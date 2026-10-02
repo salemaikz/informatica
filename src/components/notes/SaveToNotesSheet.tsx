@@ -78,7 +78,7 @@ export function SaveToNotesSheet() {
       {toast && (
         <div role="status" className="fixed inset-x-4 bottom-24 z-[60] mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-text px-4 py-3 text-surface shadow-2xl lg:bottom-6">
           <Check size={20} className="shrink-0 text-success" aria-hidden />
-          <span className="line-clamp-2 min-w-0 flex-1 font-bold">{t("notes2.save.done", { folder: toast.folder })}</span>
+          <span className="line-clamp-3 min-w-0 flex-1 text-sm font-bold">{t("notes2.save.done", { folder: toast.folder })}</span>
           <button
             type="button"
             onClick={() => {

@@ -101,8 +101,8 @@ export function FolderPicker({
             <span className={cn("shrink-0", on ? "" : "text-muted")}>
               <FolderIcon folder={f} size={20} />
             </span>
-            <span className={cn("line-clamp-2 min-w-0 flex-1 leading-tight break-words", on && "text-text")}>{nameOf(f)}</span>
-            {on && <Check size={16} aria-hidden className="shrink-0" />}
+            {/* Выбор виден по рамке и заливке — без галочки, чтобы длинным казахским названиям хватало места. */}
+            <span className={cn("line-clamp-2 min-w-0 flex-1 text-[15px] leading-tight break-words", on && "text-text")}>{nameOf(f)}</span>
           </button>
         );
       })}
@@ -112,7 +112,7 @@ export function FolderPicker({
           onClick={onNew}
           className="flex min-h-12 items-center gap-2 rounded-2xl border-2 border-dashed border-border px-3 py-2 text-left font-bold text-muted hover:bg-surface-2 hover:text-text"
         >
-          <Plus size={20} aria-hidden /> <span className="truncate">{t("notes2.folder.newDots")}</span>
+          <Plus size={20} aria-hidden className="shrink-0" /> <span className="line-clamp-2 text-[15px] leading-tight">{t("notes2.folder.newDots")}</span>
         </button>
       )}
     </div>

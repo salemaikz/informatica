@@ -7,7 +7,10 @@ import { SKILLS } from "@/content/skills";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import {
   averageMastery,
+  bestPercent,
   canExtern,
+  completionsBadge,
+  isDarkColor,
   isDue,
   lessonTopics,
   nodeState,
@@ -47,6 +50,11 @@ describe("рекомендуемый урок и состояния узлов",
     // Свободный режим: пройден дальний урок — рекомендация всё равно первая непройденная.
     expect(recommendedLesson(units, { b1: stat() })?.ref.id).toBe("a1");
     expect(recommendedLesson(units, { a1: stat(), a2: stat(), b1: stat() })).toBeUndefined();
+  });
+
+  it("запись без прохождений (completions 0) не считается пройденной — как и в nodeState", () => {
+    expect(recommendedLesson(units, { a1: stat({ completions: 0 }) })?.ref.id).toBe("a1");
+    expect(nodeState(units[0].lessons[0], stat({ completions: 0 }), "a1", NOW)).toBe("recommended");
   });
 
   it("состояния: скоро, пройден, пора повторить, рекомендуемый, доступен", () => {
@@ -164,5 +172,32 @@ describe("раскладка дороги", () => {
     const { segments } = pathLayout(3);
     const passed = [true, true, false];
     expect(segments.map((s) => segmentDone(s, passed))).toEqual([true, true, false, false]);
+  });
+});
+
+describe("недоверенные данные и цвета", () => {
+  it("бейдж повторов: только от 2, целый, с потолком", () => {
+    expect(completionsBadge(1)).toBeNull();
+    expect(completionsBadge(Number.NaN)).toBeNull();
+    expect(completionsBadge(2)).toBe("×2");
+    expect(completionsBadge(3.7)).toBe("×3");
+    expect(completionsBadge(1e9)).toBe("×99+");
+  });
+
+  it("лучший результат: 0..100, мусор — 0", () => {
+    expect(bestPercent(0.9)).toBe(90);
+    expect(bestPercent(undefined)).toBe(0);
+    expect(bestPercent(Number.NaN)).toBe(0);
+    expect(bestPercent(5)).toBe(100);
+    expect(bestPercent(-1)).toBe(0);
+  });
+
+  it("тёмные цвета разделов осветляются на тёмной теме, остальные — нет", () => {
+    expect(isDarkColor("#334155")).toBe(true);
+    expect(isDarkColor("#1a91d6")).toBe(false);
+    expect(isDarkColor("#64748b")).toBe(false);
+    expect(isDarkColor("oops")).toBe(false);
+    // На реальном курсе тёмный только последний раздел (ЕНТ).
+    expect(UNITS.filter((u) => isDarkColor(u.color)).map((u) => u.id)).toEqual(["u9"]);
   });
 });
