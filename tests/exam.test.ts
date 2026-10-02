@@ -366,3 +366,87 @@ describe("examAdvice", () => {
     expect(adv.weakTopics.length).toBeGreaterThan(0);
   });
 });
+
+describe("ревью: граничные случаи", () => {
+  it("добор у соседей — после своих тем: тема-сосед с ровно нужным числом заданий не попадает в notes", () => {
+    const pool = richPool().filter((i) => !(i.kind === "single" && (i.topic === "t01" || (i.topic === "t02" && Number(i.id.slice(-1)) >= 5))));
+    for (let seed = 1; seed <= 20; seed++) {
+      const p = buildExam({ kind: "full", seed, pool });
+      expect(p.notes.find((n) => n.topic === "t02")).toBeUndefined();
+      // у t01 single-слотов может не быть, если все её задания этого варианта — multi/match
+      expect(p.notes.find((n) => n.topic === "t01" && n.kind === "single")?.unfilled ?? 0).toBe(0);
+      expect(p.items).toHaveLength(40);
+    }
+  });
+
+  it("порядок банка не влияет на вариант", () => {
+    const pool = richPool();
+    const a = buildExam({ kind: "full", seed: 5, pool });
+    const b = buildExam({ kind: "full", seed: 5, pool: [...pool].reverse() });
+    expect(b.items.map((q) => q.key)).toEqual(a.items.map((q) => q.key));
+  });
+
+  it("контекст: берётся ровно 5 вопросов, полный t06 предпочтительнее неполного", () => {
+    const long: EntContext = { ...context("long"), questions: [...context("long").questions, ...context("long2").questions] };
+    const short: EntContext = { ...context("short"), questions: context("short").questions.slice(0, 3) };
+    const base = richPool().filter((i) => i.kind !== "context");
+    for (let seed = 1; seed <= 10; seed++) {
+      const p = buildExam({ kind: "full", seed, pool: [...base, long, short] });
+      const ctx = p.items.filter((q) => q.item.kind === "context");
+      expect(ctx).toHaveLength(5);
+      expect(ctx[0].item.id).toBe("long");
+      expect((ctx[0].item as EntContext).questions).toHaveLength(5);
+      expect(p.maxPoints).toBe(50);
+    }
+    const p = buildExam({ kind: "full", seed: 1, pool: [...base, short] });
+    expect(p.items.filter((q) => q.item.kind === "context")).toHaveLength(3);
+    expect(p.notes).toContainEqual({ topic: "t06", kind: "context", missing: 2, filledFrom: [], unfilled: 2 });
+  });
+
+  it("topic: нехватка вида записывается в notes, даже если заменили другим видом", () => {
+    const pool: EntItem[] = Array.from({ length: 20 }, (_, i) => single(`t03:s${i}`, "t03", ((i % 3) + 1) as Level));
+    const p = buildExam({ kind: "topic", seed: 2, pool, topics: ["t03"] });
+    expect(p.items).toHaveLength(10);
+    expect(p.notes).toContainEqual({ topic: null, kind: "multi", missing: 2, filledFrom: [], unfilled: 0 });
+    expect(p.notes).toContainEqual({ topic: null, kind: "match", missing: 2, filledFrom: [], unfilled: 0 });
+  });
+
+  it("испорченные ответы из хранилища не ломают подсчёт", () => {
+    const paper = buildExam({ kind: "full", seed: 1, pool: richPool() });
+    const junk = { choice: "1", multi: "abc", match: 5, timeMs: NaN } as unknown as ExamAnswers[string];
+    const answers: ExamAnswers = Object.fromEntries(paper.items.map((q) => [q.key, junk]));
+    const r = scoreExam(paper, answers);
+    expect(r.points).toBe(0);
+    expect(r.unanswered).toBe(40);
+    expect(r.timeSec).toBe(0);
+    expect(Number.isNaN(r.avgSecPerQuestion)).toBe(false);
+    // индексы вне диапазона — не ответ и не «лишний» вариант
+    const m = paper.items.find((q) => q.item.kind === "multi")!;
+    const mi = m.item as EntMulti;
+    expect(scoreQuestion(m, { multi: [...mi.correct, 99, -1, 1.5], timeMs: 1 }).points).toBe(2);
+    const s = paper.items.find((q) => q.item.kind === "single")!;
+    expect(scoreExam(paper, { [s.key]: { choice: 7, timeMs: 1 } }).unanswered).toBe(40);
+  });
+
+  it("темп считается по вопросам, где ученик был: не успел — значит медленно", () => {
+    const paper = buildExam({ kind: "full", seed: 1, pool: richPool() });
+    const all = perfectAnswers(paper, 240_000);
+    const half: ExamAnswers = Object.fromEntries(paper.items.slice(0, 20).map((q) => [q.key, all[q.key]]));
+    const r = scoreExam(paper, half);
+    expect(r.avgSecPerQuestion).toBe(240);
+    const adv = examAdvice(r);
+    expect(adv.pace).toBe("slow");
+    expect(adv.tips).toContain("skip-and-return");
+    expect(adv.tips).toContain("answer-everything");
+  });
+
+  it("«проверяй единицы» — только по теме t03, не по системам счисления", () => {
+    const paper = buildExam({ kind: "full", seed: 1, pool: richPool() });
+    const a = perfectAnswers(paper, 90_000);
+    for (const q of paper.items) if (q.item.topic === "t04") delete a[q.key];
+    expect(examAdvice(scoreExam(paper, a)).tips).not.toContain("check-units");
+    const b = perfectAnswers(paper, 90_000);
+    for (const q of paper.items) if (q.item.topic === "t03") delete b[q.key];
+    expect(examAdvice(scoreExam(paper, b)).tips).toContain("check-units");
+  });
+});

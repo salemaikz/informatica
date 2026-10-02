@@ -23,7 +23,8 @@ const CONTEXT_QUESTIONS = 5;
 
 /** Запись о том, чего не хватило в банке (не молчим). */
 export interface ExamNote {
-  /** Тема, где не хватило заданий; null — не хватило вообще по виду (в мини/по теме). */
+  /** Тема, где не хватило заданий; null — в мини/по теме не хватило заданий этого вида во всём банке
+   *  (unfilled = 0 — заменили другими видами, вариант той же длины). */
   topic: EntTopicId | null;
   kind: EntKind;
   /** Сколько заданий не нашлось в самой теме. */
@@ -466,6 +467,7 @@ export interface ExamResult {
   byKind: Record<"single" | "multi" | "match" | "context", Tally>;
   byLevel: Record<Level, Tally>;
   timeSec: number;
+  /** Средний темп, с: по вопросам, где ученик был (ответил или потратил время). */
   avgSecPerQuestion: number;
   /** До трёх самых долгих вопросов (ключи). */
   slowest: string[];

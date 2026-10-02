@@ -120,3 +120,28 @@ describe("forecastScore", () => {
     expect(f.basis).toBe("none");
   });
 });
+
+describe("forecastScore: данные из сохранения", () => {
+  it("частичный byTopic (как ExamSummary в сторе) — допустим", () => {
+    const f = forecastScore({ skills: {}, exams: [{ at: NOW, points: 20, maxPoints: 50, kind: "full", byTopic: { t04: { points: 2, max: 4 } } }], now: NOW });
+    expect(f.score).toBe(20);
+    expect(f.byTopic.t04).toBe(0.5);
+    expect(f.byTopic.t01).toBe(0);
+  });
+
+  it("мусорные значения не дают NaN", () => {
+    const junk = [
+      { at: NaN, points: 10, maxPoints: 50, byTopic: {} },
+      { at: NOW, points: "x", maxPoints: 50, byTopic: {} },
+      null,
+      { at: NOW, points: 80, maxPoints: 50, byTopic: { t01: { points: NaN, max: 5 }, t02: { points: 9, max: 3 } } },
+    ] as unknown as ForecastExam[];
+    const skills = { [SKILLS[0].id]: { attempts: NaN, correct: 0, mastery: NaN, lastSeen: 0 }, [SKILLS[1].id]: null } as unknown as Record<string, SkillStat>;
+    const f = forecastScore({ skills, exams: junk, now: NOW });
+    expect(f.basis).toBe("exams");
+    expect(f.score).toBe(50);
+    expect(f.byTopic.t01).toBe(0);
+    expect(f.byTopic.t02).toBe(1);
+    for (const v of [f.score, f.low, f.high, f.answers, ...Object.values(f.byTopic)]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
