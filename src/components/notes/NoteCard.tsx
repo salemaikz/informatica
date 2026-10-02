@@ -17,7 +17,7 @@ export function Highlighted({ text, ranges }: { text: string; ranges: [number, n
   ranges.forEach(([a, b], i) => {
     if (a > at) parts.push(<Fragment key={`t${i}`}>{text.slice(at, a)}</Fragment>);
     parts.push(
-      <mark key={`m${i}`} className="rounded bg-warning-soft px-0.5 font-extrabold text-text">
+      <mark key={`m${i}`} className="hl-mark font-extrabold text-text">
         {text.slice(a, b)}
       </mark>,
     );

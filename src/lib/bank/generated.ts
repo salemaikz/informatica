@@ -1,4 +1,43 @@
 // Сгенерировано scripts/register-content.mjs — не править руками.
-import type { SkillBank } from "./types";
 
-export const GENERATED_BANKS: SkillBank[] = [];
+import type { SkillBank } from "./types";
+import { BANKS as algo_1_basics } from "./algo-1-basics";
+import { BANKS as data_1_sheets } from "./data-1-sheets";
+import { BANKS as data_2_refs } from "./data-2-refs";
+import { BANKS as db_1_relational } from "./db-1-relational";
+import { BANKS as db_2_select } from "./db-2-select";
+import { BANKS as db_3_modify } from "./db-3-modify";
+import { BANKS as ent_1_strategy } from "./ent-1-strategy";
+import { BANKS as info_1_units } from "./info-1-units";
+import { BANKS as info_2_formula } from "./info-2-formula";
+import { BANKS as info_3_text } from "./info-3-text";
+import { BANKS as info_4_media } from "./info-4-media";
+import { BANKS as it_1_trends } from "./it-1-trends";
+import { BANKS as it_2_startup } from "./it-2-startup";
+import { BANKS as it_3_3d } from "./it-3-3d";
+import { BANKS as logic_1_ops } from "./logic-1-ops";
+import { BANKS as logic_2_tables } from "./logic-2-tables";
+import { BANKS as logic_3_circuits } from "./logic-3-circuits";
+import { BANKS as logic_4_laws } from "./logic-4-laws";
+import { BANKS as net_1_basics } from "./net-1-basics";
+import { BANKS as net_2_internet } from "./net-2-internet";
+import { BANKS as net_3_speed } from "./net-3-speed";
+import { BANKS as net_4_security } from "./net-4-security";
+import { BANKS as ns_5_oct_hex } from "./ns-5-oct-hex";
+import { BANKS as ns_6_any_base } from "./ns-6-any-base";
+import { BANKS as ns_7_arith } from "./ns-7-arith";
+import { BANKS as pc_1_devices } from "./pc-1-devices";
+import { BANKS as pc_2_cpu } from "./pc-2-cpu";
+import { BANKS as pc_3_software } from "./pc-3-software";
+import { BANKS as py_1_vars } from "./py-1-vars";
+import { BANKS as py_2_if } from "./py-2-if";
+import { BANKS as py_3_loops } from "./py-3-loops";
+import { BANKS as py_4_strings } from "./py-4-strings";
+import { BANKS as py_5_lists } from "./py-5-lists";
+import { BANKS as py_6_functions } from "./py-6-functions";
+import { BANKS as py_7_algos } from "./py-7-algos";
+import { BANKS as py_8_trace } from "./py-8-trace";
+import { BANKS as web_1_html } from "./web-1-html";
+import { BANKS as web_2_css } from "./web-2-css";
+
+export const GENERATED_BANKS: SkillBank[] = [...algo_1_basics, ...data_1_sheets, ...data_2_refs, ...db_1_relational, ...db_2_select, ...db_3_modify, ...ent_1_strategy, ...info_1_units, ...info_2_formula, ...info_3_text, ...info_4_media, ...it_1_trends, ...it_2_startup, ...it_3_3d, ...logic_1_ops, ...logic_2_tables, ...logic_3_circuits, ...logic_4_laws, ...net_1_basics, ...net_2_internet, ...net_3_speed, ...net_4_security, ...ns_5_oct_hex, ...ns_6_any_base, ...ns_7_arith, ...pc_1_devices, ...pc_2_cpu, ...pc_3_software, ...py_1_vars, ...py_2_if, ...py_3_loops, ...py_4_strings, ...py_5_lists, ...py_6_functions, ...py_7_algos, ...py_8_trace, ...web_1_html, ...web_2_css];

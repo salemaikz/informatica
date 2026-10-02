@@ -1,4 +1,43 @@
 // Сгенерировано scripts/register-content.mjs — не править руками.
-import type { Lesson } from "@/lib/types";
 
-export const GENERATED_LESSONS: Lesson[] = [];
+import type { Lesson } from "@/lib/types";
+import { lesson as algo_1_basics } from "./algo-1-basics";
+import { lesson as data_1_sheets } from "./data-1-sheets";
+import { lesson as data_2_refs } from "./data-2-refs";
+import { lesson as db_1_relational } from "./db-1-relational";
+import { lesson as db_2_select } from "./db-2-select";
+import { lesson as db_3_modify } from "./db-3-modify";
+import { lesson as ent_1_strategy } from "./ent-1-strategy";
+import { lesson as info_1_units } from "./info-1-units";
+import { lesson as info_2_formula } from "./info-2-formula";
+import { lesson as info_3_text } from "./info-3-text";
+import { lesson as info_4_media } from "./info-4-media";
+import { lesson as it_1_trends } from "./it-1-trends";
+import { lesson as it_2_startup } from "./it-2-startup";
+import { lesson as it_3_3d } from "./it-3-3d";
+import { lesson as logic_1_ops } from "./logic-1-ops";
+import { lesson as logic_2_tables } from "./logic-2-tables";
+import { lesson as logic_3_circuits } from "./logic-3-circuits";
+import { lesson as logic_4_laws } from "./logic-4-laws";
+import { lesson as net_1_basics } from "./net-1-basics";
+import { lesson as net_2_internet } from "./net-2-internet";
+import { lesson as net_3_speed } from "./net-3-speed";
+import { lesson as net_4_security } from "./net-4-security";
+import { lesson as ns_5_oct_hex } from "./ns-5-oct-hex";
+import { lesson as ns_6_any_base } from "./ns-6-any-base";
+import { lesson as ns_7_arith } from "./ns-7-arith";
+import { lesson as pc_1_devices } from "./pc-1-devices";
+import { lesson as pc_2_cpu } from "./pc-2-cpu";
+import { lesson as pc_3_software } from "./pc-3-software";
+import { lesson as py_1_vars } from "./py-1-vars";
+import { lesson as py_2_if } from "./py-2-if";
+import { lesson as py_3_loops } from "./py-3-loops";
+import { lesson as py_4_strings } from "./py-4-strings";
+import { lesson as py_5_lists } from "./py-5-lists";
+import { lesson as py_6_functions } from "./py-6-functions";
+import { lesson as py_7_algos } from "./py-7-algos";
+import { lesson as py_8_trace } from "./py-8-trace";
+import { lesson as web_1_html } from "./web-1-html";
+import { lesson as web_2_css } from "./web-2-css";
+
+export const GENERATED_LESSONS: Lesson[] = [algo_1_basics, data_1_sheets, data_2_refs, db_1_relational, db_2_select, db_3_modify, ent_1_strategy, info_1_units, info_2_formula, info_3_text, info_4_media, it_1_trends, it_2_startup, it_3_3d, logic_1_ops, logic_2_tables, logic_3_circuits, logic_4_laws, net_1_basics, net_2_internet, net_3_speed, net_4_security, ns_5_oct_hex, ns_6_any_base, ns_7_arith, pc_1_devices, pc_2_cpu, pc_3_software, py_1_vars, py_2_if, py_3_loops, py_4_strings, py_5_lists, py_6_functions, py_7_algos, py_8_trace, web_1_html, web_2_css];

@@ -207,13 +207,16 @@ export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string
         {tiles.map(({ topic: tp, lessons, value, level }, i) => {
           const Icon = topicIcon(tp.id);
           const pct = Math.round(value * 100);
+          // level «none» = ни одной попытки по навыкам темы: вместо «0%» показываем «—».
+          const hasData = level !== "none";
+          const pctText = hasData ? `${pct}%` : "—";
           const tall = tp.examCount === 4;
           return (
             <button
               key={tp.id}
               type="button"
               onClick={() => setTopic(tp.id)}
-              aria-label={t("learn2.ent.open", { title: l(tp.title), n: pct })}
+              aria-label={hasData ? t("learn2.ent.open", { title: l(tp.title), n: pct }) : t("learn2.ent.open.none", { title: l(tp.title) })}
               style={{ animationDelay: `${i * 35}ms` }}
               className={cn(
                 "animate-rise-in flex flex-col gap-2 rounded-3xl border-2 p-3.5 text-left transition-transform active:scale-[0.98]",
@@ -233,12 +236,23 @@ export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string
               </div>
               <span lang={lang} className={cn("hyphens-auto font-extrabold leading-tight [overflow-wrap:anywhere]", tp.examCount >= 4 ? "text-base" : "text-[15px]", tall ? "line-clamp-5" : "line-clamp-4")}>{l(tp.title)}</span>
               <div className="mt-auto flex flex-col gap-1.5">
-                {tall || tp.examCount >= 5 ? <span className={cn("text-3xl font-black leading-none", TONE[level].ink)}>{pct}%</span> : null}
+                {tall || tp.examCount >= 5 ? (
+                  <span className="flex items-baseline gap-2">
+                    <span className={cn("text-3xl font-black leading-none", TONE[level].ink)}>{pctText}</span>
+                    {!hasData && <span className="text-xs font-bold text-muted">{t("learn2.ent.nodata")}</span>}
+                  </span>
+                ) : null}
                 <ProgressBar value={value} color={TONE[level].bar} height={6} />
                 <span className="flex flex-wrap items-center justify-between gap-x-2 text-xs font-bold text-muted">
                   <span>{t(`learn2.ent.items.${pluralForm(tp.examCount)}`, { n: tp.examCount })}</span>
                   <span>
-                    {tp.examCount < 4 && <span className={cn("font-black", TONE[level].ink)}>{pct}% · </span>}
+                    {tp.examCount < 4 && (
+                      <span className={cn("font-black", TONE[level].ink)}>
+                        {pctText}
+                        {!hasData && <span className="font-bold text-muted"> {t("learn2.ent.nodata")}</span>}
+                        {" · "}
+                      </span>
+                    )}
                     {t(`learn2.ent.lessons.${pluralForm(lessons)}`, { n: lessons })}
                   </span>
                 </span>

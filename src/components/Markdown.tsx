@@ -110,3 +110,23 @@ export function Markdown({
     </div>
   );
 }
+
+const INLINE_ALLOWED = ["p", "strong", "em", "code", "del", "mark", "br"];
+const INLINE_COMPONENTS: Components = {
+  // Абзацы не нужны: текст встраивается в заголовок или строку.
+  p: ({ children }) => <>{children}</>,
+  code: ({ children }) => <code className="rounded-md bg-surface-2 px-1 py-px font-mono text-[0.92em] font-semibold">{children}</code>,
+  mark: ({ children }) => <mark className="rounded bg-gold-soft px-0.5 text-inherit [box-decoration-break:clone]">{children}</mark>,
+};
+
+/**
+ * Строчный markdown для условий и разборов заданий: **жирный**, *курсив*, `код`, ==маркер==.
+ * Без блоков (абзацы разворачиваются), поэтому можно вставлять внутрь заголовка или <p>.
+ */
+export function InlineMarkdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={INLINE_COMPONENTS} allowedElements={INLINE_ALLOWED} unwrapDisallowed urlTransform={urlTransform}>
+      {children}
+    </ReactMarkdown>
+  );
+}

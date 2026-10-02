@@ -27,7 +27,7 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
   const pct = Math.round(mastery * 100);
   return (
     <div className="relative overflow-hidden rounded-3xl border-2 border-(--u)/25 bg-(--u-soft) p-4">
-      <UnitArt theme={unit.theme} className="absolute -right-3 -top-1 h-28 w-36 opacity-70" />
+      <UnitArt theme={unit.theme} className="absolute right-3 top-3 h-24 w-32 opacity-[0.15]" />
       <div className="relative flex flex-col gap-3">
         <div className="flex items-start gap-3 pr-24">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-b-4 border-(--u-edge) bg-(--u-fill) text-white">

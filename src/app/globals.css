@@ -229,6 +229,22 @@ body {
   transition-duration: 0.01ms !important;
 }
 
+/* Подсветка совпадения в поиске. У Nunito большой «воздух» над строкой, поэтому фон по области содержимого
+   смещается вверх от букв — рисуем маркер полосой фиксированной высоты, прижатой к низу строки. */
+.hl-mark {
+  display: inline;
+  padding: 0 0.12em;
+  border-radius: 0.2em;
+  color: inherit;
+  background-color: transparent;
+  background-image: linear-gradient(var(--warning-soft), var(--warning-soft));
+  background-repeat: no-repeat;
+  background-size: 100% 1.2em;
+  background-position: 0 100%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* Типографика для markdown (теория, конспекты, ответы ИИ) */
 .prose-app {
   line-height: 1.6;

@@ -82,6 +82,8 @@ export const learnDict = {
   "learn2.ent.lessons.one": { ru: "{n} урок", kk: "{n} сабақ" },
   "learn2.ent.lessons.few": { ru: "{n} урока", kk: "{n} сабақ" },
   "learn2.ent.lessons.many": { ru: "{n} уроков", kk: "{n} сабақ" },
+  "learn2.ent.nodata": { ru: "нет данных", kk: "дерек жоқ" },
+  "learn2.ent.open.none": { ru: "Тема ЕНТ: {title}, данных об освоении пока нет", kk: "ҰБТ тақырыбы: {title}, меңгеру туралы дерек әзірге жоқ" },
   "learn2.ent.open": { ru: "Тема ЕНТ: {title}, освоение {n}%", kk: "ҰБТ тақырыбы: {title}, меңгеру {n}%" },
 
   // ---------- Шторка темы ЕНТ ----------

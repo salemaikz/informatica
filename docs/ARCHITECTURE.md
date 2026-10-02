@@ -1,6 +1,6 @@
 # Архитектура
 
-> Как устроена платформа на версии v0.1. Обновлять при каждом изменении «как работает».
+> Как устроена платформа (начиная с v0.1; изменения этапа 3 — в конце файла). Обновлять при каждом изменении «как работает».
 
 ## Общая схема
 
@@ -154,3 +154,50 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 
 - `tests/*.test.ts` (vitest): нормализация и проверка ответов, лесенка деления, уровни/серии/XP, модель освоения, генераторы (тысячи сгенерированных заданий проверяются валидатором), **валидация контента всех уроков** (двуязычность, корректные индексы, ответы проходят свою проверку, уникальные id).
 - `e2e/*.spec.ts` (Playwright, `npm run e2e`): онбординг → урок (неверный/верный ответ, цвета обратной связи) → тренировка на казахском. Без обращений к ИИ. В облачной среде нужен `PW_CHROMIUM_PATH`.
+
+## Этап 3 (v0.5): курс ЕНТ, навигация, пробный ЕНТ, конспекты 2.0
+
+### Контент
+- Курс — `src/content/course.ts` (`UNITS`: у раздела `icon`, `theme`, `entTopics`). Урок «готов», если он есть в `LESSONS`; название берётся из урока.
+- Урок = три файла: `src/content/lessons/<id>.ts` (`export const lesson`), `src/lib/bank/<id>.ts` (`export const BANKS: SkillBank[]`), `src/content/ent/<id>.ts` (`export const ITEMS: EntItem[]`). Подключение — `node scripts/register-content.mjs` (пишет `generated.ts` в трёх папках). Проверка одного урока — `npx tsx scripts/check-content.ts <id>`; общие тесты — `tests/content.test.ts`, `tests/content-pool.test.ts`.
+- Темы ЕНТ и их веса — `src/content/ent-topics.ts`; навык → тема — `SKILLS[].ent`.
+- Задания: у вопроса может быть `scene` (код/таблица/схема под условием), `hint` (бесплатная подсказка), `whyWrong` (разбор каждого неверного варианта).
+- Банк из статичных заданий — `lib/bank/pool.ts` (`poolBank`, варианты перемешиваются по seed вместе с `whyWrong`); id вида `<id>#<seed>` — хвост `#…` отбрасывается при отсеве повторов.
+- Задания ЕНТ: `EntSingle` (4 варианта), `EntMulti` (6, 2–3 верных, 2/1/0), `EntMatch` (2 пункта × 4 описания), `EntContext` (текст/программа + 5 вопросов). Общий пул — `src/content/ent/index.ts` (`ENT_POOL`).
+
+### Сцены (`components/scenes`)
+`table` (в т. ч. `sheet` — как в Excel), `code` (подсветка, текущая строка, переменные, вывод), `circuit` (раскладка и значения — `circuit.ts`), `flow`, `cards` (иконки — `icons.ts`, имена `IconName`), `pixels`, `web` (iframe `sandbox=""`). Плюс прежние сцены двоичной системы. Валидация — `tests/validate.ts`.
+
+### Хранилище v2 (`lib/store.ts`, версия 2)
+- Профиль: `avatar`, `reminder`, `examDate`, `targetScore`, `weeklyLessons`. Недоверенные данные проверяются (`mergeState`, `sanitizeAvatar`).
+- `lessons[id]`: `via` (learn/check/game/extern), `stage`/`dueAt` — расписание повторения (`lib/review.ts`: `scheduleAfter`, `dueLessons`, `lessonXpFactor`).
+- `notebook` — конспекты 2.0 (`lib/notebook.ts`), картинки — IndexedDB (`lib/note-images.ts`).
+- `exams` — итоги пробников; сами вопросы и ответы попытки — IndexedDB (`lib/exam-store.ts`).
+- Новые действия: `completeLessons`, `markReviewed`, `createFolder/updateFolder/deleteFolder`, `createNote/updateNote/deleteNote`, `recordExam`, `importProgress`.
+- Серия с заморозками — `lib/gamification.ts` (`bumpStreak`, `liveStreak`, `streakAtRisk`).
+
+### Маршруты
+| Адрес | Что |
+|---|---|
+| `/learn` | главная: быстрые действия, «Продолжить», «Путь» / «Карта ЕНТ» (`components/learn/*`, шторка урока `LessonSheet`) |
+| `/lesson/<id>?mode=check` | «Проверить себя» (только задания, добор из банка до 6) |
+| `/drill?mode=smart|skill|mistakes|review|extern&unit=|topic&topic=` | тренировки (`lib/drill.ts`) |
+| `/game/<id>?lesson=<id>` или `?skills=` | урок игрой (≥ 70%, ≥ 5 ответов) |
+| `/theory`, `/theory/<id>` | справочник и чтение урока без заданий |
+| `/search?q=` | поиск (`lib/search.ts` + мягкий повтор `lib/theory.ts`) |
+| `/notes`, `/notes/<noteId>`, `/notes/folder/<id>`, `/notes/lesson/<id>` | конспекты 2.0 |
+| `/exam`, `/exam/run?kind=mini|full|topic&seed=&topics=`, `/exam/result/<id>` | пробный ЕНТ (`lib/exam.ts`, `lib/forecast.ts`); `/exam/run` — вне `(main)`, без навигации |
+| `/profile`, `/stats` | профиль (аватар, цели, напоминания, копия), прогресс (`components/goals/*`) |
+
+### ИИ: кэш и лестница подсказок
+```
+Кнопка «Подсказка» → hint автора (бесплатно) → «Ещё подсказка от Бита»
+  → кэш на устройстве (lib/ai-cache.ts, 150) → POST /api/ai/tutor
+     → neutral-запрос? → LRU в памяти → unstable_cache (30 дней) → OpenAI
+     → подсказка: leaksAnswer? → повтор с NO_LEAK_NOTE → запасной текст (не кэшируется)
+  ← X-AI-Cache: hit | miss | skip (hit → refundAi: дневной лимит не тратится)
+```
+Неперсональные (кэшируемые) запросы: `hint` и `explain` на первый запрос, `ask` с быстрым вопросом-кнопкой первым сообщением. Всё остальное (чат, вопросы своими словами) — как раньше, с портретом ученика. Все три маршрута ИИ отклоняют чужой `Origin`.
+
+### Напоминания
+`ReminderAgent` (в `Providers`) — таймер до времени напоминания, пока приложение открыто, и зеркало настроек в IndexedDB (`informatica:reminder`) → `public/sw.js` (`periodicsync` на Android с установленным приложением, `notificationclick` → `/learn`). Логика текста — `lib/reminders.ts` (продублирована в `sw.js`, совпадение проверяет тест). Календарь — `.ics` с `RRULE:FREQ=DAILY`.

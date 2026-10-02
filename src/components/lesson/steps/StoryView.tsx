@@ -24,20 +24,23 @@ export function StoryView({ step }: { step: StoryStep }) {
       {step.title && <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>}
       <SceneView scene={step.scene} />
       <m.div
-        className="flex items-end gap-3"
+        className="flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:gap-3"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ ...springSoft, delay: 0.12 }}
       >
-        {bit && <Mascot mood="happy" size={64} className="shrink-0" />}
+        {bit && <Mascot mood="happy" size={64} className="ml-1 size-10 shrink-0 sm:ml-0 sm:size-16" />}
         <div
           className={cn(
-            "relative min-w-0 flex-1 rounded-2xl px-4 py-3",
-            bit ? "mb-2 border-2 border-border bg-surface" : "border-l-4 border-primary bg-surface-2",
+            "relative w-full min-w-0 rounded-2xl px-4 py-3 sm:w-auto sm:flex-1",
+            bit ? "border-2 border-border bg-surface sm:mb-2" : "border-l-4 border-primary bg-surface-2",
           )}
         >
           {bit && (
-            <span aria-hidden className="absolute -left-[9px] bottom-4 h-4 w-4 rotate-45 border-b-2 border-l-2 border-border bg-surface" />
+            <span
+              aria-hidden
+              className="absolute -top-[9px] left-4 h-4 w-4 rotate-45 border-l-2 border-t-2 border-border bg-surface sm:-left-[9px] sm:top-auto sm:bottom-4 sm:border-t-0 sm:border-b-2"
+            />
           )}
           <Markdown className={cn("relative text-[17px]", bit && "font-semibold")}>{l(step.body)}</Markdown>
         </div>

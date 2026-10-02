@@ -6,7 +6,7 @@ export function Highlight({ text, ranges }: { text: string; ranges: [number, num
     <>
       {highlightParts(text, ranges).map((p, i) =>
         p.mark ? (
-          <mark key={i} className="rounded-sm bg-warning-soft font-extrabold text-inherit">
+          <mark key={i} className="hl-mark font-extrabold">
             {p.text}
           </mark>
         ) : (

@@ -81,7 +81,7 @@ export function LessonNode({
               FACE[state],
             )}
           >
-            {state !== "soon" && <span aria-hidden className="absolute left-3 right-3 top-2 h-3 rounded-full bg-white/25" />}
+            {state !== "soon" && <span aria-hidden className="absolute inset-x-3.5 top-[5px] h-6 rounded-[50%] border-t-[3px] border-white/30" />}
             {state === "soon" ? (
               <Lock size={24} />
             ) : passed ? (

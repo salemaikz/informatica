@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
-import { Markdown } from "@/components/Markdown";
+import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { Visual } from "@/components/visuals/Visuals";
@@ -595,7 +595,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
                 </button>
               )}
             </div>
-            <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">{l(question.prompt)}</h1>
+            <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">
+              <InlineMarkdown>{l(question.prompt)}</InlineMarkdown>
+            </h1>
             {/* Схема-условие: код программы, таблица, логическая схема. */}
             {question.scene && <SceneView scene={question.scene} />}
             <Shake active={phase === "feedback" && !!result && !result.correct && SHAKE_AREA.has(question.type)} strength={6}>
@@ -680,8 +682,14 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
                         {t("fb.correctAnswer")} <span className="font-mono">{result.expected}</span>
                       </p>
                     )}
-                    {whyWrongText && <p className="mt-1 text-[15px] font-extrabold">{whyWrongText}</p>}
-                    <p className="mt-1 text-[15px] font-semibold opacity-90">{l(question.explanation)}</p>
+                    {whyWrongText && (
+                      <p className="mt-1 text-[15px] font-extrabold">
+                        <InlineMarkdown>{whyWrongText}</InlineMarkdown>
+                      </p>
+                    )}
+                    <p className="mt-1 text-[15px] font-semibold opacity-90">
+                      <InlineMarkdown>{l(question.explanation)}</InlineMarkdown>
+                    </p>
                   </>
                 )}
               </div>
