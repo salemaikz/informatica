@@ -56,13 +56,13 @@ export function useNow(): number {
 export function usePlanTier(): PlanTier {
   const plan = useApp((s) => s.plan);
   const t = useNow();
-  return effectiveTier(plan, t || Date.now());
+  return effectiveTier(plan, t);
 }
 
 /** Тариф с подробностями: дни до конца, пробный ли. */
 export function usePlan() {
   const plan = useApp((s) => s.plan);
-  const t = useNow() || Date.now();
+  const t = useNow();
   const tier = effectiveTier(plan, t);
   return { plan, tier, features: PLAN_FEATURES[tier], daysLeft: planDaysLeft(plan, t), trial: tier !== "free" && !!plan.trial };
 }
@@ -71,7 +71,7 @@ export function usePlan() {
 export function useHearts(): HeartsView {
   const hearts = useApp((s) => s.hearts);
   const tier = usePlanTier();
-  const t = useNow() || Date.now();
+  const t = useNow();
   return heartsView(hearts, tier, t, todayKey());
 }
 
@@ -80,7 +80,7 @@ export function useChips() {
   const wallet = useApp((s) => s.wallet);
   const boost = useApp((s) => s.boost);
   const tier = usePlanTier();
-  const t = useNow() || Date.now();
+  const t = useNow();
   return {
     chips: wallet.chips,
     wallet,
