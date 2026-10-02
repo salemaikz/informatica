@@ -143,7 +143,8 @@ export default function BugHuntGame({ lang, sound, mode, onFinish }: GameProps) 
   const { t } = useT();
   const cfg = MODE_CONFIG[mode];
   const [v, setV] = useState<View>(() => initialView(mode));
-  const gameRef = useRef<Game>(makeGame(mode));
+  const [initial] = useState(() => makeGame(mode));
+  const gameRef = useRef<Game>(initial);
   const apiRef = useRef<Api | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const propsRef = useRef({ sound, onFinish });

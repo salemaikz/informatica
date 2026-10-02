@@ -389,7 +389,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
           {blind && task.mode === "build" && !inFeedback && <div className="text-xs text-muted">{tx(S.sumHidden, lang)}</div>}
           {task.mode !== "read" &&
             (revealing ? (
-              <div className="text-xs font-semibold text-success-strong">{tx(S.correctPattern, lang)}</div>
+              <div className="text-xs font-semibold text-success-strong">{tx(task.mode === "property" ? S.exampleLead : S.correctPattern, lang)}</div>
             ) : (
               <div className="text-xs text-muted tabular-nums">{fmt(tx(S.flips, lang), { n: flips })}</div>
             ))}
@@ -506,7 +506,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
               {!fb.correct && !cfg.revealOnSwitches && (
                 <>
                   {fb.reason && <div className="text-sm text-text">{fmt(tx(S[fb.reason.key], lang), fb.reason.params)}</div>}
-                  <div className="text-xs text-muted">{tx(S.correctPattern, lang)}</div>
+                  <div className="text-xs text-muted">{tx(task.mode === "property" ? S.exampleLead : S.correctPattern, lang)}</div>
                   <div className="flex gap-1" aria-hidden>
                     {bitsOf(task.answer, B).map((b, i) => (
                       <span
@@ -522,7 +522,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                   </div>
                   <div className="font-mono text-sm tabular-nums">
                     {task.mode === "property"
-                      ? fmt(tx(S.example, lang), { bin: bitsOf(task.answer, B).join(""), n: task.answer })
+                      ? `${bitsOf(task.answer, B).join("")}₂ = ${task.answer}`
                       : breakdown(task.answer)}
                   </div>
                   {fb.requeued && <span className="rounded-full bg-warning-soft px-3 py-0.5 text-xs font-semibold text-warning-strong">{tx(S.retryLater, lang)}</span>}

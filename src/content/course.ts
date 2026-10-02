@@ -14,7 +14,7 @@ export const UNITS: Unit[] = [
       { id: "ns-1-binary", title: lessonBinary.title, status: "available" },
       { id: "ns-2-oct-hex", title: { ru: "Восьмеричная и шестнадцатеричная", kk: "Сегіздік және он алтылық" }, status: "soon" },
       { id: "ns-3-arith", title: { ru: "Арифметика в двоичной системе", kk: "Екілік жүйедегі арифметика" }, status: "soon" },
-      { id: "info-units", title: { ru: "Единицы измерения информации", kk: "Ақпаратты өлшеу бірліктері" }, status: "soon" },
+      { id: "info-units", title: { ru: "Единицы измерения информации", kk: "Ақпараттың өлшем бірліктері" }, status: "soon" },
     ],
   },
   {

@@ -381,7 +381,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
       if (u.paused) return;
       const isGo = e.key === "Enter" || e.key === " ";
       if (p === "banner") {
-        if (isGo && (cfg.bannerMs === null || canSkipBanner())) {
+        if (isGo && canSkipBanner()) {
           e.preventDefault();
           startCard();
         }

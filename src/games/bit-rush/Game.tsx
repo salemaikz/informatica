@@ -44,7 +44,7 @@ interface Float {
 }
 
 const END_DELAY = 700;
-const TAP_GUARD = 250;
+const TAP_GUARD = 400;
 
 /** Числа и двоичные литералы в подсказке — моноширинным шрифтом. */
 function Prompt({ text }: { text: string }) {
@@ -372,7 +372,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
     if (revealRef.current) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        advance(false);
+        advance(true);
       }
       return;
     }
@@ -478,7 +478,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
   const nextButton = (
     <button
       type="button"
-      onClick={() => apiRef.current?.advance(false)}
+      onClick={() => apiRef.current?.advance(true)}
       className={cn(
         "w-full rounded-xl bg-primary px-4 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         richReveal ? "min-h-14 shrink-0" : "mt-1 min-h-12",

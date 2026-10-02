@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import { Check } from "lucide-react";
 import { useEffect } from "react";
+import { ignoreKey } from "@/lib/keys";
 import type { ChoiceStep, MultiStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { feedback } from "@/lib/feedback";
@@ -13,7 +14,8 @@ function useDigitKeys(count: number, onPick: (i: number) => void, disabled: bool
   useEffect(() => {
     if (disabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Цифры, набранные в калькуляторе/черновике или в поле ввода, — не выбор варианта.
+      if (ignoreKey(e)) return;
       const n = Number(e.key);
       if (n >= 1 && n <= count) onPick(n - 1);
     };

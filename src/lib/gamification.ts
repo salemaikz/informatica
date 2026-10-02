@@ -98,7 +98,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "combo_7",
     icon: "flame",
-    title: { ru: "В ударе", kk: "Қызған шақ" },
+    title: { ru: "В ударе", kk: "Бабыңдасың" },
     description: { ru: "7 верных ответов подряд", kk: "Қатарынан 7 дұрыс жауап" },
   },
   {
