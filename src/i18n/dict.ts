@@ -12,6 +12,14 @@ import { videoDict } from "./parts/video";
 import { aiDict } from "./parts/ai";
 import { gamesDict } from "./parts/games";
 import { scenesDict } from "./parts/scenes";
+import { pythonDict } from "./parts/python";
+import { legalDict } from "./parts/legal";
+import { shareDict } from "./parts/share";
+import { linksDict } from "./parts/links";
+import { onboardDict } from "./parts/onboard";
+import { offlineDict } from "./parts/offline";
+import { masteryDict } from "./parts/mastery";
+import { chatsDict } from "./parts/chats";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -449,6 +457,14 @@ export const dict = {
   ...aiDict,
   ...gamesDict,
   ...scenesDict,
+  ...pythonDict,
+  ...legalDict,
+  ...shareDict,
+  ...linksDict,
+  ...onboardDict,
+  ...offlineDict,
+  ...masteryDict,
+  ...chatsDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

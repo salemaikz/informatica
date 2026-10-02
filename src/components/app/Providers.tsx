@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
+import { isPublicPath } from "@/lib/public-paths";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
@@ -30,7 +31,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const needsOnboarding = hydrated && !onboarded && pathname !== "/onboarding";
+  const needsOnboarding = hydrated && !onboarded && !isPublicPath(pathname);
 
   useEffect(() => {
     const el = document.documentElement;

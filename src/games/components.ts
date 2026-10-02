@@ -12,4 +12,9 @@ export const GAME_COMPONENTS: Record<string, LazyExoticComponent<GameComponent>>
   tower: lazy(() => import("./tower/Game")),
   truth: lazy(() => import("./truth/Game")),
   memo: lazy(() => import("./memo/Game")),
+  bingo: lazy(() => import("./bingo/Game")),
+  cipher: lazy(() => import("./cipher/Game")),
+  bet: lazy(() => import("./bet/Game")),
+  boss: lazy(() => import("./boss/Game")),
+  build: lazy(() => import("./build/Game")),
 };
