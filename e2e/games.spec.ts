@@ -16,6 +16,8 @@ for (const id of GAME_IDS) {
             onboarded: true,
             profile: { name: "Т", lang: "ru", grade: "11", goal: "ent", style: "short", dailyGoalXp: 50, theme: "system", sound: false, createdAt: 1 },
             lessons: { "ns-1-binary": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 100 } },
+            // Окно тарифов уже показано — не всплывает в автотестах.
+            paywall: { lastShownAt: 4102444800000, views: 1 },
           },
           version: 1,
         }),

@@ -201,3 +201,29 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 
 ### Напоминания
 `ReminderAgent` (в `Providers`) — таймер до времени напоминания, пока приложение открыто, и зеркало настроек в IndexedDB (`informatica:reminder`) → `public/sw.js` (`periodicsync` на Android с установленным приложением, `notificationclick` → `/learn`). Логика текста — `lib/reminders.ts` (продублирована в `sw.js`, совпадение проверяет тест). Календарь — `.ics` с `RRULE:FREQ=DAILY`.
+
+## v0.6: экономика, тарифы, история тестов, школьная программа
+
+### Экономика (`lib/economy.ts`, решения #31–#32)
+Чистые функции, состояние — в сторе (версия хранилища та же, новые поля получают значения по умолчанию в `mergeState`).
+```
+plan   { tier: free|lite|unlimited, period, until, trial, trialUsed }   effectiveTier(plan, now)
+hearts { count, updatedAt, day }      heartsNow/heartsView: новый день → полный запас; +1 за regenMs
+wallet { chips, earned, spent }       ledger — история чипов (свежие записи одной причины склеиваются)
+boost  { mult, until } | null         chipMultiplier = тариф × бустер
+aiUsage { day, count, free }          quoteAi(kind) → AiReceipt: free (по тарифу) | plan (безлимит) | chips | ok:false (chips|cap)
+paywall { lastShownAt, views }        shouldShowPaywall: бесплатным — раз в 3 дня
+```
+- **Начисление чипов** — одна функция `settleChips(prev, next, extra)` в сторе: разница XP (5 XP = 1 чип), пересечение дневной цели, новые достижения, бонусы (урок, без ошибок, пробный ЕНТ). Вызывается в конце `recordAnswer`, `finishSession`, `completeLessons`, `recordGame`, `recordExam`, `noteCombo`, `unlock`, `createNote`.
+- **ИИ**: каждый вызов модели идёт через `spendAi(kind)` → квитанция; неудача запроса или ответ из кэша → `refundAi(receipt)` (чипы и бесплатное обращение возвращаются). Виды: `hint`, `explain`, `ask`, `chat`, `photo` (чат с фото и проверка решения), `review` (ИИ-разбор пробного ЕНТ), `feedback` (отзыв после урока — бесплатно).
+- **Сердечки**: `loseHeart()` — ошибка с первой попытки в уроке; `finishSession` тренировки возвращает `heart: true`, если вернула сердечко; `buy(id)` — покупки за чипы (`SHOP_ITEMS`).
+- **Деньги** (тарифы, `CHIP_PACKS`, `BOOST_PACKS`) — пока только `ComingSoonSheet` («Оплата скоро»); работает `startTrial()` — 7 дней «Безлимита» один раз.
+- Интерфейс: хуки `components/economy/useEconomy.ts` (`useNow` — общие «часы» раз в 15 с, `useHearts`, `useChips`, `usePlan`, `useAiQuote`), магазин `/shop`, окно тарифов `/plans?from=…` (вне оболочки), `PaywallAgent` в `Providers`.
+
+### История тестов (`lib/history.ts`, решение #33)
+`history: HistoryEntry[]` (до 100, новые первыми) пишется в `finishSession` (урок, «Проверить себя», тренировки) и `recordExam` (пробный ЕНТ, `id = exam-<id попытки>`). У записи — неверные ответы с первой попытки (`WrongItem`), `fixed` — исправленные. Верный ответ на задание (в любом месте) и `dismissMistake` отмечают ошибку исправленной во всех записях (`markFixed`).
+- Ошибки пробного ЕНТ: `stepId = "ent:<id>"` или `"ent:<id>:<n>"` (пункт соответствия / вопрос контекстного задания) → `lib/ent-steps.ts` превращает их в шаги урока для работы над ошибками.
+- Экраны: `/history`, `/history/<id>`, `/drill?mode=history&entry=<id>` — исправить ошибки одного теста.
+
+### Трек «Школьная программа»
+`profile.track: "ent" | "school"`, классы `"5"…"11"`. Данные — `content/school-program.ts` (класс → разделы → темы → id готовых уроков), логика — `lib/school.ts`, карта — `components/school/*`; переключатель трека на `/learn`. Источники программы — `docs/SCHOOL.md`.
