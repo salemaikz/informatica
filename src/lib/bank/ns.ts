@@ -1,12 +1,24 @@
 import type { L, Level } from "../types";
 import { toBinary } from "../check";
-import { generateLeveled, rangeForLevel, weightsSum } from "../generators";
+import {
+  HINT_BASE_COUNT,
+  HINT_DIV,
+  HINT_LENGTH,
+  HINT_ONES,
+  HINT_PARITY,
+  HINT_WEIGHTS,
+  generateLeveled,
+  rangeForLevel,
+  weightsSum,
+} from "../generators";
+import { kkSuffix } from "../kk";
 import { seeded } from "../text";
 import type { Pair, Rand, ShortQuestion, SkillBank, Statement } from "./types";
 
 // Банк навыков раздела «Системы счисления»: утверждения, пары и короткие вопросы.
-// Правильность всегда вычисляет код. Тексты после переменных — без падежных окончаний
-// (в казахском окончание зависит от числа), поэтому формулы и двоеточия.
+// Правильность всегда вычисляет код. Окончания после чисел по-казахски — только через kkSuffix
+// (окончание зависит от слова-числительного: «25-ті», «6-дан»), либо фраза строится без окончания.
+// У утверждений и коротких вопросов — бесплатная подсказка hint (не выдаёт ответ).
 
 const int = (rand: Rand, min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 const pick = <T,>(rand: Rand, arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
@@ -14,6 +26,11 @@ const same = (s: string): L => ({ ru: s, kk: s });
 
 const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
 export const sup = (n: number) => String(n).replace(/\d/g, (d) => SUP[d]);
+
+const HINT_POW_CHECK: L = {
+  ru: "Умножение на 2 в двоичной системе дописывает справа один ноль. Сравни число нулей в записи с показателем степени.",
+  kk: `Екілік жүйеде ${kkSuffix(2, "dat")} көбейту оң жаққа бір нөл жазады. Жазбадағы нөлдер санын дәреже көрсеткішімен салыстыр.`,
+};
 
 const reversedValue = (bin: string) => parseInt(bin.split("").reverse().join(""), 2);
 
@@ -42,6 +59,7 @@ const bin2dec: SkillBank = {
       text: same(`${bin}₂ = ${claim}₁₀`),
       value,
       explanation: same(`${bin}₂ = ${weightsSum(bin)} = ${n}₁₀`),
+      hint: HINT_WEIGHTS,
     };
   },
   pair(level, seed) {
@@ -63,6 +81,7 @@ const bin2dec: SkillBank = {
       answer: String(n),
       mode: "number",
       explanation: same(`${weightsSum(bin)} = ${n}`),
+      hint: HINT_WEIGHTS,
     };
   },
 };
@@ -91,6 +110,7 @@ const dec2bin: SkillBank = {
       text: same(`${n}₁₀ = ${claim}₂`),
       value: claim === bin,
       explanation: same(`${n} = ${weightsSum(bin)} → ${bin}₂`),
+      hint: HINT_DIV,
     };
   },
   pair(level, seed) {
@@ -112,6 +132,7 @@ const dec2bin: SkillBank = {
       answer: bin,
       mode: "binary",
       explanation: same(`${n} = ${weightsSum(bin)} → ${bin}₂`),
+      hint: HINT_DIV,
     };
   },
 };
@@ -126,6 +147,10 @@ const SYSTEM_NAME: Record<number, L> = {
 };
 const SYSTEM_DIGITS: Record<number, string> = { 2: "0, 1", 8: "0–7", 10: "0–9", 16: "0–9, A–F" };
 const HEX_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
+const HINT_HEX: L = {
+  ru: "В шестнадцатеричной системе после цифры 9 цифры продолжаются буквами по порядку: A — следующая за 9. Отсчитай по порядку.",
+  kk: `Он алтылық жүйеде ${kkSuffix(9, "abl")} кейін цифрлар әріптермен жалғасады: A — 9 цифрынан кейінгі цифр. Ретімен санап көр.`,
+};
 
 const base: SkillBank = {
   skill: "ns.base",
@@ -147,8 +172,9 @@ const base: SkillBank = {
         value,
         explanation: {
           ru: `Цифр столько, сколько основание: от 0 до ${b - 1} — всего ${b}.`,
-          kk: `Цифрлар саны негізге тең: 0-ден ${b - 1}-ге дейін — барлығы ${b}.`,
+          kk: `Цифрлар саны негізге тең: ${kkSuffix(0, "abl")} ${kkSuffix(b - 1, "dat")} дейін — барлығы ${b}.`,
         },
+        hint: HINT_BASE_COUNT,
       };
     }
     if (level === 2) {
@@ -164,6 +190,7 @@ const base: SkillBank = {
           ru: `В шестнадцатеричной системе цифра ${letter} означает ${claim}`,
           kk: `Он алтылық жүйеде ${letter} цифры ${claim} санын білдіреді`,
         },
+        hint: HINT_HEX,
         value,
         explanation: {
           ru: `A = 10, B = 11, C = 12, D = 13, E = 14, F = 15. Значит, ${letter} = ${10 + i}.`,
@@ -189,6 +216,10 @@ const base: SkillBank = {
       explanation: {
         ru: `Цифры ${sys.ru} системы: ${SYSTEM_DIGITS[b]}.${value ? "" : ` В записи ${rec} есть лишняя цифра.`}`,
         kk: `${sys.kk[0].toUpperCase()}${sys.kk.slice(1)} жүйенің цифрлары: ${SYSTEM_DIGITS[b]}.${value ? "" : ` ${rec} жазбасында артық цифр бар.`}`,
+      },
+      hint: {
+        ru: `Проверь каждую цифру записи ${rec}: есть ли такая цифра в ${sys.ru} системе?`,
+        kk: `${rec} жазбасының әр цифрын тексер: ${sys.kk} жүйеде ондай цифр бар ма?`,
       },
     };
   },
@@ -223,6 +254,7 @@ const base: SkillBank = {
         answer: String(b),
         mode: "number",
         explanation: { ru: `Цифр столько, сколько основание: ${b}.`, kk: `Цифрлар саны негізге тең: ${b}.` },
+        hint: HINT_BASE_COUNT,
       };
     }
     const i = int(rand, 0, 5);
@@ -234,6 +266,7 @@ const base: SkillBank = {
       answer: String(10 + i),
       mode: "number",
       explanation: same("A = 10, B = 11, C = 12, D = 13, E = 14, F = 15"),
+      hint: HINT_HEX,
     };
   },
 };
@@ -262,6 +295,7 @@ const props: SkillBank = {
           ru: `Последняя цифра — ${bin.at(-1)}: ${even ? "0 → чётное" : "1 → нечётное"}.`,
           kk: `Соңғы цифры — ${bin.at(-1)}: ${even ? "0 → жұп" : "1 → тақ"}.`,
         },
+        hint: HINT_PARITY,
       };
     }
     if (kind === "pow") {
@@ -278,6 +312,7 @@ const props: SkillBank = {
           ru: `2${sup(k)} в двоичной системе — единица и ${k} нулей после неё: 1${"0".repeat(k)}₂.`,
           kk: `2${sup(k)} екілік жүйеде — бірлік және одан кейін ${k} нөл: 1${"0".repeat(k)}₂.`,
         },
+        hint: HINT_POW_CHECK,
       };
     }
     if (kind === "length") {
@@ -297,6 +332,7 @@ const props: SkillBank = {
           ru: `2${sup(len - 1)} = ${2 ** (len - 1)} ≤ ${n} < ${2 ** len} = 2${sup(len)}, значит цифр ${len}: ${bin}₂.`,
           kk: `2${sup(len - 1)} = ${2 ** (len - 1)} ≤ ${n} < ${2 ** len} = 2${sup(len)}, демек цифрлар саны ${len}: ${bin}₂.`,
         },
+        hint: HINT_LENGTH,
       };
     }
     const ones = bin.split("").filter((c) => c === "1").length;
@@ -312,6 +348,7 @@ const props: SkillBank = {
       },
       value: claim === ones,
       explanation: same(`${n} = ${weightsSum(bin)} = ${bin}₂ → ${ones}`),
+      hint: HINT_ONES,
     };
   },
   pair(level, seed): Pair {
@@ -334,6 +371,7 @@ const props: SkillBank = {
         answer: String(ones),
         mode: "number",
         explanation: same(`${n} = ${bin}₂ → ${ones}`),
+        hint: HINT_ONES,
       };
     }
     return {
@@ -344,6 +382,7 @@ const props: SkillBank = {
       answer: String(bin.length),
       mode: "number",
       explanation: same(`${n} = ${bin}₂ → ${bin.length}`),
+      hint: HINT_LENGTH,
     };
   },
 };

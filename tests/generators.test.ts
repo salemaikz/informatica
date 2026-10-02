@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildDrill, generateStep } from "@/lib/generators";
+import { buildDrill, generateLeveled, generateStep } from "@/lib/generators";
 import { checkInput, divisionLadder, toBinary } from "@/lib/check";
+import { kkSuffix, type KkCase } from "@/lib/kk";
 import { validateStep } from "./validate";
+
+/** Все допустимые окончания числа во всех падежах (для проверки текстов). */
+const kkAll = (n: number) =>
+  (["acc", "dat", "loc", "abl", "gen", "ins"] as KkCase[]).map((c) => kkSuffix(n, c).split("-").slice(1).join("-"));
 
 const SKILLS = ["ns.base", "ns.bin2dec", "ns.dec2bin", "ns.props"];
 
@@ -22,6 +27,70 @@ describe("генераторы", () => {
         }
       }
     }
+  });
+
+  it("у каждого задания есть подсказка, а у choice — whyWrong на неверные варианты", () => {
+    for (const skill of SKILLS)
+      for (const level of [1, 2, 3] as const)
+        for (let seed = 1; seed < 150; seed++) {
+          const step = generateLeveled(skill, level, seed);
+          expect(step.hint?.ru && step.hint?.kk, `${step.id}: hint`).toBeTruthy();
+          if (step.type === "choice") {
+            expect(step.whyWrong, `${step.id}: whyWrong`).toBeDefined();
+            const ww = step.whyWrong!;
+            expect(ww.length).toBe(step.options.length);
+            ww.forEach((w, i) => {
+              if (i === step.correct) expect(w).toBeNull();
+              else expect(w?.ru && w?.kk, `${step.id}: вариант ${i}`).toBeTruthy();
+            });
+          }
+        }
+  });
+
+  it("подсказка не выдаёт ответ", () => {
+    for (let seed = 1; seed < 200; seed++) {
+      for (const skill of ["ns.bin2dec", "ns.dec2bin"]) {
+        const step = generateLeveled(skill, 3, seed);
+        if (step.type !== "input") continue;
+        const answer = step.answers[0];
+        // ответ из 4+ цифр в тексте подсказки — явная утечка
+        if (answer.length >= 4) {
+          expect(step.hint!.ru.includes(answer), step.id).toBe(false);
+          expect(step.hint!.kk.includes(answer), step.id).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("whyWrong по типу ошибки: обратный порядок разрядов и ±1", () => {
+    let reversed = 0;
+    let off = 0;
+    for (let seed = 1; seed < 400; seed++) {
+      const step = generateLeveled("ns.dec2bin", 1, seed);
+      if (step.type !== "choice") continue;
+      step.whyWrong!.forEach((w) => {
+        if (w?.ru.includes("снизу вверх")) reversed++;
+        if (w?.ru.includes("двоичная запись числа")) off++;
+      });
+    }
+    expect(reversed).toBeGreaterThan(0);
+    expect(off).toBeGreaterThan(0);
+  });
+
+  it("казахские тексты не содержат неверных окончаний после чисел", () => {
+    for (const skill of SKILLS)
+      for (const level of [1, 2, 3] as const)
+        for (let seed = 1; seed < 150; seed++) {
+          const step = generateLeveled(skill, level, seed);
+          const texts = [step.prompt.kk, step.hint?.kk ?? "", "explanation" in step ? step.explanation.kk : "", ...(step.type === "choice" ? step.whyWrong!.map((w) => w?.kk ?? "") : [])];
+          for (const t of texts) {
+            // допустимо только то, что kkSuffix дал бы для этого числа
+            for (const m of t.matchAll(/(\d+)-([а-яәіңғүұқөһ]+)/g)) {
+              const expected = kkAll(Number(m[1]));
+              expect(expected.includes(m[2]), `${step.id}: «${m[0]}»`).toBe(true);
+            }
+          }
+        }
   });
 
   it("детерминированы по seed", () => {

@@ -1,7 +1,7 @@
 import "server-only";
 import type { StudentContext, TaskContext, TutorMode } from "@/lib/ai-types";
 import type { Lang } from "@/lib/types";
-import { renderContext } from "./context";
+import { renderContext, styleRule } from "./context";
 
 // Системные промпты. Пишем по-русски (модель понимает лучше всего), а язык ответа задаём явно.
 // Правило: любые изменения промптов фиксировать в docs/CHANGELOG.md — они влияют на качество обучения.
@@ -32,8 +32,24 @@ const MODE_RULE: Record<TutorMode, string> = {
   explain: `Режим: РАЗБОР ОШИБКИ. Ученик ответил на задание неверно (ниже его ответ и верный ответ). 1) Предположи, в чём именно ошибка рассуждения, исходя из его ответа. 2) Коротко покажи верное решение. 3) Закончи одним советом, как не ошибаться на ЕНТ. Без упрёков.`,
 };
 
-export function tutorSystemPrompt(ctx: StudentContext, mode: TutorMode, task?: TaskContext): string {
-  const parts = [BASE, LANG_RULE[ctx.lang], MODE_RULE[mode], `ДАННЫЕ УЧЕНИКА (для персонализации, не пересказывай их дословно):\n${renderContext(ctx)}`];
+/** Приписка при повторной генерации подсказки, в которой утёк ответ. */
+export const NO_LEAK_NOTE =
+  "ВАЖНО: в прошлой попытке в подсказке прозвучал ответ. Не называй ответ — ни прямо, ни числом, ни текстом верного варианта. Наведи только на первый шаг решения.";
+
+/**
+ * neutral — запрос для общего кэша: без персональных данных (имя, память, ошибки, заметки),
+ * только язык, стиль объяснений и задание. noLeak — повтор подсказки с припиской «не называй ответ».
+ */
+export function tutorSystemPrompt(
+  ctx: StudentContext,
+  mode: TutorMode,
+  task?: TaskContext,
+  opts: { neutral?: boolean; noLeak?: boolean } = {},
+): string {
+  const student = opts.neutral
+    ? `СТИЛЬ ОБЪЯСНЕНИЙ: ${styleRule(ctx.style)}.`
+    : `ДАННЫЕ УЧЕНИКА (для персонализации, не пересказывай их дословно):\n${renderContext(ctx)}`;
+  const parts = [BASE, LANG_RULE[ctx.lang], MODE_RULE[mode], student];
   if (task?.theory) parts.push(`ТЕОРИЯ ТЕКУЩЕГО ШАГА УРОКА${task.prompt ? ` «${task.prompt}»` : ""}:\n${task.theory}`);
   if (task?.prompt && !task.theory) {
     const t = [`ЗАДАНИЕ: ${task.prompt}`];
@@ -47,8 +63,12 @@ export function tutorSystemPrompt(ctx: StudentContext, mode: TutorMode, task?: T
     } else if (task.correct) {
       t.push(`(Верный ответ для тебя, НЕ сообщай его: ${task.correct})`);
     }
+    // Лестница: бесплатное уже показано — ИИ идёт дальше, а не повторяет.
+    if (mode === "hint" && task.hint) t.push(`Ученик уже видел подсказку: «${task.hint}». Дай следующую, более конкретную, не повторяя её.`);
+    if (mode === "explain" && task.whyWrong) t.push(`Ученик уже прочитал краткий разбор: «${task.whyWrong}». Объясни подробнее, не повторяя дословно.`);
     parts.push(t.join("\n"));
   }
+  if (opts.noLeak) parts.push(NO_LEAK_NOTE);
   return parts.join("\n\n");
 }
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { AiError, streamTutor } from "@/lib/ai";
+import { cacheableRequest, cacheKeyPayload, clientCacheGet, clientCacheKey, clientCachePut } from "@/lib/ai-cache";
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
 import type { DictKey } from "@/i18n/dict";
@@ -26,26 +27,54 @@ export function useTutor() {
       onText: (text: string) => void,
     ): Promise<string | null> => {
       const app = useApp.getState();
+      const context = buildStudentContext(app);
+      // Неперсональные запросы: сначала клиентский кэш — без обращения к серверу и без траты дневного лимита.
+      const cacheReq = cacheableRequest(args.mode, args.messages, args.task, !!args.image);
+      const cacheKey =
+        cacheReq && args.task
+          ? clientCacheKey(cacheKeyPayload({ mode: args.mode, lang: context.lang, style: context.style, task: args.task, question: cacheReq.question }))
+          : null;
+      if (cacheKey) {
+        const hit = clientCacheGet(cacheKey);
+        if (hit) {
+          setError(null);
+          onText(hit);
+          app.unlock("ai_friend");
+          return hit;
+        }
+      }
       if (!app.spendAi()) {
         setError("tutor.limit");
         return null;
       }
+      let refunded = false;
       abort.current?.abort();
       const ctrl = new AbortController();
       abort.current = ctrl;
       setError(null);
       setStreaming(true);
       try {
+        const meta: { status: string | null } = { status: null };
         const text = await streamTutor(
-          { ...args, context: buildStudentContext(useApp.getState()) },
+          { ...args, context },
           onText,
           ctrl.signal,
+          (st) => {
+            meta.status = st;
+            // Ответ взят из серверного кэша — модель не вызывалась, возвращаем потраченное обращение.
+            if (st === "hit") {
+              useApp.getState().refundAi();
+              refunded = true;
+            }
+          },
         );
+        // «skip» — заглушка вместо подсказки, её не запоминаем.
+        if (cacheKey && (meta.status === "hit" || meta.status === "miss")) clientCachePut(cacheKey, text);
         useApp.getState().unlock("ai_friend");
         return text;
       } catch (e) {
         if (ctrl.signal.aborted) return null;
-        useApp.getState().refundAi();
+        if (!refunded) useApp.getState().refundAi();
         setError(e instanceof AiError && e.code === "rate_limited" ? "tutor.limit" : "tutor.error");
         return null;
       } finally {

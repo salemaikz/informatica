@@ -1,7 +1,7 @@
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { getOpenAI, jsonError, logUsage, MODELS } from "@/server/openai";
 import { clientIp, rateLimit } from "@/server/rate-limit";
-import { sanitizeContext } from "@/server/context";
+import { sameOrigin, sanitizeContext } from "@/server/context";
 import { lessonFeedbackPrompt } from "@/server/prompts";
 
 // Отзыв после урока + обновление «памяти наставника» об ученике. Дешёвая модель.
@@ -22,6 +22,7 @@ const SCHEMA = {
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
 
 export async function POST(req: Request) {
+  if (!sameOrigin(req)) return jsonError(403, "forbidden_origin");
   if (!rateLimit(`feedback:${clientIp(req)}`, 20, 10 * 60_000)) return jsonError(429, "rate_limited");
   const client = getOpenAI();
   if (!client) return jsonError(503, "ai_not_configured");

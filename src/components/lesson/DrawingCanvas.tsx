@@ -1,27 +1,51 @@
 "use client";
 
-import clsx from "clsx";
-import { Eraser, Pencil, Trash2, Undo2 } from "lucide-react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Eraser, Highlighter, Pencil, Trash2, Undo2 } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncExternalStore } from "react";
+import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
+import { cn } from "@/lib/cn";
+import {
+  DEFAULT_SIZE_INDEX,
+  MARKER_ALPHA,
+  MAX_STROKES,
+  PALETTE,
+  PEN_COLORS,
+  TOOL_SIZES,
+  defaultColor,
+  exportScale,
+  hasInk,
+  makeStroke,
+  sanitizeStrokes,
+  strokesBounds,
+  type Box,
+  type ColorId,
+  type Point,
+  type Stroke,
+  type ToolId,
+} from "@/lib/strokes";
 
-type Point = { x: number; y: number };
-type Stroke = { tool: "pen" | "eraser"; points: Point[] };
+export type { Stroke } from "@/lib/strokes";
 
 export interface DrawingHandle {
   isEmpty: () => boolean;
-  /** Рисунок на белом фоне (без сетки) — для отправки ИИ. */
+  /** Рисунок в настоящих цветах на белом фоне (без сетки) — для отправки ИИ. null — холст пока недоступен. */
   exportCanvas: () => HTMLCanvasElement | null;
   /**
-   * Рисунок на прозрачном фоне (PNG dataURL, чернила #111) — для сохранения и восстановления через `initialImage`.
+   * Рисунок на прозрачном фоне (PNG dataURL, цвета как на светлой теме) — для сохранения и восстановления через `initialImage`.
    * "" — рисунок пуст; null — холст пока недоступен (нулевой размер), сохранять нечего.
    */
   exportImage: () => string | null;
+  /**
+   * Для конспектов: PNG dataURL в настоящих цветах на белом фоне, обрезанный по содержимому с полями 16 px,
+   * шириной не больше 1600 px. null — рисовать нечего.
+   */
+  exportPaper: () => string | null;
 }
 
 interface BaseImage {
   img: HTMLImageElement;
-  /** Копия, перекрашенная в цвет чернил текущей темы. */
+  /** Копия, перекрашенная в нужный цвет чернил. */
   tinted: HTMLCanvasElement | null;
   tint: string;
 }
@@ -33,6 +57,11 @@ interface BaseImage {
 const EXPORT_SCALE = 2;
 /** Защита от испорченных данных: слишком большую картинку не восстанавливаем (память холста, особенно на iOS). */
 const MAX_IMAGE_PX = 4096;
+const PAPER_MARGIN = 16;
+const PAPER_MAX_WIDTH = 1600;
+const PAPER_MAX_SIDE = 8192;
+
+type Palette = Record<ColorId, string>;
 
 /** Освобождает память временного холста (iOS держит их до сборки мусора и быстро упирается в лимит). */
 function freeCanvas(c: HTMLCanvasElement | null) {
@@ -53,278 +82,578 @@ function tintImage(img: HTMLImageElement, color: string): HTMLCanvasElement {
   return c;
 }
 
-interface DrawingCanvasProps {
-  onChange?: (empty: boolean) => void;
-  disabled?: boolean;
-  /** Сохранённый рисунок (из exportImage) — читается один раз при монтировании; рисуется под новыми штрихами. */
-  initialImage?: string;
-  /** Фиксированная высота холста в px (по умолчанию зависит от ширины). */
-  height?: number;
+/** Тёмная ли сейчас тема: ручной выбор (data-theme) или системная настройка. */
+function readDark(): boolean {
+  const attr = document.documentElement.getAttribute("data-theme");
+  if (attr === "dark") return true;
+  if (attr === "light") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-const PEN = 3;
-const ERASER = 22;
+function subscribeTheme(cb: () => void): () => void {
+  const mo = new MutationObserver(cb);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener("change", cb);
+  return () => {
+    mo.disconnect();
+    mq.removeEventListener("change", cb);
+  };
+}
 
-/** Холст «в клеточку» для решения задач пальцем/стилусом/мышью. */
-export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
-  function DrawingCanvas({ onChange, disabled, initialImage, height: fixedHeight }, ref) {
-    const { t } = useT();
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const wrapRef = useRef<HTMLDivElement>(null);
-    const strokes = useRef<Stroke[]>([]);
-    const current = useRef<Stroke | null>(null);
-    const [tool, setTool] = useState<"pen" | "eraser">("pen");
-    const [count, setCount] = useState(0);
-    const base = useRef<BaseImage | null>(null);
-    /** Размер холста в CSS-пикселях (не зависит от dpr). */
-    const size = useRef({ w: 0, h: 0 });
-    const initialRef = useRef(initialImage);
-    const [hasBase, setHasBase] = useState(false);
+/** Путь штриха: сглаженная ломаная (квадратичные кривые через середины отрезков). */
+function tracePath(ctx: CanvasRenderingContext2D, pts: readonly Point[]) {
+  ctx.beginPath();
+  if (!pts.length) return;
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  if (pts.length === 1) {
+    ctx.lineTo(pts[0][0] + 0.1, pts[0][1] + 0.1);
+    return;
+  }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+    const my = (pts[i][1] + pts[i + 1][1]) / 2;
+    ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last[0], last[1]);
+}
 
-    const draw = useCallback((ctx: CanvasRenderingContext2D, list: Stroke[], color: string) => {
-      for (const s of list) {
-        if (!s.points.length) continue;
-        ctx.save();
-        ctx.globalCompositeOperation = s.tool === "eraser" ? "destination-out" : "source-over";
-        ctx.strokeStyle = color;
-        ctx.lineWidth = s.tool === "eraser" ? ERASER : PEN;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.beginPath();
-        ctx.moveTo(s.points[0].x, s.points[0].y);
-        if (s.points.length === 1) ctx.lineTo(s.points[0].x + 0.1, s.points[0].y + 0.1);
-        for (const p of s.points.slice(1)) ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }, []);
+/**
+ * Рисует один штрих. `multiply` — «живой» маркер поверх уже нарисованного в светлой теме (после завершения
+ * штриха слои пересобираются и маркер оказывается под чернилами).
+ */
+function applyStroke(ctx: CanvasRenderingContext2D, s: Stroke, pal: Palette, markerAlpha: number, multiply: boolean) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = s.size;
+  if (s.tool === "eraser") {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.strokeStyle = "#000";
+  } else {
+    ctx.strokeStyle = pal[s.color];
+    if (s.tool === "marker") {
+      ctx.globalAlpha = markerAlpha;
+      if (multiply) ctx.globalCompositeOperation = "multiply";
+    }
+  }
+  tracePath(ctx, s.points);
+  ctx.stroke();
+  ctx.restore();
+}
 
-    const redraw = useCallback(() => {
-      const c = canvasRef.current;
-      if (!c) return;
-      const ctx = c.getContext("2d")!;
-      const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, c.width, c.height);
-      const ink = getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#1b2333";
-      const b = base.current;
-      if (b) {
-        if (!b.tinted || b.tint !== ink) {
-          freeCanvas(b.tinted);
-          b.tinted = tintImage(b.img, ink);
-          b.tint = ink;
-        }
-        // Сохранённый рисунок — под штрихами, поэтому ластик стирает и его. Размер — по фиксированному масштабу.
-        ctx.drawImage(b.tinted, 0, 0, b.tinted.width / EXPORT_SCALE, b.tinted.height / EXPORT_SCALE);
-      }
-      draw(ctx, strokes.current, ink);
-    }, [draw]);
+interface LayerOpts {
+  pxW: number;
+  pxH: number;
+  /** Пикселей на CSS-пиксель. */
+  scale: number;
+  /** Левый верхний угол видимой области в CSS-пикселях. */
+  ox: number;
+  oy: number;
+  pal: Palette;
+  markerAlpha: number;
+  /** Подложка (старый PNG), уже окрашенная; рисуется в логическом размере. */
+  base: HTMLCanvasElement | null;
+}
 
-    // Восстановление сохранённого рисунка (один раз).
-    useEffect(() => {
-      const src = initialRef.current;
-      if (!src) return;
-      let alive = true;
-      const img = new Image();
-      img.onload = () => {
-        if (!alive) return;
-        if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth > MAX_IMAGE_PX || img.naturalHeight > MAX_IMAGE_PX) return;
-        base.current = { img, tinted: null, tint: "" };
-        setHasBase(true);
-        redraw();
-      };
-      img.src = src;
-      return () => {
-        alive = false;
-      };
-    }, [redraw]);
+/**
+ * Собирает рисунок в `target` (поверх того, что там уже есть): сначала слой маркера, над ним слой чернил
+ * (подложка + ручка). Ластик действует на оба слоя в порядке штрихов, поэтому маркер всегда под чернилами.
+ */
+function renderLayers(target: CanvasRenderingContext2D, strokes: readonly Stroke[], o: LayerOpts) {
+  const makeLayer = () => {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, o.pxW);
+    c.height = Math.max(1, o.pxH);
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(o.scale, 0, 0, o.scale, -o.ox * o.scale, -o.oy * o.scale);
+    return { c, ctx };
+  };
+  const hasMarker = strokes.some((s) => s.tool === "marker");
+  if (hasMarker) {
+    const { c, ctx } = makeLayer();
+    for (const s of strokes) if (s.tool !== "pen") applyStroke(ctx, s, o.pal, o.markerAlpha, false);
+    target.save();
+    target.setTransform(1, 0, 0, 1, 0, 0);
+    target.drawImage(c, 0, 0);
+    target.restore();
+    freeCanvas(c);
+  }
+  const { c, ctx } = makeLayer();
+  if (o.base) ctx.drawImage(o.base, 0, 0, o.base.width / EXPORT_SCALE, o.base.height / EXPORT_SCALE);
+  for (const s of strokes) if (s.tool !== "marker") applyStroke(ctx, s, o.pal, o.markerAlpha, false);
+  target.save();
+  target.setTransform(1, 0, 0, 1, 0, 0);
+  target.drawImage(c, 0, 0);
+  target.restore();
+  freeCanvas(c);
+}
 
-    // Смена темы: цвет чернил берётся из --text, поэтому перерисовываем (и перекрашиваем сохранённый рисунок).
-    useEffect(() => {
-      const mo = new MutationObserver(() => redraw());
-      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-      const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      const onScheme = () => redraw();
-      mq.addEventListener("change", onScheme);
-      return () => {
-        mo.disconnect();
-        mq.removeEventListener("change", onScheme);
-      };
-    }, [redraw]);
+const unionBox = (a: Box | null, b: Box): Box => {
+  if (!a) return b;
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
 
-    // Освобождаем перекрашенную копию при размонтировании.
-    useEffect(
-      () => () => {
-        const b = base.current;
-        if (b) {
-          freeCanvas(b.tinted);
-          b.tinted = null;
-        }
-      },
-      [],
-    );
+interface DrawingCanvasProps {
+  /** Рисунок изменился (штрих закончен, отмена, очистка): empty — рисовать нечего. */
+  onChange?: (empty: boolean) => void;
+  disabled?: boolean;
+  /** Сохранённый рисунок-подложка (старый PNG) — читается один раз при монтировании; рисуется под новыми штрихами. */
+  initialImage?: string;
+  /** Сохранённые штрихи — читаются один раз при монтировании. */
+  initialStrokes?: Stroke[];
+  /** Список штрихов после каждого изменения (для сохранения вектором). */
+  onStrokes?: (strokes: Stroke[]) => void;
+  /** Фиксированная высота холста в px (по умолчанию зависит от ширины). */
+  height?: number;
+  /** Холст занимает всё свободное место родителя (родитель — flex-контейнер с заданной высотой). */
+  fill?: boolean;
+  className?: string;
+}
 
-    useEffect(() => {
-      const resize = () => {
-        const c = canvasRef.current;
-        const w = wrapRef.current;
-        if (!c || !w) return;
-        const dpr = window.devicePixelRatio || 1;
-        const width = w.clientWidth;
-        const height = fixedHeight ?? Math.max(260, Math.min(420, Math.round(width * 0.75)));
-        size.current = { w: width, h: height };
-        c.style.width = `${width}px`;
-        c.style.height = `${height}px`;
-        c.width = Math.round(width * dpr);
-        c.height = Math.round(height * dpr);
-        redraw();
-      };
-      resize();
-      const ro = new ResizeObserver(resize);
-      if (wrapRef.current) ro.observe(wrapRef.current);
-      return () => ro.disconnect();
-    }, [redraw, fixedHeight]);
+const COLOR_KEYS: Record<ColorId, DictKey> = {
+  ink: "canvas.color.ink",
+  blue: "canvas.color.blue",
+  red: "canvas.color.red",
+  green: "canvas.color.green",
+  orange: "canvas.color.orange",
+  yellow: "canvas.color.yellow",
+};
 
-    const changed = () => {
-      setCount(strokes.current.length);
-      onChange?.(strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current);
+/** Диаметр точки на кнопке размера: растёт с толщиной, но влезает в кнопку. */
+function dotPx(tool: ToolId, size: number): number {
+  const k = tool === "eraser" ? 0.3 : tool === "marker" ? 0.55 : 1;
+  return Math.round(Math.min(22, size * k + 3));
+}
+
+/** Холст «в клеточку» для решения задач пальцем/стилусом/мышью: ручка, маркер, ластик, цвета и размеры. */
+export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(function DrawingCanvas(
+  { onChange, disabled, initialImage, initialStrokes, onStrokes, height: fixedHeight, fill, className },
+  ref,
+) {
+  const { t } = useT();
+  const dark = useSyncExternalStore(subscribeTheme, readDark, () => false);
+  const pal = PALETTE[dark ? "dark" : "light"];
+  const markerAlpha = MARKER_ALPHA[dark ? "dark" : "light"];
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  /** Завершённые штрихи. */
+  const strokes = useRef<Stroke[]>([]);
+  /** Штрих, который рисуется сейчас (точки «сырые», упрощаются при отпускании). */
+  const current = useRef<Stroke | null>(null);
+  /** Кэш завершённых штрихов (в пикселях экрана): при движении перерисовывается только текущий штрих. */
+  const cache = useRef<HTMLCanvasElement | null>(null);
+  const base = useRef<BaseImage | null>(null);
+  /** Размер холста в CSS-пикселях и devicePixelRatio, с которым он создан. */
+  const size = useRef({ w: 0, h: 0, dpr: 1 });
+  const initialRef = useRef(initialImage);
+
+  const [initial] = useState(() => sanitizeStrokes(initialStrokes ?? []));
+  const [count, setCount] = useState(initial.length);
+  const [hasBase, setHasBase] = useState(false);
+  const [tool, setTool] = useState<ToolId>("pen");
+  const [penColor, setPenColor] = useState<ColorId>("ink");
+  const [sizeIdx, setSizeIdx] = useState<Record<ToolId, number>>(DEFAULT_SIZE_INDEX);
+
+  const sizes = TOOL_SIZES[tool];
+  const curSize = sizes[Math.min(sizeIdx[tool], sizes.length - 1)];
+  const curColor: ColorId = tool === "pen" ? penColor : defaultColor(tool);
+
+  /** Подложка, окрашенная в чернила текущей темы. */
+  const tintedBase = useCallback((color: string): HTMLCanvasElement | null => {
+    const b = base.current;
+    if (!b) return null;
+    if (!b.tinted || b.tint !== color) {
+      freeCanvas(b.tinted);
+      b.tinted = tintImage(b.img, color);
+      b.tint = color;
+    }
+    return b.tinted;
+  }, []);
+
+  /** Выводит кэш + текущий штрих на экран. */
+  const paint = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c || !c.width) return;
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (cache.current && cache.current.width) ctx.drawImage(cache.current, 0, 0);
+    const cur = current.current;
+    if (cur) {
+      ctx.setTransform(size.current.dpr, 0, 0, size.current.dpr, 0, 0);
+      applyStroke(ctx, cur, pal, markerAlpha, !dark);
+    }
+  }, [pal, markerAlpha, dark]);
+
+  /** Пересобирает кэш из подложки и всех штрихов (смена размера/темы, отмена, маркер). */
+  const rebuild = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c || !c.width) return;
+    let layer = cache.current;
+    if (!layer) {
+      layer = document.createElement("canvas");
+      cache.current = layer;
+    }
+    if (layer.width !== c.width || layer.height !== c.height) {
+      layer.width = c.width;
+      layer.height = c.height;
+    }
+    const ctx = layer.getContext("2d")!;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, layer.width, layer.height);
+    renderLayers(ctx, strokes.current, {
+      pxW: layer.width,
+      pxH: layer.height,
+      scale: size.current.dpr,
+      ox: 0,
+      oy: 0,
+      pal,
+      markerAlpha,
+      base: tintedBase(pal.ink),
+    });
+    paint();
+  }, [pal, markerAlpha, tintedBase, paint]);
+
+  // Штрихи, переданные при монтировании (объявлен раньше остальных эффектов — выполняется первым).
+  useEffect(() => {
+    strokes.current = initial.slice();
+  }, [initial]);
+
+  // Восстановление старого рисунка-подложки (один раз).
+  useEffect(() => {
+    const src = initialRef.current;
+    if (!src) return;
+    let alive = true;
+    const img = new Image();
+    img.onload = () => {
+      if (!alive) return;
+      if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth > MAX_IMAGE_PX || img.naturalHeight > MAX_IMAGE_PX) return;
+      base.current = { img, tinted: null, tint: "" };
+      setHasBase(true);
+      rebuild();
     };
-
-    /** Слой «сохранённый рисунок + штрихи» на прозрачном фоне: pxW×pxH пикселей, `scale` пикселей на CSS-пиксель. */
-    const renderLayer = useCallback(
-      (pxW: number, pxH: number, scale: number): HTMLCanvasElement => {
-        const layer = document.createElement("canvas");
-        layer.width = Math.max(1, pxW);
-        layer.height = Math.max(1, pxH);
-        const lctx = layer.getContext("2d")!;
-        lctx.setTransform(scale, 0, 0, scale, 0, 0);
-        const b = base.current;
-        // Базу рисуем в её логическом размере: при scale = EXPORT_SCALE это пиксель в пиксель, без пересэмплинга.
-        if (b) lctx.drawImage(b.img, 0, 0, b.img.naturalWidth / EXPORT_SCALE, b.img.naturalHeight / EXPORT_SCALE);
-        draw(lctx, strokes.current, "#111111");
-        return layer;
-      },
-      [draw],
-    );
-
-    useImperativeHandle(ref, () => ({
-      isEmpty: () => strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current,
-      exportCanvas: () => {
-        const c = canvasRef.current;
-        if (!c) return null;
-        const dpr = window.devicePixelRatio || 1;
-        const out = document.createElement("canvas");
-        out.width = c.width;
-        out.height = c.height;
-        const ctx = out.getContext("2d")!;
-        // Сначала рисуем всё на прозрачном слое (чтобы ластик работал), затем подкладываем белый фон.
-        const layer = renderLayer(c.width, c.height, dpr);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, out.width, out.height);
-        ctx.drawImage(layer, 0, 0);
-        freeCanvas(layer);
-        return out;
-      },
-      exportImage: () => {
-        const c = canvasRef.current;
-        if (!c || c.width === 0 || c.height === 0) return null;
-        if (!base.current && strokes.current.every((s) => s.tool === "eraser")) return "";
-        // Слой не меньше сохранённого рисунка: то, что вышло за текущую ширину панели, не обрезаем.
-        const img = base.current?.img;
-        const w = Math.max(size.current.w, img ? img.naturalWidth / EXPORT_SCALE : 0);
-        const h = Math.max(size.current.h, img ? img.naturalHeight / EXPORT_SCALE : 0);
-        const layer = renderLayer(Math.ceil(w * EXPORT_SCALE), Math.ceil(h * EXPORT_SCALE), EXPORT_SCALE);
-        try {
-          return layer.toDataURL("image/png");
-        } finally {
-          freeCanvas(layer);
-        }
-      },
-    }));
-
-    const pos = (e: React.PointerEvent): Point => {
-      const r = canvasRef.current!.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    img.src = src;
+    return () => {
+      alive = false;
     };
+  }, [rebuild]);
 
-    const onDown = (e: React.PointerEvent) => {
-      if (disabled) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      current.current = { tool, points: [pos(e)] };
-      strokes.current.push(current.current);
-      redraw();
-    };
-    const onMove = (e: React.PointerEvent) => {
-      if (!current.current) return;
-      const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
-      const r = canvasRef.current!.getBoundingClientRect();
-      for (const ev of events) current.current.points.push({ x: ev.clientX - r.left, y: ev.clientY - r.top });
-      redraw();
-    };
-    const onUp = () => {
-      if (!current.current) return;
-      current.current = null;
-      changed();
-    };
+  // Смена темы: цвета берутся из палитры темы, поэтому пересобираем (и перекрашиваем подложку).
+  useEffect(() => {
+    rebuild();
+  }, [rebuild]);
 
-    const undo = () => {
-      strokes.current.pop();
-      redraw();
-      changed();
-    };
-    const clear = () => {
-      strokes.current = [];
+  // Освобождаем временные холсты при размонтировании.
+  useEffect(
+    () => () => {
       freeCanvas(base.current?.tinted ?? null);
-      base.current = null;
-      setHasBase(false);
-      redraw();
-      changed();
+      freeCanvas(cache.current);
+      cache.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const resize = () => {
+      const c = canvasRef.current;
+      const w = wrapRef.current;
+      if (!c || !w) return;
+      const dpr = window.devicePixelRatio || 1;
+      const width = w.clientWidth;
+      const height = fill ? w.clientHeight : (fixedHeight ?? Math.max(260, Math.min(420, Math.round(width * 0.75))));
+      size.current = { w: width, h: height, dpr };
+      c.style.width = `${width}px`;
+      c.style.height = `${height}px`;
+      c.width = Math.round(width * dpr);
+      c.height = Math.round(height * dpr);
+      rebuild();
     };
+    resize();
+    const ro = new ResizeObserver(resize);
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, [rebuild, fixedHeight, fill]);
 
-    const toolBtn = (active: boolean) =>
-      clsx(
-        "flex h-10 items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold transition-colors",
-        active ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:text-text",
-      );
+  const isEmpty = () => !hasInk(strokes.current) && !base.current;
 
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")}>
-            <Pencil size={16} /> {t("sol.pen")}
-          </button>
-          <button type="button" className={toolBtn(tool === "eraser")} onClick={() => setTool("eraser")}>
-            <Eraser size={16} /> {t("sol.eraser")}
-          </button>
-          <div className="flex-1" />
-          <button type="button" className={toolBtn(false)} onClick={undo} disabled={!count} aria-label={t("sol.undo")}>
-            <Undo2 size={16} />
-          </button>
-          <button type="button" className={toolBtn(false)} onClick={clear} disabled={!count && !hasBase} aria-label={t("sol.clear")}>
-            <Trash2 size={16} />
-          </button>
+  const changed = () => {
+    setCount(strokes.current.length);
+    onChange?.(isEmpty());
+    onStrokes?.(strokes.current.slice());
+  };
+
+  useImperativeHandle(ref, () => ({
+    isEmpty,
+    exportCanvas: () => {
+      const c = canvasRef.current;
+      if (!c || c.width === 0 || c.height === 0) return null;
+      const out = document.createElement("canvas");
+      out.width = c.width;
+      out.height = c.height;
+      const ctx = out.getContext("2d")!;
+      // Рисуем на прозрачном слое (чтобы ластик работал), поверх белого фона; цвета — как на бумаге.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      const paper = base.current ? tintImage(base.current.img, PALETTE.light.ink) : null;
+      renderLayers(ctx, strokes.current, {
+        pxW: out.width,
+        pxH: out.height,
+        scale: size.current.dpr,
+        ox: 0,
+        oy: 0,
+        pal: PALETTE.light,
+        markerAlpha: MARKER_ALPHA.light,
+        base: paper,
+      });
+      freeCanvas(paper);
+      return out;
+    },
+    exportImage: () => {
+      const c = canvasRef.current;
+      if (!c || c.width === 0 || c.height === 0) return null;
+      if (isEmpty()) return "";
+      // Слой не меньше сохранённой подложки: то, что вышло за текущую ширину панели, не обрезаем.
+      const img = base.current?.img;
+      const w = Math.max(size.current.w, img ? img.naturalWidth / EXPORT_SCALE : 0);
+      const h = Math.max(size.current.h, img ? img.naturalHeight / EXPORT_SCALE : 0);
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.ceil(w * EXPORT_SCALE));
+      out.height = Math.max(1, Math.ceil(h * EXPORT_SCALE));
+      const paper = img ? tintImage(img, PALETTE.light.ink) : null;
+      renderLayers(out.getContext("2d")!, strokes.current, {
+        pxW: out.width,
+        pxH: out.height,
+        scale: EXPORT_SCALE,
+        ox: 0,
+        oy: 0,
+        pal: PALETTE.light,
+        markerAlpha: MARKER_ALPHA.light,
+        base: paper,
+      });
+      freeCanvas(paper);
+      try {
+        return out.toDataURL("image/png");
+      } finally {
+        freeCanvas(out);
+      }
+    },
+    exportPaper: () => {
+      let box = strokesBounds(strokes.current, 0);
+      const img = base.current?.img;
+      if (img) box = unionBox(box, { x: 0, y: 0, w: img.naturalWidth / EXPORT_SCALE, h: img.naturalHeight / EXPORT_SCALE });
+      if (!box) return null;
+      box = { x: box.x - PAPER_MARGIN, y: box.y - PAPER_MARGIN, w: box.w + 2 * PAPER_MARGIN, h: box.h + 2 * PAPER_MARGIN };
+      const scale = Math.min(exportScale(box.w, EXPORT_SCALE, PAPER_MAX_WIDTH), PAPER_MAX_SIDE / box.h);
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.ceil(box.w * scale));
+      out.height = Math.max(1, Math.ceil(box.h * scale));
+      const ctx = out.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      const paper = img ? tintImage(img, PALETTE.light.ink) : null;
+      renderLayers(ctx, strokes.current, {
+        pxW: out.width,
+        pxH: out.height,
+        scale,
+        ox: box.x,
+        oy: box.y,
+        pal: PALETTE.light,
+        markerAlpha: MARKER_ALPHA.light,
+        base: paper,
+      });
+      freeCanvas(paper);
+      try {
+        return out.toDataURL("image/png");
+      } finally {
+        freeCanvas(out);
+      }
+    },
+  }));
+
+  const pos = (e: React.PointerEvent): Point => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+
+  const onDown = (e: React.PointerEvent) => {
+    if (disabled || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    current.current = { tool, color: curColor, size: curSize, points: [pos(e)] };
+    paint();
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const cur = current.current;
+    if (!cur) return;
+    const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
+    const r = canvasRef.current!.getBoundingClientRect();
+    for (const ev of events) cur.points.push([ev.clientX - r.left, ev.clientY - r.top]);
+    paint();
+  };
+  const onUp = () => {
+    const cur = current.current;
+    if (!cur) return;
+    current.current = null;
+    if (strokes.current.length >= MAX_STROKES) {
+      paint();
+      return;
+    }
+    const s = makeStroke(cur.tool, cur.color, cur.size, cur.points);
+    strokes.current.push(s);
+    const layer = cache.current;
+    if (s.tool === "marker" || !layer || !layer.width) {
+      // Маркер должен оказаться под чернилами — пересобираем слои.
+      rebuild();
+    } else {
+      // Ручка и ластик ложатся поверх кэша как есть (ластик стирает всё, что нарисовано раньше).
+      const ctx = layer.getContext("2d")!;
+      ctx.setTransform(size.current.dpr, 0, 0, size.current.dpr, 0, 0);
+      applyStroke(ctx, s, pal, markerAlpha, false);
+      paint();
+    }
+    changed();
+  };
+
+  const undo = () => {
+    if (!strokes.current.length) return;
+    strokes.current.pop();
+    rebuild();
+    changed();
+  };
+  const clear = () => {
+    strokes.current = [];
+    freeCanvas(base.current?.tinted ?? null);
+    base.current = null;
+    setHasBase(false);
+    rebuild();
+    changed();
+  };
+
+  const focusRing = "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  const iconBtn = cn(
+    "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-surface text-muted transition-colors",
+    "hover:text-text disabled:cursor-not-allowed disabled:opacity-50",
+    focusRing,
+  );
+
+  const toolDefs: { id: ToolId; icon: typeof Pencil; label: string }[] = [
+    { id: "pen", icon: Pencil, label: t("sol.pen") },
+    { id: "marker", icon: Highlighter, label: t("canvas.marker") },
+    { id: "eraser", icon: Eraser, label: t("sol.eraser") },
+  ];
+
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      <div className="flex items-center gap-1.5">
+        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-xl bg-surface-2 p-1">
+          {toolDefs.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              aria-pressed={tool === id}
+              title={label}
+              onClick={() => setTool(id)}
+              className={cn(
+                "flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-bold transition-colors",
+                focusRing,
+                tool === id ? "bg-surface text-primary shadow-sm" : "text-muted hover:text-text",
+              )}
+            >
+              <Icon size={18} aria-hidden />
+              <span className="hidden min-[420px]:inline">{label}</span>
+            </button>
+          ))}
         </div>
-        <div
-          ref={wrapRef}
-          className="overflow-hidden rounded-2xl border-2 border-border"
-          style={{
-            backgroundColor: "var(--surface)",
-            backgroundImage:
-              "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-            backgroundSize: "22px 22px",
-          }}
+        <button type="button" className={iconBtn} onClick={undo} disabled={!count} aria-label={t("sol.undo")} title={t("sol.undo")}>
+          <Undo2 size={18} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          onClick={clear}
+          disabled={!count && !hasBase}
+          aria-label={t("sol.clear")}
+          title={t("sol.clear")}
         >
-          <canvas
-            ref={canvasRef}
-            className={clsx("block touch-none", tool === "eraser" ? "cursor-cell" : "cursor-crosshair")}
-            onPointerDown={onDown}
-            onPointerMove={onMove}
-            onPointerUp={onUp}
-            onPointerCancel={onUp}
-            onPointerLeave={onUp}
-          />
+          <Trash2 size={18} aria-hidden />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {tool === "pen" && (
+          <div role="group" aria-label={t("canvas.colors")} className="flex items-center gap-2.5 px-1">
+            {PEN_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={t(COLOR_KEYS[c])}
+                aria-pressed={penColor === c}
+                title={t(COLOR_KEYS[c])}
+                onClick={() => setPenColor(c)}
+                style={{ backgroundColor: pal[c] }}
+                className={cn(
+                  "h-8 w-8 rounded-full border border-border transition-shadow",
+                  focusRing,
+                  penColor === c && "ring-2 ring-primary ring-offset-2 ring-offset-surface",
+                )}
+              />
+            ))}
+          </div>
+        )}
+        <div role="group" aria-label={t("canvas.sizes")} className="flex items-center gap-1">
+          {sizes.map((s, i) => {
+            const active = sizeIdx[tool] === i;
+            const d = dotPx(tool, s);
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-label={t(tool === "eraser" ? "canvas.eraserSize" : "canvas.size", { n: s })}
+                aria-pressed={active}
+                title={t(tool === "eraser" ? "canvas.eraserSize" : "canvas.size", { n: s })}
+                onClick={() => setSizeIdx((prev) => ({ ...prev, [tool]: i }))}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full border-2 transition-colors",
+                  focusRing,
+                  active ? "border-primary bg-primary-soft" : "border-border bg-surface hover:bg-surface-2",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn("block rounded-full", tool === "eraser" && "border-2 border-muted")}
+                  style={{ width: d, height: d, backgroundColor: tool === "eraser" ? "transparent" : pal[curColor] }}
+                />
+              </button>
+            );
+          })}
         </div>
       </div>
-    );
-  },
-);
+
+      <div
+        ref={wrapRef}
+        className={cn("overflow-hidden rounded-2xl border-2 border-border", fill && "relative min-h-0 flex-1")}
+        style={{
+          backgroundColor: "var(--surface)",
+          backgroundImage:
+            "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+          backgroundSize: "22px 22px",
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          className={cn("block touch-none", fill && "absolute left-0 top-0", tool === "eraser" ? "cursor-cell" : "cursor-crosshair")}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+          onPointerLeave={onUp}
+        />
+      </div>
+    </div>
+  );
+});

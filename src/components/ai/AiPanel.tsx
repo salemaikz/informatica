@@ -1,11 +1,12 @@
 "use client";
 
-import { BookmarkPlus, Check, Send, Sparkles } from "lucide-react";
+import { BookmarkPlus, Check, Lightbulb, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { useApp } from "@/lib/store";
+import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -19,6 +20,8 @@ const TITLE: Record<Exclude<TutorMode, "chat">, DictKey> = {
 
 /**
  * Шторка с ИИ внутри урока: подсказка к заданию, разбор ошибки или вопрос по шагу + уточняющие вопросы.
+ * Лестница «бесплатно → ИИ»: если у задания есть статическая подсказка (`hint`) или разбор ошибки (`whyWrong`),
+ * они показываются сразу, без запроса; ИИ — только по кнопке «Ещё подсказка / Подробнее от Бита».
  * В режиме «вопрос» ИИ молчит, пока ученик не спросит (своими словами или быстрой кнопкой).
  */
 export function AiPanel({
@@ -40,7 +43,11 @@ export function AiPanel({
   const { t } = useT();
   const saveToNotes = useApp((s) => s.saveToNotes);
   const { ask, stop, streaming, error } = useTutor();
-  const autoStart = mode !== "ask";
+  // Бесплатный текст: подсказка автора или разбор неверного варианта (+ объяснение урока).
+  const [staticText] = useState(() =>
+    mode === "hint" ? task.hint : mode === "explain" && task.whyWrong ? [task.whyWrong, task.explanation].filter(Boolean).join("\n\n") : undefined,
+  );
+  const autoStart = mode !== "ask" && !staticText;
   const [turns, setTurns] = useState<TutorTurn[]>(autoStart ? [{ role: "assistant", content: "" }] : []);
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState<number[]>([]);
@@ -73,6 +80,14 @@ export function AiPanel({
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
+  // «Ещё подсказка / Подробнее от Бита» — единственное, что после статики делает запрос к ИИ.
+  const askMore = () => {
+    if (streaming) return;
+    const id = ++runId.current;
+    setTurns([{ role: "assistant", content: "" }]);
+    void stream([], () => id === runId.current);
+  };
+
   const send = (text?: string) => {
     const q = (text ?? draft).trim();
     if (!q || streaming) return;
@@ -92,6 +107,19 @@ export function AiPanel({
         </h3>
       </div>
       <div className="flex max-h-[52dvh] flex-col gap-3 overflow-y-auto pr-1">
+        {staticText && (
+          <div className="rounded-2xl rounded-bl-md border-2 border-primary/25 bg-primary-soft px-4 py-3">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-primary">
+              <Lightbulb size={14} /> {t(mode === "hint" ? "ai.staticHint" : "ai.staticWhy")}
+            </p>
+            <Markdown>{staticText}</Markdown>
+          </div>
+        )}
+        {staticText && turns.length === 0 && (
+          <Button variant="ai" block icon={<Sparkles size={18} />} onClick={askMore}>
+            {t(mode === "hint" ? "ai.moreHint" : "ai.moreExplain")}
+          </Button>
+        )}
         {turns.map((m, i) =>
           m.role === "user" ? (
             <div key={i} className="self-end rounded-2xl rounded-br-md bg-primary px-3.5 py-2 font-semibold text-white">

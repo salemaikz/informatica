@@ -13,6 +13,31 @@ export function lang(v: unknown): Lang {
   return v === "kk" ? "kk" : "ru";
 }
 
+/**
+ * Запрос пришёл с нашего же сайта? Если заголовок Origin есть, его хост должен совпасть с Host
+ * (или x-forwarded-host за прокси). Нет Origin — пропускаем (старые клиенты, curl в dev).
+ * Закрывает использование нашего ИИ чужими сайтами.
+ */
+export function sameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+  let host: string;
+  try {
+    host = new URL(origin).host.toLowerCase();
+  } catch {
+    return false; // например, Origin: null
+  }
+  const allowed = [req.headers.get("x-forwarded-host")?.split(",")[0], req.headers.get("host")]
+    .map((h) => h?.trim().toLowerCase())
+    .filter((h): h is string => !!h);
+  return allowed.includes(host);
+}
+
+/** Текст про стиль объяснений для промпта (по умолчанию — коротко). */
+export function styleRule(style: string): string {
+  return STYLES[style] ?? STYLES.short;
+}
+
 export function sanitizeContext(raw: unknown): StudentContext {
   const c = (raw ?? {}) as Record<string, unknown>;
   const mistakes = Array.isArray(c.mistakes)
@@ -50,6 +75,9 @@ export function sanitizeTask(raw: unknown): TaskContext | undefined {
     explanation: str(t.explanation, 800),
     theory: str(t.theory, 1500),
     answered: t.answered === true,
+    hint: str(t.hint, 500),
+    whyWrong: str(t.whyWrong, 600),
+    stepKey: str(t.stepKey, 80),
   };
 }
 

@@ -1,9 +1,12 @@
 import type OpenAI from "openai";
-import type { TutorMode } from "@/lib/ai-types";
+import type { StudentContext, TaskContext, TutorMode } from "@/lib/ai-types";
+import { aiDict } from "@/i18n/parts/ai";
+import { cacheableRequest, cacheKeyPayload, cacheStyle, cacheTask, leaksAnswer } from "@/lib/ai-cache";
 import { getOpenAI, jsonError, logUsage, MODELS } from "@/server/openai";
 import { clientIp, rateLimit } from "@/server/rate-limit";
-import { sanitizeContext, sanitizeImage, sanitizeTask } from "@/server/context";
+import { sameOrigin, sanitizeContext, sanitizeImage, sanitizeTask } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
+import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
 
 // Чат с ИИ-наставником: свободный диалог, подсказка к заданию, разбор ошибки. Ответ — потоковый текст.
 
@@ -14,6 +17,7 @@ const MODES: TutorMode[] = ["chat", "hint", "explain", "ask"];
 type Msg = OpenAI.Chat.ChatCompletionMessageParam;
 
 export async function POST(req: Request) {
+  if (!sameOrigin(req)) return jsonError(403, "forbidden_origin");
   if (!rateLimit(`tutor:${clientIp(req)}`, 40, 10 * 60_000)) return jsonError(429, "rate_limited");
   const client = getOpenAI();
   if (!client) return jsonError(503, "ai_not_configured");
@@ -40,28 +44,37 @@ export async function POST(req: Request) {
 
   if ((mode === "chat" || mode === "ask") && history.length === 0) return jsonError(400, "empty");
 
-  const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task) }];
-  history.forEach((m, i) => {
-    const isLast = i === history.length - 1;
-    if (isLast && image && m.role === "user") {
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: m.content },
-          { type: "image_url", image_url: { url: image, detail: "auto" } },
-        ],
-      });
-    } else {
-      messages.push(m);
+  const userTurns = (): Msg[] => {
+    const out: Msg[] = [];
+    history.forEach((m, i) => {
+      const isLast = i === history.length - 1;
+      if (isLast && image && m.role === "user") {
+        out.push({
+          role: "user",
+          content: [
+            { type: "text", text: m.content },
+            { type: "image_url", image_url: { url: image, detail: "auto" } },
+          ],
+        });
+      } else {
+        out.push(m);
+      }
+    });
+    if (history.length === 0) {
+      const ask =
+        mode === "hint"
+          ? ctx.lang === "kk" ? "Кеңес берші" : "Дай подсказку"
+          : ctx.lang === "kk" ? "Қатемді түсіндірші" : "Объясни мою ошибку";
+      out.push({ role: "user", content: ask });
     }
-  });
-  if (history.length === 0) {
-    const ask =
-      mode === "hint"
-        ? ctx.lang === "kk" ? "Кеңес берші" : "Дай подсказку"
-        : ctx.lang === "kk" ? "Қатемді түсіндірші" : "Объясни мою ошибку";
-    messages.push({ role: "user", content: ask });
-  }
+    return out;
+  };
+
+  // Неперсональные запросы (подсказка/разбор на первый запрос, быстрые вопросы) — через общий кэш.
+  const cacheReq = cacheableRequest(mode, history, task, !!image);
+  if (cacheReq && task) return cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns() });
+
+  const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task) }, ...userTurns()];
 
   try {
     const model = image ? MODELS.vision : MODELS.tutor;
@@ -100,6 +113,58 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[tutor] openai error", e);
+    return jsonError(502, "ai_failed");
+  }
+}
+
+const FALLBACK_HINT = aiDict["ai.hintFallback"];
+
+/** Ответ из кэша или одна генерация целиком (не потоком): короткие неперсональные ответы. */
+async function cachedTutor(
+  client: OpenAI,
+  a: { mode: TutorMode; ctx: StudentContext; task: TaskContext; question?: string; turns: Msg[] },
+): Promise<Response> {
+  const { mode, ctx, question, turns } = a;
+  const task = cacheTask(mode, a.task);
+  const key = sha256(cacheKeyPayload({ mode, lang: ctx.lang, style: ctx.style, task, question }));
+  const route = `tutor:${mode}`;
+  const model = MODELS.tutor;
+  const neutralCtx = { ...ctx, style: cacheStyle(ctx.style) };
+
+  const generate = async (noLeak: boolean): Promise<string> => {
+    const res = await client.chat.completions.create({
+      model,
+      messages: [{ role: "system", content: tutorSystemPrompt(neutralCtx, mode, task, { neutral: true, noLeak }) }, ...turns],
+      reasoning_effort: "none",
+      max_completion_tokens: mode === "hint" ? 300 : 600,
+    });
+    logCache(route, "miss", model, res.usage);
+    return res.choices[0]?.message?.content?.trim() ?? "";
+  };
+
+  const leaks = (text: string) =>
+    mode === "hint" && !!task.correct && leaksAnswer(text, task.correct, { isOption: !!task.options?.includes(task.correct) });
+
+  try {
+    const r = await cachedAnswer(key, async () => {
+      let text = await generate(false);
+      if (leaks(text)) {
+        // Подсказка выдала ответ: один повтор с припиской; если снова — статичный текст и без кэша.
+        text = await generate(true);
+        if (leaks(text)) throw new SkipCache(a.task.hint || FALLBACK_HINT[ctx.lang]);
+      }
+      return text;
+    });
+    if (r.hit) logCache(route, "hit");
+    return new Response(r.text, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-AI-Cache": r.hit ? "hit" : r.cacheable ? "miss" : "skip",
+      },
+    });
+  } catch (e) {
+    console.error("[tutor] cached answer error", e);
     return jsonError(502, "ai_failed");
   }
 }

@@ -27,7 +27,13 @@ async function ensureOk(res: Response) {
 }
 
 /** Потоковый ответ наставника: onDelta получает накопленный текст. */
-export async function streamTutor(req: TutorRequest, onText: (full: string) => void, signal?: AbortSignal): Promise<string> {
+export async function streamTutor(
+  req: TutorRequest,
+  onText: (full: string) => void,
+  signal?: AbortSignal,
+  /** Вызывается сразу после заголовков: значение X-AI-Cache (hit | miss | skip) или null. */
+  onCache?: (status: string | null) => void,
+): Promise<string> {
   const res = await fetch("/api/ai/tutor", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -35,6 +41,7 @@ export async function streamTutor(req: TutorRequest, onText: (full: string) => v
     signal,
   });
   await ensureOk(res);
+  onCache?.(res.headers.get("X-AI-Cache"));
   if (!res.body) throw new AiError("no_body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

@@ -5,6 +5,7 @@ import { buildDrill, generateLeveled } from "@/lib/generators";
 import { entPoints, levelFromMastery, multiPoints } from "@/lib/ent";
 import { evaluate } from "@/lib/evaluate";
 import type { MultiStep } from "@/lib/types";
+import { kkSuffix, type KkCase } from "@/lib/kk";
 import { validateStep } from "./validate";
 
 const SKILLS = NS_BANKS.map((b) => b.skill);
@@ -105,6 +106,31 @@ describe("банк заданий", () => {
         expect(t, `${b.skill} L${level}`).toBeGreaterThan(20);
         expect(f, `${b.skill} L${level}`).toBeGreaterThan(20);
       }
+  });
+
+  it("утверждения и короткие вопросы имеют подсказку на двух языках", () => {
+    for (const b of NS_BANKS)
+      for (const level of LEVELS)
+        for (let seed = 1; seed < 60; seed++) {
+          for (const item of [b.statement!(level, seed), b.short!(level, seed)]) {
+            expect(item.hint?.ru && item.hint?.kk, `${item.id}`).toBeTruthy();
+          }
+        }
+  });
+
+  it("казахские тексты банка ns: окончания после чисел только как у kkSuffix", () => {
+    const CASES: KkCase[] = ["acc", "dat", "loc", "abl", "gen", "ins"];
+    for (const b of NS_BANKS)
+      for (const level of LEVELS)
+        for (let seed = 1; seed < 80; seed++) {
+          const st = b.statement!(level, seed);
+          const sh = b.short!(level, seed);
+          for (const t of [st.text.kk, st.explanation.kk, st.hint?.kk ?? "", sh.prompt.kk, sh.explanation.kk, sh.hint?.kk ?? ""])
+            for (const m of t.matchAll(/(\d+)-([а-яәіңғүұқөһ]+)/g)) {
+              const ok = CASES.map((c) => kkSuffix(Number(m[1]), c).split("-")[1]);
+              expect(ok.includes(m[2]), `${st.id} / ${sh.id}: «${m[0]}»`).toBe(true);
+            }
+        }
   });
 
   it("пары и короткие вопросы вычислены верно", () => {

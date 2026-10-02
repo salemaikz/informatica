@@ -3,6 +3,7 @@ import { toBinary } from "./check";
 import { seeded, shuffle } from "./text";
 import type { SkillStat } from "./mastery";
 import { levelFromMastery } from "./ent";
+import { kkSuffix } from "./kk";
 
 // Процедурная генерация заданий: бесконечная тренировка без затрат на ИИ.
 // У каждого задания уровень A/B/C (1/2/3), как в ЕНТ. Уровень выбирается по освоению навыка,
@@ -20,18 +21,58 @@ export function rangeForLevel(level: Level): [number, number] {
   return [64, 255];
 }
 
-/** Варианты ответа: правильный + уникальные отвлекающие, перемешанные. */
-function options(rand: Rand, correct: string, distractors: string[], total = 4): { options: Text[]; correct: number } {
-  const set = new Set<string>([correct]);
+/** Вариант ответа с объяснением, какую ошибку он выдаёт (для whyWrong). */
+type Distractor = { value: string; why: L };
+
+/**
+ * Варианты ответа: правильный + уникальные отвлекающие, перемешанные.
+ * whyWrong — в том же порядке, у верного null; при совпадении значений побеждает первое объяснение.
+ */
+function options(
+  rand: Rand,
+  correct: string,
+  distractors: Distractor[],
+  total = 4,
+): { options: Text[]; correct: number; whyWrong: (L | null)[] } {
+  const whys = new Map<string, L>();
   for (const d of distractors) {
-    if (set.size >= total) break;
-    if (d && !set.has(d)) set.add(d);
+    if (whys.size >= total - 1) break;
+    if (d.value && d.value !== correct && !whys.has(d.value)) whys.set(d.value, d.why);
   }
-  const list = shuffle([...set], rand);
-  return { options: list, correct: list.indexOf(correct) };
+  const list = shuffle([correct, ...whys.keys()], rand);
+  return { options: list, correct: list.indexOf(correct), whyWrong: list.map((v) => (v === correct ? null : (whys.get(v) as L))) };
+}
+
+/** «на 1 больше / на 2 меньше»: объяснение для числового дистрактора. */
+function offBy(n: number, v: number, hint: L): L {
+  const d = Math.abs(v - n);
+  const more = v > n;
+  return {
+    ru: `Это на ${d} ${more ? "больше" : "меньше"} верного значения. ${hint.ru}`,
+    kk: `Бұл дұрыс мәннен ${kkSuffix(d, "dat")} ${more ? "артық" : "кем"}. ${hint.kk}`,
+  };
 }
 
 const sub2 = (bin: string) => `${bin}₂`;
+
+// ---------- Шаблоны подсказок (без ответа: подталкивают к первому шагу) ----------
+
+export const HINT_WEIGHTS: L = {
+  ru: "Подпиши под цифрами веса разрядов справа налево: 1, 2, 4, 8… Затем сложи веса только тех разрядов, где стоит 1.",
+  kk: "Цифрлардың астына разряд салмақтарын оңнан солға қарай жаз: 1, 2, 4, 8… Содан кейін тек 1 тұрған разрядтардың салмақтарын қос.",
+};
+const HINT_BITS: L = {
+  ru: "Разложи число на веса 1, 2, 4, 8…: начни с самого большого веса, который не больше числа, и вычти его.",
+  kk: "Санды 1, 2, 4, 8… салмақтарына жікте: саннан аспайтын ең үлкен салмақтан баста да, оны алып таста.",
+};
+export const HINT_DIV: L = {
+  ru: "Дели на 2 и записывай остатки; читай их снизу вверх.",
+  kk: `${kkSuffix(2, "dat")} бөліп, қалдықтарды жаз; оларды төменнен жоғары қарай оқы.`,
+};
+const HINT_LADDER: L = {
+  ru: "Дели число на 2, потом частное снова на 2 — и так до нуля. Остаток каждого деления — одна цифра ответа; читай их снизу вверх.",
+  kk: `Санды ${kkSuffix(2, "dat")} бөл, сосын бөліндіні қайта ${kkSuffix(2, "dat")} бөл — нөлге дейін. Әр бөлудің қалдығы — жауаптың бір цифры; оларды төменнен жоғары оқы.`,
+};
 
 // ---------- 2 → 10 ----------
 
@@ -56,10 +97,29 @@ function genBin2Dec(rand: Rand, level: Level, seed: number): QuestionStep {
       target: n,
       bits,
       explanation,
+      hint: HINT_BITS,
     };
   }
   if (kind === "choice") {
-    const o = options(rand, String(n), [String(n + 1), String(n - 1), String(parseInt(bin.split("").reverse().join(""), 2)), String(n + 2), String(n * 2)]);
+    const o = options(rand, String(n), [
+      { value: String(n + 1), why: offBy(n, n + 1, { ru: "Проверь сложение весов: лишней единицы быть не должно.", kk: "Салмақтарды қосуды тексер: артық бірлік болмауы керек." }) },
+      { value: String(n - 1), why: offBy(n, n - 1, { ru: "Проверь, не пропущен ли вес разряда, где стоит 1.", kk: "1 тұрған разрядтардың бірінің салмағы жіберіліп кетпегенін тексер." }) },
+      {
+        value: String(reverseBin(bin)),
+        why: {
+          ru: "Цифры прочитаны справа налево: вес 1 у правой цифры, а не у левой.",
+          kk: "Цифрлар оңнан солға оқылып қалған: 1 салмағы сол жақтағы емес, оң жақтағы цифрдікі.",
+        },
+      },
+      { value: String(n + 2), why: offBy(n, n + 2, { ru: "Проверь сложение весов.", kk: "Салмақтарды қосуды тексер." }) },
+      {
+        value: String(n * 2),
+        why: {
+          ru: "Это вдвое больше верного: веса сдвинуты на один разряд. У правой цифры вес 1, а не 2.",
+          kk: "Бұл дұрыс жауаптан екі есе артық: салмақтар бір разрядқа жылжып кеткен. Оң жақтағы цифрдың салмағы 2 емес, 1.",
+        },
+      },
+    ]);
     return {
       id,
       type: "choice",
@@ -67,6 +127,7 @@ function genBin2Dec(rand: Rand, level: Level, seed: number): QuestionStep {
       prompt: { ru: `Чему равно ${sub2(bin)} в десятичной системе?`, kk: `${sub2(bin)} ондық жүйеде неге тең?` },
       ...o,
       explanation,
+      hint: HINT_WEIGHTS,
     } satisfies ChoiceStep;
   }
   return {
@@ -78,8 +139,11 @@ function genBin2Dec(rand: Rand, level: Level, seed: number): QuestionStep {
     mode: "number",
     suffix: "₁₀",
     explanation,
+    hint: HINT_WEIGHTS,
   } satisfies InputStep;
 }
+
+const reverseBin = (bin: string) => parseInt(bin.split("").reverse().join(""), 2);
 
 export function weightsSum(bin: string): string {
   const parts: string[] = [];
@@ -100,25 +164,45 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
   const id = `g:ns.dec2bin:${kind}:${n}:${seed}`;
   const explanation: L = {
     ru: `Делим ${n} на 2 и читаем остатки снизу вверх: ${sub2(bin)}. Проверка: ${weightsSum(bin)} = ${n}.`,
-    kk: `${n}-ді 2-ге бөліп, қалдықтарды төменнен жоғары оқимыз: ${sub2(bin)}. Тексеру: ${weightsSum(bin)} = ${n}.`,
+    kk: `${kkSuffix(n, "acc")} ${kkSuffix(2, "dat")} бөліп, қалдықтарды төменнен жоғары оқимыз: ${sub2(bin)}. Тексеру: ${weightsSum(bin)} = ${n}.`,
   };
   if (kind === "ladder") {
     return {
       id,
       type: "ladder",
       skill: "ns.dec2bin",
-      prompt: { ru: `Переведи ${n} в двоичную систему делением на 2`, kk: `${n} санын 2-ге бөлу арқылы екілік жүйеге аудар` },
+      prompt: { ru: `Переведи ${n} в двоичную систему делением на 2`, kk: `${n} санын ${kkSuffix(2, "dat")} бөлу арқылы екілік жүйеге аудар` },
       number: n,
       explanation,
+      hint: HINT_LADDER,
     };
   }
   if (kind === "choice") {
     const reversed = bin.split("").reverse().join("").replace(/^0+/, "") || "0";
+    const lower = Math.max(1, n - 1);
     const o = options(rand, sub2(bin), [
-      sub2(reversed),
-      sub2(toBinary(n + 1)),
-      sub2(toBinary(Math.max(1, n - 1))),
-      sub2(toBinary(n * 2)),
+      {
+        value: sub2(reversed),
+        why: {
+          ru: `Это ${sub2(reversed)}: остатки прочитаны сверху вниз. Читать нужно снизу вверх.`,
+          kk: `Бұл ${sub2(reversed)}: қалдықтар жоғарыдан төмен оқылған. Төменнен жоғары оқу керек.`,
+        },
+      },
+      {
+        value: sub2(toBinary(n + 1)),
+        why: { ru: `Это двоичная запись числа ${n + 1}, а не ${n}.`, kk: `Бұл ${n} емес, ${n + 1} санының екілік жазбасы.` },
+      },
+      {
+        value: sub2(toBinary(lower)),
+        why: { ru: `Это двоичная запись числа ${lower}, а не ${n}.`, kk: `Бұл ${n} емес, ${lower} санының екілік жазбасы.` },
+      },
+      {
+        value: sub2(toBinary(n * 2)),
+        why: {
+          ru: `Это запись числа ${n * 2}: лишний ноль справа удваивает число.`,
+          kk: `Бұл ${n * 2} санының жазбасы: оң жақтағы артық нөл санды екі есе өсіреді.`,
+        },
+      },
     ]);
     return {
       id,
@@ -127,6 +211,7 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
       prompt: { ru: `Как записать ${n} в двоичной системе?`, kk: `${n} саны екілік жүйеде қалай жазылады?` },
       ...o,
       explanation,
+      hint: HINT_DIV,
     };
   }
   return {
@@ -138,17 +223,45 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
     mode: "binary",
     suffix: "₂",
     explanation,
+    hint: HINT_DIV,
   };
 }
 
 // ---------- Основание и цифры ----------
+
+export const HINT_BASE_COUNT: L = {
+  ru: "Цифры в системе начинаются с 0 и идут по порядку. Самая большая цифра на 1 меньше основания — посчитай, сколько всего цифр.",
+  kk: `Жүйедегі цифрлар ${kkSuffix(0, "abl")} басталып, ретімен жүреді. Ең үлкен цифр негізден ${kkSuffix(1, "dat")} кем — барлығы неше цифр екенін санап көр.`,
+};
+const HINT_BASE_INVALID = (sys: L): L => ({
+  ru: `Посмотри, из каких цифр состоит каждая запись, и вспомни, какие цифры есть в ${sys.ru} системе.`,
+  kk: `Әр жазба қандай цифрлардан тұратынын қарап, ${sys.kk} жүйеде қандай цифрлар бар екенін еске түсір.`,
+});
 
 function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
   // A/B — «сколько цифр» и «какая запись не двоичная», C — только ловушки с записью (в т.ч. восьмеричной).
   const kind = level === 3 ? "invalid" : pick(rand, ["digits", "invalid"] as const);
   if (kind === "digits") {
     const base = pick(rand, [2, 8, 10, 16, 5, 3]);
-    const o = options(rand, String(base), [String(base - 1), String(base + 1), "10", "2", "9"]);
+    const o = options(rand, String(base), [
+      {
+        value: String(base - 1),
+        why: {
+          ru: `${base - 1} — значение самой большой цифры этой системы, а цифр на одну больше: 0 — тоже цифра.`,
+          kk: `${base - 1} — бұл жүйедегі ең үлкен цифрдың мәні, ал цифрлар бірге көп: нөлді де санау керек.`,
+        },
+      },
+      {
+        value: String(base + 1),
+        why: {
+          ru: `Значения цифр идут от 0 до ${base - 1}, цифры со значением ${base} в этой системе нет — цифр не бывает больше основания.`,
+          kk: `Цифрлардың мәндері ${kkSuffix(0, "abl")} ${kkSuffix(base - 1, "dat")} дейін, бұл жүйеде мәні ${base} болатын цифр жоқ — цифрлар саны негізден артық болмайды.`,
+        },
+      },
+      { value: "10", why: { ru: "Десять цифр — только в десятичной системе, а здесь основание другое.", kk: "Он цифр тек ондық жүйеде, ал мұнда негіз басқа." } },
+      { value: "2", why: { ru: "Две цифры (0 и 1) — только в двоичной системе.", kk: "Екі цифр (0 мен 1) тек екілік жүйеде болады." } },
+      { value: "9", why: { ru: "9 — самая большая цифра десятичной системы, а не количество цифр.", kk: "9 — ондық жүйедегі ең үлкен цифр, цифрлар саны емес." } },
+    ]);
     return {
       id: `g:ns.base:digits:${base}:${seed}`,
       type: "choice",
@@ -160,8 +273,9 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
       ...o,
       explanation: {
         ru: `Количество цифр равно основанию: от 0 до ${base - 1}, то есть ${base} цифр.`,
-        kk: `Цифрлар саны негізге тең: 0-ден ${base - 1}-ге дейін, яғни ${base} цифр.`,
+        kk: `Цифрлар саны негізге тең: ${kkSuffix(0, "abl")} ${kkSuffix(base - 1, "dat")} дейін, яғни ${base} цифр.`,
       },
+      hint: HINT_BASE_COUNT,
     };
   }
   // C — восьмеричная система (ловушка: цифры 8 и 9), иначе — двоичная (ловушка: цифра 2).
@@ -172,7 +286,17 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
     const pos = int(rand, 0, raw.length - 1);
     const badDigit = pick(rand, ["8", "9"]);
     const fixedBad = `${raw.slice(0, pos)}${badDigit}${raw.slice(pos + 1)}`;
-    const o = options(rand, fixedBad, [...validSet]);
+    const o = options(
+      rand,
+      fixedBad,
+      [...validSet].map((v) => ({
+        value: v,
+        why: {
+          ru: `В записи ${v} только цифры от 0 до 7 — она может быть восьмеричной.`,
+          kk: `${v} жазбасында тек ${kkSuffix(0, "abl")} ${kkSuffix(7, "dat")} дейінгі цифрлар бар — ол сегіздік сан бола алады.`,
+        },
+      })),
+    );
     return {
       id: `g:ns.base:invalid8:${fixedBad}:${seed}`,
       type: "choice",
@@ -184,8 +308,9 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
       ...o,
       explanation: {
         ru: `В восьмеричной системе цифры от 0 до 7. В записи ${fixedBad} есть цифра ${badDigit}.`,
-        kk: `Сегіздік жүйеде 0-ден 7-ге дейінгі цифрлар бар. ${fixedBad} жазбасында ${badDigit} цифры бар.`,
+        kk: `Сегіздік жүйеде ${kkSuffix(0, "abl")} ${kkSuffix(7, "dat")} дейінгі цифрлар бар. ${fixedBad} жазбасында ${badDigit} цифры бар.`,
       },
+      hint: HINT_BASE_INVALID({ ru: "восьмеричной", kk: "сегіздік" }),
     };
   }
   const validSet = new Set<string>();
@@ -194,7 +319,14 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
   const raw = toBinary(int(rand, 9, 60));
   const pos = int(rand, 1, raw.length - 1);
   const fixedBad = `${raw.slice(0, pos)}2${raw.slice(pos + 1)}`;
-  const o = options(rand, fixedBad, valid);
+  const o = options(
+    rand,
+    fixedBad,
+    valid.map((v) => ({
+      value: v,
+      why: { ru: `В записи ${v} только 0 и 1 — она может быть двоичной.`, kk: `${v} жазбасында тек 0 мен 1 бар — ол екілік сан бола алады.` },
+    })),
+  );
   return {
     id: `g:ns.base:invalid:${fixedBad}:${seed}`,
     type: "choice",
@@ -208,10 +340,28 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
       ru: `В двоичной системе только цифры 0 и 1. В записи ${fixedBad} есть цифра 2.`,
       kk: `Екілік жүйеде тек 0 мен 1 цифрлары бар. ${fixedBad} жазбасында 2 цифры бар.`,
     },
+    hint: HINT_BASE_INVALID({ ru: "двоичной", kk: "екілік" }),
   };
 }
 
 // ---------- Свойства ----------
+
+export const HINT_PARITY: L = {
+  ru: "Смотри только на последнюю цифру двоичной записи. Что она говорит о делении числа на 2?",
+  kk: `Тек екілік жазбаның соңғы цифрына қара. Ол санның ${kkSuffix(2, "dat")} бөлінуі туралы не айтады?`,
+};
+export const HINT_LENGTH: L = {
+  ru: "Найди наибольшую степень двойки, которая не больше числа (1, 2, 4, 8, 16…). Сколько цифр в её двоичной записи: единица и сколько нулей?",
+  kk: "Саннан аспайтын екінің ең үлкен дәрежесін тап (1, 2, 4, 8, 16…). Оның екілік жазбасында неше цифр бар: бірлік және неше нөл?",
+};
+export const HINT_ONES: L = {
+  ru: "Запиши число в двоичной системе (разложи на веса 1, 2, 4, 8…), а затем посчитай, сколько в записи единиц.",
+  kk: "Санды екілік жүйеде жаз (1, 2, 4, 8… салмақтарына жікте), содан кейін жазбада неше бірлік барын сана.",
+};
+export const HINT_POW: L = {
+  ru: "В двоичной системе умножение на 2 дописывает справа один ноль. Сколько раз нужно умножить 1 на 2, чтобы получить это число?",
+  kk: `Екілік жүйеде ${kkSuffix(2, "dat")} көбейту оң жаққа бір нөл жазады. Осы санды алу үшін ${kkSuffix(1, "acc")} неше рет ${kkSuffix(2, "dat")} көбейту керек?`,
+};
 
 function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
   const kind = pick(rand, level === 1 ? (["parity", "pow", "length"] as const) : level === 2 ? (["length", "ones", "pow", "parity"] as const) : (["ones", "length"] as const));
@@ -220,10 +370,15 @@ function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
   const bin = toBinary(n);
   if (kind === "parity") {
     const even = n % 2 === 0;
+    const last = bin.at(-1);
     const opts: L[] = [
       { ru: "Чётное", kk: "Жұп" },
       { ru: "Нечётное", kk: "Тақ" },
     ];
+    // Объяснение — для неверного варианта.
+    const wrong: L = even
+      ? { ru: `У нечётного числа последняя цифра 1, а здесь ${last}.`, kk: `Тақ санның соңғы цифры 1 болады, ал мұнда ${last}.` }
+      : { ru: `У чётного числа последняя цифра 0, а здесь ${last}.`, kk: `Жұп санның соңғы цифры 0 болады, ал мұнда ${last}.` };
     return {
       id: `g:ns.props:parity:${n}:${seed}`,
       type: "choice",
@@ -231,15 +386,39 @@ function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
       prompt: { ru: `Число ${sub2(bin)} — чётное или нечётное?`, kk: `${sub2(bin)} саны — жұп па, тақ па?` },
       options: opts,
       correct: even ? 0 : 1,
+      whyWrong: even ? [null, wrong] : [wrong, null],
       explanation: {
-        ru: `Смотрим на последнюю цифру: ${bin.at(-1)}. Если 0 — число чётное, если 1 — нечётное.`,
-        kk: `Соңғы цифрға қараймыз: ${bin.at(-1)}. 0 болса — жұп, 1 болса — тақ.`,
+        ru: `Смотрим на последнюю цифру: ${last}. Если 0 — число чётное, если 1 — нечётное.`,
+        kk: `Соңғы цифрға қараймыз: ${last}. 0 болса — жұп, 1 болса — тақ.`,
       },
+      hint: HINT_PARITY,
     };
   }
   if (kind === "length") {
     const len = bin.length;
-    const o = options(rand, String(len), [String(len - 1), String(len + 1), String(len + 2)]);
+    const o = options(rand, String(len), [
+      {
+        value: String(len - 1),
+        why: {
+          ru: "Цифр на одну больше: в записи степени двойки 2ᵏ есть единица и k нулей — старшую единицу тоже нужно посчитать.",
+          kk: "Цифрлар бірге көп: екінің 2ᵏ дәрежесінің жазбасында бірлік және k нөл бар — ең жоғарғы бірлікті де санау керек.",
+        },
+      },
+      {
+        value: String(len + 1),
+        why: {
+          ru: `Слишком много цифр: чтобы их было ${len + 1}, число должно быть не меньше ${2 ** len}.`,
+          kk: `Цифр тым көп: олар ${len + 1} болу үшін сан ${kkSuffix(2 ** len, "abl")} кем болмауы керек.`,
+        },
+      },
+      {
+        value: String(len + 2),
+        why: {
+          ru: `Слишком много цифр: нужно было бы число не меньше ${2 ** (len + 1)}.`,
+          kk: `Цифр тым көп: сан ${kkSuffix(2 ** (len + 1), "abl")} кем болмауы керек еді.`,
+        },
+      },
+    ]);
     return {
       id: `g:ns.props:length:${n}:${seed}`,
       type: "choice",
@@ -251,13 +430,19 @@ function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
       ...o,
       explanation: {
         ru: `${n} = ${sub2(bin)} — ${len} цифр. Быстрый способ: найди наибольшую степень двойки ≤ ${n}: 2^${len - 1} = ${2 ** (len - 1)}, значит цифр ${len}.`,
-        kk: `${n} = ${sub2(bin)} — ${len} цифр. Жылдам тәсіл: ${n}-нен аспайтын екінің ең үлкен дәрежесін тап: 2^${len - 1} = ${2 ** (len - 1)}, демек ${len} цифр.`,
+        kk: `${n} = ${sub2(bin)} — ${len} цифр. Жылдам тәсіл: ${kkSuffix(n, "abl")} аспайтын екінің ең үлкен дәрежесін тап: 2^${len - 1} = ${2 ** (len - 1)}, демек ${len} цифр.`,
       },
+      hint: HINT_LENGTH,
     };
   }
   if (kind === "ones") {
     const ones = bin.split("").filter((c) => c === "1").length;
-    const o = options(rand, String(ones), [String(ones + 1), String(Math.max(0, ones - 1)), String(ones + 2), String(bin.length - ones)]);
+    const o = options(rand, String(ones), [
+      { value: String(ones + 1), why: { ru: "На одну единицу больше: пересчитай — нули не считаются.", kk: "Бір бірлік артық: қайта санап шық — нөлдер есептелмейді." } },
+      { value: String(Math.max(0, ones - 1)), why: { ru: "На одну единицу меньше: пересчитай единицы в записи внимательнее.", kk: "Бір бірлік кем: жазбадағы бірліктерді мұқият қайта санап шық." } },
+      { value: String(ones + 2), why: { ru: "Слишком много: пересчитай единицы в записи, нули не считаются.", kk: "Тым көп: жазбадағы бірліктерді қайта сана, нөлдер есептелмейді." } },
+      { value: String(bin.length - ones), why: { ru: "Это количество нулей, а спрашивали про единицы.", kk: "Бұл нөлдердің саны, ал сұрақ бірліктер туралы." } },
+    ]);
     return {
       id: `g:ns.props:ones:${n}:${seed}`,
       type: "choice",
@@ -272,12 +457,29 @@ function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
         ru: `${n} = ${weightsSum(bin)} = ${sub2(bin)}. Единиц: ${ones}.`,
         kk: `${n} = ${weightsSum(bin)} = ${sub2(bin)}. Бірліктер саны: ${ones}.`,
       },
+      hint: HINT_ONES,
     };
   }
   const k = level === 1 ? int(rand, 3, 5) : int(rand, 5, 8);
   const pow = 2 ** k;
   const correct = sub2(`1${"0".repeat(k)}`);
-  const o = options(rand, correct, [sub2(`1${"0".repeat(k - 1)}`), sub2("1".repeat(k)), sub2(`1${"0".repeat(k + 1)}`)]);
+  const o = options(rand, correct, [
+    {
+      value: sub2(`1${"0".repeat(k - 1)}`),
+      why: { ru: "Нулей на один меньше: это предыдущая степень двойки, вдвое меньше.", kk: "Нөл бірге аз: бұл екінің алдыңғы дәрежесі, екі есе кіші." },
+    },
+    {
+      value: sub2("1".repeat(k)),
+      why: {
+        ru: `Одни единицы — это ${pow - 1}, на 1 меньше ${pow}.`,
+        kk: `Тек бірліктер — бұл ${pow - 1}, ${pow} санынан ${kkSuffix(1, "dat")} кем.`,
+      },
+    },
+    {
+      value: sub2(`1${"0".repeat(k + 1)}`),
+      why: { ru: `Нулей на один больше: это ${pow * 2}, вдвое больше.`, kk: `Нөл бірге артық: бұл ${pow * 2}, екі есе үлкен.` },
+    },
+  ]);
   return {
     id: `g:ns.props:pow:${k}:${seed}`,
     type: "choice",
@@ -288,6 +490,7 @@ function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
       ru: `${pow} = 2^${k}. Степень двойки 2^k в двоичной — это 1 и k нулей.`,
       kk: `${pow} = 2^${k}. Екінің 2^k дәрежесі екілік жүйеде — 1 және k нөл.`,
     },
+    hint: HINT_POW,
   };
 }
 
