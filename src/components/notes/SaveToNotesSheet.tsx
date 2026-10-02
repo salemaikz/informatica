@@ -85,11 +85,11 @@ export function SaveToNotesSheet() {
               router.push(`/notes/${toast.noteId}`);
               setToast(null);
             }}
-            className="h-9 shrink-0 rounded-xl bg-surface/15 px-3 font-extrabold hover:bg-surface/25"
+            className="h-10 shrink-0 rounded-xl bg-surface/15 px-3 font-extrabold hover:bg-surface/25"
           >
             {t("notes2.save.open")}
           </button>
-          <button type="button" onClick={() => setToast(null)} aria-label={t("common.close")} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl hover:bg-surface/15">
+          <button type="button" onClick={() => setToast(null)} aria-label={t("common.close")} className="-mr-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-surface/15">
             <X size={16} aria-hidden />
           </button>
         </div>

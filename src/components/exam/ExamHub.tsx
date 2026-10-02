@@ -19,7 +19,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ExamChart } from "./ExamChart";
-import { EXAM_FORMAT, examLink, historyPoints, randomSeed, ratioOf, toneOf, toggleTopic, MAX_TOPIC_PICK } from "./logic";
+import { EXAM_FORMAT, examLink, formatDay, historyPoints, randomSeed, ratioOf, toneOf, toggleTopic, MAX_TOPIC_PICK } from "./logic";
 
 /** Сколько заданий каждой темы в банке (вопросы контекстных считаем по одному). */
 function poolCounts(): Record<EntTopicId, number> {
@@ -110,7 +110,7 @@ export function ExamHub() {
   const points = useMemo(() => historyPoints(exams), [exams]);
   const sorted = useMemo(() => [...exams].sort((a, b) => b.at - a.at), [exams]);
   const rows = showAll ? sorted : sorted.slice(0, HISTORY_SHOWN);
-  const dateFmt = (at: number) => new Date(at).toLocaleDateString(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "short" });
+  const dateFmt = (at: number) => formatDay(at, lang, true, now);
 
   const start = (kind: ExamKind) => router.push(examLink(kind, randomSeed(), kind === "topic" ? topics : []));
 
@@ -268,7 +268,7 @@ export function ExamHub() {
               })}
             </ul>
             {sorted.length > HISTORY_SHOWN && (
-              <Button variant="ghost" size="sm" onClick={() => setShowAll((v) => !v)}>
+              <Button variant="ghost" size="sm" className="h-10" onClick={() => setShowAll((v) => !v)}>
                 {showAll ? t("exam.history.less") : t("exam.history.more", { n: sorted.length - HISTORY_SHOWN })}
               </Button>
             )}
@@ -299,7 +299,7 @@ export function ExamHub() {
                 {t(`exam.mode.${k}` as DictKey)}
               </button>
             ))}
-            <Button variant="secondary" size="sm" icon={<Link2 size={16} aria-hidden />} onClick={share} className="ml-auto">
+            <Button variant="secondary" size="sm" icon={<Link2 size={16} aria-hidden />} onClick={share} disabled={empty} className="ml-auto h-10">
               {t("exam.share.button")}
             </Button>
           </div>

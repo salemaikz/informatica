@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Flag, LayoutGrid, Play, TimerOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
 import type { DictKey } from "@/i18n/dict";
@@ -61,9 +61,12 @@ function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[]) {
 }
 
 /** Экран прохождения: загрузка → (продолжить?) → условия → сами задания. Спокойная оболочка без маскота, XP, звуков и ИИ. */
-export function ExamRun({ kind, seed, topics }: ExamRunProps) {
+export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
   const { t } = useT();
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
+  // Массив из пропсов может прийти новым при той же строке — эффект зависит от строки, а не от ссылки.
+  const topicsKey = topicsProp.join(",");
+  const topics = useMemo(() => (topicsKey ? (topicsKey.split(",") as EntTopicId[]) : []), [topicsKey]);
 
   useEffect(() => {
     let off = false;
@@ -243,7 +246,10 @@ function Runner({ initial }: { initial: ExamAttempt }) {
 
   const schedule = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(persist, 350);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      persist();
+    }, 350);
   }, [persist]);
 
   const flush = useCallback(() => {
@@ -291,9 +297,12 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     const now = Date.now();
     resumedAt.current = now;
     enteredAt.current = now;
+    let ticks = 0;
     const tick = () => {
       const e = baseMs + (Date.now() - resumedAt.current);
       setElapsedMs(e);
+      // Время пишем и без действий ученика: если браузер выгрузит вкладку без pagehide, потеряется не больше 15 с.
+      if (++ticks % 15 === 0 && !saveTimer.current) persist();
       // Время вышло: фиксируем время текущего задания, ответы закрываются, итог — по кнопке.
       if (remainingSec(limitSec, e) === 0 && !timeUpRef.current) {
         timeUpRef.current = true;
@@ -312,7 +321,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
       document.removeEventListener("visibilitychange", onHide);
       flush();
     };
-  }, [baseMs, limitSec, flush, leaveQuestion]);
+  }, [baseMs, limitSec, flush, persist, leaveQuestion]);
 
   // Стрелки — между заданиями (если не печатаем в калькуляторе/черновике).
   useEffect(() => {
@@ -345,9 +354,10 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     try {
       await saveAttemptState(state);
       await setActiveAttempt(null);
-    } finally {
-      router.replace(`/exam/result/${attempt.id}`);
+    } catch {
+      // Итог уже в сторе; без разбора в IndexedDB экран результата покажет итог.
     }
+    router.replace(`/exam/result/${attempt.id}`);
   };
 
   const exit = () => {
@@ -392,7 +402,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
             {formatClock(left)}
           </span>
           <ToolboxButton variant="icon" />
-          <Button size="sm" variant="secondary" onClick={() => setSheet("finish")} disabled={finishing}>
+          <Button size="sm" variant="secondary" className="h-10" onClick={() => setSheet("finish")} disabled={finishing}>
             {t("exam.run.finish")}
           </Button>
         </div>
@@ -411,7 +421,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
       {/* Нижняя панель: назад / флажок / далее */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-bg/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
-          <Button variant="secondary" className="min-w-0 flex-1 sm:max-w-44" disabled={current === 0} onClick={() => go(current - 1)} icon={<ChevronLeft size={18} aria-hidden />}>
+          <Button variant="secondary" className="min-w-0 flex-1 whitespace-nowrap px-3 sm:max-w-44" disabled={current === 0} onClick={() => go(current - 1)} icon={<ChevronLeft size={18} aria-hidden />}>
             {t("common.back")}
           </Button>
           <button
@@ -429,11 +439,11 @@ function Runner({ initial }: { initial: ExamAttempt }) {
             <span className="hidden min-[400px]:inline">{t("exam.flag.label")}</span>
           </button>
           {last ? (
-            <Button className="min-w-0 flex-1 sm:max-w-44" onClick={() => setSheet("finish")} disabled={finishing}>
+            <Button className="min-w-0 flex-1 whitespace-nowrap px-3 sm:max-w-44" onClick={() => setSheet("finish")} disabled={finishing}>
               {t("exam.run.finish")}
             </Button>
           ) : (
-            <Button className="min-w-0 flex-1 sm:max-w-44" onClick={() => go(current + 1)}>
+            <Button className="min-w-0 flex-1 whitespace-nowrap px-3 sm:max-w-44" onClick={() => go(current + 1)}>
               {t("common.next")}
               <ChevronRight size={18} aria-hidden />
             </Button>

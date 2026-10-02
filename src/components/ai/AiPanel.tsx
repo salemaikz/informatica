@@ -133,7 +133,7 @@ export function AiPanel({
                   onClick={() =>
                     useSaveToNotes.getState().open({ source: "ai", text: m.content, lessonId: noteKey === "general" ? undefined : noteKey })
                   }
-                  className="mt-2 flex min-h-9 items-center gap-1 text-xs font-extrabold text-ai"
+                  className="mt-1 flex min-h-10 items-center gap-1 text-xs font-extrabold text-ai"
                 >
                   <BookmarkPlus size={14} />
                   {t("tutor.saveNote")}

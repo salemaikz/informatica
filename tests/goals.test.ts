@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ENT_TOPICS } from "@/content/ent-topics";
-import { daysText, daysUntil, examTrend, goalStatus, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
+import { daysText, daysUntil, examTrend, formatDayMonth, formatExamDate, goalStatus, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
+import { cleanBackup } from "@/components/goals/backup";
 import type { EntTopicId } from "@/lib/types";
 
 describe("daysUntil", () => {
@@ -149,5 +150,45 @@ describe("nextLessonId / lessonsForTopic", () => {
     ];
     expect(lessonsForTopic("t04", lessons)).toEqual(["x", "z"]);
     expect(lessonsForTopic("t03", lessons)).toEqual(["y"]);
+  });
+});
+
+describe("даты без Intl (kk-KZ есть не везде)", () => {
+  it("дата ЕНТ по-русски и по-казахски", () => {
+    expect(formatExamDate("2027-01-30", "ru")).toBe("30 января 2027");
+    expect(formatExamDate("2027-01-30", "kk")).toBe("2027 жылғы 30 қаңтар");
+    expect(formatExamDate("2026-12-05", "ru")).toBe("5 декабря 2026");
+    expect(formatExamDate("2026-13-05", "ru")).toBe("");
+    expect(formatExamDate("кривая", "kk")).toBe("");
+  });
+  it("короткая дата графика", () => {
+    expect(formatDayMonth(new Date(2026, 8, 7, 15).getTime())).toBe("07.09");
+  });
+});
+
+describe("cleanBackup: файл копии — недоверенные данные", () => {
+  const ok = { version: 2, xp: 120, profile: { name: "А" }, lessons: { "ns-1-bits": { best: 1 } }, days: {}, exams: [], streak: { current: 1 }, onboarded: false, junk: 1 };
+  it("пропускает свою копию и отбрасывает лишние поля", () => {
+    const c = cleanBackup(ok)!;
+    expect(c).not.toBeNull();
+    expect(c.xp).toBe(120);
+    expect(c.version).toBe(2);
+    expect(c.lessons).toEqual(ok.lessons);
+    expect("junk" in c).toBe(false);
+    expect("onboarded" in c).toBe(false);
+  });
+  it("отклоняет не копию и битые поля", () => {
+    expect(cleanBackup(null)).toBeNull();
+    expect(cleanBackup([])).toBeNull();
+    expect(cleanBackup({ xp: "1", profile: {} })).toBeNull();
+    expect(cleanBackup({ xp: -5, profile: {} })).toBeNull();
+    expect(cleanBackup({ xp: 1, profile: null })).toBeNull();
+    expect(cleanBackup({ ...ok, lessons: null })).toBeNull();
+    expect(cleanBackup({ ...ok, lessons: { a: 5 } })).toBeNull();
+    expect(cleanBackup({ ...ok, exams: {} })).toBeNull();
+    expect(cleanBackup({ ...ok, streak: [] })).toBeNull();
+  });
+  it("старая копия без version и новых полей проходит", () => {
+    expect(cleanBackup({ xp: 10, profile: { lang: "kk" }, notes: { "ns-1-bits": { text: "x" } } })).not.toBeNull();
   });
 });

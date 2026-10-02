@@ -15,7 +15,7 @@ export function isDue(stat: LessonStat | undefined, now: number): boolean {
 
 /** Рекомендуемый урок — первый непройденный готовый урок по порядку курса (свободный режим: остальные тоже открыты). */
 export function recommendedLesson(units: Unit[], stats: Record<string, LessonStat>): { unit: Unit; ref: LessonRef } | undefined {
-  for (const unit of units) for (const ref of unit.lessons) if (ref.status === "available" && !stats[ref.id]) return { unit, ref };
+  for (const unit of units) for (const ref of unit.lessons) if (ref.status === "available" && (stats[ref.id]?.completions ?? 0) <= 0) return { unit, ref };
   return undefined;
 }
 
@@ -23,6 +23,31 @@ export function nodeState(ref: LessonRef, stat: LessonStat | undefined, recommen
   if (ref.status === "soon") return "soon";
   if (stat && stat.completions > 0) return isDue(stat, now) ? "due" : "done";
   return ref.id === recommendedId ? "recommended" : "available";
+}
+
+/** Тёмный цвет раздела (относительная яркость по WCAG): на тёмной теме его нужно осветлять, иначе дорога не видна. */
+export function isDarkColor(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+  return lum < 0.1;
+}
+
+/** Бейдж повторов: недоверенные данные из localStorage не должны раздувать узел. */
+export function completionsBadge(n: number): string | null {
+  if (!Number.isFinite(n) || n < 2) return null;
+  return n > 99 ? "×99+" : `×${Math.floor(n)}`;
+}
+
+/** Лучший результат в процентах 0..100 (мусор из старых сохранений — 0). */
+export function bestPercent(acc: number | undefined): number {
+  if (typeof acc !== "number" || !Number.isFinite(acc)) return 0;
+  return Math.round(Math.min(1, Math.max(0, acc)) * 100);
 }
 
 /** Пройден (в том числе «пора повторить»). */

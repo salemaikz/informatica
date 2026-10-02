@@ -60,7 +60,7 @@ export function FolderTile({ folder, count }: { folder: NoteFolder; count: numbe
     >
       <FolderIcon folder={folder} size={26} />
       <span className="min-w-0">
-        <span className="block truncate font-extrabold text-text">{name}</span>
+        <span className="line-clamp-2 font-extrabold leading-tight break-words text-text">{name}</span>
         <span className="block text-xs font-bold opacity-80">{t("notes2.notesCount", { n: count })}</span>
       </span>
     </Link>
@@ -101,7 +101,7 @@ export function FolderPicker({
             <span className={cn("shrink-0", on ? "" : "text-muted")}>
               <FolderIcon folder={f} size={20} />
             </span>
-            <span className={cn("min-w-0 flex-1 truncate", on && "text-text")}>{nameOf(f)}</span>
+            <span className={cn("line-clamp-2 min-w-0 flex-1 leading-tight break-words", on && "text-text")}>{nameOf(f)}</span>
             {on && <Check size={16} aria-hidden className="shrink-0" />}
           </button>
         );

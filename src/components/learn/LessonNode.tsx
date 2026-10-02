@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
-import type { NodeState, PathNode } from "./map";
+import { completionsBadge, type NodeState, type PathNode } from "./map";
 
 // Узел урока на дороге: круглая «кнопка» с объёмным низом + подпись сбоку (со стороны центра).
 
@@ -46,6 +46,7 @@ export function LessonNode({
   const title = l(lesson.title);
   const passed = state === "done" || state === "due";
   const labelRight = node.label === "right";
+  const badge = passed ? completionsBadge(completions) : null;
   // Подпись: от края узла к центру и дальше, не шире половины дорожки.
   const labelStyle = labelRight
     ? { left: `calc(50% + ${node.x + HALF + GAP}px)`, maxWidth: `min(12rem, calc(50% - ${node.x + HALF + GAP}px))` }
@@ -89,9 +90,9 @@ export function LessonNode({
               <Play size={28} fill="currentColor" className="translate-x-0.5" />
             )}
           </button>
-          {passed && completions > 1 && (
+          {badge && (
             <span className="pointer-events-none absolute -right-1.5 -top-1 rounded-full border-2 border-surface bg-warning-strong px-1.5 text-[11px] font-black leading-4 text-white">
-              ×{completions}
+              {badge}
             </span>
           )}
           {state === "due" && (

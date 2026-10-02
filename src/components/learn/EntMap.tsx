@@ -147,6 +147,7 @@ function TopicSheet({
                           <button
                             type="button"
                             onClick={() => onLesson(ref.id)}
+                            aria-label={t("learn2.node.aria", { n: lessonNumber(ref.id), title: l(ref.title), state: t(`learn2.state.${st}`) })}
                             className="flex w-full items-center gap-3 rounded-2xl border-2 border-border bg-surface p-2 text-left hover:bg-surface-2"
                           >
                             <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", cls)}>
@@ -182,7 +183,7 @@ function TopicSheet({
 }
 
 export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string | undefined; now: number; onLesson: (lessonId: string) => void }) {
-  const { t, l } = useT();
+  const { t, l, lang } = useT();
   const skills = useApp((s) => s.skills);
   const [topic, setTopic] = useState<EntTopicId | null>(null);
   const tiles = useMemo(
@@ -230,7 +231,7 @@ export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string
                   ))}
                 </span>
               </div>
-              <span className={cn("hyphens-auto font-extrabold leading-tight [overflow-wrap:anywhere]", tp.examCount >= 4 ? "text-base" : "text-[15px]", tall ? "line-clamp-4" : "line-clamp-3")}>{l(tp.title)}</span>
+              <span lang={lang} className={cn("hyphens-auto font-extrabold leading-tight [overflow-wrap:anywhere]", tp.examCount >= 4 ? "text-base" : "text-[15px]", tall ? "line-clamp-4" : "line-clamp-3")}>{l(tp.title)}</span>
               <div className="mt-auto flex flex-col gap-1.5">
                 {tall || tp.examCount >= 5 ? <span className={cn("text-3xl font-black leading-none", TONE[level].ink)}>{pct}%</span> : null}
                 <ProgressBar value={value} color={TONE[level].bar} height={6} />

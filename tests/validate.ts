@@ -135,6 +135,11 @@ export function validateEnt(item: EntItem): string[] {
       need(item.choices.length === 4, "ровно 4 описания");
       need(item.items.every(filledText) && item.choices.every(filledText) && uniq(item.choices), "тексты непустые, описания разные");
       need(item.answer.length === 2 && item.answer.every((a) => a >= 0 && a < 4) && item.answer[0] !== item.answer[1], "answer: 2 разных индекса 0..3");
+      // Буквы A/B и номера описаний экран добавляет сам — в тексте их быть не должно.
+      need(
+        [...item.items, ...item.choices].every((t) => !/^\s*([A-DА-Г]|\d)[.)]\s/.test(typeof t === "string" ? t : `${t.ru}\n${t.kk}`)),
+        "не пиши «A. »/«1) » в начале пунктов и описаний — буквы и номера ставит экран",
+      );
       break;
   }
   return errors;

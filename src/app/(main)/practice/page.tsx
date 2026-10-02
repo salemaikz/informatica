@@ -5,6 +5,7 @@ import { Brain, ChevronDown, ChevronRight, Repeat, RotateCcw, Timer, Trophy } fr
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
+import { getLesson } from "@/content/course";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
 import { dueLessons } from "@/lib/review";
@@ -29,7 +30,8 @@ export default function PracticePage() {
   const games = useApp((s) => s.games);
   const [now] = useState(() => Date.now());
   const [openUnits, setOpenUnits] = useState<ReadonlySet<string>>(new Set());
-  const due = dueLessons(lessons, now).length;
+  // Только уроки, которые есть в курсе (в старых сохранениях бывают удалённые id): разминка их не соберёт.
+  const due = dueLessons(lessons, now).filter((d) => getLesson(d.id)).length;
   const completedSkills = skillsOfLessons(Object.keys(lessons).filter((id) => (lessons[id]?.completions ?? 0) > 0));
 
   const toggle = (id: string) =>

@@ -36,6 +36,8 @@ export const DRILL_COUNT = 8;
 /** «Экстерн»: порог зачёта раздела и максимум заданий. */
 export const EXTERN_PASS = 0.8;
 export const EXTERN_MAX = 12;
+/** «Экстерн»: минимум заданий — раздел не засчитывается за 2 угаданных ответа. */
+export const EXTERN_MIN = 6;
 /** Урок игрой: порог зачёта урока (доля верных) и минимум ответов (2 из 2 — ещё не урок). */
 export const GAME_PASS = 0.7;
 export const GAME_MIN_TOTAL = 5;
@@ -305,21 +307,22 @@ export interface ExternSession {
 }
 
 /**
- * По 2 задания уровня B–C на навык (если навыков больше 6 — по одному), всего до 12.
+ * По 2 задания уровня B–C на навык (если навыков больше 6 — по одному), всего до 12;
+ * если навыков мало — больше заданий на навык, чтобы набрать минимум 6.
  * Навыки сверх 12 в задания не попадают — их уроки экстерн не засчитывает (иначе урок засчитался бы без проверки).
  */
 export function buildExternSession(unitId: string | undefined, done: Record<string, LessonStat>, seed: number): ExternSession {
   const candidates = externLessons(unitId, done);
   const skills = skillsOfLessons(candidates).slice(0, EXTERN_MAX);
   if (!skills.length) return { steps: [], lessons: [] };
-  const per = skills.length * 2 <= EXTERN_MAX ? 2 : 1;
+  const per = skills.length * 2 <= EXTERN_MAX ? Math.max(2, Math.ceil(EXTERN_MIN / skills.length)) : 1;
   const rand = seeded(seed);
   const steps: QuestionStep[] = [];
   const seen = new Set<string>();
   skills.forEach((skill, si) => {
     for (let j = 0; j < per; j++) {
-      // Два задания на навык: B и C; одно — по очереди B / C.
-      const level: Level = per === 2 ? ((2 + j) as Level) : ((2 + (si % 2)) as Level);
+      // Несколько заданий на навык: B, C, B, …; одно — по очереди B / C.
+      const level: Level = per >= 2 ? ((2 + (j % 2)) as Level) : ((2 + (si % 2)) as Level);
       for (let attempt = 0; attempt < 8; attempt++) {
         const step = bankFor(skill)!.question(level, Math.floor(rand() * 1e9));
         const key = stepKey(step);

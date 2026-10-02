@@ -3,7 +3,7 @@
 import { ArrowRight, BookOpen, Clock, Dumbbell, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { LESSONS } from "@/content/course";
+import { LESSONS, lessonNumber } from "@/content/course";
 import { entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import type { DictKey } from "@/i18n/dict";
@@ -22,20 +22,14 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ExamNotes } from "./ExamNotes";
-import {
-  aiMistakes,
-  formatClock,
-  lessonsForTopic,
-  onlyMistakes,
-  ratioOf,
-  reviewRows,
-  slowestRows,
-  toneOf,
-  type Tone,
-} from "./logic";
+import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
 
-const TONE_COLOR: Record<Tone, string> = { danger: "var(--danger)", warning: "var(--warning)", success: "var(--success)" };
+const TONE_COLOR: Record<Tone, string> = {
+  danger: "var(--danger)",
+  warning: "var(--warning)",
+  success: "var(--success)",
+};
 const KIND_ROWS = ["single", "multi", "match", "context"] as const;
 
 type AiState = { status: "idle" | "loading" | "failed" | "limit" };
@@ -48,7 +42,10 @@ function Bar({ label, points, max, hint }: { label: string; points: number; max:
       <div className="mb-1 flex items-baseline justify-between gap-2 text-sm font-bold">
         <span className="min-w-0 truncate">{label}</span>
         <span className="shrink-0 tabular-nums text-muted">
-          {hint ?? `${points}/${max}`} · <span className={cn(tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning-strong" : "text-success-strong")}>{Math.round(ratio * 100)}%</span>
+          {hint ?? `${points}/${max}`} ·{" "}
+          <span className={cn(tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning-strong" : "text-success-strong")}>
+            {Math.round(ratio * 100)}%
+          </span>
         </span>
       </div>
       <ProgressBar value={ratio} color={TONE_COLOR[tone]} height={10} label={label} />
@@ -62,7 +59,10 @@ export function ExamResult({ id }: { id: string }) {
   const exams = useApp((s) => s.exams);
   const skills = useApp((s) => s.skills);
 
-  const [loaded, setLoaded] = useState<{ done: boolean; attempt: ExamAttempt | null }>({ done: false, attempt: null });
+  const [loaded, setLoaded] = useState<{
+    done: boolean;
+    attempt: ExamAttempt | null;
+  }>({ done: false, attempt: null });
   const [now] = useState(() => Date.now());
   const [onlyWrong, setOnlyWrong] = useState(false);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
@@ -86,12 +86,25 @@ export function ExamResult({ id }: { id: string }) {
     () =>
       forecastScore({
         skills,
-        exams: exams.map((e) => ({ at: e.at, points: e.points, maxPoints: e.maxPoints, byTopic: e.byTopic, kind: e.kind })),
+        exams: exams.map((e) => ({
+          at: e.at,
+          points: e.points,
+          maxPoints: e.maxPoints,
+          byTopic: e.byTopic,
+          kind: e.kind,
+        })),
         now,
       }),
     [skills, exams, now],
   );
-  const lessons = useMemo(() => Object.values(LESSONS), []);
+  // Уроки на карте — в порядке курса (старые уроки вне карты не предлагаем).
+  const lessons = useMemo(
+    () =>
+      Object.values(LESSONS)
+        .filter((x) => lessonNumber(x.id) > 0)
+        .sort((a, b) => lessonNumber(a.id) - lessonNumber(b.id)),
+    [],
+  );
 
   if (!loaded.done) return <p className="py-20 text-center font-bold text-muted">{t("common.loading")}</p>;
 
@@ -115,8 +128,18 @@ export function ExamResult({ id }: { id: string }) {
   const at = attempt?.finishedAt ?? summary?.at ?? 0;
   const topicRows = (
     result
-      ? Object.entries(result.byTopic).filter(([, v]) => v.max > 0).map(([tp, v]) => ({ topic: tp as EntTopicId, points: v.points, max: v.max }))
-      : Object.entries(summary?.byTopic ?? {}).map(([tp, v]) => ({ topic: tp as EntTopicId, points: v!.points, max: v!.max }))
+      ? Object.entries(result.byTopic)
+          .filter(([, v]) => v.max > 0)
+          .map(([tp, v]) => ({
+            topic: tp as EntTopicId,
+            points: v.points,
+            max: v.max,
+          }))
+      : Object.entries(summary?.byTopic ?? {}).map(([tp, v]) => ({
+          topic: tp as EntTopicId,
+          points: v!.points,
+          max: v!.max,
+        }))
   ).sort((a, b) => ratioOf(a.points, a.max) - ratioOf(b.points, b.max));
 
   const shown = onlyWrong ? onlyMistakes(rows) : rows;
@@ -148,15 +171,26 @@ export function ExamResult({ id }: { id: string }) {
       const weakSkills = [...new Set(onlyMistakes(rows).map((r) => r.q.item.skill))].slice(0, 10);
       const data = await lessonFeedback({
         context: buildStudentContext(app),
-        lesson: t("exam.ai.lesson", { kind: t(`exam.mode.${attempt.kind}` as DictKey), points: result.points, max: result.maxPoints }),
+        lesson: t("exam.ai.lesson", {
+          kind: t(`exam.mode.${attempt.kind}` as DictKey),
+          points: result.points,
+          max: result.maxPoints,
+        }),
         accuracy: ratio,
         durationSec: result.timeSec,
         mistakes: aiMistakes(rows, attempt.answers, lang, 8),
-        skills: weakSkills.map((sid) => ({ title: skillById(sid) ? l(skillById(sid)!.title) : sid, mastery: app.skills[sid]?.mastery ?? 0 })),
+        skills: weakSkills.map((sid) => ({
+          title: skillById(sid) ? l(skillById(sid)!.title) : sid,
+          mastery: app.skills[sid]?.mastery ?? 0,
+        })),
       });
       if (!data.feedback?.trim()) throw new Error("empty");
       if (data.memory) app.setMemory(data.memory);
-      const review = { feedback: data.feedback, focus: Array.isArray(data.focus) ? data.focus : [], at: Date.now() };
+      const review = {
+        feedback: data.feedback,
+        focus: Array.isArray(data.focus) ? data.focus : [],
+        at: Date.now(),
+      };
       const { paper: _paper, ...state } = attempt;
       void _paper;
       await saveAttemptState({ ...state, review });
@@ -169,6 +203,9 @@ export function ExamResult({ id }: { id: string }) {
   };
 
   const weak = advice?.weakTopics.slice(0, 3) ?? [];
+  // Ни одного ответа (время вышло, завершено сразу): темп и «отвечаешь быстро» ничего не значат.
+  const answeredAny = !!result && !!attempt && result.unanswered < attempt.paper.items.length;
+  const tips = advice ? (answeredAny ? advice.tips : advice.tips.filter((x) => x === "answer-everything")) : [];
   const pace = result && advice ? advice.pace : null;
   const avg = result?.avgSecPerQuestion ?? 0;
   const paceMax = Math.max(avg, SEC_PER_QUESTION, 1);
@@ -193,7 +230,7 @@ export function ExamResult({ id }: { id: string }) {
             </p>
             <p className="flex items-center gap-1.5 text-xs font-bold text-muted">
               <Clock size={13} aria-hidden />
-              {at ? new Date(at).toLocaleDateString(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "long" }) : ""}
+              {formatDay(at, lang, false, now)}
               {durationSec > 0 ? ` · ${formatClock(durationSec)}` : ""}
             </p>
           </div>
@@ -202,11 +239,18 @@ export function ExamResult({ id }: { id: string }) {
           <div className="flex items-center justify-between gap-2 rounded-2xl bg-surface-2 px-3.5 py-2.5">
             <span className="text-sm font-bold">{t("exam.result.forecast")}</span>
             <span className="font-extrabold">
-              ~{forecast.score} <span className="text-sm text-muted">({forecast.low}–{forecast.high} {t("exam.of", { max: MAX_SCORE })})</span>
+              ~{forecast.score}{" "}
+              <span className="text-sm text-muted">
+                ({forecast.low}–{forecast.high} {t("exam.of", { max: MAX_SCORE })})
+              </span>
             </span>
           </div>
         )}
-        {result && result.unanswered > 0 && <Pill tone="warning" className="self-start">{t("exam.result.unanswered", { n: result.unanswered })}</Pill>}
+        {result && result.unanswered > 0 && (
+          <Pill tone="warning" className="self-start">
+            {t("exam.result.unanswered", { n: result.unanswered })}
+          </Pill>
+        )}
       </Card>
 
       {attempt && <ExamNotes paper={attempt.paper} />}
@@ -223,9 +267,7 @@ export function ExamResult({ id }: { id: string }) {
         </section>
       )}
 
-      {!result && (
-        <p className="rounded-2xl border-2 border-border bg-surface p-3.5 text-sm font-semibold text-muted">{t("exam.result.summaryOnly")}</p>
-      )}
+      {!result && <p className="rounded-2xl border-2 border-border bg-surface p-3.5 text-sm font-semibold text-muted">{t("exam.result.summaryOnly")}</p>}
 
       {result && advice && attempt && (
         <>
@@ -240,46 +282,67 @@ export function ExamResult({ id }: { id: string }) {
           </section>
 
           {/* Темп */}
-          <section>
-            <SectionTitle>{t("exam.result.pace")}</SectionTitle>
-            <Card className="flex flex-col gap-3">
-              <p className="font-bold">{t(`exam.pace.${pace}` as DictKey, { avg: formatClock(avg), norm: formatClock(SEC_PER_QUESTION) })}</p>
-              <div className="flex flex-col gap-2 text-sm font-bold">
-                <div>
-                  <div className="mb-1 flex justify-between"><span>{t("exam.pace.yours")}</span><span className="tabular-nums text-muted">{formatClock(avg)}</span></div>
-                  <ProgressBar value={avg / paceMax} color={pace === "slow" ? "var(--warning)" : pace === "fast" ? "var(--primary)" : "var(--success)"} height={10} label={t("exam.pace.yours")} />
-                </div>
-                <div>
-                  <div className="mb-1 flex justify-between"><span>{t("exam.pace.norm")}</span><span className="tabular-nums text-muted">{formatClock(SEC_PER_QUESTION)}</span></div>
-                  <ProgressBar value={SEC_PER_QUESTION / paceMax} color="var(--border)" height={10} label={t("exam.pace.norm")} />
-                </div>
-              </div>
-              {result.slowest.length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-sm font-extrabold text-muted">{t("exam.pace.slowest")}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {slowestRows(attempt.paper, attempt.answers, result.slowest).map((s) => (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => jumpTo(s.key)}
-                        className="h-9 rounded-full border-2 border-border bg-surface px-3 text-sm font-extrabold hover:bg-surface-2"
-                      >
-                        {t("exam.pace.item", { n: s.number, time: formatClock(s.sec) })}
-                      </button>
-                    ))}
+          {answeredAny && (
+            <section>
+              <SectionTitle>{t("exam.result.pace")}</SectionTitle>
+              <Card className="flex flex-col gap-3">
+                <p className="font-bold">
+                  {t(`exam.pace.${pace}` as DictKey, {
+                    avg: formatClock(avg),
+                    norm: formatClock(SEC_PER_QUESTION),
+                  })}
+                </p>
+                <div className="flex flex-col gap-2 text-sm font-bold">
+                  <div>
+                    <div className="mb-1 flex justify-between">
+                      <span>{t("exam.pace.yours")}</span>
+                      <span className="tabular-nums text-muted">{formatClock(avg)}</span>
+                    </div>
+                    <ProgressBar
+                      value={avg / paceMax}
+                      color={pace === "slow" ? "var(--warning)" : pace === "fast" ? "var(--primary)" : "var(--success)"}
+                      height={10}
+                      label={t("exam.pace.yours")}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between">
+                      <span>{t("exam.pace.norm")}</span>
+                      <span className="tabular-nums text-muted">{formatClock(SEC_PER_QUESTION)}</span>
+                    </div>
+                    <ProgressBar value={SEC_PER_QUESTION / paceMax} color="var(--border)" height={10} label={t("exam.pace.norm")} />
                   </div>
                 </div>
-              )}
-            </Card>
-          </section>
+                {result.slowest.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-sm font-extrabold text-muted">{t("exam.pace.slowest")}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {slowestRows(attempt.paper, attempt.answers, result.slowest).map((s) => (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => jumpTo(s.key)}
+                          className="h-10 rounded-full border-2 border-border bg-surface px-3 text-sm font-extrabold hover:bg-surface-2"
+                        >
+                          {t("exam.pace.item", {
+                            n: s.number,
+                            time: formatClock(s.sec),
+                          })}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </section>
+          )}
 
           {/* Советы */}
-          {advice.tips.length > 0 && (
+          {tips.length > 0 && (
             <section>
               <SectionTitle>{t("exam.result.advice")}</SectionTitle>
               <div className="flex flex-col gap-2">
-                {advice.tips.map((tip) => (
+                {tips.map((tip) => (
                   <div key={tip} className="flex gap-3 rounded-2xl border-2 border-primary/30 bg-primary-soft p-3.5">
                     <Lightbulb size={22} className="mt-0.5 shrink-0 text-primary" aria-hidden />
                     <div>
@@ -303,7 +366,9 @@ export function ExamResult({ id }: { id: string }) {
                 {attempt.review.focus.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {attempt.review.focus.map((f, i) => (
-                      <Pill key={i} tone="ai">{f}</Pill>
+                      <Pill key={i} tone="ai">
+                        {f}
+                      </Pill>
                     ))}
                   </div>
                 )}
@@ -335,14 +400,16 @@ export function ExamResult({ id }: { id: string }) {
                   <div key={tp} className="flex flex-col gap-2.5 rounded-2xl border-2 border-border bg-surface p-3">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className="min-w-0 font-extrabold">{l(entTopicById(tp).title)}</p>
-                      <p className="shrink-0 text-sm font-extrabold text-danger">{Math.round(ratioOf(result.byTopic[tp].points, result.byTopic[tp].max) * 100)}%</p>
+                      <p className="shrink-0 text-sm font-extrabold text-danger">
+                        {Math.round(ratioOf(result.byTopic[tp].points, result.byTopic[tp].max) * 100)}%
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <ButtonLink href={`/drill?mode=topic&topic=${tp}`} size="sm" variant="secondary">
+                      <ButtonLink href={`/drill?mode=topic&topic=${tp}`} size="sm" variant="secondary" className="h-10">
                         <Dumbbell size={16} aria-hidden />
                         {t("exam.result.train")}
                       </ButtonLink>
-                      <ButtonLink href={lessonFor(tp)} size="sm" variant="secondary">
+                      <ButtonLink href={lessonFor(tp)} size="sm" variant="secondary" className="h-10">
                         <BookOpen size={16} aria-hidden />
                         {t("exam.result.lessons")}
                       </ButtonLink>

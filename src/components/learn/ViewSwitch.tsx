@@ -39,7 +39,7 @@ export function ViewSwitch({ view, onChange }: { view: MapView; onChange: (v: Ma
     { id: "ent", label: t("learn2.view.ent"), icon: LayoutGrid },
   ];
   return (
-    <div role="tablist" aria-label={t("learn2.view.label")} className="relative grid grid-cols-2 rounded-2xl border-2 border-border bg-surface-2 p-1">
+    <div role="group" aria-label={t("learn2.view.label")} className="relative grid grid-cols-2 rounded-2xl border-2 border-border bg-surface-2 p-1">
       {/* Одна «таблетка» скользит между сегментами. */}
       <m.span
         aria-hidden
@@ -54,8 +54,7 @@ export function ViewSwitch({ view, onChange }: { view: MapView; onChange: (v: Ma
           <button
             key={id}
             type="button"
-            role="tab"
-            aria-selected={on}
+            aria-pressed={on}
             onClick={() => onChange(id)}
             className={cn("relative flex h-10 items-center justify-center gap-2 rounded-xl text-[15px] font-extrabold transition-colors", on ? "text-primary" : "text-muted hover:text-text")}
           >

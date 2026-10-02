@@ -303,3 +303,29 @@ export function noteSnippet(body: string, max = 120): string {
 export function isEmptyNote(n: { title: string; body: string; images?: string[] }): boolean {
   return n.title.trim() === "" && n.body.trim() === "" && !n.images?.length;
 }
+
+/**
+ * Тело записи без строки, ставшей заголовком (когда своего заголовка нет или он совпадает с первой строкой) —
+ * чтобы в карточке заголовок не повторялся в сниппете.
+ */
+export function bodyWithoutTitleLine(body: string): string {
+  const lines = body.split("\n");
+  const i = lines.findIndex((l) => noteSnippet(l) !== "");
+  return i === -1 ? body : [...lines.slice(0, i), ...lines.slice(i + 1)].join("\n");
+}
+
+// Intl с локалью kk-KZ есть не во всех браузерах (Chromium без полного ICU отдаёт английский) — месяцы свои.
+const MONTHS_RU = ["янв.", "февр.", "марта", "апр.", "мая", "июня", "июля", "авг.", "сент.", "окт.", "нояб.", "дек."];
+const MONTHS_KK = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+
+/** Короткая дата записи: «2 окт.» / «2 қазан»; другой год — с годом. */
+export function noteDate(ts: number, lang: "ru" | "kk", now = Date.now()): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.getDate();
+  const m = d.getMonth();
+  const y = d.getFullYear();
+  const sameYear = y === new Date(now).getFullYear();
+  if (lang === "kk") return sameYear ? `${day} ${MONTHS_KK[m]}` : `${y} ж. ${day} ${MONTHS_KK[m]}`;
+  return sameYear ? `${day} ${MONTHS_RU[m]}` : `${day} ${MONTHS_RU[m]} ${y}`;
+}

@@ -1,9 +1,11 @@
 "use client";
 
+import { Image as ImageIcon } from "lucide-react";
 import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { NoteImage } from "@/components/notes/NoteImage";
+import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { noteImageId, remarkNoteMark, type MarkColor } from "@/lib/note-markdown";
 
@@ -31,9 +33,12 @@ function makeComponents(onToggleTask?: (offset: number) => void): Components {
       return <mark className={cn("rounded px-0.5 text-inherit [box-decoration-break:clone]", MARK_CLASS[color])}>{children}</mark>;
     },
     img: ({ src, alt }) => {
-      const id = noteImageId(typeof src === "string" ? src : undefined);
-      // eslint-disable-next-line @next/next/no-img-element
-      return id ? <NoteImage id={id} alt={alt} /> : <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} className="h-auto max-w-full rounded-xl" />;
+      const url = typeof src === "string" ? src : "";
+      const id = noteImageId(url);
+      if (id) return <NoteImage id={id} alt={alt} />;
+      // Чужие картинки сами не грузим: ответ ИИ мог бы так «позвонить» на сторонний сервер (трекинг, утечка данных).
+      // Показываем ссылку — откроет ученик сам, если захочет.
+      return <ExternalImage href={url} alt={alt} />;
     },
     li: ({ node, className, children }) => {
       const task = typeof className === "string" && className.includes("task-list-item");
@@ -49,18 +54,36 @@ function makeComponents(onToggleTask?: (offset: number) => void): Components {
   };
 }
 
+function ExternalImage({ href, alt }: { href: string; alt?: string }) {
+  const { t } = useT();
+  const label = alt?.trim() || t("notes2.imgExternal");
+  if (!/^https?:\/\//i.test(href)) return <span className="font-semibold text-muted">[{label}]</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 font-semibold">
+      <ImageIcon size={16} aria-hidden className="shrink-0" />
+      {label}
+    </a>
+  );
+}
+
 function TaskBox({ type, checked, onToggle }: { type?: string; checked?: boolean; onToggle?: (offset: number) => void }) {
   const offset = useContext(TaskOffset);
   if (type !== "checkbox") return <input type={type} readOnly />;
   const live = !!onToggle && offset !== null;
-  return (
+  const box = (
     <input
       type="checkbox"
       checked={!!checked}
       disabled={!live}
       onChange={() => live && onToggle(offset)}
-      className={cn("mr-2 h-5 w-5 translate-y-1 accent-[var(--primary)]", live ? "cursor-pointer" : "cursor-default")}
+      className={cn("h-5 w-5 accent-[var(--primary)]", live ? "cursor-pointer" : "cursor-default")}
     />
+  );
+  // Зона касания 40×40 (поля компенсированы отрицательными отступами — вёрстка строки не меняется).
+  return live ? (
+    <label className="-my-2.5 -ml-2.5 mr-0 inline-flex translate-y-1 cursor-pointer p-2.5 align-baseline">{box}</label>
+  ) : (
+    <span className="mr-2 inline-flex translate-y-1 align-baseline">{box}</span>
   );
 }
 

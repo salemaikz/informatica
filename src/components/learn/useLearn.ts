@@ -5,7 +5,7 @@ import type { LessonRef, Unit } from "@/lib/types";
 import { UNITS } from "@/content/course";
 import { dueLessons } from "@/lib/review";
 import { useApp } from "@/lib/store";
-import { pluralForm, recommendedLesson } from "./map";
+import { isDarkColor, pluralForm, recommendedLesson } from "./map";
 import type { DictKey } from "@/i18n/dict";
 
 /** «Сейчас» на время жизни экрана: стабильно между рендерами (расписание повторения не дёргается). */
@@ -41,7 +41,9 @@ export function useLearnData() {
  */
 export function unitVars(color: string): CSSProperties {
   return {
-    "--u": color,
+    // Очень тёмный цвет раздела (u9 — #334155) на тёмной теме почти не виден: подмешиваем цвет текста —
+    // в светлой теме он чуть темнеет, в тёмной — светлеет.
+    "--u": isDarkColor(color) ? `color-mix(in srgb, ${color} 62%, var(--text))` : color,
     "--u-ink": `color-mix(in srgb, ${color} 64%, var(--text))`,
     "--u-soft": `color-mix(in srgb, ${color} 12%, var(--surface))`,
     "--u-fill": `color-mix(in srgb, ${color} 88%, var(--text))`,

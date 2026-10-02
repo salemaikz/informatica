@@ -54,11 +54,11 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonLink href={`/theory#${unit.id}`} variant="secondary" size="sm" icon={<BookOpen size={16} />}>
+          <ButtonLink href={`/theory#${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<BookOpen size={16} />}>
             {t("learn2.unit.theory")}
           </ButtonLink>
           {canExtern(unit, lessons) && (
-            <ButtonLink href={`/drill?mode=extern&unit=${unit.id}`} variant="secondary" size="sm" icon={<GraduationCap size={16} />}>
+            <ButtonLink href={`/drill?mode=extern&unit=${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<GraduationCap size={16} />}>
               {t("learn2.unit.extern")}
             </ButtonLink>
           )}

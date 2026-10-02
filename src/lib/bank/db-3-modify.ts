@@ -334,11 +334,6 @@ function makeId(kind: string, t: Table, extra: string, seed: number): string {
 
 const T_RU: Record<TableName, string> = { Students: "Students", Goods: "Goods" };
 
-const HINT_ROWS: L = {
-  ru: "Иди по таблице сверху вниз и проверяй условие для каждой записи отдельно. Обрати внимание, включается ли граничное значение.",
-  kk: "Кестені жоғарыдан төмен қарай шығып, шартты әр жазба үшін бөлек тексер. Шектік мән қосылатынына назар аудар.",
-};
-
 const listOf = (t: Table, idx: number[]): L => ({
   ru: idx.map((i) => (typeof t.labels[i] === "string" ? t.labels[i] : (t.labels[i] as L).ru)).join(", "),
   kk: idx.map((i) => (typeof t.labels[i] === "string" ? t.labels[i] : (t.labels[i] as L).kk)).join(", "),

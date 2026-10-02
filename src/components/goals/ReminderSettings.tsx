@@ -9,6 +9,7 @@ import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
+import { downloadBlob } from "./backup";
 import { Row, Switch } from "./controls";
 import { disablePush, enablePush, pushSupport, showNotification } from "./push";
 
@@ -52,11 +53,7 @@ export function ReminderSettings() {
 
   const downloadIcs = () => {
     const ics = buildIcs({ time: reminder.time, lang, title: t("remind.ics.summary"), body: t("remind.ics.body") });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-    a.download = "informatica-reminder.ics";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(new Blob([ics], { type: "text/calendar;charset=utf-8" }), "informatica-reminder.ics");
   };
 
   return (
@@ -83,7 +80,7 @@ export function ReminderSettings() {
       )}
       {pushOn && (
         <div className="py-3">
-          <Button variant="secondary" size="sm" icon={<BellRing size={16} />} onClick={() => void showNotification(testText().title, testText().body)}>
+          <Button variant="secondary" size="sm" className="h-10" icon={<BellRing size={16} />} onClick={() => void showNotification(testText().title, testText().body)}>
             {t("remind.push.test")}
           </Button>
         </div>

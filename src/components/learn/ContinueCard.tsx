@@ -38,7 +38,7 @@ export function ContinueCard({
           <p className="font-extrabold">{t("learn2.hero.allDone")}</p>
           <p className="text-sm font-semibold text-muted">{t("learn2.hero.allDoneHint")}</p>
         </div>
-        <ButtonLink href="/exam" size="sm" icon={<ClipboardCheck size={16} />} aria-label={t("learn2.quick.exam")} className="shrink-0">
+        <ButtonLink href="/exam" size="sm" icon={<ClipboardCheck size={16} />} aria-label={t("learn2.quick.exam")} className="h-10 min-w-10 shrink-0">
           <span className="hidden sm:inline">{t("learn2.quick.exam")}</span>
         </ButtonLink>
       </div>
@@ -79,7 +79,7 @@ export function ContinueCard({
           ) : (
             <span />
           )}
-          <Button variant="secondary" size="sm" onClick={onModes} icon={<Layers size={16} />} className="shrink-0">
+          <Button variant="secondary" size="sm" onClick={onModes} icon={<Layers size={16} />} className="h-10 shrink-0">
             {t("learn2.hero.modes")}
           </Button>
         </div>

@@ -54,7 +54,7 @@ export default function LearnPage() {
     <div className="flex flex-col gap-5">
       <MascotSays mood="happy" size={56}>
         <span className="block text-lg font-extrabold leading-tight">{name ? t("learn.greeting", { name }) : t("learn.hello")}</span>
-        <span className="text-sm text-muted">{firstTime ? t("learn2.sub.first") : recommended ? t("learn2.sub.go") : t("learn2.sub.done")}</span>
+        <span className="text-sm text-muted">{firstTime ? t("learn2.sub.first") : recommended ? t("learn2.sub.go") : due.length ? t("learn2.sub.done") : t("learn2.sub.wait")}</span>
       </MascotSays>
 
       {/* GoalSummaryCard */}

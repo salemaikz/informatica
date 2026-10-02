@@ -103,7 +103,7 @@ export default function TutorPage() {
                 type="button"
                 // Открываем шторку выбора папки — молча в конспект не сохраняем.
                 onClick={() => useSaveToNotes.getState().open({ source: "ai", text: m.content })}
-                className="mt-2 flex min-h-9 items-center gap-1 text-xs font-extrabold text-ai"
+                className="mt-1 flex min-h-10 items-center gap-1 text-xs font-extrabold text-ai"
               >
                 <BookmarkPlus size={14} />
                 {t("tutor.saveNote")}

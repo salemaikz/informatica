@@ -15,6 +15,7 @@ import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
+import { cleanBackup, downloadBlob } from "@/components/goals/backup";
 import { Row, Segmented } from "@/components/goals/controls";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
@@ -78,12 +79,7 @@ export default function ProfilePage() {
   };
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ version: 2, ...useApp.getState() }, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "informatica-progress.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(new Blob([JSON.stringify({ ...useApp.getState(), version: 2 }, null, 2)], { type: "application/json" }), "informatica-progress.json");
   };
 
   const pickFile = async (file: File | undefined) => {
@@ -95,9 +91,8 @@ export default function ProfilePage() {
       return;
     }
     try {
-      const data: unknown = JSON.parse(await file.text());
-      const d = data as Record<string, unknown> | null;
-      if (!d || typeof d !== "object" || Array.isArray(d) || typeof d.xp !== "number" || !d.profile || typeof d.profile !== "object") throw new Error("not a backup");
+      const data = cleanBackup(JSON.parse(await file.text()));
+      if (!data) throw new Error("not a backup");
       setPending(data);
     } catch {
       setImportMsg({ ok: false, text: t("prof2.import.bad") });
@@ -128,15 +123,21 @@ export default function ProfilePage() {
               type="button"
               onClick={() => setPickAvatar(true)}
               aria-label={t("prof2.avatar.edit")}
-              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface bg-primary text-white shadow transition-transform active:scale-95"
+              className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border-2 border-surface bg-primary text-white shadow transition-transform active:scale-95"
             >
               <Pencil size={16} />
             </button>
           </div>
           <div className="min-w-0 flex-1">
-            <label htmlFor="prof-name" className="text-xs font-extrabold uppercase tracking-wide text-muted">
-              {t("prof2.name.label")}
-            </label>
+            {editingName ? (
+              <label htmlFor="prof-name" className="text-xs font-extrabold uppercase tracking-wide text-muted">
+                {t("prof2.name.label")}
+              </label>
+            ) : (
+              <p id="prof-name-label" className="text-xs font-extrabold uppercase tracking-wide text-muted">
+                {t("prof2.name.label")}
+              </p>
+            )}
             {editingName ? (
               <form
                 onSubmit={(e) => {
@@ -155,20 +156,20 @@ export default function ProfilePage() {
                   className="h-11 w-full rounded-xl border-2 border-primary bg-surface px-3 text-lg font-extrabold outline-none"
                 />
                 <div className="flex gap-2">
-                  <Button type="submit" size="sm" disabled={!draft.trim()}>
+                  <Button type="submit" size="sm" className="h-10" disabled={!draft.trim()}>
                     {t("prof2.name.save")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditingName(false)}>
+                  <Button size="sm" variant="ghost" className="h-10" onClick={() => setEditingName(false)}>
                     {t("common.cancel")}
                   </Button>
                 </div>
               </form>
             ) : (
               <div className="mt-0.5 flex flex-col items-start gap-2">
-                <p id="prof-name" className="max-w-full break-words text-2xl font-extrabold leading-tight">
+                <p aria-labelledby="prof-name-label" className="max-w-full break-words text-2xl font-extrabold leading-tight">
                   {profile.name || "—"}
                 </p>
-                <Button size="sm" variant="secondary" icon={<Pencil size={14} />} onClick={startEditName}>
+                <Button size="sm" variant="secondary" className="h-10" icon={<Pencil size={14} />} onClick={startEditName}>
                   {t("prof2.name.edit")}
                 </Button>
               </div>
@@ -182,8 +183,10 @@ export default function ProfilePage() {
 
       {/* Цели */}
       <Card id="goals" className="scroll-mt-20 divide-y-2 divide-border py-1">
-        <p className="py-3 text-lg font-extrabold">{t("prof2.goals.title")}</p>
-        <Row label={t("prof2.goals.examDate")} hint={daysLeft !== null && daysLeft >= 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : t("prof2.goals.examDate.hint")}>
+        <h2 className="py-3 text-lg font-extrabold">{t("prof2.goals.title")}</h2>
+        <Row label={t("prof2.goals.examDate")} hint={
+            daysLeft === null ? t("prof2.goals.examDate.hint") : daysLeft > 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : daysLeft === 0 ? t("goals.card.today") : t("goals.card.past")
+          }>
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -194,7 +197,7 @@ export default function ProfilePage() {
               className="h-11 rounded-xl border-2 border-border bg-surface px-3 font-extrabold outline-none focus:border-primary"
             />
             {profile.examDate && (
-              <Button size="sm" variant="ghost" onClick={() => update({ examDate: null })}>
+              <Button size="sm" variant="ghost" className="h-auto min-h-10" onClick={() => update({ examDate: null })}>
                 {t("prof2.goals.examClear")}
               </Button>
             )}
@@ -205,7 +208,7 @@ export default function ProfilePage() {
             <label htmlFor="prof-target" className="font-extrabold">
               {t("prof2.goals.target")}
             </label>
-            <span className="text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
+            <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
           </div>
           <input
             id="prof-target"
@@ -230,7 +233,7 @@ export default function ProfilePage() {
 
       {/* Напоминания */}
       <Card className="py-1">
-        <p className="py-3 text-lg font-extrabold">{t("remind.title")}</p>
+        <h2 className="py-3 text-lg font-extrabold">{t("remind.title")}</h2>
         <ReminderSettings />
       </Card>
 
@@ -314,7 +317,7 @@ export default function ProfilePage() {
 
       {/* Резервная копия */}
       <Card>
-        <p className="text-lg font-extrabold">{t("prof2.backup.title")}</p>
+        <h2 className="text-lg font-extrabold">{t("prof2.backup.title")}</h2>
         <p className="mb-3 mt-1 text-sm font-semibold text-muted">{t("prof2.backup.desc")}</p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button variant="secondary" onClick={exportData} icon={<Download size={18} />}>

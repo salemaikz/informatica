@@ -61,7 +61,8 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-8 w-14 shrink-0 rounded-full border-2 transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
+        // Видимый переключатель 32 px, а зона касания — 44 px (псевдоэлемент after).
+        "relative h-8 w-14 shrink-0 rounded-full border-2 transition-colors after:absolute after:-inset-1.5 after:content-[''] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
         checked ? "border-primary bg-primary" : "border-border bg-surface-2",
         disabled && "cursor-not-allowed opacity-50",
       )}

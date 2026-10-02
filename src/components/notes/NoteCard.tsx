@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
-import { noteSnippet } from "@/lib/note-markdown";
+import { bodyWithoutTitleLine, noteDate, noteSnippet } from "@/lib/note-markdown";
 import { titleFromBody, type Note } from "@/lib/notebook";
 import { FOLDER_STYLE, FolderIcon, useFolderName } from "./folder-ui";
 import { useApp } from "@/lib/store";
@@ -27,13 +27,10 @@ export function Highlighted({ text, ranges }: { text: string; ranges: [number, n
   return <>{parts}</>;
 }
 
-/** Тело записи без первой строки, если она стала заголовком — чтобы заголовок не дублировался в сниппете. */
+/** Тело записи без строки, ставшей заголовком, — чтобы заголовок не дублировался в сниппете. */
 function bodyForSnippet(n: Note): string {
-  if (n.title && n.title === titleFromBody(n.body)) {
-    const i = n.body.indexOf("\n");
-    return i === -1 ? "" : n.body.slice(i + 1);
-  }
-  return n.body;
+  const own = n.title.trim();
+  return !own || own === titleFromBody(n.body) ? bodyWithoutTitleLine(n.body) : n.body;
 }
 
 /** Карточка записи в списках: заголовок, начало текста, папка и дата. */
@@ -63,7 +60,7 @@ export function NoteCard({ note, showFolder = true }: { note: Note; showFolder?:
             <span className="truncate">{folderName(folder)}</span>
           </span>
         )}
-        <span className="ml-auto shrink-0">{new Date(note.updatedAt).toLocaleDateString(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "short" })}</span>
+        <span className="ml-auto shrink-0">{noteDate(note.updatedAt, lang)}</span>
       </span>
     </Link>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Flag } from "lucide-react";
+import { memo } from "react";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { pickMatch, pickSingle, toggleMulti } from "@/lib/exam-store";
@@ -61,7 +62,7 @@ function OptionButton({
  * Одно задание «как на ЕНТ»: условие, схема, варианты ответа. Для контекстного — общий текст сверху и «вопрос 2 из 5».
  * Ничего не подсказывает и не проверяет. Ответы меняются через onChange (чистые функции из exam-store).
  */
-export function QuestionView({
+export const QuestionView = memo(function QuestionView({
   q,
   number,
   answers,
@@ -173,4 +174,4 @@ export function QuestionView({
       </div>
     </article>
   );
-}
+});

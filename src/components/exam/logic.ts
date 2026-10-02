@@ -106,6 +106,23 @@ export function remainingSec(limitSec: number, elapsedMs: number): number {
   return Math.max(0, Math.ceil(limitSec - (Number.isFinite(elapsedMs) ? elapsedMs : 0) / 1000));
 }
 
+// ---------- Дата ----------
+
+// Intl с локалью kk-KZ есть не во всех браузерах (Chromium без полного ICU отдаёт английский) — месяцы свои.
+const MONTHS_RU = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const MONTHS_RU_SHORT = ["янв.", "февр.", "марта", "апр.", "мая", "июня", "июля", "авг.", "сент.", "окт.", "нояб.", "дек."];
+const MONTHS_KK = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+
+/** «2 октября» / «2 окт.» / «2 қазан» (местное время); год — только если не текущий. */
+export function formatDay(at: number, lang: Lang, short = false, now: number = Date.now()): string {
+  if (!Number.isFinite(at) || at <= 0) return "";
+  const d = new Date(at);
+  const m = d.getMonth();
+  const year = d.getFullYear() !== new Date(now).getFullYear() ? d.getFullYear() : null;
+  if (lang === "kk") return `${year ? `${year} ж. ` : ""}${d.getDate()} ${MONTHS_KK[m]}`;
+  return `${d.getDate()} ${(short ? MONTHS_RU_SHORT : MONTHS_RU)[m]}${year ? ` ${year}` : ""}`;
+}
+
 // ---------- Цвет по доле ----------
 
 export type Tone = "danger" | "warning" | "success";

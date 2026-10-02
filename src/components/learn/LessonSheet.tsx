@@ -29,7 +29,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ICONS } from "@/components/scenes/icons";
-import { isDue, lessonTopics, pluralForm, reviewInDays, topicLessons, xpKind } from "./map";
+import { bestPercent, isDue, lessonTopics, pluralForm, reviewInDays, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
 
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
@@ -170,7 +170,9 @@ function SheetBody({ lessonId }: { lessonId: string }) {
         <p className={cn("flex items-center gap-2 text-sm font-extrabold", due ? "text-streak" : "text-success-strong")}>
           {due ? <RotateCcw size={16} /> : <CircleCheckBig size={16} />}
           <span>
-            {t("learn2.sheet.done", { n: stat.completions, best: Math.round(stat.bestAccuracy * 100) })}
+            {stat.completions > 1
+              ? t("learn2.sheet.done", { n: stat.completions, best: bestPercent(stat.bestAccuracy) })
+              : t("learn2.sheet.doneOnce", { best: bestPercent(stat.bestAccuracy) })}
             {" · "}
             {due ? t("learn2.sheet.due") : t(`learn2.sheet.in.${pluralForm(inDays ?? 0)}`, { n: inDays ?? 0 })}
           </span>

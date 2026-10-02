@@ -13,6 +13,16 @@ import { ButtonLink } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { useMinuteClock } from "./useClock";
 
+const HIDDEN_KEY = "informatica:streak-banner-hidden";
+
+function readHidden(): string | null {
+  try {
+    return typeof window === "undefined" ? null : localStorage.getItem(HIDDEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Плашка «серия под угрозой»: показывается после времени напоминания, пока сегодня не было занятий.
  * Главная вставляет её над картой курса.
@@ -23,7 +33,16 @@ export function StreakReminder({ className }: { className?: string }) {
   const streak = useApp((s) => s.streak);
   const lessons = useApp((s) => s.lessons);
   const now = useMinuteClock();
-  const [hiddenDay, setHiddenDay] = useState<string | null>(null);
+  // Скрытие запоминаем на день (localStorage в try/catch): иначе баннер возвращается при каждом переходе на главную.
+  const [hiddenDay, setHiddenDay] = useState<string | null>(readHidden);
+  const hide = (day: string) => {
+    setHiddenDay(day);
+    try {
+      localStorage.setItem(HIDDEN_KEY, day);
+    } catch {
+      /* приватный режим — скроем до перехода */
+    }
+  };
 
   if (!now) return null;
   const date = new Date(now);
@@ -39,9 +58,9 @@ export function StreakReminder({ className }: { className?: string }) {
     <div role="status" className={cn("relative rounded-3xl border-2 border-streak/40 bg-streak-soft p-4", className)}>
       <button
         type="button"
-        onClick={() => setHiddenDay(today)}
+        onClick={() => hide(today)}
         aria-label={t("remind.banner.close")}
-        className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface/60 hover:text-text"
+        className="absolute right-1.5 top-1.5 flex h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-surface/60 hover:text-text"
       >
         <X size={18} />
       </button>

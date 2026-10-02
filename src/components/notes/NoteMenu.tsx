@@ -7,6 +7,7 @@ import { getLesson } from "@/content/course";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/useT";
+import { cn } from "@/lib/cn";
 import { deleteImages } from "@/lib/note-images";
 import { useApp } from "@/lib/store";
 import { FolderPicker } from "./folder-ui";
@@ -16,7 +17,7 @@ function Row({ icon, children, onClick, danger }: { icon: ReactNode; children: R
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left font-extrabold hover:bg-surface-2 ${danger ? "text-danger hover:bg-danger-soft" : ""}`}
+      className={cn("flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left font-extrabold hover:bg-surface-2", danger && "text-danger hover:bg-danger-soft")}
     >
       {icon}
       {children}

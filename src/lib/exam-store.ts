@@ -16,7 +16,6 @@ const INDEX_KEY = `${PREFIX}index`;
 export const MAX_ATTEMPTS = 50;
 
 const KINDS: readonly ExamKind[] = ["full", "mini", "topic"];
-const ITEM_KINDS = ["single", "multi", "match", "context"];
 const TOPIC_IDS = new Set<string>(ENT_TOPICS.map((t) => t.id));
 
 /** Отзыв ИИ по попытке («Разбор от Бита»): хранится в попытке, повторно не запрашивается. */
@@ -74,7 +73,69 @@ export function sanitizeAnswers(raw: unknown, paper: ExamPaper): ExamAnswers {
   return out;
 }
 
-/** Бумага из хранилища: оставляем только вопросы с ключом и известным видом задания. */
+/** Текст задания: строка или { ru, kk }. */
+const isText = (x: unknown): boolean =>
+  typeof x === "string" || (!!x && typeof x === "object" && typeof (x as Record<string, unknown>).ru === "string" && typeof (x as Record<string, unknown>).kk === "string");
+const textList = (x: unknown, min: number): x is unknown[] => Array.isArray(x) && x.length >= min && x.length <= 8 && x.every(isText);
+const inRange = (v: unknown, n: number) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < n;
+
+/** Структура задания по виду: варианты — тексты, верные индексы — в пределах (иначе экран упадёт или посчитает неверно). */
+function isValidItem(item: Record<string, unknown>, sub: unknown): boolean {
+  if (typeof item.id !== "string" || typeof item.skill !== "string" || ![1, 2, 3].includes(item.level as number)) return false;
+  switch (item.kind) {
+    case "single":
+      return isText(item.prompt) && textList(item.options, 2) && inRange(item.correct, (item.options as unknown[]).length);
+    case "multi":
+      return (
+        isText(item.prompt) &&
+        textList(item.options, 2) &&
+        Array.isArray(item.correct) &&
+        item.correct.length > 0 &&
+        item.correct.every((c) => inRange(c, (item.options as unknown[]).length))
+      );
+    case "match":
+      return (
+        isText(item.prompt) &&
+        textList(item.items, 1) &&
+        textList(item.choices, 2) &&
+        Array.isArray(item.answer) &&
+        item.answer.length === (item.items as unknown[]).length &&
+        item.answer.every((c) => inRange(c, (item.choices as unknown[]).length))
+      );
+    case "context": {
+      if (!isText(item.text) || !Array.isArray(item.questions) || !inRange(sub, item.questions.length)) return false;
+      const cq = item.questions[sub as number] as Record<string, unknown> | null;
+      return !!cq && typeof cq === "object" && isText(cq.prompt) && textList(cq.options, 2) && inRange(cq.correct, (cq.options as unknown[]).length);
+    }
+    default:
+      return false;
+  }
+}
+
+const KIND_SET = new Set(["single", "multi", "match", "context"]);
+
+/** Записи о нехватке заданий: только корректные (их тексты подставляются в интерфейс). */
+export function sanitizeNotes(raw: unknown): ExamPaper["notes"] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExamPaper["notes"] = [];
+  for (const x of raw.slice(0, 64)) {
+    if (!x || typeof x !== "object") continue;
+    const n = x as Record<string, unknown>;
+    if (!KIND_SET.has(n.kind as string)) continue;
+    if (n.topic !== null && !TOPIC_IDS.has(n.topic as string)) continue;
+    const count = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 ? Math.min(v as number, 99) : 0);
+    out.push({
+      topic: n.topic as EntTopicId | null,
+      kind: n.kind as ExamPaper["notes"][number]["kind"],
+      missing: count(n.missing),
+      unfilled: count(n.unfilled),
+      filledFrom: Array.isArray(n.filledFrom) ? n.filledFrom.filter((t): t is EntTopicId => TOPIC_IDS.has(t as string)) : [],
+    });
+  }
+  return out;
+}
+
+/** Бумага из хранилища: оставляем только вопросы с ключом, известным видом и целой структурой задания. */
 export function sanitizePaper(raw: unknown): ExamPaper | null {
   if (!raw || typeof raw !== "object") return null;
   const p = raw as Record<string, unknown>;
@@ -86,9 +147,9 @@ export function sanitizePaper(raw: unknown): ExamPaper | null {
     const q = it as Record<string, unknown>;
     const item = q.item as Record<string, unknown> | undefined;
     if (typeof q.key !== "string" || keys.has(q.key) || !item || typeof item !== "object") continue;
-    if (!ITEM_KINDS.includes(item.kind as string) || !TOPIC_IDS.has(item.topic as string)) continue;
-    if (item.kind === "context" && !(Number.isInteger(q.sub) && Array.isArray(item.questions) && item.questions[q.sub as number])) continue;
-    if (!fin(q.maxPoints)) continue;
+    if (!TOPIC_IDS.has(item.topic as string)) continue;
+    if (!isValidItem(item, q.sub)) continue;
+    if (!fin(q.maxPoints) || q.maxPoints < 0 || q.maxPoints > 2) continue;
     keys.add(q.key);
     items.push(it as unknown as ExamQuestion);
   }
@@ -97,9 +158,10 @@ export function sanitizePaper(raw: unknown): ExamPaper | null {
     kind: p.kind as ExamKind,
     seed: p.seed,
     items,
-    maxPoints: fin(p.maxPoints) ? p.maxPoints : items.reduce((s, q) => s + q.maxPoints, 0),
+    // Всегда по оставшимся вопросам: если битые отброшены, максимум не должен остаться прежним.
+    maxPoints: items.reduce((s, q) => s + q.maxPoints, 0),
     timeLimitSec: fin(p.timeLimitSec) && p.timeLimitSec > 0 ? p.timeLimitSec : EXAM_TIME_LIMIT_SEC[p.kind as ExamKind],
-    notes: Array.isArray(p.notes) ? (p.notes as ExamPaper["notes"]) : [],
+    notes: sanitizeNotes(p.notes),
   };
 }
 
@@ -206,10 +268,15 @@ export function addTime(answers: ExamAnswers, key: string, ms: number): ExamAnsw
 
 // ---------- Чистая часть: итоги ----------
 
-/** Оценки по навыкам (0..1 за каждое задание) — для освоения: доля набранных баллов. */
+/**
+ * Оценки по навыкам (0..1 за каждое задание) — для освоения: доля набранных баллов.
+ * Только задания с ответом: пропуск (не успел, не открывал) ничего не говорит о навыке, а пустая попытка
+ * иначе обнулила бы освоение десятков навыков и засчитала день серии (recordExam считает оценки как ответы).
+ */
 export function skillScoresOf(paper: ExamPaper, answers: ExamAnswers): Record<string, number[]> {
   const out: Record<string, number[]> = {};
   for (const q of paper.items) {
+    if (!isAnswered(q, answers[q.key])) continue;
     const s = scoreQuestion(q, answers[q.key]);
     (out[q.item.skill] ??= []).push(s.max > 0 ? s.points / s.max : 0);
   }

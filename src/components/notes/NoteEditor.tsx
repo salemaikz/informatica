@@ -28,10 +28,11 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { compressImage } from "@/lib/image";
-import { NoteImageError, putImage } from "@/lib/note-images";
+import { NoteImageError, deleteImages, putImage } from "@/lib/note-images";
 import {
   MARK_COLORS,
   codeBlock,
+  imageIds,
   insertBlock,
   insertText,
   markSyntax,
@@ -65,8 +66,11 @@ const btn = "flex h-11 min-w-11 shrink-0 items-center justify-center rounded-xl 
 export function NoteEditor({ id }: { id: string }) {
   const { t } = useT();
   const note = useApp((s) => s.notebook.notes.find((n) => n.id === id));
+  // Запись удалили из меню — пока идёт переход, не мигаем сообщением «не найдена».
+  const [seen, setSeen] = useState(false);
+  if (note && !seen) setSeen(true);
   if (!note)
-    return (
+    return seen ? null : (
       <Card className="flex flex-col items-center gap-3 py-10 text-center">
         <p className="text-lg font-extrabold">{t("notes2.note.notFound")}</p>
         <p className="font-semibold text-muted">{t("notes2.note.notFoundHint")}</p>
@@ -95,6 +99,7 @@ function EditorBody({ note }: { note: Note }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingSel = useRef<[number, number] | null>(null);
   /** Последнее выделение в тексте: поле пересоздаётся при смене вкладки и теряет курсор. */
@@ -131,8 +136,16 @@ function EditorBody({ note }: { note: Note }) {
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", flush);
       flush();
+      // Уходим из записи: фото и рисунки, ссылки на которые стёрли из текста, удаляем из IndexedDB (иначе копятся).
+      const cur = useApp.getState().notebook.notes.find((n) => n.id === id);
+      if (!cur?.images?.length) return;
+      const used = new Set(imageIds(cur.body));
+      const orphans = cur.images.filter((x) => !used.has(x));
+      if (!orphans.length) return;
+      useApp.getState().updateNote(id, { images: cur.images.filter((x) => used.has(x)) });
+      void deleteImages(orphans);
     };
-  }, [flush]);
+  }, [flush, id]);
 
   const change = (setter: (v: string) => void, v: string, max: number) => {
     setter(v.slice(0, max));
@@ -146,6 +159,13 @@ function EditorBody({ note }: { note: Note }) {
     ta.style.height = "auto";
     ta.style.height = `${ta.scrollHeight}px`;
   }, [body, tab]);
+
+  useLayoutEffect(() => {
+    const ta = titleRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [title]);
 
   // Выделение после правки панелью (поле перерисовалось — возвращаем курсор).
   useLayoutEffect(() => {
@@ -281,14 +301,22 @@ function EditorBody({ note }: { note: Note }) {
         </button>
       </div>
 
-      <input
+      {/* Заголовок переносится на несколько строк — длинные казахские названия видны целиком. */}
+      <textarea
+        ref={titleRef}
+        rows={1}
         value={title}
-        onChange={(e) => change(setTitle, e.target.value, NOTE_LIMITS.title)}
+        onChange={(e) => change(setTitle, e.target.value.replace(/\s*\n+\s*/g, " "), NOTE_LIMITS.title)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          if (tab === "edit") taRef.current?.focus();
+        }}
         onBlur={flush}
         placeholder={t("notes2.note.title")}
         aria-label={t("notes2.note.title")}
         maxLength={NOTE_LIMITS.title}
-        className="w-full bg-transparent text-2xl font-extrabold outline-none placeholder:text-muted/60"
+        className="w-full resize-none overflow-hidden bg-transparent text-2xl leading-tight font-extrabold outline-none placeholder:text-muted/60"
       />
       {lesson && (
         <Link

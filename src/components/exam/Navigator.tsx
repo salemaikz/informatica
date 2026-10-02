@@ -1,6 +1,7 @@
 "use client";
 
 import { Flag } from "lucide-react";
+import { memo } from "react";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { isAnswered, type ExamAnswers, type ExamPaper } from "@/lib/exam";
@@ -9,7 +10,7 @@ import { isAnswered, type ExamAnswers, type ExamPaper } from "@/lib/exam";
  * Навигатор заданий: сетка номеров. Отвечено — заливка primary, отмечено флажком — янтарная рамка и флажок,
  * текущее — жирная рамка. На телефоне открывается шторкой, на десктопе стоит сбоку.
  */
-export function Navigator({
+export const Navigator = memo(function Navigator({
   paper,
   answers,
   current,
@@ -68,4 +69,4 @@ export function Navigator({
       </ul>
     </div>
   );
-}
+});

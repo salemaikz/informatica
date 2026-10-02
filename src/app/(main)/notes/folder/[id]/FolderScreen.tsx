@@ -35,11 +35,15 @@ export function FolderScreen({ id: rawId }: { id: string }) {
 
   const folder = notebook.folders.find((f) => f.id === id);
   const notes = useMemo(() => notesInFolder(notebook, id), [notebook, id]);
+  // Папку удалили на этом экране — пока идёт переход, не мигаем сообщением «не найдена».
+  const [seen, setSeen] = useState(false);
+  if (folder && !seen) setSeen(true);
 
   if (!folder)
-    return (
+    return seen ? null : (
       <Card className="flex flex-col items-center gap-3 py-10 text-center">
-        <p className="text-lg font-extrabold">{t("notes2.folder.untitled")}</p>
+        <p className="text-lg font-extrabold">{t("notes2.folder.notFound")}</p>
+        <p className="font-semibold text-muted">{t("notes2.folder.notFoundHint")}</p>
         <ButtonLink href="/notes">{t("notes2.toNotes")}</ButtonLink>
       </Card>
     );
@@ -58,7 +62,7 @@ export function FolderScreen({ id: rawId }: { id: string }) {
       <div className={cn("flex items-center gap-3 rounded-3xl border-2 p-4", FOLDER_STYLE[folder.color].card)}>
         <FolderIcon folder={folder} size={30} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-extrabold text-text">{nameOf(folder)}</h1>
+          <h1 className="line-clamp-3 text-xl leading-tight font-extrabold break-words text-text">{nameOf(folder)}</h1>
           <p className="text-sm font-bold opacity-80">{t("notes2.notesCount", { n: notes.length })}</p>
         </div>
         <button

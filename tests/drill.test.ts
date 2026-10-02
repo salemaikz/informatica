@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   EXTERN_MAX,
+  EXTERN_MIN,
   bankSkillIds,
   buildCheck,
   buildExtern,
+  buildExternSession,
+  externStartLesson,
+  GAME_MIN_TOTAL,
   buildFromBank,
   buildMistakes,
   buildReview,
@@ -218,8 +222,30 @@ describe("экстерн", () => {
     const lessonSkills = new Set(u1Banked.flatMap((l) => l.skills));
     for (const s of skills) expect(lessonSkills.has(s!)).toBe(true);
     if (lessonSkills.size * 2 <= EXTERN_MAX) {
-      for (const s of lessonSkills) expect(steps.filter((x) => x.skill === s).length, s).toBeLessThanOrEqual(2);
+      const per = Math.max(2, Math.ceil(EXTERN_MIN / lessonSkills.size));
+      for (const s of lessonSkills) expect(steps.filter((x) => x.skill === s).length, s).toBeLessThanOrEqual(per);
     }
+  });
+  it("засчитывает только уроки, все навыки которых проверены заданиями", () => {
+    const ex = buildExternSession(u1.id, {}, 7);
+    const tested = new Set(ex.steps.map((s) => s.skill));
+    expect(ex.lessons.length).toBeGreaterThan(0);
+    for (const id of ex.lessons) for (const s of LESSONS[id].skills) expect(tested.has(s), `${id}:${s}`).toBe(true);
+    for (const id of ex.lessons) expect(externLessons(u1.id, {})).toContain(id);
+  });
+  it("не сдан — начинать с первого непройденного урока раздела", () => {
+    expect(externStartLesson(u1.id, {})).toBe(u1Lessons[0]?.id);
+    if (u1Lessons.length > 1) expect(externStartLesson(u1.id, { [u1Lessons[0].id]: stat() })).toBe(u1Lessons[1].id);
+    expect(externStartLesson("zz", {})).toBeUndefined();
+  });
+  it("если остался один урок с одним навыком — всё равно не меньше EXTERN_MIN заданий (если банк позволяет)", () => {
+    const one = u1Banked.find((l) => l.skills.length === 1);
+    if (!one) return;
+    const doneOthers = Object.fromEntries(u1Lessons.filter((l) => l.id !== one.id).map((l) => [l.id, stat()]));
+    const ex = buildExternSession(u1.id, doneOthers, 3);
+    expect(ex.lessons).toEqual([one.id]);
+    expect(ex.steps.length).toBeGreaterThanOrEqual(EXTERN_MIN);
+    expect(ex.steps.every((s) => s.skill === one.skills[0] && (s.level ?? 1) >= 2)).toBe(true);
   });
   it("порог зачёта — 80%", () => {
     expect(externPassed(0.8)).toBe(true);
@@ -315,6 +341,9 @@ describe("урок игрой", () => {
     expect(gamePassed(7, 10)).toBe(true);
     expect(gamePassed(6, 10)).toBe(false);
     expect(gamePassed(0, 0)).toBe(false);
+    // Слишком короткая игра урок не засчитывает, даже без ошибок.
+    expect(gamePassed(GAME_MIN_TOTAL - 1, GAME_MIN_TOTAL - 1)).toBe(false);
+    expect(gamePassed(GAME_MIN_TOTAL, GAME_MIN_TOTAL)).toBe(true);
   });
   it("игра пишет урок, только если он не пройден или пора повторить", () => {
     expect(gameCanCredit(undefined, 100)).toBe(true);

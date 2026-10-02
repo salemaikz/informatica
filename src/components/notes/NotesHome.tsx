@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { buildIndex, noteDocs, search, type SearchDoc } from "@/lib/search";
+import { titleFromBody } from "@/lib/notebook";
 import { useApp } from "@/lib/store";
 import { FolderSheet, FolderTile } from "./folder-ui";
 import { Highlighted, NoteCard } from "./NoteCard";
@@ -38,7 +39,8 @@ export function NotesHome() {
 
   // Индекс поиска: записи ученика + шпаргалки готовых уроков. Пересобирается при смене записей или языка.
   const index = useMemo(() => {
-    const docs: SearchDoc[] = noteDocs(notebook.notes);
+    // Без своего заголовка — как в карточке: первая строка текста (иначе в выдаче «Без названия»).
+    const docs: SearchDoc[] = noteDocs(notebook.notes.map((n) => (n.title.trim() ? n : { ...n, title: titleFromBody(n.body) })));
     for (const unit of UNITS) {
       for (const ref of unit.lessons) {
         const lesson = LESSONS[ref.id];
@@ -57,7 +59,9 @@ export function NotesHome() {
     return buildIndex(docs);
   }, [notebook.notes, lang]);
   const q = query.trim();
-  const results = useMemo(() => (q.length >= 2 ? search(index, q, 40) : []), [index, q]);
+  // Поиск — с двух символов; на одной букве показываем обычный экран, а не «ничего не найдено».
+  const searching = q.length >= 2;
+  const results = useMemo(() => (searching ? search(index, q, 40) : []), [index, q, searching]);
   const noteResults = results.filter((r) => r.doc.kind === "note");
   const lessonResults = results.filter((r) => r.doc.kind === "conspect");
 
@@ -102,7 +106,7 @@ export function NotesHome() {
         </div>
       </div>
 
-      {q ? (
+      {searching ? (
         <div className="flex flex-col gap-5" aria-live="polite">
           {results.length === 0 && (
             <Card className="py-8 text-center">

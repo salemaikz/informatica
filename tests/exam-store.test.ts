@@ -7,6 +7,7 @@ import {
   EXAM_FORMAT,
   examLink,
   formatClock,
+  formatDay,
   givenText,
   historyPoints,
   lessonsForTopic,
@@ -36,6 +37,7 @@ import {
   sanitizeAnswer,
   sanitizeAnswers,
   sanitizeAttempt,
+  sanitizeNotes,
   sanitizePaper,
   sanitizeReview,
   skillScoresOf,
@@ -149,6 +151,18 @@ describe("время и цвет", () => {
   });
 });
 
+describe("дата без Intl (kk-KZ есть не во всех браузерах)", () => {
+  it("formatDay: ru/kk, короткий месяц, год только не текущий", () => {
+    const at = new Date(2026, 9, 2, 12).getTime();
+    const now = new Date(2026, 11, 1).getTime();
+    expect(formatDay(at, "ru", false, now)).toBe("2 октября");
+    expect(formatDay(at, "ru", true, now)).toBe("2 окт.");
+    expect(formatDay(at, "kk", false, now)).toBe("2 қазан");
+    expect(formatDay(at, "kk", true, new Date(2027, 0, 5).getTime())).toBe("2026 ж. 2 қазан");
+    expect(formatDay(0, "ru")).toBe("");
+  });
+});
+
 describe("история и график", () => {
   const ex = (id: string, at: number, kind: ExamSummary["kind"], points: number, maxPoints: number): ExamSummary => ({
     id, at, kind, seed: 1, points, maxPoints, durationSec: 60, byTopic: {},
@@ -258,6 +272,41 @@ describe("недоверенные данные из хранилища", () => 
     expect(sanitizePaper({ ...clone(paper), items: [] })).toBeNull();
   });
 
+  it("sanitizePaper: структура задания проверяется по виду, максимум пересчитывается", () => {
+    const paper = full();
+    const raw = clone(paper) as unknown as { maxPoints: number; items: { item: Record<string, unknown>; sub?: number }[] };
+    const at = (k: string) => raw.items.findIndex((q) => q.item.kind === k);
+    raw.items[at("single")].item.correct = 7; // верный вне вариантов
+    raw.items[at("multi")].item.options = "abc"; // не список
+    raw.items[at("match")].item.answer = [0]; // пунктов два, ответ один
+    raw.items[at("context")].sub = 9; // вопроса нет
+    const s1 = raw.items.findLastIndex((q) => q.item.kind === "single");
+    raw.items[s1].item.prompt = { ru: "только ru" }; // нет kk
+    raw.maxPoints = 999;
+    const out = sanitizePaper(raw)!;
+    expect(out.items).toHaveLength(paper.items.length - 5);
+    expect(out.maxPoints).toBe(out.items.reduce((a, q) => a + q.maxPoints, 0));
+    // контекстный вопрос с верным ответом вне вариантов
+    const ctx = clone(paper) as unknown as { items: { item: { kind: string; questions?: { correct: number }[] }; sub?: number }[] };
+    const c = ctx.items.find((q) => q.item.kind === "context")!;
+    c.item.questions![c.sub!].correct = -1;
+    expect(sanitizePaper(ctx)!.items).toHaveLength(paper.items.length - 1);
+  });
+
+  it("sanitizeNotes: только корректные записи", () => {
+    expect(sanitizeNotes("x")).toEqual([]);
+    const ok = { topic: "t04", kind: "multi", missing: 2, filledFrom: ["t03", "zzz"], unfilled: 0 };
+    const out = sanitizeNotes([ok, null, { topic: "t99", kind: "single" }, { topic: null, kind: "wat" }, { topic: null, kind: "match", missing: -3, unfilled: "1" }]);
+    expect(out).toEqual([
+      { topic: "t04", kind: "multi", missing: 2, filledFrom: ["t03"], unfilled: 0 },
+      { topic: null, kind: "match", missing: 0, filledFrom: [], unfilled: 0 },
+    ]);
+    // заметки реальной бумаги переживают сохранение
+    const p = buildExam({ kind: "full", seed: 3, pool: pool().filter((i) => i.topic === "t04") });
+    expect(p.notes.length).toBeGreaterThan(0);
+    expect(sanitizePaper(clone(p))!.notes).toEqual(p.notes);
+  });
+
   it("sanitizeAttempt: целая попытка, текущий вопрос в пределах, битое состояние — null", () => {
     const paper = mini();
     const state = { id: "ex-abc", answers: { [paper.items[0].key]: { timeMs: 5, choice: 1 } }, current: 9999, startedAt: 10, elapsedMs: -1 };
@@ -334,8 +383,11 @@ describe("итог попытки", () => {
     const all = skillScoresOf(paper, perfect(paper));
     expect(Object.values(all).flat().every((x) => x === 1)).toBe(true);
     expect(Object.values(all).flat()).toHaveLength(paper.items.length);
-    const none = skillScoresOf(paper, {});
-    expect(Object.values(none).flat().every((x) => x === 0)).toBe(true);
+    // Пропуски не идут в освоение: пустая попытка не обнуляет навыки и не засчитывает день серии.
+    expect(skillScoresOf(paper, {})).toEqual({});
+    const s0 = paper.items.find((q) => q.item.kind === "single")!;
+    const wrong = ((s0.item as EntSingle).correct + 1) % 4;
+    expect(skillScoresOf(paper, { [s0.key]: { timeMs: 0, choice: wrong } })).toEqual({ [s0.item.skill]: [0] });
     // частичный балл matcha: одно соответствие из двух = 0.5
     const m = paper.items.find((q) => q.item.kind === "match")!;
     const it = m.item as EntMatch;
