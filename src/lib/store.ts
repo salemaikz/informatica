@@ -6,8 +6,8 @@ import type { AnswerRecord, ExplainStyle, Goal, Grade, Lang, SessionResult, Them
 import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
 import { masteryLevel, updateSkill, type SkillStat } from "./mastery";
 import { todayKey } from "./text";
-import { gameReward, type GameReward } from "./games";
-import type { GameResult } from "@/games/types";
+import { gameReward, gameStatKey, type GameReward } from "./games";
+import type { GameMode, GameResult } from "@/games/types";
 
 // Локальное хранилище прогресса (MVP). Всё лежит в localStorage устройства.
 // План: заменить на синхронизацию с бэкендом (см. docs/ROADMAP.md) — интерфейс действий не менять.
@@ -21,6 +21,12 @@ export interface Profile {
   dailyGoalXp: number;
   theme: Theme;
   sound: boolean;
+  /** Вибрация при ответе (где поддерживается). */
+  vibration: boolean;
+  /** Меньше анимаций (плюс системная настройка prefers-reduced-motion). */
+  reduceMotion: boolean;
+  /** Последний выбранный темп мини-игр. */
+  gameMode: GameMode;
   createdAt: number;
 }
 
@@ -117,7 +123,7 @@ export interface AppActions {
   /** Закрыть ошибку(и) по id задания. */
   dismissMistake: (stepId: string) => void;
   /** Итог мини-игры: XP, рекорд, освоение навыков, серия. */
-  recordGame: (gameId: string, result: GameResult) => GameReward;
+  recordGame: (gameId: string, result: GameResult, mode?: GameMode) => GameReward;
   resetProgress: () => void;
 }
 
@@ -134,6 +140,9 @@ export const defaultProfile: Profile = {
   dailyGoalXp: 50,
   theme: "system",
   sound: true,
+  vibration: true,
+  reduceMotion: false,
+  gameMode: "normal",
   createdAt: 0,
 };
 
@@ -333,9 +342,10 @@ export const useApp = create<AppState & AppActions>()(
 
       dismissMistake: (stepId) => set((s) => ({ mistakes: s.mistakes.filter((m) => m.stepId !== stepId) })),
 
-      recordGame: (gameId, result) => {
+      recordGame: (gameId, result, mode = "normal") => {
         const s = get();
-        const reward = gameReward(result, s.games[gameId]?.best);
+        const key = gameStatKey(gameId, mode);
+        const reward = gameReward(result, key ? s.games[key]?.best : undefined, mode);
         const today = todayKey();
         const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
         let skills = s.skills;
@@ -349,10 +359,12 @@ export const useApp = create<AppState & AppActions>()(
             ...s.days,
             [today]: { ...day, xp: day.xp + reward.xp, answers: day.answers + result.total, correct: day.correct + result.correct },
           },
-          games: {
-            ...s.games,
-            [gameId]: { best: Math.max(s.games[gameId]?.best ?? 0, result.score), plays: (s.games[gameId]?.plays ?? 0) + 1, lastAt: Date.now() },
-          },
+          games: key
+            ? {
+                ...s.games,
+                [key]: { best: Math.max(s.games[key]?.best ?? 0, result.score), plays: (s.games[key]?.plays ?? 0) + 1, lastAt: Date.now() },
+              }
+            : s.games,
         };
         next = { ...next, ...withAchievement(next, "gamer") };
         next = { ...next, ...evaluate(next) };
@@ -366,6 +378,11 @@ export const useApp = create<AppState & AppActions>()(
       name: "informatica-v1",
       version: 1,
       storage: createJSONStorage(() => localStorage),
+      // Новые поля профиля получают значения по умолчанию у старых сохранений.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AppState>;
+        return { ...current, ...p, profile: { ...current.profile, ...p.profile } };
+      },
     },
   ),
 );

@@ -1,20 +1,27 @@
 "use client";
 
-import { Play, RotateCcw, Trophy, X, Zap } from "lucide-react";
+import { Feather, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
-import type { GameResult } from "@/games/types";
+import type { GameMode, GameResult } from "@/games/types";
 import { gameById } from "@/games/registry";
 import { GAME_COMPONENTS } from "@/games/components";
-import type { GameReward } from "@/lib/games";
+import { gameStatKey, type GameReward } from "@/lib/games";
 import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
+import type { DictKey } from "@/i18n/dict";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 
 type Phase = { name: "intro" } | { name: "playing"; round: number } | { name: "result"; result: GameResult; reward: GameReward };
+
+const MODES: { id: GameMode; icon: LucideIcon; title: DictKey; desc: DictKey }[] = [
+  { id: "calm", icon: Feather, title: "game.mode.calm", desc: "game.mode.calm.desc" },
+  { id: "normal", icon: Timer, title: "game.mode.normal", desc: "game.mode.normal.desc" },
+  { id: "blitz", icon: Zap, title: "game.mode.blitz", desc: "game.mode.blitz.desc" },
+];
 
 /** Оболочка мини-игры: вступление с правилами → игра → итоги (очки, рекорд, XP). */
 export function GameShell({ id }: { id: string }) {
@@ -22,7 +29,10 @@ export function GameShell({ id }: { id: string }) {
   const { t, l, lang } = useT();
   const meta = gameById(id)!;
   const sound = useApp((s) => s.profile.sound);
-  const stat = useApp((s) => s.games[id]);
+  const mode = useApp((s) => s.profile.gameMode);
+  const updateProfile = useApp((s) => s.updateProfile);
+  const statKey = gameStatKey(id, mode);
+  const stat = useApp((s) => (statKey ? s.games[statKey] : undefined));
   const recordGame = useApp((s) => s.recordGame);
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [round, setRound] = useState(0);
@@ -36,7 +46,7 @@ export function GameShell({ id }: { id: string }) {
   };
 
   const finish = (result: GameResult) => {
-    const reward = recordGame(id, result);
+    const reward = recordGame(id, result, mode);
     if (sound) playSound("complete");
     if (reward.newBest && stat) {
       void import("canvas-confetti").then(({ default: confetti }) =>
@@ -61,9 +71,11 @@ export function GameShell({ id }: { id: string }) {
           <span className="flex flex-1 items-center gap-2 truncate text-lg font-extrabold">
             <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
           </span>
-          <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
-            <Trophy size={16} className="text-gold" /> {stat?.best ?? 0}
-          </span>
+          {statKey && (
+            <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
+              <Trophy size={16} className="text-gold" /> {stat?.best ?? 0}
+            </span>
+          )}
         </div>
       </header>
 
@@ -82,10 +94,43 @@ export function GameShell({ id }: { id: string }) {
               <p className="mb-1 text-sm font-extrabold text-muted">{t("game.rules")}</p>
               <p className="whitespace-pre-line font-semibold leading-relaxed">{l(meta.rules)}</p>
             </div>
+            <div role="radiogroup" aria-label={t("game.mode")} className="flex flex-col gap-2">
+              <p className="text-sm font-extrabold text-muted">{t("game.mode")}</p>
+              {MODES.map((m) => {
+                const on = m.id === mode;
+                const MIcon = m.icon;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => updateProfile({ gameMode: m.id })}
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl border-2 px-3.5 py-2.5 text-left transition-colors active:translate-y-[2px]",
+                      on ? "border-primary bg-primary-soft shadow-[0_3px_0_var(--primary)]" : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
+                    )}
+                  >
+                    <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", on ? "bg-primary text-white" : "bg-surface-2 text-muted")}>
+                      <MIcon size={20} strokeWidth={2.4} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className={cn("block font-extrabold", on && "text-primary")}>{t(m.title)}</span>
+                      <span className="block text-xs font-semibold text-muted">{t(m.desc)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <div className="flex justify-center gap-4 text-sm font-bold text-muted">
-              <span>{stat ? t("game.best", { n: stat.best }) : t("game.noBest")}</span>
-              {stat && <span>· {t("game.plays", { n: stat.plays })}</span>}
-              <span>· {t("game.seconds", { n: meta.durationSec })}</span>
+              {statKey ? (
+                <>
+                  <span>{stat ? t("game.best", { n: stat.best }) : t("game.noBest")}</span>
+                  {stat && <span>· {t("game.plays", { n: stat.plays })}</span>}
+                </>
+              ) : (
+                <span>{t("game.calmNoRecord")}</span>
+              )}
             </div>
             <div className="flex-1" />
             <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
@@ -96,7 +141,7 @@ export function GameShell({ id }: { id: string }) {
 
         {phase.name === "playing" && (
           <Suspense fallback={<div className="mt-6 h-96 animate-pulse rounded-3xl bg-surface-2" />}>
-            <Game key={phase.round} lang={lang} sound={sound} onFinish={finish} />
+            <Game key={phase.round} lang={lang} sound={sound} mode={mode} onFinish={finish} />
           </Suspense>
         )}
 
@@ -127,11 +172,12 @@ export function GameShell({ id }: { id: string }) {
                 <p className="text-2xl font-extrabold text-warning-strong">+{phase.reward.xp}</p>
               </div>
             </div>
-            {!phase.reward.newBest && stat && (
+            {!phase.reward.newBest && stat && statKey && (
               <MascotSays mood="happy" size={56}>
                 {t("game.beat", { n: stat.best })}
               </MascotSays>
             )}
+            {!statKey && <p className="text-center text-sm font-bold text-muted">{t("game.calmNoRecord")}</p>}
             <div className="flex-1" />
             <div className="flex flex-col gap-3">
               <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>

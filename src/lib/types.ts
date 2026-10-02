@@ -10,6 +10,9 @@ export type Text = string | L;
 
 export type SkillId = string;
 
+/** Уровень сложности задания — как в ЕНТ: 1 = A (базовый), 2 = B (средний), 3 = C (высокий). */
+export type Level = 1 | 2 | 3;
+
 export interface Skill {
   id: SkillId;
   title: L;
@@ -24,6 +27,8 @@ interface StepBase {
   skill?: SkillId;
   /** Формат ЕНТ — помечается бейджем. */
   ent?: boolean;
+  /** Сложность A/B/C. В уроке и тренировке задания идут от лёгкого к сложному. */
+  level?: Level;
 }
 
 export interface VideoStep extends StepBase {

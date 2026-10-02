@@ -19,9 +19,18 @@ export interface GameResult {
   attempts: GameAttempt[];
 }
 
+/**
+ * Темп игры (выбирает ученик перед началом):
+ * - calm — без таймера, после ошибки показывается разбор, доступны все инструменты, рекорд не ставится;
+ * - normal — время на задание зависит от его сложности, доступен калькулятор «как на ЕНТ»;
+ * - blitz — на скорость и рекорд, без инструментов.
+ */
+export type GameMode = "calm" | "normal" | "blitz";
+
 export interface GameProps {
   lang: Lang;
   sound: boolean;
+  mode: GameMode;
   onFinish: (result: GameResult) => void;
 }
 
