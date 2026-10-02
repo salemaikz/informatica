@@ -10,6 +10,7 @@ import type { GameReward } from "@/lib/games";
 import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 
@@ -65,7 +66,8 @@ export function GameShell({ id }: { id: string }) {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-8">
+      {/* Во время игры поле занимает всю ширину/высоту под шапкой — отступы задаёт сама игра. */}
+      <main className={cn("mx-auto flex w-full max-w-2xl flex-1 flex-col", phase.name !== "playing" && "px-4 pb-8")}>
         {phase.name === "intro" && (
           <div className="flex flex-1 flex-col gap-5 pt-4 animate-fade-in">
             <div className="flex flex-col items-center gap-3 text-center">
@@ -93,9 +95,7 @@ export function GameShell({ id }: { id: string }) {
 
         {phase.name === "playing" && (
           <Suspense fallback={<div className="mt-6 h-96 animate-pulse rounded-3xl bg-surface-2" />}>
-            <div className="flex flex-1 flex-col pt-2">
-              <Game key={phase.round} lang={lang} sound={sound} onFinish={finish} />
-            </div>
+            <Game key={phase.round} lang={lang} sound={sound} onFinish={finish} />
           </Suspense>
         )}
 
@@ -126,9 +126,11 @@ export function GameShell({ id }: { id: string }) {
                 <p className="text-2xl font-extrabold text-warning-strong">+{phase.reward.xp}</p>
               </div>
             </div>
-            <MascotSays mood="happy" size={56}>
-              {stat ? t("game.best", { n: stat.best }) : ""}
-            </MascotSays>
+            {!phase.reward.newBest && stat && (
+              <MascotSays mood="happy" size={56}>
+                {t("game.beat", { n: stat.best })}
+              </MascotSays>
+            )}
             <div className="flex-1" />
             <div className="flex flex-col gap-3">
               <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>
