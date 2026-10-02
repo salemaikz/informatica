@@ -14,7 +14,7 @@ import { AiPanel } from "@/components/ai/AiPanel";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
-import { AskBit, InfoBlock, type WorkedMode } from "./TheoryBlocks";
+import { AskBit, InfoBlock, MD_WIDE, type WorkedMode } from "./TheoryBlocks";
 import { useHashScroll } from "./useHashScroll";
 
 const CARDS_KEY: DictKey[] = ["theory.cards.one", "theory.cards.few", "theory.cards.many"];
@@ -132,12 +132,12 @@ export function TheoryReader({ id }: { id: string }) {
         />
       ))}
 
-      <section id="conspect" className="scroll-mt-20 flex flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-surface p-4 sm:p-5">
+      <section id="conspect" className="flex min-w-0 scroll-mt-20 flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-surface p-4 sm:p-5">
         <div>
           <h2 className="text-2xl font-extrabold">{t("theory.conspect")}</h2>
           <p className="text-sm font-semibold text-muted">{t("theory.conspectHint")}</p>
         </div>
-        <Markdown className="text-[17px]">{l(lesson.conspect)}</Markdown>
+        <Markdown className={cn("text-[17px]", MD_WIDE)}>{l(lesson.conspect)}</Markdown>
         <AskBit onClick={() => setAskId("conspect")} label={t("theory.askConspect")} />
       </section>
 

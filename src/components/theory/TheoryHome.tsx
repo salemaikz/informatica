@@ -70,7 +70,7 @@ export function TheoryHome() {
         const Icon = iconFor(unit.icon ?? "box");
         return (
           <section key={unit.id} id={unit.id} className="scroll-mt-20">
-            <div className="mb-3 flex items-center gap-3">
+            <div className="mb-3 flex items-start gap-3">
               <span
                 aria-hidden
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"

@@ -52,18 +52,19 @@ export function LessonCard({
       >
         <span aria-hidden className="h-10 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <p className="min-w-0 flex-1 font-extrabold leading-snug">{l(title)}</p>
+          <p className="font-extrabold leading-snug">{l(title)}</p>
+          {description && <p className="mt-0.5 line-clamp-2 text-sm font-semibold text-muted">{l(description)}</p>}
+          {/* «Пройден» — в строке со статистикой, чтобы не сжимать длинное (казахское) название. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-xs font-bold text-muted">
+              {t(CARDS_KEY[lang === "ru" ? pluralIndex(stats.cards) : 2], { n: stats.cards })} · {t("theory.readMin", { n: stats.minutes })}
+            </p>
             {done && (
-              <Pill tone="success" icon={<Check size={12} strokeWidth={3.5} />} className="shrink-0">
+              <Pill tone="success" icon={<Check size={12} strokeWidth={3.5} />}>
                 {t("theory.done")}
               </Pill>
             )}
           </div>
-          {description && <p className="mt-0.5 line-clamp-2 text-sm font-semibold text-muted">{l(description)}</p>}
-          <p className="mt-1.5 text-xs font-bold text-muted">
-            {t(CARDS_KEY[lang === "ru" ? pluralIndex(stats.cards) : 2], { n: stats.cards })} · {t("theory.readMin", { n: stats.minutes })}
-          </p>
         </div>
         <ChevronRight size={20} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
       </Link>

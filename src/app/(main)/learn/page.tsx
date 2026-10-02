@@ -59,7 +59,7 @@ export default function LearnPage() {
 
       {/* GoalSummaryCard */}
 
-      <QuickActions continueId={recommended?.ref.id} dueCount={due.length} />
+      <QuickActions continueId={recommended?.ref.id} dueCount={due.length} firstTime={firstTime} />
 
       <ContinueCard
         target={hero}

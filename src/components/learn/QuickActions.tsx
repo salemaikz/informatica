@@ -14,10 +14,10 @@ interface Action {
   tone: "main" | "streak" | "primary";
 }
 
-export function QuickActions({ continueId, dueCount }: { continueId?: string; dueCount: number }) {
+export function QuickActions({ continueId, dueCount, firstTime }: { continueId?: string; dueCount: number; firstTime?: boolean }) {
   const { t } = useT();
   const actions: Action[] = [
-    ...(continueId ? [{ href: `/lesson/${continueId}`, icon: Play, label: t("learn2.quick.continue"), tone: "main" as const }] : []),
+    ...(continueId ? [{ href: `/lesson/${continueId}`, icon: Play, label: firstTime ? t("learn2.hero.start") : t("learn2.quick.continue"), tone: "main" as const }] : []),
     ...(dueCount > 0 ? [{ href: "/drill?mode=review", icon: History, label: t("learn2.quick.review", { n: dueCount }), tone: "streak" as const }] : []),
     { href: "/exam", icon: ClipboardCheck, label: t("learn2.quick.exam"), tone: "primary" },
     { href: "/theory", icon: BookOpen, label: t("learn2.quick.theory"), tone: "primary" },

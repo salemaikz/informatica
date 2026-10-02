@@ -74,7 +74,7 @@ export function reminderText({ streak, freezes, lang }: { streak: number; freeze
 
 /** Экранирование текстового значения iCalendar (RFC 5545, 3.3.11). */
 export function icsEscape(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
 /** Складывание длинных строк: не больше 75 октетов, продолжение начинается с пробела; многобайтовые символы не рвём. */

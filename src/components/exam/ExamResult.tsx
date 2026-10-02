@@ -332,19 +332,21 @@ export function ExamResult({ id }: { id: string }) {
                   {t("exam.result.drillWeak")}
                 </ButtonLink>
                 {weak.map((tp) => (
-                  <div key={tp} className="flex items-center gap-2 rounded-2xl border-2 border-border bg-surface p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-extrabold">{l(entTopicById(tp).title)}</p>
-                      <p className="text-xs font-bold text-danger">{Math.round(ratioOf(result.byTopic[tp].points, result.byTopic[tp].max) * 100)}%</p>
+                  <div key={tp} className="flex flex-col gap-2.5 rounded-2xl border-2 border-border bg-surface p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="min-w-0 font-extrabold">{l(entTopicById(tp).title)}</p>
+                      <p className="shrink-0 text-sm font-extrabold text-danger">{Math.round(ratioOf(result.byTopic[tp].points, result.byTopic[tp].max) * 100)}%</p>
                     </div>
-                    <ButtonLink href={`/drill?mode=topic&topic=${tp}`} size="sm" variant="secondary" aria-label={`${t("exam.result.train")}: ${l(entTopicById(tp).short)}`}>
-                      <Dumbbell size={16} aria-hidden />
-                      {t("exam.result.train")}
-                    </ButtonLink>
-                    <ButtonLink href={lessonFor(tp)} size="sm" variant="secondary" aria-label={`${t("exam.result.lessons")}: ${l(entTopicById(tp).short)}`}>
-                      <BookOpen size={16} aria-hidden />
-                      {t("exam.result.lessons")}
-                    </ButtonLink>
+                    <div className="grid grid-cols-2 gap-2">
+                      <ButtonLink href={`/drill?mode=topic&topic=${tp}`} size="sm" variant="secondary">
+                        <Dumbbell size={16} aria-hidden />
+                        {t("exam.result.train")}
+                      </ButtonLink>
+                      <ButtonLink href={lessonFor(tp)} size="sm" variant="secondary">
+                        <BookOpen size={16} aria-hidden />
+                        {t("exam.result.lessons")}
+                      </ButtonLink>
+                    </div>
                   </div>
                 ))}
               </div>

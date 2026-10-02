@@ -95,9 +95,11 @@ describe("buildIcs", () => {
     expect(late.split("\r\n")).toContain("DTSTART:20261003T190000");
   });
   it("запятые, точки с запятой и переводы строк экранируются", () => {
-    expect(lines).toContain("SUMMARY:Серия\\, 5 дней\; под угрозой");
+    expect(lines).toContain("SUMMARY:Серия\\, 5 дней\\; под угрозой");
     expect(lines).toContain("DESCRIPTION:5 минут\\nи всё");
     expect(icsEscape("a\\b")).toBe("a\\\\b");
+    // «\;» в строке JS — просто «;»: проверяем, что обратная косая черта действительно есть.
+    expect(icsEscape("a;b,c")).toBe("a" + "\\" + ";b" + "\\" + ",c");
   });
   it("длинные строки складываются, символы не рвутся", () => {
     const long = "я".repeat(200);
