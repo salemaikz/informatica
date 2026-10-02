@@ -1,13 +1,14 @@
 import type { Level, QuestionStep, SkillId } from "../types";
 import { seeded } from "../text";
 import { NS_BANKS } from "./ns";
+import { GENERATED_BANKS } from "./generated";
 import type { Pair, Shape, ShortQuestion, SkillBank, Statement } from "./types";
 
 export type { Pair, Shape, ShortQuestion, SkillBank, Statement } from "./types";
 
 // Реестр банка заданий. Новая тема = новый файл с SkillBank[] + строка здесь.
 
-const BANKS: Record<SkillId, SkillBank> = Object.fromEntries([...NS_BANKS].map((b) => [b.skill, b]));
+const BANKS: Record<SkillId, SkillBank> = Object.fromEntries([...NS_BANKS, ...GENERATED_BANKS].map((b) => [b.skill, b]));
 
 export function bankFor(skill: SkillId): SkillBank | undefined {
   return BANKS[skill];

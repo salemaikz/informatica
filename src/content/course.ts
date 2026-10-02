@@ -4,6 +4,7 @@ import { lessonBits } from "./lessons/ns-1-bits";
 import { lessonRead } from "./lessons/ns-2-read";
 import { lessonWrite } from "./lessons/ns-3-write";
 import { lessonTraps } from "./lessons/ns-4-traps";
+import { GENERATED_LESSONS } from "./lessons/generated";
 
 // Карта курса подготовки к ЕНТ по информатике: 9 разделов по спецификации ЕНТ-2026 (docs/ENT.md).
 // status: "soon" — урок запланирован, но ещё не написан (см. docs/PLAN.md).
@@ -157,7 +158,18 @@ export const LESSONS: Record<string, Lesson> = {
   // Старый урок 1 (до серии из 4 уроков): не на карте, но нужен для прогресса,
   // открытых навыков и «работы над ошибками» тех, кто его уже прошёл.
   [lessonBinary.id]: lessonBinary,
+  // Уроки контент-потока (этап 3): подключаются скриптом scripts/register-content.mjs.
+  ...Object.fromEntries(GENERATED_LESSONS.map((l) => [l.id, l])),
 };
+
+// Урок на карте «готов», если он есть в LESSONS; название — из самого урока.
+for (const unit of UNITS) {
+  for (const ref of unit.lessons) {
+    const lesson = LESSONS[ref.id];
+    ref.status = lesson ? "available" : "soon";
+    if (lesson) ref.title = lesson.title;
+  }
+}
 
 export function getLesson(id: string): Lesson | undefined {
   return LESSONS[id];
