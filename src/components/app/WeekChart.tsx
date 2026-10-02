@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { shortDate } from "@/lib/date";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
@@ -25,7 +26,7 @@ export function WeekChart() {
     return {
       key,
       label: names[(d.getDay() + 6) % 7],
-      date: d.toLocaleDateString(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "short" }),
+      date: shortDate(d, lang),
       xp: days[key]?.xp ?? 0,
       today: i === 6,
     };

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
+import { BookOpen, Library, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -305,6 +305,9 @@ export function Results({
                 {t("modes.next.note")}
               </Button>
             </div>
+            <ButtonLink href={`/theory/${lessonId}`} variant="ghost" block icon={<Library size={18} />}>
+              {t("theory.read")}
+            </ButtonLink>
           </div>
         </Card>
       )}

@@ -574,7 +574,10 @@ export function examAdvice(result: ExamResult): ExamAdvice {
   const strongTopics = withData.filter((t) => ratio(t) >= STRONG_FROM_RATIO).sort((a, b) => ratio(b) - ratio(a));
 
   const avg = result.avgSecPerQuestion;
-  const pace: ExamAdvice["pace"] = avg > SEC_PER_QUESTION ? "slow" : avg > 0 && avg < SEC_PER_QUESTION / 2 ? "fast" : "ok";
+  // Без ответов (или с одним) о темпе судить нельзя — считаем его нормальным.
+  const answeredCount = Object.values(result.byTopic).reduce((a, x) => a + x.count, 0) - result.unanswered;
+  const pace: ExamAdvice["pace"] =
+    answeredCount < 3 ? "ok" : avg > SEC_PER_QUESTION ? "slow" : avg > 0 && avg < SEC_PER_QUESTION / 2 ? "fast" : "ok";
   const accuracy = result.maxPoints ? result.points / result.maxPoints : 0;
 
   const tips: AdviceId[] = [];

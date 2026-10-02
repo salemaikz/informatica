@@ -3,6 +3,7 @@
 import { AnimatePresence, m } from "motion/react";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/useT";
 
 /** sm-брейкпоинт Tailwind: на нём шторка снизу превращается в окно по центру. */
 function useIsDesktop(): boolean {
@@ -18,6 +19,9 @@ function useIsDesktop(): boolean {
 }
 
 const SHEET = { type: "spring", stiffness: 380, damping: 34 } as const;
+
+/** Открытые окна по порядку: Escape закрывает только верхнее (шторка поверх шторки). */
+const stack: symbol[] = [];
 const POP = { type: "spring", stiffness: 420, damping: 28 } as const;
 
 /** Модальное окно: на телефоне — шторка снизу (выезжает пружиной), на десктопе — по центру (мягкий «поп»). */
@@ -35,15 +39,22 @@ export function Modal({
   label?: string;
 }) {
   const desktop = useIsDesktop();
+  const { t } = useT();
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const me = Symbol("modal");
+    stack.push(me);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && stack[stack.length - 1] === me) onClose();
+    };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
+      const i = stack.lastIndexOf(me);
+      if (i >= 0) stack.splice(i, 1);
       document.body.style.overflow = prev;
     };
   }, [open, onClose]);
@@ -53,7 +64,7 @@ export function Modal({
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={label}>
           <m.button
-            aria-label="close"
+            aria-label={t("common.close")}
             className="absolute inset-0 bg-black/40"
             onClick={onClose}
             initial={{ opacity: 0 }}

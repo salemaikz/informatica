@@ -6,6 +6,8 @@ import { useApp } from "@/lib/store";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
+import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
+import { ReminderAgent } from "@/components/app/ReminderAgent";
 
 function useHydrated(): boolean {
   return useSyncExternalStore(
@@ -60,6 +62,10 @@ export function Providers({ children }: { children: ReactNode }) {
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />
+      {/* «Сохранить в конспект» из любого места (черновик, ответ ИИ, урок). */}
+      <SaveToNotesSheet />
+      {/* Напоминания о серии: таймер, пока приложение открыто, и зеркало для сервис-воркера. */}
+      <ReminderAgent />
     </MotionProvider>
   );
 }

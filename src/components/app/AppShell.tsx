@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Calculator, ChartColumn, Dumbbell, NotebookPen, Sparkles } from "lucide-react";
+import { BookOpen, Calculator, ChartColumn, Dumbbell, Library, NotebookPen, Search, Sparkles, Target } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,6 +16,13 @@ import { DailyGoalCard, LevelCard, LevelChip, WeakTopicsCard } from "./Widgets";
 import { Avatar } from "./Avatar";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolbox } from "@/components/tools/useToolbox";
+
+/** Дополнительные разделы в боковом меню компьютера (на телефоне — быстрые действия на главной и поиск в шапке). */
+const NAV_EXTRA: { href: string; key: DictKey; icon: typeof BookOpen }[] = [
+  { href: "/theory", key: "theory.title", icon: Library },
+  { href: "/exam", key: "exam.title", icon: Target },
+  { href: "/search", key: "search.title", icon: Search },
+];
 
 const NAV: { href: string; key: DictKey; icon: typeof BookOpen; ai?: boolean }[] = [
   { href: "/learn", key: "nav.learn", icon: BookOpen },
@@ -36,7 +43,8 @@ function Logo() {
   return (
     <Link href="/learn" className="flex items-center gap-2">
       <Mascot size={34} />
-      <span className="text-lg font-black tracking-tight text-primary">Informatica</span>
+      {/* На самых узких телефонах (360 px) название скрываем — остаётся маскот, шапке нужно место. */}
+      <span className="hidden text-lg font-black tracking-tight text-primary min-[400px]:inline lg:inline">Informatica</span>
     </Link>
   );
 }
@@ -70,6 +78,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Icon size={22} /> {t(key)}
           </Link>
         ))}
+        <div className="my-2 h-0.5 rounded-full bg-border" aria-hidden />
+        {NAV_EXTRA.map(({ href, key, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className={clsx(
+              "flex h-11 items-center gap-3 rounded-2xl border-2 px-3 text-[15px] font-extrabold transition-colors",
+              active(href) ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2 hover:text-text",
+            )}
+          >
+            <Icon size={20} /> {t(key)}
+          </Link>
+        ))}
         <div className="flex-1" />
         <button
           type="button"
@@ -92,11 +113,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         {/* Телефон: верхняя панель */}
         <header className="sticky top-0 z-20 border-b-2 border-border bg-bg/90 backdrop-blur lg:hidden">
-          <div className="mx-auto flex h-14 max-w-2xl items-center gap-4 px-4 pt-[env(safe-area-inset-top)]">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2.5 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-4 min-[400px]:px-4">
             <Logo />
             <div className="flex-1" />
             <StreakChipAnimated />
             <XpChipAnimated />
+            <Link
+              href="/search"
+              aria-label={t("search.title")}
+              className={clsx(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-surface-2",
+                active("/search") ? "text-primary" : "text-muted",
+              )}
+            >
+              <Search size={22} />
+            </Link>
             <ToolboxButton variant="icon" />
             <Link href="/profile" aria-label={t("nav.profile")}>
               <ProfileAvatar size={32} />

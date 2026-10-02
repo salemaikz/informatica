@@ -37,7 +37,8 @@ export const REPLAY_XP = {
 /** Множитель XP для прохождения урока сейчас: первый раз — 1, повтор — меньше. */
 export function lessonXpFactor(stat: LessonStat | undefined, now: number): number {
   if (!stat || stat.completions <= 0) return 1;
-  if (stat.dueAt !== undefined && now >= stat.dueAt) return REPLAY_XP.review;
+  // Старые сохранения без расписания: повторять пора через день после прохождения (как в dueLessons).
+  if (now >= (stat.dueAt ?? stat.lastAt + DAY_MS)) return REPLAY_XP.review;
   return stat.completions === 1 ? REPLAY_XP.second : REPLAY_XP.later;
 }
 

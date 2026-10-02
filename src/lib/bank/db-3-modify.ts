@@ -42,6 +42,22 @@ const NAMES = ["Айдар", "Алия", "Арман", "Асель", "Берик
 /** Имена для новых учеников (INSERT) — не пересекаются с NAMES. */
 const NEW_NAMES = ["Тимур", "Камила", "Руслан", "Томирис", "Аружан", "Санжар", "Малика", "Динара"];
 const g = (ru: string, kk: string): L => ({ ru, kk });
+
+/** Русское согласование с числом: 1 запись, 2 записи, 5 записей. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a >= 11 && a <= 14) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+/** «2 записи» (им./вин. падеж). */
+const recs = (n: number) => `${n} ${plural(n, "запись", "записи", "записей")}`;
+/** «Под условие … подходят 2 записи» — глагол и существительное согласованы с числом. */
+const fitsRu = (cond: string, n: number) => `Под условие ${cond} ${plural(n, "подходит", "подходят", "подходят")} ${recs(n)}`;
+const rowsRu = (n: number) => `${n} ${plural(n, "строка", "строки", "строк")}`;
+
 const GOODS_POOL: L[] = [
   g("Тетрадь", "Дәптер"),
   g("Ручка", "Қалам"),
@@ -418,7 +434,7 @@ function genDeleteSimple(rand: Rand, level: Level, seed: number): QuestionStep |
         kk: "DELETE WHERE-ге сәйкес жазбаларды жояды. Неше жазба жойылатынын санап, жалпы саннан алып таста.",
       },
       explanation: {
-        ru: `Условие ${show(cond)} подходит ${del.length} записям: ${listOf(t, del).ru}. Они удаляются. Осталось ${t.rows.length} − ${del.length} = ${left}.`,
+        ru: `${fitsRu(show(cond), del.length)}: ${listOf(t, del).ru}. Они удаляются. Осталось ${t.rows.length} − ${del.length} = ${left}.`,
         kk: `${show(cond)} шарты ${del.length} жазбаға сәйкес келеді: ${listOf(t, del).kk}. Олар жойылады. Қалғаны ${t.rows.length} − ${del.length} = ${left}.`,
       },
     },
@@ -463,7 +479,7 @@ function genAggSimple(rand: Rand, level: Level, seed: number): QuestionStep | un
           : "Қорытынды функция кестенің барлық жазбасын қарап шығып, бір мән қайтарады.",
       },
       explanation: {
-        ru: `${cond ? `WHERE ${show(cond)} оставляет ${idx.length} записей` : `Берутся все ${idx.length} записей`}${fn === "COUNT" ? "" : `, значения ${f}: ${listTxt}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${how.ru}.`,
+        ru: `${cond ? `WHERE ${show(cond)} оставляет ${recs(idx.length)}` : `Берутся все ${recs(idx.length)}`}${fn === "COUNT" ? "" : `, значения ${f}: ${listTxt}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${how.ru}.`,
         kk: `${cond ? `WHERE ${show(cond)} ${idx.length} жазбаны қалдырады` : `Барлық ${idx.length} жазба алынады`}${fn === "COUNT" ? "" : `, ${f} мәндері: ${listTxt}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].kk}: ${how.kk}.`,
       },
     },
@@ -472,7 +488,7 @@ function genAggSimple(rand: Rand, level: Level, seed: number): QuestionStep | un
 }
 
 const FN_GOAL: Record<Fn, (f: string, t: TableName) => L> = {
-  COUNT: (_f, t) => ({ ru: `число записей в таблице ${t}`, kk: `${t} кестесіндегі жазбалар саны` }),
+  COUNT: (_f, t) => ({ ru: `число записей в таблице ${t}`, kk: `${t} кестесіндегі жазбалар санын` }),
   SUM: (f) => ({ ru: `сумму значений поля ${f}`, kk: `${f} өрісі мәндерінің қосындысын` }),
   AVG: (f) => ({ ru: `среднее значение поля ${f}`, kk: `${f} өрісінің орташа мәнін` }),
   MIN: (f) => ({ ru: `наименьшее значение поля ${f}`, kk: `${f} өрісінің ең кіші мәнін` }),
@@ -568,7 +584,7 @@ function genDeleteTwo(rand: Rand, level: Level, seed: number): QuestionStep | un
         kk: "Әр жазба үшін екі шартты да тексер. AND екеуінің де орындалуын, OR — кемінде біреуінің орындалуын талап етеді. Содан кейін жойылғандарды жалпы саннан алып таста.",
       },
       explanation: {
-        ru: `Условие ${show(cond)} подходит ${del.length} записям: ${listOf(t, del).ru}. Они удаляются: ${t.rows.length} − ${del.length} = ${left}.`,
+        ru: `${fitsRu(show(cond), del.length)}: ${listOf(t, del).ru}. Они удаляются: ${t.rows.length} − ${del.length} = ${left}.`,
         kk: `${show(cond)} шарты ${del.length} жазбаға сәйкес келеді: ${listOf(t, del).kk}. Олар жойылады: ${t.rows.length} − ${del.length} = ${left}.`,
       },
     },
@@ -683,7 +699,7 @@ function genAggWhere(rand: Rand, level: Level, seed: number): QuestionStep | und
         kk: "Алдымен WHERE бойынша жазбаларды іріктеп ал (AND — екі шарт, OR — кемінде біреуі). Содан кейін қорытынды функцияны тек соларға қолдан.",
       },
       explanation: {
-        ru: `Условие ${show(cond)} подходит ${idx.length} записям: ${listOf(t, idx).ru}${fn === "COUNT" ? "" : `, значения ${f}: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${right}.`,
+        ru: `${fitsRu(show(cond), idx.length)}: ${listOf(t, idx).ru}${fn === "COUNT" ? "" : `, значения ${f}: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${right}.`,
         kk: `${show(cond)} шарты ${idx.length} жазбаға сәйкес келеді: ${listOf(t, idx).kk}${fn === "COUNT" ? "" : `, ${f} мәндері: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].kk}: ${right}.`,
       },
     },
@@ -720,7 +736,7 @@ function genAvg(rand: Rand, level: Level, seed: number): QuestionStep | undefine
         kk: "WHERE бойынша жазбаларды іріктеп, өрістің мәндерін жаз. Орташа мән — мәндер қосындысын олардың санына бөлгенде шығады.",
       },
       explanation: {
-        ru: `WHERE ${show(cond)} оставляет ${idx.length} записей, значения ${f}: ${vals.join(", ")}. Сумма ${sum}, среднее ${sum} : ${idx.length} = ${fmt(avg)}.`,
+        ru: `WHERE ${show(cond)} оставляет ${recs(idx.length)}, значения ${f}: ${vals.join(", ")}. Сумма ${sum}, среднее ${sum} : ${idx.length} = ${fmt(avg)}.`,
         kk: `WHERE ${show(cond)} ${idx.length} жазбаны қалдырады, ${f} мәндері: ${vals.join(", ")}. Қосынды ${sum}, орташа мән ${sum} : ${idx.length} = ${fmt(avg)}.`,
       },
     },
@@ -780,8 +796,8 @@ function genUpdateAgg(rand: Rand, level: Level, seed: number): QuestionStep | un
         kk: "Алдымен UPDATE-ті қолдан: WHERE-ге сәйкес жазбаларды тауып, оларға жаңа мәнді жаз. Содан кейін екінші сұранысты өзгерген кесте бойынша орында.",
       },
       explanation: {
-        ru: `Условие ${show(cond)} подходит ${hit.length} записям: ${idsTxt.ru}. Значение ${f} у них становится ${newV}. ${byCount ? `Теперь ${f} = ${newV} у ${right} записей` : `Сумма ${f} по изменённой таблице равна ${right}`} (до UPDATE было ${before}).`,
-        kk: `${show(cond)} шарты ${hit.length} жазбаға сәйкес келеді: ${idsTxt.kk}. Олардағы ${f} мәні ${newV} болады. ${byCount ? `Енді ${f} = ${newV} болатын жазбалар саны ${right}` : `Өзгерген кесте бойынша ${f} қосындысы ${right} тең`} (UPDATE-ке дейін ${before} болған).`,
+        ru: `${fitsRu(show(cond), hit.length)}: ${idsTxt.ru}. Значение ${f} у них становится ${newV}. ${byCount ? `Теперь ${f} = ${newV} у ${right} ${plural(right, "записи", "записей", "записей")}` : `Сумма ${f} по изменённой таблице равна ${right}`} (до UPDATE было ${before}).`,
+        kk: `${show(cond)} шарты ${hit.length} жазбаға сәйкес келеді: ${idsTxt.kk}. Олардағы ${f} мәні ${newV} болады. ${byCount ? `Енді ${f} = ${newV} болатын жазбалар саны ${right}` : `Өзгерген кесте бойынша ${f} қосындысы: ${right}`} (UPDATE-ке дейін ${before} болған).`,
       },
     },
     String(right),
@@ -820,8 +836,8 @@ function genGroupRows(rand: Rand, level: Level, seed: number): QuestionStep | un
         kk: "Сұранысты екі қадаммен орында: алдымен жазбаларды WHERE бойынша іріктеп, содан кейін оларды Class мәндері бойынша бөл. Неше түрлі сынып қалды?",
       },
       explanation: {
-        ru: `WHERE ${show(cond)} оставляет ${idx.length} записей: ${listOf(t, idx).ru}. GROUP BY раскладывает их по классам: ${groups.join(", ")}. Групп ${groups.length}, значит, в результате ${groups.length} строк.`,
-        kk: `WHERE ${show(cond)} ${idx.length} жазбаны қалдырады: ${listOf(t, idx).kk}. GROUP BY оларды сыныптар бойынша бөледі: ${groups.join(", ")}. Топ ${groups.length}, демек, нәтижеде ${groups.length} жол.`,
+        ru: `WHERE ${show(cond)} оставляет ${recs(idx.length)}: ${listOf(t, idx).ru}. GROUP BY раскладывает их по классам: ${groups.join(", ")}. Групп получилось ${groups.length}, значит, в результате ${rowsRu(groups.length)}.`,
+        kk: `WHERE ${show(cond)} ${idx.length} жазбаны қалдырады: ${listOf(t, idx).kk}. GROUP BY оларды сыныптар бойынша бөледі: ${groups.join(", ")}. Топ саны — ${groups.length}, демек, нәтижеде ${groups.length} жол.`,
       },
     },
     String(groups.length),
@@ -861,7 +877,8 @@ function genGroupValue(rand: Rand, level: Level, seed: number): QuestionStep | u
     const other = idx.filter((i) => t.rows[i][2] === c2);
     if (other.length) add(aggOver(t, other, fn, "Mark"), { ru: `Это значение для класса ${c2}, а спрашивается про класс ${c}.`, kk: `Бұл ${c2}-сынып үшін мән, ал ${c}-сынып туралы сұралған.` });
   }
-  for (const d of [1, -1, 2]) add(right + d, WHY_COUNT);
+  // Для MIN/MAX «соседние» числа вне шкалы оценок 2–5 — бессмысленные варианты.
+  for (const d of [1, -1, 2]) if (fn === "COUNT" || fn === "SUM" || (right + d >= 2 && right + d <= 5)) add(right + d, WHY_COUNT);
   return choice(
     rand,
     {
@@ -878,7 +895,7 @@ function genGroupValue(rand: Rand, level: Level, seed: number): QuestionStep | u
         kk: `Алдымен WHERE бойынша жазбаларды іріктеп ал (егер ол бар болса), содан кейін тек ${c}-сынып жазбаларын алып, оларға қорытынды функцияны қолдан.`,
       },
       explanation: {
-        ru: `${cond ? `WHERE ${show(cond)} оставляет ${idx.length} записей. ` : ""}В группе класса ${c} ${inGroup.length} записей: ${listOf(t, inGroup).ru}, оценки ${inGroup.map((i) => t.rows[i][3]).join(", ")}. ${fnCall(fn, "Mark")} — ${FN_DESC[fn].ru}: ${right}.`,
+        ru: `${cond ? `WHERE ${show(cond)} оставляет ${recs(idx.length)}. ` : ""}В группе класса ${c} — ${recs(inGroup.length)}: ${listOf(t, inGroup).ru}, оценки ${inGroup.map((i) => t.rows[i][3]).join(", ")}. ${fnCall(fn, "Mark")} — ${FN_DESC[fn].ru}: ${right}.`,
         kk: `${cond ? `WHERE ${show(cond)} ${idx.length} жазбаны қалдырады. ` : ""}${c}-сынып тобында ${inGroup.length} жазба бар: ${listOf(t, inGroup).kk}, бағалары ${inGroup.map((i) => t.rows[i][3]).join(", ")}. ${fnCall(fn, "Mark")} — ${FN_DESC[fn].kk}: ${right}.`,
       },
     },
@@ -917,7 +934,7 @@ function genDeleteAgg(rand: Rand, level: Level, seed: number): QuestionStep | un
         kk: "Алдымен DELETE-ті орында: WHERE-ге сәйкес жазбаларды сызып таста. Содан кейін қорытынды функцияны қалған жазбаларға қолдан.",
       },
       explanation: {
-        ru: `Условие ${show(cond)} подходит ${del.length} записям: ${listOf(t, del).ru}. Они удалены, осталось ${after.rows.length} записей${fn === "COUNT" ? "" : `, значения ${f}: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${answer}.`,
+        ru: `${fitsRu(show(cond), del.length)}: ${listOf(t, del).ru}. Они удалены, осталось ${recs(after.rows.length)}${fn === "COUNT" ? "" : `, значения ${f}: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].ru}: ${answer}.`,
         kk: `${show(cond)} шарты ${del.length} жазбаға сәйкес келеді: ${listOf(t, del).kk}. Олар жойылды, ${after.rows.length} жазба қалды${fn === "COUNT" ? "" : `, ${f} мәндері: ${vals.join(", ")}`}. ${fnCall(fn, f)} — ${FN_DESC[fn].kk}: ${answer}.`,
       },
     },
@@ -964,7 +981,7 @@ const st = (id: string, level: Level, ru: string, kk: string, value: boolean, ex
 const STATEMENTS: Statement[] = [
   st("insert-adds", 1, "Команда INSERT INTO добавляет в таблицу новую запись.", "INSERT INTO командасы кестеге жаңа жазба қосады.", true,
     "INSERT INTO таблица (поля) VALUES (значения) добавляет одну запись в конец таблицы.", "INSERT INTO кесте (өрістер) VALUES (мәндер) кестенің соңына бір жазба қосады.",
-    { ru: "Переведи слово insert с английского: «вставить».", kk: "Insert сөзін ағылшыннан аудар: «кірістіру»." }),
+    { ru: "Слово insert по-английски значит «вставить».", kk: "Insert ағылшынша «кірістіру» дегенді білдіреді." }),
   st("insert-order", 1, "В команде INSERT значения в VALUES записывают в том же порядке, что и поля в скобках.", "INSERT командасында VALUES ішіндегі мәндер жақшадағы өрістермен бірдей ретпен жазылады.", true,
     "Первое значение попадает в первое поле, второе — во второе и так далее.", "Бірінші мән бірінші өріске, екінші мән екінші өріске түседі, т.с.с.",
     { ru: "Как база узнаёт, в какое поле какое значение класть?", kk: "Деректер қоры қай мәнді қай өріске салуды қалай біледі?" }),
@@ -989,7 +1006,7 @@ const STATEMENTS: Statement[] = [
   st("avg-def", 2, "AVG(Mark) — это сумма значений Mark, делённая на количество записей.", "AVG(Mark) — Mark мәндерінің қосындысын жазбалар санына бөлгенде шығатын мән.", true,
     "Среднее значение — сумма, делённая на количество.", "Орташа мән — қосындыны санға бөлгенде шығады.",
     { ru: "Как в школе считают среднюю оценку?", kk: "Мектепте орташа бағаны қалай есептейді?" }),
-  st("avg-minmax", 2, "AVG(Mark) всегда равно (MIN(Mark) + MAX(Mark)) : 2.", "AVG(Mark) әрқашан (MIN(Mark) + MAX(Mark)) : 2 тең.", false,
+  st("avg-minmax", 2, "AVG(Mark) всегда равно (MIN(Mark) + MAX(Mark)) : 2.", "AVG(Mark) әрқашан (MIN(Mark) + MAX(Mark)) : 2 өрнегіне тең.", false,
     "Среднее зависит от всех значений, а не только от самого большого и самого маленького. Для оценок 5, 4, 3, 5 среднее 4,25, а (3 + 5) : 2 = 4.", "Орташа мән тек ең үлкен және ең кіші мәндерге емес, барлық мәнге тәуелді. 5, 4, 3, 5 бағалары үшін орташа 4,25, ал (3 + 5) : 2 = 4.",
     { ru: "Проверь на оценках 5, 4, 3, 5: посчитай оба выражения.", kk: "5, 4, 3, 5 бағаларында тексер: екі өрнекті де есепте." }),
   st("where-aggregate", 2, "В запросе SELECT MAX(Price) FROM Goods WHERE Qty > 20; сначала отбираются записи по WHERE, а потом ищется наибольшая цена среди них.", "SELECT MAX(Price) FROM Goods WHERE Qty > 20; сұранысында алдымен жазбалар WHERE бойынша іріктеледі, содан кейін солардың ішінен ең үлкен баға табылады.", true,
@@ -999,7 +1016,7 @@ const STATEMENTS: Statement[] = [
     "GROUP BY объединяет записи с одинаковым значением поля в группу, и итог считается для каждой группы отдельно.", "GROUP BY өрістің мәні бірдей жазбаларды топқа біріктіреді, қорытынды әр топ үшін бөлек есептеледі.",
     { ru: "Сколько групп, столько и ...?", kk: "Қанша топ болса, сонша ...?" }),
   st("as-name", 2, "Слово AS в запросе задаёт название столбца результата.", "Сұраныстағы AS сөзі нәтиже бағанының атын береді.", true,
-    "Например, COUNT(*) AS N выведет столбец с названием N.", "Мысалы, COUNT(*) AS N N деп аталатын бағанды шығарады.",
+    "Например, COUNT(*) AS N выведет столбец с названием N.", "Мысалы, COUNT(*) AS N жазылса, нәтиже бағаны N деп аталады.",
     { ru: "AS по-английски значит «как».", kk: "AS ағылшынша «ретінде» дегенді білдіреді." }),
   st("update-not-insert", 2, "Чтобы добавить новую запись, можно использовать UPDATE.", "Жаңа жазба қосу үшін UPDATE қолдануға болады.", false,
     "UPDATE меняет только существующие записи. Новую запись добавляет INSERT INTO.", "UPDATE тек бар жазбаларды өзгертеді. Жаңа жазбаны INSERT INTO қосады.",
@@ -1047,12 +1064,12 @@ const sq = (id: string, level: Level, ru: string, kk: string, answer: string, mo
 });
 
 const SHORTS: ShortQuestion[] = [
-  sq("kw-insert", 1, "Какая команда добавляет новую запись в таблицу?", "Қай команда кестеге жаңа жазба қосады?", "INSERT", "text", "Новую запись добавляет INSERT INTO.", "Жаңа жазбаны INSERT INTO қосады.", { ru: "Слово по-английски значит «вставить».", kk: "Бұл сөз ағылшынша «кірістіру» дегенді білдіреді." }),
-  sq("kw-update", 1, "Какая команда меняет значения в существующих записях?", "Қай команда бар жазбалардағы мәндерді өзгертеді?", "UPDATE", "text", "Значения меняет UPDATE ... SET.", "Мәндерді UPDATE ... SET өзгертеді.", { ru: "Слово по-английски значит «обновить».", kk: "Бұл сөз ағылшынша «жаңарту» дегенді білдіреді." }),
-  sq("kw-delete", 1, "Какая команда удаляет записи из таблицы?", "Қай команда кестеден жазбаларды жояды?", "DELETE", "text", "Записи удаляет DELETE FROM.", "Жазбаларды DELETE FROM жояды.", { ru: "Слово по-английски значит «удалить».", kk: "Бұл сөз ағылшынша «жою» дегенді білдіреді." }),
-  sq("kw-create", 1, "Какая команда создаёт новую таблицу?", "Қай команда жаңа кесте құрады?", "CREATE TABLE", "text", "Таблицу создаёт CREATE TABLE.", "Кестені CREATE TABLE құрады.", { ru: "Слово по-английски значит «создать».", kk: "Бұл сөз ағылшынша «құру» дегенді білдіреді." }),
-  sq("kw-count", 1, "Какая итоговая функция считает число записей?", "Қай қорытынды функция жазбалар санын санайды?", "COUNT", "text", "COUNT(*) возвращает число записей.", "COUNT(*) жазбалар санын қайтарады.", { ru: "Английское слово означает «считать».", kk: "Ағылшын сөзі «санау» дегенді білдіреді." }),
-  sq("kw-avg", 1, "Какая итоговая функция находит среднее значение?", "Қай қорытынды функция орташа мәнді табады?", "AVG", "text", "AVG — среднее значение (average).", "AVG — орташа мән (average).", { ru: "Название — сокращение английского слова average.", kk: "Атауы — ағылшынша average сөзінің қысқартылуы." }),
+  sq("kw-insert", 1, "Каким словом начинается команда, которая добавляет новую запись в таблицу?", "Кестеге жаңа жазба қосатын команда қай сөзден басталады?", "INSERT", "text", "Новую запись добавляет INSERT INTO.", "Жаңа жазбаны INSERT INTO қосады.", { ru: "Слово по-английски значит «вставить».", kk: "Бұл сөз ағылшынша «кірістіру» дегенді білдіреді." }),
+  sq("kw-update", 1, "Каким словом начинается команда, которая меняет значения в существующих записях?", "Бар жазбалардағы мәндерді өзгертетін команда қай сөзден басталады?", "UPDATE", "text", "Значения меняет UPDATE ... SET.", "Мәндерді UPDATE ... SET өзгертеді.", { ru: "Слово по-английски значит «обновить».", kk: "Бұл сөз ағылшынша «жаңарту» дегенді білдіреді." }),
+  sq("kw-delete", 1, "Каким словом начинается команда, которая удаляет записи из таблицы?", "Кестеден жазбаларды жоятын команда қай сөзден басталады?", "DELETE", "text", "Записи удаляет DELETE FROM.", "Жазбаларды DELETE FROM жояды.", { ru: "Слово по-английски значит «удалить».", kk: "Бұл сөз ағылшынша «жою» дегенді білдіреді." }),
+  sq("kw-create", 1, "Какими двумя словами начинается команда, которая создаёт новую таблицу?", "Жаңа кесте құратын команда қандай екі сөзден басталады?", "CREATE TABLE", "text", "Таблицу создаёт CREATE TABLE.", "Кестені CREATE TABLE құрады.", { ru: "Слово по-английски значит «создать».", kk: "Бұл сөз ағылшынша «құру» дегенді білдіреді." }),
+  sq("kw-count", 1, "Как называется итоговая функция, которая считает число записей? Напиши название без скобок.", "Жазбалар санын санайтын қорытынды функция қалай аталады? Атауын жақшасыз жаз.", "COUNT", "text", "COUNT(*) возвращает число записей.", "COUNT(*) жазбалар санын қайтарады.", { ru: "Английское слово означает «считать».", kk: "Ағылшын сөзі «санау» дегенді білдіреді." }),
+  sq("kw-avg", 1, "Как называется итоговая функция, которая находит среднее значение? Напиши название без скобок.", "Орташа мәнді табатын қорытынды функция қалай аталады? Атауын жақшасыз жаз.", "AVG", "text", "AVG — среднее значение (average).", "AVG — орташа мән (average).", { ru: "Название — сокращение английского слова average.", kk: "Атауы — ағылшынша average сөзінің қысқартылуы." }),
   sq("kw-groupby", 2, "Какие слова задают подсчёт итогов по группам записей?", "Жазбалар топтары бойынша қорытынды санауды қандай сөздер береді?", "GROUP BY", "text", "GROUP BY раскладывает записи по группам.", "GROUP BY жазбаларды топтарға бөледі.", { ru: "По-английски: «группировать по».", kk: "Ағылшынша: «... бойынша топтау»." }),
   sq("kw-as", 2, "Какое слово задаёт название столбца результата, например COUNT(*) ... N?", "Нәтиже бағанының атауын қандай сөз береді, мысалы COUNT(*) ... N?", "AS", "text", "COUNT(*) AS N: столбец называется N.", "COUNT(*) AS N: баған N деп аталады.", { ru: "Это короткое слово из двух букв.", kk: "Бұл екі әріптен тұратын қысқа сөз." }),
 ];
@@ -1081,15 +1098,18 @@ function shortGenerated(level: Level, seed: number): ShortQuestion {
       `SUM — мәндер қосындысы: ${marks.join(" + ")} = ${total}.`,
       { ru: "Сложи все оценки.", kk: "Барлық бағаны қос." });
   }
-  const a = int(rand, 3, 5);
-  const b = a + int(rand, 1, 3);
-  return sq(`avg-trap-${a}-${b}`, 3,
-    `В таблице две записи со значениями ${a} и ${b}. Чему равно 2 · AVG(Mark), где Mark — значения этих записей?`,
-    `Кестеде мәндері ${a} және ${b} екі жазба бар. 2 · AVG(Mark) неге тең, мұндағы Mark — осы жазбалардың мәндері?`,
-    String(a + b), "number",
-    `AVG = (${a} + ${b}) : 2, значит, 2 · AVG = ${a} + ${b} = ${a + b}.`,
-    `AVG = (${a} + ${b}) : 2, демек, 2 · AVG = ${a} + ${b} = ${a + b}.`,
-    { ru: "Среднее двух чисел — их сумма, делённая на 2.", kk: "Екі санның орташа мәні — олардың қосындысын 2-ге бөлгенде шығады." });
+  // Уровень 3: два шага — сначала UPDATE, потом SUM по изменённым оценкам.
+  if (!marks.includes(3)) marks[int(rand, 0, n - 1)] = 3;
+  const threes = marks.filter((m) => m === 3).length;
+  const after = marks.map((m) => (m === 3 ? 4 : m));
+  const sumAfter = after.reduce((x, y) => x + y, 0);
+  return sq(`upd-sum-${marks.join("")}`, 3,
+    `Оценки в поле Mark: ${marks.join(", ")}. Выполнен запрос UPDATE T SET Mark = 4 WHERE Mark = 3; Чему теперь равно SUM(Mark)?`,
+    `Mark өрісіндегі бағалар: ${marks.join(", ")}. UPDATE T SET Mark = 4 WHERE Mark = 3; сұранысы орындалды. Енді SUM(Mark) неге тең?`,
+    String(sumAfter), "number",
+    `UPDATE меняет каждую тройку на 4 (троек: ${threes}). Новые оценки: ${after.join(", ")}. SUM = ${after.join(" + ")} = ${sumAfter}.`,
+    `UPDATE әр 3 бағасын 4-ке ауыстырады (3 бағасының саны: ${threes}). Жаңа бағалар: ${after.join(", ")}. SUM = ${after.join(" + ")} = ${sumAfter}.`,
+    { ru: "Сначала замени по условию WHERE все тройки, потом сложи все оценки.", kk: "Алдымен WHERE шарты бойынша барлық 3 бағасын ауыстыр, содан кейін барлық бағаны қос." });
 }
 
 function byLevel<T extends { level: Level }>(items: T[], level: Level): T[] {

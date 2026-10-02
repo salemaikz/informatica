@@ -1,6 +1,8 @@
 "use client";
 
 import { ClipboardCheck, Timer } from "lucide-react";
+import { GoalSummaryCard } from "@/components/goals/GoalSummaryCard";
+import { StreakReminder } from "@/components/goals/StreakReminder";
 import { useCallback, useState } from "react";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
@@ -57,7 +59,8 @@ export default function LearnPage() {
         <span className="text-sm text-muted">{firstTime ? t("learn2.sub.first") : recommended ? t("learn2.sub.go") : due.length ? t("learn2.sub.done") : t("learn2.sub.wait")}</span>
       </MascotSays>
 
-      {/* GoalSummaryCard */}
+      <StreakReminder />
+      <GoalSummaryCard />
 
       <QuickActions continueId={recommended?.ref.id} dueCount={due.length} firstTime={firstTime} />
 

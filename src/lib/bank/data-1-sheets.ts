@@ -259,6 +259,8 @@ function substitute(formula: string, grid: Cell[][]): string {
 interface Opt {
   text: string;
   why: L | null;
+  /** Запасной вариант без точного разбора ошибки: берётся, только если нет содержательных. */
+  weak?: boolean;
 }
 
 interface ChoiceInput {
@@ -276,7 +278,8 @@ interface ChoiceInput {
 function choice(rand: Rand, c: ChoiceInput): ChoiceStep {
   const seen = new Set<string>([c.correct]);
   const wrongs: Opt[] = [];
-  for (const w of shuffle(c.wrongs, rand)) {
+  const ordered = shuffle(c.wrongs, rand).sort((a, b) => Number(!!a.weak) - Number(!!b.weak));
+  for (const w of ordered) {
     if (wrongs.length >= 3) break;
     if (w.text && !seen.has(w.text)) {
       seen.add(w.text);
@@ -317,14 +320,14 @@ function numWrongs(correct: number, cands: { v: number | undefined; why: L }[]):
     out.push({ text: num(c.v), why: c.why });
   }
   const filler: L = {
-    ru: "Ошибка в вычислениях: пересчитай подстановку и порядок действий.",
-    kk: "Есептеуде қате бар: мәндерді қою мен амалдардың орындалу ретін қайта тексер.",
+    ru: "Ошибка в вычислениях: пересчитай решение по шагам ещё раз.",
+    kk: "Есептеуде қате бар: шешуді қадамдар бойынша қайта есепте.",
   };
   for (const d of [1, -1, 2, -2, 3]) {
     const v = correct + d;
     if (v >= 0 && !seen.has(v)) {
       seen.add(v);
-      out.push({ text: num(v), why: filler });
+      out.push({ text: num(v), why: filler, weak: true });
     }
   }
   return out;
@@ -508,8 +511,8 @@ const genCalc: Gen = (rand, level, seed) => {
       scene: sheetScene(grid, [[0, 3]]),
       hint: HINT_CALC,
       explanation: {
-        ru: `Подставляем значения: ${substitute(tpl.f, grid)} = ${v}. Скобки — первыми, затем умножение и деление, затем сложение и вычитание.`,
-        kk: `Мәндерді қоямыз: ${substitute(tpl.f, grid)} = ${v}. Алдымен жақша, содан кейін көбейту мен бөлу, соңында қосу мен азайту.`,
+        ru: `Подставляем значения: ${substitute(tpl.f, grid)} = ${v}. Скобки — первыми, затем степень, затем умножение и деление, затем сложение и вычитание.`,
+        kk: `Мәндерді қоямыз: ${substitute(tpl.f, grid)} = ${v}. Алдымен жақша, содан кейін дәреже, содан кейін көбейту мен бөлу, соңында қосу мен азайту.`,
       },
       correct: String(v),
       wrongs,
@@ -724,8 +727,8 @@ const genUnion: Gen = (rand, level, seed) => {
       },
       hint: HINT_UNION,
       explanation: {
-        ru: `${r1}: ${area(a)} яч., ${r2}: ${area(b)} яч. Общих ячеек ${inter}. Всего: ${area(a)} + ${area(b)} − ${inter} = ${union}.`,
-        kk: `${r1}: ${area(a)} ұяшық, ${r2}: ${area(b)} ұяшық. Ортақ ұяшық ${inter}. Барлығы: ${area(a)} + ${area(b)} − ${inter} = ${union}.`,
+        ru: `${r1}: ${area(a)} ${ruPl(area(a), "ячейка", "ячейки", "ячеек")}, ${r2}: ${area(b)} ${ruPl(area(b), "ячейка", "ячейки", "ячеек")}. Общих ячеек: ${inter}. Всего: ${area(a)} + ${area(b)} − ${inter} = ${union}.`,
+        kk: `${r1}: ${area(a)} ұяшық, ${r2}: ${area(b)} ұяшық. Ортақ ұяшықтар: ${inter}. Барлығы: ${area(a)} + ${area(b)} − ${inter} = ${union}.`,
       },
       correct: String(union),
       wrongs,
@@ -747,8 +750,8 @@ const genRev: Gen = (rand, level, seed) => {
     id: `g:${SKILL}:rev:${idp(addr(c1, r1 - 1), rows, cols)}:${seed}`,
     level,
     prompt: {
-      ru: `Диапазон ${addr(c1, r1 - 1)}:?${r1 + rows - 1} содержит ${total} ${ruPl(total, "ячейку", "ячейки", "ячеек")}. Какая буква стоит вместо «?»`,
-      kk: `${addr(c1, r1 - 1)}:?${r1 + rows - 1} диапазонында ${total} ұяшық бар. «?» орнына қандай әріп тұр`,
+      ru: `Диапазон ${addr(c1, r1 - 1)}:?${r1 + rows - 1} содержит ${total} ${ruPl(total, "ячейку", "ячейки", "ячеек")}. Какой буквой обозначен последний столбец диапазона?`,
+      kk: `${addr(c1, r1 - 1)}:?${r1 + rows - 1} диапазонында ${total} ұяшық бар. диапазонның соңғы бағанасы қандай әріппен белгіленген?`,
     },
     hint: {
       ru: "Сначала найди число строк в диапазоне, затем раздели число ячеек на число строк — получишь число столбцов. Считай столбцы от первой буквы включительно.",
@@ -1126,8 +1129,8 @@ function genStatement(rand: Rand, level: Level): Statement {
       },
       value: claim === v,
       explanation: {
-        ru: `Подставляем: ${substitute(tpl.f, grid)} = ${v}. Скобки — первыми, затем умножение и деление, затем сложение и вычитание.`,
-        kk: `Мәндерді қоямыз: ${substitute(tpl.f, grid)} = ${v}. Алдымен жақша, содан кейін көбейту мен бөлу, соңында қосу мен азайту.`,
+        ru: `Подставляем: ${substitute(tpl.f, grid)} = ${v}. Скобки — первыми, затем степень, затем умножение и деление, затем сложение и вычитание.`,
+        kk: `Мәндерді қоямыз: ${substitute(tpl.f, grid)} = ${v}. Алдымен жақша, содан кейін дәреже, содан кейін көбейту мен бөлу, соңында қосу мен азайту.`,
       },
       hint: HINT_CALC,
     };

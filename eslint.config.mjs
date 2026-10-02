@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Временные скрипты проверок (в git не попадают).
+    "scripts/out/**",
   ]),
 ]);
 

@@ -341,6 +341,16 @@ function singleRef(rand: Rand, level: Level, seed: number) {
     add({ ...r, col: r.ac ? r.col : r.col + dc }, WHY.onlyCol);
     add({ ...r, row: r.ar ? r.row : r.row + dr }, WHY.onlyRow);
     add(shiftRef(r, -dc, -dr), WHY.opposite);
+    if (kind === "abs") {
+      // Абсолютная ссылка при копировании не меняется — любые изменения (в том числе потеря $) неверны.
+      const WHY_ABS = lk(
+        "Абсолютная ссылка закреплена знаками $ и при копировании не меняется, а здесь она изменена.",
+        "Абсолютті сілтеме $ белгілерімен бекітілген және көшіргенде өзгермейді, ал мұнда ол өзгертілген.",
+      );
+      add({ ...r, ac: false, ar: false, col: r.col + dc, row: r.row + dr }, WHY_ABS);
+      add({ ...r, ar: false, row: r.row + dr }, WHY_ABS);
+      add({ ...r, ac: false, col: r.col + dc }, WHY_ABS);
+    }
     return choice(rand, {
       id: `g:${SKILL}:ref-${kind}:${idPart(`${f}-${a}-${b}`)}:${seed}`,
       level,
@@ -371,25 +381,32 @@ const MIXED_FLAGS: Flags[] = [
 ];
 
 function mixedCopy(rand: Rand, level: Level, seed: number) {
-  const f1 = pick(rand, MIXED_FLAGS.slice(0, 3));
-  const f2 = pick(rand, [[true, false], [false, true], [false, false]] as Flags[]);
   const moves: [number, number][] = level === 2 ? [[1, 1], [1, -1], [-1, 1], [0, -1], [-1, 0]] : [[-1, -1], [1, -1], [-1, 1]];
-  const plan = makePlan(rand, { flags: [f1, f2], ops: ["+", "*", "-"], moves });
-  const { a, b } = fmtMove(plan);
-  const f = fStr(plan.f);
-  const g = fStr(plan.g);
-  return choice(rand, {
-    id: `g:${SKILL}:mixed-copy:${idPart(`${f}-${a}-${b}`)}:${seed}`,
-    level,
-    prompt: copyPrompt(f, a, b),
-    hint: HINT_SHIFT,
-    explanation: lk(
-      `Из ${a} в ${b}: ${shiftL(plan.dc, plan.dr).ru}. Знак $ закрепляет то, что стоит сразу после него (столбец или строку), остальное сдвигается. Получается \`${g}\`.`,
-      `${a} → ${b}: ${shiftL(plan.dc, plan.dr).kk}. $ белгісі өзінен кейін тұрғанды (бағанды немесе жолды) бекітеді, қалғаны жылжиды. Нәтижесі: \`${g}\`.`,
-    ),
-    correct: g,
-    wrongs: mistakeCands(plan, ["unchanged", "ignore", "invert", "onlyCol", "onlyRow", "partial", "partial"]),
-  });
+  const kinds: Mistake[] = ["unchanged", "ignore", "invert", "onlyCol", "onlyRow", "partial", "partial"];
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const f1 = pick(rand, MIXED_FLAGS.slice(0, 3));
+    const f2 = pick(rand, [[true, false], [false, true], [false, false]] as Flags[]);
+    const plan = makePlan(rand, { flags: [f1, f2], ops: ["+", "*", "-"], moves });
+    const wrongs = mistakeCands(plan, kinds);
+    // Формула должна измениться, и неверных вариантов должно хватать на четыре варианта ответа.
+    if (fStr(plan.f) === fStr(plan.g) || wrongs.length < 3) continue;
+    const { a, b } = fmtMove(plan);
+    const f = fStr(plan.f);
+    const g = fStr(plan.g);
+    return choice(rand, {
+      id: `g:${SKILL}:mixed-copy:${idPart(`${f}-${a}-${b}`)}:${seed}`,
+      level,
+      prompt: copyPrompt(f, a, b),
+      hint: HINT_SHIFT,
+      explanation: lk(
+        `Из ${a} в ${b}: ${shiftL(plan.dc, plan.dr).ru}. Знак $ закрепляет то, что стоит сразу после него (столбец или строку), остальное сдвигается. Получается \`${g}\`.`,
+        `${a} → ${b}: ${shiftL(plan.dc, plan.dr).kk}. $ белгісі өзінен кейін тұрғанды (бағанды немесе жолды) бекітеді, қалғаны жылжиды. Нәтижесі: \`${g}\`.`,
+      ),
+      correct: g,
+      wrongs,
+    });
+  }
+  throw new Error("mixedCopy: не удалось подобрать формулу");
 }
 
 // ---------- Значение формулы в таблице чисел ----------
@@ -626,43 +643,48 @@ function ifCase(rand: Rand, level: Level, seed: number) {
 // ---------- Обратная задача ----------
 
 function reverse(rand: Rand, level: Level, seed: number) {
-  const f1 = pick(rand, MIXED_FLAGS);
-  const f2 = pick(rand, MIXED_FLAGS);
-  const plan = makePlan(rand, { flags: [f1, f2], ops: ["+", "*", "-"], moves: [[-1, -1]], row: [3, 7], col: [2, 4] });
-  if (refs(plan.f).every((r) => r.ac && r.ar)) return reverse(rand, level, seed + 1);
-  const { a, b } = fmtMove(plan);
-  const f = fStr(plan.f);
-  const g = fStr(plan.g);
-  // Ошибки обратного хода: формула не «развёрнута», развёрнута без учёта $, развёрнута в другую сторону.
-  const undoIgnore = mapRefs(plan.g, (r) => ({ ...r, col: r.col - plan.dc, row: r.row - plan.dr }));
-  const forward = shiftF(plan.g, plan.dc, plan.dr);
-  const undoCol = mapRefs(plan.g, (r) => ({ ...r, col: r.ac ? r.col : r.col - plan.dc }));
-  const undoRow = mapRefs(plan.g, (r) => ({ ...r, row: r.ar ? r.row : r.row - plan.dr }));
-  const cands: Cand[] = [
-    { text: g, why: lk("Это формула из ячейки, куда копировали. Нужно вернуться назад на тот же сдвиг.", "Бұл көшірілген ұяшықтағы формула. Сол жылжуға кері қайту керек.") },
-    { text: fStr(undoIgnore), why: lk("Знаки $ не учтены: закреплённая часть при копировании не менялась, значит, назад её двигать не нужно.", "$ белгілері ескерілмеген: бекітілген бөлік көшіргенде өзгермеген, демек, оны кері жылжыту керек емес.") },
-    { text: fStr(forward), why: lk("Сдвиг сделан в ту же сторону, а нужно вернуться назад: из ячейки назначения — в исходную.", "Жылжу сол бағытта жасалған, ал артқа қайту керек: көшірілген ұяшықтан бастапқысына.") },
-    { text: fStr(undoCol), why: lk("Назад сдвинуты только столбцы, а строки тоже менялись при копировании.", "Тек бағандар артқа жылжытылған, ал көшіргенде жолдар да өзгерген.") },
-    { text: fStr(undoRow), why: lk("Назад сдвинуты только строки, а столбцы тоже менялись при копировании.", "Тек жолдар артқа жылжытылған, ал көшіргенде бағандар да өзгерген.") },
-  ].filter((c) => validF(parseBack(c.text)) && c.text !== f);
-  return choice(rand, {
-    id: `g:${SKILL}:reverse:${idPart(`${g}-${a}-${b}`)}:${seed}`,
-    level,
-    prompt: lk(
-      `Формулу из ячейки ${a} скопировали в ячейку ${b}. В ${b} оказалась формула \`${g}\`. Какая формула была записана в ${a}?`,
-      `${a} ұяшығындағы формуланы ${b} ұяшығына көшірді. ${b} ұяшығында \`${g}\` формуласы шықты. ${a} ұяшығында қандай формула жазылған болатын?`,
-    ),
-    hint: lk(
-      "Иди обратно: формулу переместили вправо и вниз, значит, нужно вернуться влево и вверх — но только в тех частях ссылок, где нет знака $.",
-      "Кері жүр: формуланы оңға және төмен жылжытқан, демек солға және жоғары қайту керек — бірақ сілтемелердің тек $ белгісі жоқ бөліктерінде.",
-    ),
-    explanation: lk(
-      `Из ${a} в ${b}: ${shiftL(plan.dc, plan.dr).ru}. Идём обратно: у каждой ссылки возвращаем назад только то, что не закреплено знаком $. Было \`${f}\`.`,
-      `${a} → ${b}: ${shiftL(plan.dc, plan.dr).kk}. Кері жүреміз: әр сілтемеде тек $ белгісімен бекітілмегенін артқа қайтарамыз. Түпнұсқа: \`${f}\`.`,
-    ),
-    correct: f,
-    wrongs: cands,
-  });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const f1 = pick(rand, MIXED_FLAGS);
+    const f2 = pick(rand, MIXED_FLAGS);
+    const plan = makePlan(rand, { flags: [f1, f2], ops: ["+", "*", "-"], moves: [[-1, -1]], row: [3, 7], col: [2, 4] });
+    const f = fStr(plan.f);
+    const g = fStr(plan.g);
+    if (f === g) continue;
+    // Ошибки обратного хода: формула не «развёрнута», развёрнута без учёта $, развёрнута в ту же сторону.
+    const undoIgnore = mapRefs(plan.g, (r) => ({ ...r, col: r.col - plan.dc, row: r.row - plan.dr }));
+    const forward = shiftF(plan.g, plan.dc, plan.dr);
+    const undoCol = mapRefs(plan.g, (r) => ({ ...r, col: r.ac ? r.col : r.col - plan.dc }));
+    const undoRow = mapRefs(plan.g, (r) => ({ ...r, row: r.ar ? r.row : r.row - plan.dr }));
+    const raw: Cand[] = [
+      { text: g, why: lk("Это формула из ячейки, куда копировали. Нужно вернуться назад на тот же сдвиг.", "Бұл көшірілген ұяшықтағы формула. Сол жылжуға кері қайту керек.") },
+      { text: fStr(undoIgnore), why: lk("Знаки $ не учтены: закреплённая часть при копировании не менялась, значит, назад её двигать не нужно.", "$ белгілері ескерілмеген: бекітілген бөлік көшіргенде өзгермеген, демек, оны кері жылжыту керек емес.") },
+      { text: fStr(forward), why: lk("Сдвиг сделан в ту же сторону, а нужно вернуться назад: из ячейки назначения — в исходную.", "Жылжу сол бағытта жасалған, ал артқа қайту керек: көшірілген ұяшықтан бастапқысына.") },
+      { text: fStr(undoCol), why: lk("Назад сдвинуты только столбцы, а строки тоже менялись при копировании.", "Тек бағандар артқа жылжытылған, ал көшіргенде жолдар да өзгерген.") },
+      { text: fStr(undoRow), why: lk("Назад сдвинуты только строки, а столбцы тоже менялись при копировании.", "Тек жолдар артқа жылжытылған, ал көшіргенде бағандар да өзгерген.") },
+    ];
+    const wrongs = raw.filter((c, i) => validF(parseBack(keyOf(c.text))) && c.text !== f && raw.findIndex((x) => x.text === c.text) === i);
+    if (wrongs.length < 3) continue;
+    const { a, b } = fmtMove(plan);
+    return choice(rand, {
+      id: `g:${SKILL}:reverse:${idPart(`${g}-${a}-${b}`)}:${seed}`,
+      level,
+      prompt: lk(
+        `Формулу из ячейки ${a} скопировали в ячейку ${b}. В ${b} оказалась формула \`${g}\`. Какая формула была записана в ${a}?`,
+        `${a} ұяшығындағы формуланы ${b} ұяшығына көшірді. ${b} ұяшығында \`${g}\` формуласы шықты. ${a} ұяшығында қандай формула жазылған болатын?`,
+      ),
+      hint: lk(
+        "Иди обратно: формулу переместили вправо и вниз, значит, нужно вернуться влево и вверх — но только в тех частях ссылок, где нет знака $.",
+        "Кері жүр: формуланы оңға және төмен жылжытқан, демек солға және жоғары қайту керек — бірақ сілтемелердің тек $ белгісі жоқ бөліктерінде.",
+      ),
+      explanation: lk(
+        `Из ${a} в ${b}: ${shiftL(plan.dc, plan.dr).ru}. Идём обратно: у каждой ссылки возвращаем назад только то, что не закреплено знаком $. Было \`${f}\`.`,
+        `${a} → ${b}: ${shiftL(plan.dc, plan.dr).kk}. Кері жүреміз: әр сілтемеде тек $ белгісімен бекітілмегенін артқа қайтарамыз. Түпнұсқа: \`${f}\`.`,
+      ),
+      correct: f,
+      wrongs,
+    });
+  }
+  throw new Error("reverse: не удалось подобрать формулу");
 }
 
 /** Разбор текста формулы обратно в ссылки — чтобы проверить, что неверные варианты не выходят за границы таблицы. */
