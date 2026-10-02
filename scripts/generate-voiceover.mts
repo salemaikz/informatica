@@ -2,6 +2,7 @@
  * Генерация озвучки для видео уроков через OpenAI TTS.
  *
  *   npm run voiceover -- binary-intro
+ *   npm run voiceover -- binary-intro --force --only=kk:example,kk:outro   (перегенерировать отдельные сцены)
  *
  * Требует OPENAI_API_KEY в .env.local. Кладёт mp3 в public/media/videos/<id>/<lang>/<scene>.mp3
  * и записывает длительности в src/videos/<id>/durations.json (через ffprobe).
@@ -15,6 +16,8 @@ import OpenAI from "openai";
 const root = path.resolve(import.meta.dirname, "..");
 const videoId = process.argv[2] ?? "binary-intro";
 const force = process.argv.includes("--force");
+const only = (process.argv.find((a) => a.startsWith("--only="))?.slice(7).split(",") ?? []).filter(Boolean);
+const shouldRegenerate = (lang: string, id: string) => force && (only.length === 0 || only.includes(`${lang}:${id}`));
 
 // Подхватываем .env.local без зависимостей
 for (const file of [".env.local", ".env"]) {
@@ -52,7 +55,7 @@ for (const lang of ["ru", "kk"] as const) {
   durations[lang] = {};
   for (const scene of SCENES) {
     const file = path.join(dir, `${scene.id}.mp3`);
-    if (force || !existsSync(file)) {
+    if (shouldRegenerate(lang, scene.id) || !existsSync(file)) {
       const res = await client.audio.speech.create({
         model: MODEL,
         voice: VOICE,
