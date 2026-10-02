@@ -15,23 +15,23 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await expect(page.getByText("Привет, Тест!")).toBeVisible();
 
   await page.getByRole("link", { name: "Начать" }).first().click();
-  await page.waitForURL("**/lesson/ns-1-binary");
-  await expect(page.getByText("Как компьютер считает")).toBeVisible();
-  await page.locator("footer button").last().click(); // видео → дальше
+  await page.waitForURL("**/lesson/ns-1-bits");
+  // Ситуация: квест «Побег из компьютера»
+  await expect(page.getByText("Побег из компьютера")).toBeVisible();
+  await page.locator("footer button").last().click();
+
+  // Песочница: «Продолжить» откроется, когда ламп станет 5 (32 сигнала)
+  await expect(page.locator("footer button").last()).toBeDisabled();
+  for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Добавить лампу" }).click();
+  await expect(page.getByText("Получилось!")).toBeVisible();
+  await page.locator("footer button").last().click();
   await page.locator("footer button").last().click(); // теория → дальше
 
   // Неверный ответ → красная панель с правильным ответом
-  await page.getByRole("button", { name: "1 и 2", exact: true }).click();
+  await page.getByRole("button", { name: "1", exact: true }).click();
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toBeVisible();
-  await expect(page.locator("footer")).toContainText("0 и 1");
-  await page.getByRole("button", { name: "Продолжить" }).click();
-
-  // Лампочки: 13 = 8 + 4 + 1
-  await page.getByRole("button", { name: "Продолжить" }).click(); // теория
-  for (const w of ["8", "4", "1"]) await page.locator(`main button[aria-label='${w}']`).click();
-  await page.getByRole("button", { name: "Проверить" }).click();
-  await expect(page.locator("footer")).toContainText("XP");
+  await expect(page.locator("footer")).toContainText("2");
 
   expect(errors).toEqual([]);
 });

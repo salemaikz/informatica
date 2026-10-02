@@ -48,7 +48,21 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 
 ## Урок
 
-**Модель.** `Lesson` = список `Step`. Шаги: `video`, `theory` и 8 типов вопросов (`choice`, `multi`, `input`, `bits`, `ladder`, `match`, `order`, `solution`). Типы — в `src/lib/types.ts`. Каждый вопрос привязан к навыку (`skill`), может быть помечен `ent: true` (формат ЕНТ).
+**Модель.** `Lesson` = список `Step`. Типы — в `src/lib/types.ts`.
+- **Информационные шаги** (без проверки):
+  - `video`, `theory` (может иметь `scene`);
+  - `story` — ситуация: сцена и реплика;
+  - `worked` — пошаговый разбор, у каждого подшага своя `scene`;
+  - `explore` — песочница `lamps` / `weights` / `coins`. С `goal` кнопка «Продолжить» открывается после достижения цели.
+- **Вопросы:**
+  - `choice`, `multi`, `input`, `bits`, `ladder`, `match`, `order`, `solution`;
+  - `cloze` — «решаем вместе», пропуски в строках решения.
+- Каждый вопрос привязан к навыку (`skill`), имеет уровень `level` (A/B/C), может быть помечен `ent: true` (формат ЕНТ) и иметь `reveal` — сцену, которая показывается после ответа («предскажи → проверь»).
+
+**Сцены** (`components/scenes/SceneView.tsx`):
+- типы: `binary` (веса, зачёркивание, сумма, ловушка «веса слева»), `ladder`, `lamps`, `coins`, `decimal`, `quest` (иллюстрации сюжета);
+- сцена — данные, а не картинка: подшаги разбора передают новую сцену того же вида, и элементы плавно меняются, а не перерисовываются;
+- чистая логика сцен — `components/scenes/logic.ts` (тесты `tests/scenes.test.ts`).
 
 **Плеер** (`components/lesson/LessonPlayer.tsx`):
 
