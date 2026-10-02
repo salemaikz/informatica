@@ -6,6 +6,7 @@ import { AiError, streamTutor } from "@/lib/ai";
 import { cacheableRequest, cacheKeyPayload, clientCacheGet, clientCacheKey, clientCachePut } from "@/lib/ai-cache";
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
+import { detectCrisis } from "@/lib/safety";
 import type { DictKey } from "@/i18n/dict";
 
 export interface TutorTurn {
@@ -49,11 +50,15 @@ export function useTutor() {
           return hit;
         }
       }
-      if (!app.spendAi()) {
+      // Кризисное сообщение уходит всегда и бесплатно: сервер отвечает готовым текстом с телефонами доверия,
+      // модель не вызывается. Даже при исчерпанном дневном лимите ученик должен получить этот ответ.
+      const last = args.messages[args.messages.length - 1];
+      const crisis = last?.role === "user" && detectCrisis(last.content) !== null;
+      if (!crisis && !app.spendAi()) {
         setError("tutor.limit");
         return null;
       }
-      let refunded = false;
+      let refunded = crisis;
       abort.current?.abort();
       const ctrl = new AbortController();
       abort.current = ctrl;
@@ -68,7 +73,7 @@ export function useTutor() {
           (st) => {
             meta.status = st;
             // Ответ взят из серверного кэша — модель не вызывалась, возвращаем потраченное обращение.
-            if (st === "hit") {
+            if (st === "hit" && !refunded) {
               useApp.getState().refundAi();
               refunded = true;
             }

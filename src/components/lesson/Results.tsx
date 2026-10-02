@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Library, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
+import { BookOpen, Library, Save, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -105,6 +105,7 @@ export function Results({
   const router = useRouter();
   const { t, l } = useT();
   const skills = useApp((s) => s.skills);
+  const onboarded = useApp((s) => s.onboarded);
   const lessons = useApp((s) => s.lessons);
   const dueAt = useApp((s) => (lessonId ? s.lessons[lessonId]?.dueAt : undefined));
   // «Сейчас» фиксируем при показе итогов: для расчёта «повторение через N дней».
@@ -227,6 +228,17 @@ export function Results({
             );
           })}
         </div>
+      )}
+
+      {/* Гость (пришёл по ссылке без онбординга): прогресс уже на устройстве, зовём настроить занятия. */}
+      {!onboarded && (
+        <Card appear className="border-primary/40 bg-primary-soft">
+          <p className="mb-1 font-extrabold text-primary">{t("onboard.guest.title")}</p>
+          <p className="mb-3 text-sm font-semibold">{t("onboard.guest.text")}</p>
+          <ButtonLink href="/onboarding" size="lg" block icon={<Save size={20} />}>
+            {t("onboard.guest.cta")}
+          </ButtonLink>
+        </Card>
       )}
 
       <Reveal delay={0.5} className="rounded-3xl border-2 border-ai/30 bg-ai-soft p-4 sm:p-5">

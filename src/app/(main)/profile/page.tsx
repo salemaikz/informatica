@@ -19,6 +19,10 @@ import { cleanBackup, downloadBlob } from "@/components/goals/backup";
 import { Row, Segmented } from "@/components/goals/controls";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
+import { LinkTools } from "@/components/links/LinkTools";
+import { LegalLinks } from "@/components/legal/LegalLinks";
+import { InstallPrompt } from "@/components/app/InstallPrompt";
+import { exportChats, importChats } from "@/lib/chat-store";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -61,6 +65,7 @@ export default function ProfilePage() {
   const [pending, setPending] = useState<unknown>(null);
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pendingChats = useRef<unknown>(undefined);
 
   // Просим браузер не стирать данные при нехватке места (Safari иначе чистит localStorage через 7 дней без визитов).
   useEffect(() => {
@@ -79,7 +84,9 @@ export default function ProfilePage() {
   };
 
   const exportData = () => {
-    downloadBlob(new Blob([JSON.stringify({ ...useApp.getState(), version: 2 }, null, 2)], { type: "application/json" }), "informatica-progress.json");
+    // Чаты наставника живут в отдельном хранилище (lib/chat-store) — кладём их в ту же копию.
+    const data = { ...useApp.getState(), version: 2, chats: exportChats() };
+    downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), "informatica-progress.json");
   };
 
   const pickFile = async (file: File | undefined) => {
@@ -91,8 +98,10 @@ export default function ProfilePage() {
       return;
     }
     try {
-      const data = cleanBackup(JSON.parse(await file.text()));
+      const raw: unknown = JSON.parse(await file.text());
+      const data = cleanBackup(raw);
       if (!data) throw new Error("not a backup");
+      pendingChats.current = raw && typeof raw === "object" ? (raw as { chats?: unknown }).chats : undefined;
       setPending(data);
     } catch {
       setImportMsg({ ok: false, text: t("prof2.import.bad") });
@@ -101,6 +110,9 @@ export default function ProfilePage() {
 
   const confirmImport = () => {
     const ok = importProgress(pending);
+    // Чаты из копии (если есть и похожи на экспорт) — после прогресса; битые просто пропускаем.
+    if (ok && pendingChats.current !== undefined) importChats(pendingChats.current);
+    pendingChats.current = undefined;
     setPending(null);
     setImportMsg(ok ? { ok: true, text: t("prof2.import.ok") } : { ok: false, text: t("prof2.import.bad") });
   };
@@ -337,6 +349,12 @@ export default function ProfilePage() {
           {t("prof.reset")}
         </Button>
       </Card>
+
+      <LinkTools />
+
+      <InstallPrompt />
+
+      <LegalLinks className="mt-2" />
 
       <AvatarPicker open={pickAvatar} value={profile.avatar} name={profile.name} onChange={(avatar) => update({ avatar })} onClose={() => setPickAvatar(false)} />
 

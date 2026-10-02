@@ -201,3 +201,36 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 
 ### Напоминания
 `ReminderAgent` (в `Providers`) — таймер до времени напоминания, пока приложение открыто, и зеркало настроек в IndexedDB (`informatica:reminder`) → `public/sw.js` (`periodicsync` на Android с установленным приложением, `notificationclick` → `/learn`). Логика текста — `lib/reminders.ts` (продублирована в `sw.js`, совпадение проверяет тест). Календарь — `.ics` с `RRULE:FREQ=DAILY`.
+
+## Волна 3 (v0.6): игры этапа 4, Python, чат 2.0, доверие, офлайн
+
+### Игры
+- 12 игр в `src/games/*` (реестр — `registry.ts`, ленивые компоненты — `components.ts`). Новые: `bingo`, `cipher`, `bet`, `boss` (банк, форма `question`) и `build` — **`source: "worked"`**: берёт пошаговые разборы уроков (`collectWorked` в `games/build/logic.ts`). Какие навыки игра возьмёт — `gameSkillsFor` в `lib/drill.ts` (форма банка или разборы); шторка урока «Игрой» и «Тренировка» используют её же.
+- `GAMES_WIP` — список игр «в разработке» (открываются по адресу, не видны в списках).
+
+### Python (`/python`)
+- `src/lib/python/runner.ts` качает `/py-worker.js` и файлы Pyodide 0.29.5 с jsDelivr (через HTTP-кэш страницы) и передаёт их байтами в скрытый `iframe sandbox="allow-scripts"` (источник `null`); там загрузчик (`src/lib/python/sandbox.ts`, CSP: `connect-src 'none'`, `script-src` — хэш загрузчика, `blob:`, `'wasm-unsafe-eval'`) создаёт воркер из Blob. Сообщения проверяются по `event.source` и `parseReply`. Таймаут — удаление iframe.
+- Пошаговый режим: шаги `{line, vars, outLen}` — вывод передаётся один раз, срез на шаге делает клиент.
+- `src/components/python/*` — редактор (textarea + подсветка `scenes/highlight.ts`), шаги, карточка ошибки (`lib/python/errors.ts`, ru/kk). `CodeRunContext` (в `scenes/CodeScene.tsx`) включает ссылку «Запустить в Python» только в объяснениях.
+
+### Чаты (`/tutor`)
+- `src/lib/chat-store.ts` — zustand persist `informatica-chats`: чаты, активный, лимиты (50 чатов, 200 сообщений); `exportChats/importChats` — в резервной копии профиля. Сообщение-«квиз» (`lib/chat-quiz.ts`) хранит задания и ответы; в историю для ИИ уходит только текстовая сводка.
+
+### Безопасность чата
+- `src/lib/safety.ts` — `detectCrisis` + `crisisReply`. Сервер (`api/ai/tutor`) отвечает на кризис до проверки ключа и лимита (`X-AI-Crisis`, `X-AI-Cache: hit`); `useTutor` не списывает дневной лимит.
+
+### Публичные страницы и ссылки
+- `src/lib/public-paths.ts` — что открывается без онбординга (проверка в `Providers`); `useGuestLang` — язык гостя.
+- `/privacy`, `/terms`, `/about` — `src/content/legal.ts` + `components/legal/*`.
+- `/exam/print` — `components/exam/PrintSheet.tsx`, `print-logic.ts` (тот же `buildExam` по seed).
+- Вызов другу: параметр `ch=` (`lib/challenge.ts`), хранится в `ExamAttempt.challenge` (`lib/exam-store.ts`). Карточка результата — `lib/share-card.ts` (canvas, PNG 1080 × 1920).
+- Перенос и отчёт: `lib/share-link.ts` — `#d=` + `z` (deflate-raw) или `r` (без сжатия) + base64url; `lib/report.ts` (`v: 1`, необязательный `lang`); страницы `/restore`, `/report`; QR — `qrcode-generator`.
+
+### Офлайн
+- `public/sw.js`: напоминания (как раньше) + кэш: ядро (`/offline`, иконки, манифест) и рабочий кэш (до 400 записей); стратегии — см. решение #36. Версия — `CACHE_VERSION` (повышать при заметных изменениях `sw.js`). Регистрация — `components/app/SwRegister.tsx` (только production); `OfflineBanner`, `InstallPrompt`, значок — `components/app/badge.ts` в `ReminderAgent`.
+
+### Ступени освоения
+- `src/lib/mastery-steps.ts` — `lessonStep(stat, now)`: new / started / familiar / skilled / mastered (по `stage`, `bestAccuracy`, `via`); отметки — `components/learn/MasteryLegend.tsx` (`StepMarks`), в узле карты и шторке.
+
+### CI
+- `.github/workflows/ci.yml`: `npm ci` → typecheck → lint → test → build → `next start` + Playwright.

@@ -2,10 +2,10 @@
 // Онбординг не навязываем: человек пришёл посмотреть конкретную вещь.
 
 /** Точные адреса. */
-const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/about", "/report", "/restore", "/exam/print", "/offline"]);
+const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/about", "/report", "/restore", "/exam/print", "/exam/run", "/offline"]);
 
 /** Префиксы (адрес совпадает или продолжается через «/»). */
-const PREFIXES: string[] = [];
+const PREFIXES: string[] = ["/lesson", "/theory", "/game"];
 
 export function isPublicPath(pathname: string): boolean {
   if (EXACT.has(pathname)) return true;

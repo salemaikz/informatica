@@ -21,9 +21,11 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
+import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
+import { ShareActions } from "./ShareActions";
 
 const TONE_COLOR: Record<Tone, string> = {
   danger: "var(--danger)",
@@ -252,6 +254,17 @@ export function ExamResult({ id }: { id: string }) {
           </Pill>
         )}
       </Card>
+
+      {attempt?.challenge && <ChallengeCompare challenge={attempt.challenge} points={points} max={maxPoints} />}
+
+      <ShareActions
+        kind={kind}
+        seed={attempt?.seed ?? summary?.seed ?? 0}
+        topics={attempt?.topics ?? summary?.topics ?? []}
+        points={points}
+        max={maxPoints}
+        topicRows={topicRows.map((r) => ({ label: l(entTopicById(r.topic).short), points: r.points, max: r.max }))}
+      />
 
       {attempt && <ExamNotes paper={attempt.paper} />}
 

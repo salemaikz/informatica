@@ -48,6 +48,7 @@ import { StoryView } from "./steps/StoryView";
 import { WorkedView } from "./steps/WorkedView";
 import type { StepProps } from "./steps/types";
 import { Results, requestLessonFeedback, type FeedbackState } from "./Results";
+import { CodeRunContext } from "@/components/scenes/CodeScene";
 
 interface QueueItem {
   step: Step;
@@ -537,18 +538,28 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
               {t("lesson.theory")}
             </Pill>
             <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
-            {step.scene && <SceneView scene={step.scene} />}
+            {step.scene && (
+              <CodeRunContext value={true}>
+                <SceneView scene={step.scene} />
+              </CodeRunContext>
+            )}
             {step.visual && <Visual id={step.visual} />}
             <Markdown className="text-[17px]">{l(step.body)}</Markdown>
             <AskInline label={t("tutor.askInline")} onClick={() => setAi("ask")} />
           </div>
         )}
 
-        {step.type === "story" && <StoryView step={step} />}
+        {step.type === "story" && (
+          <CodeRunContext value={true}>
+            <StoryView step={step} />
+          </CodeRunContext>
+        )}
 
         {step.type === "worked" && (
           <div className="flex flex-col gap-4">
-            <WorkedView step={step} revealed={revealed} />
+            <CodeRunContext value={true}>
+              <WorkedView step={step} revealed={revealed} />
+            </CodeRunContext>
             <AskInline label={t("tutor.askInline")} onClick={() => setAi("ask")} />
           </div>
         )}

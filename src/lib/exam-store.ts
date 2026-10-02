@@ -5,6 +5,7 @@
 
 import { del, get, set } from "idb-keyval";
 import { ENT_TOPICS } from "@/content/ent-topics";
+import { sanitizeChallenge, type Challenge } from "./challenge";
 import { EXAM_TIME_LIMIT_SEC, isAnswered, scoreExam, scoreQuestion, type ExamAnswer, type ExamAnswers, type ExamKind, type ExamPaper, type ExamQuestion } from "./exam";
 import type { ExamSummary } from "./store";
 import type { EntTopicId } from "./types";
@@ -39,6 +40,8 @@ export interface ExamAttempt {
   elapsedMs: number;
   finishedAt?: number;
   review?: ExamAiReview;
+  /** Вызов друга: результат того, кто прислал ссылку (из `ch=` в адресе). */
+  challenge?: Challenge;
 }
 
 /** Всё, кроме бумаги: часто пишется. */
@@ -193,6 +196,7 @@ export function sanitizeState(raw: unknown, paper: ExamPaper): ExamAttemptState 
     elapsedMs: fin(s.elapsedMs) ? Math.max(0, s.elapsedMs) : 0,
     finishedAt: fin(s.finishedAt) ? s.finishedAt : undefined,
     review: sanitizeReview(s.review),
+    challenge: sanitizeChallenge(s.challenge) ?? undefined,
   };
 }
 

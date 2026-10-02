@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Calculator, ChartColumn, Dumbbell, Library, NotebookPen, Search, Sparkles, Target } from "lucide-react";
+import { BookOpen, Calculator, ChartColumn, Dumbbell, Library, NotebookPen, Search, Sparkles, SquareTerminal, Target } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,6 +21,7 @@ import { useToolbox } from "@/components/tools/useToolbox";
 const NAV_EXTRA: { href: string; key: DictKey; icon: typeof BookOpen }[] = [
   { href: "/theory", key: "theory.title", icon: Library },
   { href: "/exam", key: "exam.title", icon: Target },
+  { href: "/python", key: "python.nav", icon: SquareTerminal },
   { href: "/search", key: "search.title", icon: Search },
 ];
 
@@ -44,7 +45,7 @@ function Logo() {
     <Link href="/learn" className="flex items-center gap-2">
       <Mascot size={34} />
       {/* На самых узких телефонах (360 px) название скрываем — остаётся маскот, шапке нужно место. */}
-      <span className="hidden text-lg font-black tracking-tight text-primary min-[400px]:inline lg:inline">Informatica</span>
+      <span className="hidden text-lg font-black tracking-tight text-primary min-[480px]:inline lg:inline">Informatica</span>
     </Link>
   );
 }
@@ -113,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         {/* Телефон: верхняя панель */}
         <header className="sticky top-0 z-20 border-b-2 border-border bg-bg/90 backdrop-blur lg:hidden">
-          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2.5 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-4 min-[400px]:px-4">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-3 min-[480px]:gap-4 min-[480px]:px-4">
             <Logo />
             <div className="flex-1" />
             <StreakChipAnimated />
@@ -129,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Search size={22} />
             </Link>
             <ToolboxButton variant="icon" />
-            <Link href="/profile" aria-label={t("nav.profile")}>
+            <Link href="/profile" aria-label={t("nav.profile")} className="shrink-0">
               <ProfileAvatar size={32} />
             </Link>
           </div>

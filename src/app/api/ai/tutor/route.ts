@@ -6,6 +6,7 @@ import { getOpenAI, jsonError, logUsage, MODELS } from "@/server/openai";
 import { clientIp, rateLimit } from "@/server/rate-limit";
 import { sameOrigin, sanitizeContext, sanitizeImage, sanitizeTask } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
+import { crisisLang, crisisReply, detectCrisis } from "@/lib/safety";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
 
 // Чат с ИИ-наставником: свободный диалог, подсказка к заданию, разбор ошибки. Ответ — потоковый текст.
@@ -18,9 +19,6 @@ type Msg = OpenAI.Chat.ChatCompletionMessageParam;
 
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return jsonError(403, "forbidden_origin");
-  if (!rateLimit(`tutor:${clientIp(req)}`, 40, 10 * 60_000)) return jsonError(429, "rate_limited");
-  const client = getOpenAI();
-  if (!client) return jsonError(503, "ai_not_configured");
 
   let body: Record<string, unknown>;
   try {
@@ -43,6 +41,27 @@ export async function POST(req: Request) {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
 
   if ((mode === "chat" || mode === "ask") && history.length === 0) return jsonError(400, "empty");
+
+  // Кризисная тема в последнем сообщении ученика (в любом режиме: в уроке тоже можно дописать вопрос):
+  // модель не вызываем, ответ работает и без ключа, серверный лимит не тратим (проверка раньше rateLimit),
+  // X-AI-Cache: hit — клиент (useTutor) возвращает потраченное обращение из дневного лимита.
+  const last = history[history.length - 1];
+  const crisis = last?.role === "user" ? detectCrisis(last.content) : null;
+  if (last && crisis) {
+    console.log(`[ai] route=tutor crisis=${crisis}`);
+    return new Response(crisisReply(crisis, crisisLang(last.content, ctx.lang)), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-AI-Cache": "hit",
+        "X-AI-Crisis": crisis,
+      },
+    });
+  }
+
+  if (!rateLimit(`tutor:${clientIp(req)}`, 40, 10 * 60_000)) return jsonError(429, "rate_limited");
+  const client = getOpenAI();
+  if (!client) return jsonError(503, "ai_not_configured");
 
   const userTurns = (): Msg[] => {
     const out: Msg[] = [];

@@ -9,6 +9,19 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.goto("/");
   await page.waitForURL("**/onboarding");
   await page.getByText("Русский").click();
+  // «Сначала задание»: три мини-задания (лампочки → 1011₂ → что больше) до анкеты
+  await page.getByRole("button", { name: "Лампочка 4: выключена" }).click();
+  await page.getByRole("button", { name: "Лампочка 1: выключена" }).click();
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await expect(page.getByText("+10 XP")).toBeVisible();
+  await page.getByRole("button", { name: "Дальше" }).click();
+  await page.getByRole("button", { name: "11", exact: true }).click();
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await page.getByRole("button", { name: "Дальше" }).click();
+  await page.getByRole("button", { name: "1000₂" }).click();
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await page.getByRole("button", { name: "Дальше" }).click();
+  // Анкета: имя (необязательно), класс, цель, стиль, дневная цель
   await page.getByPlaceholder("Твоё имя").fill("Тест");
   for (let i = 0; i < 5; i++) await page.getByRole("button", { name: /Продолжить|Поехали/ }).click();
   await page.waitForURL("**/learn");
@@ -55,4 +68,13 @@ test("тренировка по навыку генерирует задания
   await expect(page.getByText("Ақылды жаттығу")).toBeVisible();
   await page.goto("/drill?mode=skill&skill=ns.dec2bin");
   await expect(page.locator("main h1")).toContainText(/екілік|Екілік/);
+});
+
+test("ссылка на урок открывается без онбординга", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/lesson/ns-1-bits");
+  await expect(page).toHaveURL(/\/lesson\/ns-1-bits/);
+  await expect(page.getByText("Побег из компьютера")).toBeVisible();
+  expect(errors).toEqual([]);
 });

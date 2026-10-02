@@ -280,6 +280,12 @@ body {
 .prose-app li + li {
   margin-top: 0.25em;
 }
+/* Без лигатур в коде: иначе у JetBrains Mono «==» и «<=» выглядят как «═» и «≤». */
+code,
+pre,
+.font-mono {
+  font-variant-ligatures: none;
+}
 .prose-app code {
   font-family: var(--font-mono);
   font-size: 0.92em;

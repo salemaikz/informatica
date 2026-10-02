@@ -1,16 +1,25 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, SquareTerminal } from "lucide-react";
 import { m } from "motion/react";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { createContext, use, useEffect, useState } from "react";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { springBouncy } from "@/components/motion/presets";
 import { cn } from "@/lib/cn";
 import type { Scene } from "@/lib/types";
+import { pythonHref } from "@/lib/python/codec";
 import { useT } from "@/i18n/useT";
 import { TOKEN_CLASS, tokenizeLine, type CodeLang } from "./highlight";
 
 type CodeScene = Extract<Scene, { kind: "code" }>;
+
+/**
+ * Показывать ли в сцене Python ссылку «Запустить в Python». null — по умолчанию: только если вывод программы
+ * уже показан в сцене (трассировка, разобранный пример). В заданиях «Что выведет программа?» и на пробном ЕНТ
+ * вывода в сцене нет — запуск выдал бы ответ. Обёртка с true/false задаёт явно (теория, разбор, экзамен).
+ */
+export const CodeRunContext = createContext<boolean | null>(null);
 
 /** Одна строка кода с подсветкой синтаксиса; отступы сохраняются (white-space: pre). */
 function CodeText({ line, lang }: { line: string; lang: CodeLang }) {
@@ -88,6 +97,7 @@ const toMap = (vars: CodeScene["vars"]): Record<string, string> => Object.fromEn
 export function CodeScene({ scene }: { scene: CodeScene }) {
   const { t } = useT();
   const reduce = useReduceMotion();
+  const runnable = use(CodeRunContext) ?? scene.output !== undefined;
   const vars = scene.vars;
   const sig = JSON.stringify(vars ?? null);
 
@@ -108,6 +118,19 @@ export function CodeScene({ scene }: { scene: CodeScene }) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5">
       <CodeBlock lines={scene.lines} lang={scene.lang} active={scene.active} marks={scene.marks} />
+
+      {scene.lang === "python" && runnable && (
+        // Новая вкладка: урок не прерывается. Видимая высота 32 px, зона касания (after) — 44 px.
+        <Link
+          href={pythonHref(scene.lines.join("\n"))}
+          target="_blank"
+          rel="noopener"
+          className="relative -mt-1 inline-flex h-8 items-center gap-1.5 self-end rounded-lg px-2 text-[13px] font-bold text-primary after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] hover:bg-primary-soft print:hidden"
+        >
+          <SquareTerminal size={15} aria-hidden />
+          {t("python.scene.run")}
+        </Link>
+      )}
 
       {vars && vars.length > 0 && (
         <div>

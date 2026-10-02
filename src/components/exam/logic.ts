@@ -19,6 +19,7 @@ import {
   type ExamQuestion,
 } from "@/lib/exam";
 import { ENT_TOPICS } from "@/content/ent-topics";
+import { withChallenge, type Challenge } from "@/lib/challenge";
 import type { ExamSummary } from "@/lib/store";
 import { plain, tx } from "@/lib/text";
 import type { EntTopicId, Lang, Lesson, Text } from "@/lib/types";
@@ -75,10 +76,11 @@ export function parseRunParams(sp: Record<string, string | string[] | undefined>
 }
 
 /** Относительная ссылка на вариант. */
-export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = []): string {
+export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = [], challenge?: Challenge): string {
   const q = new URLSearchParams({ kind, seed: String(seed >>> 0) });
   if (kind === "topic" && topics.length) q.set("topics", topics.join(","));
-  return `/exam/run?${q.toString()}`;
+  const link = `/exam/run?${q.toString()}`;
+  return challenge ? withChallenge(link, challenge) : link;
 }
 
 /** Выбор тем чипами: включить/выключить, не больше MAX_TOPIC_PICK (лишний выбор игнорируется). */

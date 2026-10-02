@@ -11,6 +11,13 @@ import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
 import { SwRegister } from "@/components/app/SwRegister";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
+import { useGuestLang } from "@/components/onboarding/useGuestLang";
+
+/** Гость по открытой ссылке (без онбординга): язык из настроек браузера. Монтируется только после гидратации стора. */
+function GuestLang() {
+  useGuestLang();
+  return null;
+}
 
 function useHydrated(): boolean {
   return useSyncExternalStore(
@@ -65,6 +72,7 @@ export function Providers({ children }: { children: ReactNode }) {
       {/* Офлайн: кэш сервис-воркера (только production) и полоса «Нет интернета». */}
       <SwRegister />
       <OfflineBanner />
+      <GuestLang />
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />

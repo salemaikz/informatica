@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ClipboardCheck, Link2, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
+import { ChevronRight, ClipboardCheck, Link2, ListChecks, Play, Printer, Timer, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -84,6 +84,8 @@ export function ExamHub() {
   const [now] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
   const [shareKind, setShareKind] = useState<Extract<ExamKind, "mini" | "full">>("mini");
+  // Номер варианта для печати: один на открытие экрана, чтобы ссылка не менялась при каждой перерисовке.
+  const [printSeed] = useState(() => randomSeed());
   const [shared, setShared] = useState<{ url: string; how: "shared" | "copied" | "manual" } | null>(null);
 
   useEffect(() => {
@@ -303,6 +305,11 @@ export function ExamHub() {
               {t("exam.share.button")}
             </Button>
           </div>
+          {!empty && (
+            <ButtonLink href={`/exam/print?kind=${shareKind}&seed=${printSeed}&lang=${lang}`} variant="secondary" block icon={<Printer size={18} aria-hidden />}>
+              {t("share.print.button")}
+            </ButtonLink>
+          )}
           {shared && (
             <div className="flex flex-col gap-1.5" role="status">
               <p className="text-sm font-extrabold text-success-strong">{t(`exam.share.${shared.how}` as DictKey)}</p>

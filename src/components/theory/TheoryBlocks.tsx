@@ -14,6 +14,7 @@ import { WorkedView } from "@/components/lesson/steps/WorkedView";
 import { SceneView } from "@/components/scenes/SceneView";
 import { Visual } from "@/components/visuals/Visuals";
 import { LessonVideo } from "@/videos/LessonVideo";
+import { CodeRunContext } from "@/components/scenes/CodeScene";
 
 export type WorkedMode = "all" | "steps";
 
@@ -50,7 +51,11 @@ function TheoryBlock({ step }: { step: TheoryStep }) {
   return (
     <>
       <BlockHead icon={<BookOpen size={14} />} label={t("lesson.theory")} title={l(step.title)} />
-      {step.scene && <SceneView scene={step.scene} />}
+      {step.scene && (
+        <CodeRunContext value={true}>
+          <SceneView scene={step.scene} />
+        </CodeRunContext>
+      )}
       {step.visual && <Visual id={step.visual} />}
       <Markdown className={cn("text-[17px]", MD_WIDE)}>{l(step.body)}</Markdown>
     </>
@@ -70,7 +75,11 @@ function WorkedAll({ step }: { step: WorkedStep }) {
               <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-white">{i + 1}</span>
               <Markdown className={cn("min-w-0 flex-1 text-[17px]", MD_WIDE)}>{l(s.text)}</Markdown>
             </div>
-            {s.scene && <SceneView scene={s.scene} />}
+            {s.scene && (
+              <CodeRunContext value={true}>
+                <SceneView scene={s.scene} />
+              </CodeRunContext>
+            )}
           </li>
         ))}
       </ol>
@@ -96,7 +105,9 @@ function WorkedSteps({ step, revealed, onReveal }: { step: WorkedStep; revealed:
   const more = revealed < step.steps.length;
   return (
     <>
-      <WorkedView step={step} revealed={revealed} />
+      <CodeRunContext value={true}>
+        <WorkedView step={step} revealed={revealed} />
+      </CodeRunContext>
       {more && (
         <Button size="md" onClick={onReveal} className="self-start">
           {t("lesson.nextStep")}
@@ -142,7 +153,11 @@ export function InfoBlock({
   return (
     <section id={step.id} className="flex min-w-0 scroll-mt-20 flex-col gap-4 rounded-3xl border-2 border-border bg-surface p-4 sm:p-5">
       {step.type === "theory" && <TheoryBlock step={step} />}
-      {step.type === "story" && <StoryView step={step} />}
+      {step.type === "story" && (
+        <CodeRunContext value={true}>
+          <StoryView step={step} />
+        </CodeRunContext>
+      )}
       {step.type === "worked" && (mode === "all" ? <WorkedAll step={step} /> : <WorkedSteps step={step} revealed={revealed} onReveal={onReveal} />)}
       {step.type === "explore" && <ExploreBlock step={step} />}
       {step.type === "video" && (

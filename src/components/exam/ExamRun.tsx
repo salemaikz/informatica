@@ -1,13 +1,14 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Flag, LayoutGrid, Play, TimerOff, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
+import { decodeChallenge, type Challenge } from "@/lib/challenge";
 import { buildExam, EXAM_TIME_LIMIT_SEC, type ExamKind, type ExamPaper } from "@/lib/exam";
 import {
   buildSummary,
@@ -31,6 +32,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
+import { ChallengeBanner } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { formatClock, randomSeed, remainingSec } from "./logic";
 import { Navigator } from "./Navigator";
@@ -64,6 +66,9 @@ function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[]) {
 export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
   const { t } = useT();
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
+  // Вызов друга: `ch=` из адреса (недоверенное — decodeChallenge проверяет и обрезает).
+  const chParam = useSearchParams().get("ch");
+  const challenge = useMemo(() => decodeChallenge(chParam), [chParam]);
   // Массив из пропсов может прийти новым при той же строке — эффект зависит от строки, а не от ссылки.
   const topicsKey = topicsProp.join(",");
   const topics = useMemo(() => (topicsKey ? (topicsKey.split(",") as EntTopicId[]) : []), [topicsKey]);
@@ -104,6 +109,7 @@ export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
         <Intro
           paper={phase.paper}
           topics={phase.topics}
+          challenge={challenge}
           onStart={async () => {
             if (phase.replaces) await deleteAttempt(phase.replaces.id);
             const now = Date.now();
@@ -117,6 +123,7 @@ export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
               current: 0,
               startedAt: now,
               elapsedMs: 0,
+              challenge: challenge ?? undefined,
             };
             await createAttempt(attempt);
             await setActiveAttempt(attempt.id);
@@ -158,7 +165,7 @@ function ResumeChoice({ active, onContinue, onFresh }: { active: ExamAttempt; on
   );
 }
 
-function Intro({ paper, topics, onStart }: { paper: ExamPaper; topics: EntTopicId[]; onStart: () => Promise<void> }) {
+function Intro({ paper, topics, challenge, onStart }: { paper: ExamPaper; topics: EntTopicId[]; challenge: Challenge | null; onStart: () => Promise<void> }) {
   const { t, l } = useT();
   const [busy, setBusy] = useState(false);
   const empty = paper.items.length === 0;
@@ -174,6 +181,7 @@ function Intro({ paper, topics, onStart }: { paper: ExamPaper; topics: EntTopicI
           </p>
         )}
       </div>
+      {challenge && <ChallengeBanner challenge={challenge} />}
       {empty ? (
         <p className="rounded-2xl border-2 border-warning/40 bg-warning-soft p-3.5 font-semibold">{t("exam.run.emptyPaper")}</p>
       ) : (

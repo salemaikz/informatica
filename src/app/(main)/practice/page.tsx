@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, ChevronDown, ChevronRight, Repeat, RotateCcw, Timer, Trophy } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Repeat, RotateCcw, SquareTerminal, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
@@ -102,6 +102,18 @@ export default function PracticePage() {
         <span className="min-w-0 flex-1">
           <span className="block text-lg font-extrabold">{t("modes.prac.exam")}</span>
           <span className="block text-sm font-semibold text-muted">{t("modes.prac.exam.desc")}</span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-muted" />
+      </Link>
+
+      {/* Python-песочница: запуск кода и пошаговое выполнение. */}
+      <Link href="/python" className="flex items-center gap-4 rounded-3xl border-2 border-border bg-surface p-4 hover:bg-surface-2 active:translate-y-0.5">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <SquareTerminal size={26} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg font-extrabold">{t("python.title")}</span>
+          <span className="block text-sm font-semibold text-muted">{t("python.practiceCard")}</span>
         </span>
         <ChevronRight size={20} className="shrink-0 text-muted" />
       </Link>

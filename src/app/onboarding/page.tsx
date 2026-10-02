@@ -11,6 +11,10 @@ import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MascotSays } from "@/components/mascot/Mascot";
+import { FirstTasks } from "@/components/onboarding/FirstTasks";
+import { FIRST_TASKS } from "@/components/onboarding/logic";
+import { useGuestLang } from "@/components/onboarding/useGuestLang";
+import { LegalConsentNote } from "@/components/legal/LegalConsentNote";
 
 const GRADES: Grade[] = ["8", "9", "10", "11", "other"];
 const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
@@ -62,11 +66,20 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(profile.name);
 
-  const total = 6;
-  const canNext = step !== 1 || name.trim().length > 0;
+  const total = 7;
+  // Язык по умолчанию — из navigator.language (один раз на устройстве).
+  useGuestLang();
+  // Сколько мини-заданий уже решено (XP за каждое — один раз, даже если вернуться к выбору языка).
+  const [solved, setSolved] = useState(0);
+  // Уже прошедший онбординг или гость с прогрессом (пришёл из итогов урока) — задания не повторяем.
+  const [skipTasks] = useState(() => {
+    const s = useApp.getState();
+    return s.onboarded || s.xp > 0;
+  });
+  const tasksDone = skipTasks || solved >= FIRST_TASKS.length;
 
   const next = () => {
-    if (step === 1) updateProfile({ name: name.trim().slice(0, 30) });
+    if (step === 2) updateProfile({ name: name.trim().slice(0, 30) });
     if (step < total - 1) setStep(step + 1);
     else {
       completeOnboarding({ name: name.trim().slice(0, 30) });
@@ -76,7 +89,7 @@ export default function OnboardingPage() {
 
   const setLang = (lang: Lang) => {
     updateProfile({ lang });
-    setStep(1);
+    setStep(tasksDone ? 2 : 1);
   };
 
   return (
@@ -84,8 +97,8 @@ export default function OnboardingPage() {
       <div className="flex h-12 items-center gap-3">
         <button
           type="button"
-          onClick={() => setStep(Math.max(0, step - 1))}
-          className={clsx("flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2", step === 0 && "invisible")}
+          onClick={() => setStep(step === 2 ? 0 : Math.max(0, step - 1))}
+          className={clsx("flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2", step === 0 && "invisible")}
           aria-label={t("common.back")}
         >
           <ChevronLeft size={26} />
@@ -116,17 +129,18 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 1 && (
+        {step === 1 && <FirstTasks solved={solved} onSolved={setSolved} onDone={() => setStep(2)} />}
+
+        {step === 2 && (
           <>
             <MascotSays mood="happy" size={88}>
               <span className="block">{t("onb.hello")}</span>
-              <span className="text-muted">{t("onb.name.title")}</span>
+              <span className="text-muted">{t("onb.name.title")} · {t("onboard.name.optional")}</span>
             </MascotSays>
             <input
-              autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && canNext && next()}
+              onKeyDown={(e) => e.key === "Enter" && next()}
               placeholder={t("onb.name.placeholder")}
               maxLength={30}
               className="h-14 rounded-2xl border-2 border-border bg-surface px-4 text-xl font-bold outline-none focus:border-primary"
@@ -134,7 +148,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <>
             <MascotSays size={88}>{t("onb.grade.title")}</MascotSays>
             <div className="grid grid-cols-2 gap-3">
@@ -147,7 +161,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <>
             <MascotSays size={88}>{t("onb.goal.title")}</MascotSays>
             <div className="flex flex-col gap-3">
@@ -161,7 +175,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <>
             <MascotSays mood="thinking" size={88}>
               {t("onb.style.title")}
@@ -180,7 +194,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <>
             <MascotSays mood="happy" size={88}>
               {t("onb.daily.title")}
@@ -197,11 +211,13 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      {step > 0 && (
-        <Button size="lg" block disabled={!canNext} onClick={next} className="mt-6">
+      {step > 1 && (
+        <Button size="lg" block onClick={next} className="mt-6">
           {step === total - 1 ? t("onb.finish") : t("common.continue")}
         </Button>
       )}
+      {/* Согласие с условиями — на последнем шаге, перед «Поехали». */}
+      {step === total - 1 && <LegalConsentNote className="mt-3" />}
     </div>
   );
 }
