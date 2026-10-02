@@ -50,7 +50,8 @@ describe("стор: работа над ошибками", () => {
       accuracy: 1,
     };
     expect(useApp.getState().finishSession(base).bonusXp).toBe(40);
-    expect(useApp.getState().finishSession({ ...base, skipped: 1 }).bonusXp).toBe(20);
+    // Другой урок: повтор того же урока дал бы меньше XP (lib/review.ts).
+    expect(useApp.getState().finishSession({ ...base, lessonId: "ns-2-read", skipped: 1 }).bonusXp).toBe(20);
   });
 
   it("refundAi возвращает обращение", () => {

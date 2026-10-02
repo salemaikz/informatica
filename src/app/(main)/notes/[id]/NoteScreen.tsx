@@ -14,21 +14,32 @@ export function NoteScreen({ id }: { id: string }) {
   const { t, l, lang } = useT();
   const lesson = id === "general" ? undefined : getLesson(id);
   const completed = useApp((s) => !!s.lessons[id]);
-  const note = useApp((s) => s.notes[id]);
-  const setOwnNote = useApp((s) => s.setOwnNote);
-  const removeSavedNote = useApp((s) => s.removeSavedNote);
-  const [draft, setDraft] = useState(note?.own ?? "");
+  // Временная версия на конспектах 2.0 (страница переделывается в этапе 3, волна 2).
+  const lessonKey = id === "general" ? undefined : id;
+  const allNotes = useApp((s) => s.notebook.notes);
+  const ownNote = allNotes.find((n) => n.source === "own" && n.lessonId === lessonKey);
+  const saved = allNotes.filter((n) => n.source === "ai" && n.lessonId === lessonKey);
+  const note = { own: ownNote?.body ?? "", saved: saved.map((n) => ({ id: n.id, text: n.body, at: n.createdAt })) };
+  const setOwnNote = (_key: string, text: string) => {
+    const existing = useApp.getState().notebook.notes.find((n) => n.source === "own" && n.lessonId === lessonKey);
+    if (existing) useApp.getState().updateNote(existing.id, { body: text });
+    else useApp.getState().createNote({ source: "own", body: text, lessonId: lessonKey });
+  };
+  const removeSavedNote = (_key: string, noteId: string) => useApp.getState().deleteNote(noteId);
+  const ownText = () => useApp.getState().notebook.notes.find((n) => n.source === "own" && n.lessonId === lessonKey)?.body ?? "";
+  const [draft, setDraft] = useState(note.own);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   // Автосохранение заметки через полсекунды после ввода.
   useEffect(() => {
-    if (draft === (useApp.getState().notes[id]?.own ?? "")) return;
+    if (draft === ownText()) return;
     const timer = setTimeout(() => {
       setOwnNote(id, draft.slice(0, 4000));
       setSavedAt(Date.now());
     }, 500);
     return () => clearTimeout(timer);
-  }, [draft, id, setOwnNote]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, id]);
 
   const title = lesson ? l(lesson.title) : t("notes.general");
   const locked = !!lesson && !completed;
@@ -64,7 +75,7 @@ export function NoteScreen({ id }: { id: string }) {
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => {
                 // Сохраняем сразу при уходе из поля (переход по ссылке не потеряет последние символы).
-                if (draft !== (useApp.getState().notes[id]?.own ?? "")) {
+                if (draft !== ownText()) {
                   setOwnNote(id, draft.slice(0, 4000));
                   setSavedAt(Date.now());
                 }

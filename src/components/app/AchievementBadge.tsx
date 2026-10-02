@@ -1,4 +1,4 @@
-import { Brain, CalendarCheck, Camera, Dumbbell, Flame, Gamepad2, Gem, GraduationCap, Sparkles, Star, Trophy, type LucideIcon } from "lucide-react";
+import { Brain, CalendarCheck, Camera, Crosshair, Dumbbell, Flame, Gamepad2, Gem, GraduationCap, NotebookPen, Sparkles, Star, Trophy, type LucideIcon } from "lucide-react";
 import type { AchievementIcon } from "@/lib/gamification";
 import { cn } from "@/lib/cn";
 
@@ -14,6 +14,8 @@ const ICONS: Record<AchievementIcon, LucideIcon> = {
   dumbbell: Dumbbell,
   gamepad: Gamepad2,
   brain: Brain,
+  target: Crosshair,
+  notebook: NotebookPen,
 };
 
 /** Значок достижения: рисованная иконка в золотом круге (серый — пока не получено). */

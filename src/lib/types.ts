@@ -462,6 +462,18 @@ export interface SessionResult {
 }
 
 export type Grade = "8" | "9" | "10" | "11" | "other";
+
+/** Цвет аватара-инициала (токены темы, см. components/app/Avatar.tsx). */
+export type AvatarColor = "primary" | "success" | "warning" | "danger" | "ai" | "gold" | "streak";
+
+/**
+ * Аватар ученика: буква имени на цветном круге, рисованный аватар из набора или своё фото
+ * (квадрат до 160×160, JPEG dataURL ≤ ~40 КБ — хранится в localStorage).
+ */
+export type AvatarConfig =
+  | { kind: "initial"; color: AvatarColor }
+  | { kind: "preset"; id: string }
+  | { kind: "photo"; data: string };
 export type Goal = "ent" | "school" | "interest";
 export type ExplainStyle = "short" | "examples" | "steps";
 export type Theme = "system" | "light" | "dark";

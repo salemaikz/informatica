@@ -32,6 +32,11 @@ export interface GameProps {
   sound: boolean;
   mode: GameMode;
   onFinish: (result: GameResult) => void;
+  /**
+   * Навыки, из которых брать задания (урок «игрой», тема из тренировки). Если не задано или пусто —
+   * игра сама берёт свои навыки по умолчанию (GameMeta.skills). Универсальные игры работают с любыми навыками банка.
+   */
+  skills?: SkillId[];
 }
 
 export interface GameMeta {
@@ -47,6 +52,11 @@ export interface GameMeta {
   /** CSS-цвет иконки на плитке. */
   ink: string;
   skills: SkillId[];
+  /**
+   * Универсальная игра на банке заданий: подходит к любому уроку, у навыков которого есть нужная форма
+   * (question / statement / pair / short — lib/bank). Для таких игр skills — навыки по умолчанию.
+   */
+  shape?: "question" | "statement" | "pair" | "short";
   /** Примерная длительность, сек. */
   durationSec: number;
 }

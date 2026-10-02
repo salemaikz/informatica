@@ -10,9 +10,10 @@ import { useT } from "@/i18n/useT";
 export default function NotesPage() {
   const { t, l } = useT();
   const lessons = useApp((s) => s.lessons);
-  const notes = useApp((s) => s.notes);
-  const general = notes.general;
-  const generalCount = (general?.saved.length ?? 0) + (general?.own.trim() ? 1 : 0);
+  // Временная версия на конспектах 2.0 (страница переделывается в этапе 3, волна 2).
+  const all = useApp((s) => s.notebook.notes);
+  const countFor = (key: string | undefined) => all.filter((n) => n.lessonId === key).length;
+  const generalCount = countFor(undefined);
 
   return (
     <div className="flex flex-col gap-5">
@@ -39,8 +40,7 @@ export default function NotesPage() {
           <ul className="flex flex-col gap-2">
             {unit.lessons.map((ref) => {
               const open = !!lessons[ref.id];
-              const n = notes[ref.id];
-              const extra = (n?.saved.length ?? 0) + (n?.own.trim() ? 1 : 0);
+              const extra = countFor(ref.id);
               return (
                 <li key={ref.id}>
                   <Link

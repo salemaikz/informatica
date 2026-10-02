@@ -3,6 +3,7 @@ import type { AppState } from "./store";
 import { liveStreak, levelInfo } from "./gamification";
 import { masteryLevel } from "./mastery";
 import { todayKey, tx } from "./text";
+import { ownNotesText } from "./notebook";
 import { skillById } from "@/content/skills";
 import { LESSONS } from "@/content/course";
 
@@ -19,11 +20,7 @@ export function buildStudentContext(s: AppState): StudentContext {
     if (level === "weak") weak.push(label);
     if (level === "mastered") strong.push(label);
   }
-  const notes = Object.values(s.notes)
-    .map((n) => n.own.trim())
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 700);
+  const notes = ownNotesText(s.notebook, 700);
   return {
     name: s.profile.name,
     lang,

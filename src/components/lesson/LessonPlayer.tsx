@@ -5,7 +5,7 @@ import { BookOpen, Check, Clapperboard, Eye, Handshake, Hand, Lightbulb, Minus, 
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AnswerRecord, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
+import type { AnswerRecord, Lang, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
@@ -114,6 +114,17 @@ function RevealCard({ scene }: { scene: Scene }) {
 }
 
 /** Кнопка «Спросить Бита» под теорией и другими информационными шагами. */
+/** Статический разбор выбранного неверного варианта (choice / multi) или null. */
+function wrongReason(q: QuestionStep, a: Answer | null, lang: Lang): string | null {
+  if (!a) return null;
+  let idx = -1;
+  if (q.type === "choice" && a.type === "choice") idx = a.index;
+  if (q.type === "multi" && a.type === "multi") idx = a.indices.find((i) => !q.correct.includes(i)) ?? -1;
+  if (idx < 0 || (q.type !== "choice" && q.type !== "multi")) return null;
+  const why = q.whyWrong?.[idx];
+  return why ? tx(why, lang) : null;
+}
+
 function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -376,6 +387,12 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, ai, session]);
 
+  // Разбор выбранного неверного варианта (choice/multi) — показываем бесплатно, до ИИ.
+  const whyWrongText = useMemo(
+    () => (phase === "feedback" && question && result && !result.correct ? wrongReason(question, answer, lang) : null),
+    [phase, question, result, answer, lang],
+  );
+
   // Контекст для ИИ: задание (с ответом, если ученик уже ответил) или теория текущего шага.
   const taskCtx = useMemo<TaskContext | null>(() => {
     if (step.type === "theory") return { prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
@@ -401,8 +418,12 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       given: result?.given,
       explanation: plain(tx(question.explanation, lang)),
       answered: phase === "feedback",
+      // Лестница подсказок: бесплатное (hint автора, разбор неверного варианта) показывается до ИИ.
+      hint: question.hint ? plain(tx(question.hint, lang)) : undefined,
+      whyWrong: whyWrongText ? plain(whyWrongText) : undefined,
+      stepKey: question.id,
     };
-  }, [step, question, lang, result, phase]);
+  }, [step, question, lang, result, phase, whyWrongText]);
   const askSuggestions: DictKey[] = !question
     ? ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"]
     : phase === "feedback"
@@ -546,6 +567,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
               )}
             </div>
             <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">{l(question.prompt)}</h1>
+            {/* Схема-условие: код программы, таблица, логическая схема. */}
+            {question.scene && <SceneView scene={question.scene} />}
             <Shake active={phase === "feedback" && !!result && !result.correct && SHAKE_AREA.has(question.type)} strength={6}>
               <QuestionView
                 key={item.key}
@@ -628,6 +651,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                         {t("fb.correctAnswer")} <span className="font-mono">{result.expected}</span>
                       </p>
                     )}
+                    {whyWrongText && <p className="mt-1 text-[15px] font-extrabold">{whyWrongText}</p>}
                     <p className="mt-1 text-[15px] font-semibold opacity-90">{l(question.explanation)}</p>
                   </>
                 )}

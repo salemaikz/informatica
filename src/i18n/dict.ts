@@ -11,6 +11,7 @@ import { canvasDict } from "./parts/canvas";
 import { videoDict } from "./parts/video";
 import { aiDict } from "./parts/ai";
 import { gamesDict } from "./parts/games";
+import { scenesDict } from "./parts/scenes";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -447,6 +448,7 @@ export const dict = {
   ...videoDict,
   ...aiDict,
   ...gamesDict,
+  ...scenesDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

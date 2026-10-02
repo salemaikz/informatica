@@ -49,31 +49,70 @@ export function levelTitle(level: number): L {
 
 // ---------- Серия дней ----------
 
+/** Заморозка серии: зарабатывается за каждые 7 дней подряд (не покупается), не больше двух в запасе. */
+export const STREAK_FREEZE = { every: 7, max: 2 } as const;
+
 export interface Streak {
   current: number;
   best: number;
   lastDay: string | null;
+  /** Заморозки в запасе: каждая спасает серию при одном пропущенном дне. */
+  freezes?: number;
+  /** Дни, которые «спасла» заморозка (последние 10) — для календаря. */
+  frozenDays?: string[];
 }
 
-/** Обновляет серию при активности в день `today`. */
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Обновляет серию при активности в день `today`.
+ * Пропущенные дни закрываются заморозками, если их хватает; иначе серия начинается заново.
+ */
 export function bumpStreak(s: Streak, today: string): Streak {
   if (s.lastDay === today) return s;
+  const freezes = s.freezes ?? 0;
   const gap = s.lastDay ? dayDiff(s.lastDay, today) : Infinity;
-  const current = gap === 1 ? s.current + 1 : 1;
-  return { current, best: Math.max(s.best, current), lastDay: today };
+  const missed = gap - 1;
+  let current: number;
+  let left = freezes;
+  let frozen = s.frozenDays ?? [];
+  if (gap === 1) {
+    current = s.current + 1;
+  } else if (Number.isFinite(gap) && missed >= 1 && missed <= freezes) {
+    current = s.current + 1;
+    left = freezes - missed;
+    const saved = Array.from({ length: missed }, (_, i) => addDays(s.lastDay!, i + 1));
+    frozen = [...frozen, ...saved].slice(-10);
+  } else {
+    current = 1;
+  }
+  // Новая заморозка за каждые 7 дней подряд.
+  if (current > s.current && current % STREAK_FREEZE.every === 0) left = Math.min(STREAK_FREEZE.max, left + 1);
+  return { current, best: Math.max(s.best, current), lastDay: today, freezes: left, frozenDays: frozen };
 }
 
-/** Актуальная серия на сегодня: если пропущен день — 0. */
+/** Актуальная серия на сегодня: если пропущено больше дней, чем есть заморозок, — 0. */
 export function liveStreak(s: Streak, today: string): number {
   if (!s.lastDay) return 0;
   const gap = dayDiff(s.lastDay, today);
-  return gap <= 1 ? s.current : 0;
+  return gap - 1 <= (s.freezes ?? 0) ? s.current : 0;
+}
+
+/** Серия под угрозой: сегодня ещё не занимались, а серия есть (её спасёт только занятие сегодня или заморозка). */
+export function streakAtRisk(s: Streak, today: string): boolean {
+  return s.lastDay !== today && liveStreak(s, today) > 0;
 }
 
 // ---------- Достижения ----------
 
 /** Имя рисованной иконки (компонент — components/app/AchievementBadge.tsx). */
-export type AchievementIcon = "graduation" | "gem" | "flame" | "calendar" | "trophy" | "star" | "sparkles" | "camera" | "dumbbell" | "gamepad" | "brain";
+export type AchievementIcon = "graduation" | "gem" | "flame" | "calendar" | "trophy" | "star" | "sparkles" | "camera" | "dumbbell" | "gamepad" | "brain" | "target" | "notebook";
 
 export interface AchievementDef {
   id: string;
@@ -153,6 +192,21 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     },
   },
 ];
+
+ACHIEVEMENTS.push(
+  {
+    id: "exam_first",
+    icon: "target",
+    title: { ru: "Пробный старт", kk: "Сынақ бастамасы" },
+    description: { ru: "Пройди мини-ЕНТ или пробный ЕНТ", kk: "Шағын ҰБТ немесе сынақ ҰБТ тапсыр" },
+  },
+  {
+    id: "explorer",
+    icon: "notebook",
+    title: { ru: "Конспектер", kk: "Конспект шебері" },
+    description: { ru: "Создай свой конспект", kk: "Өз конспектіңді жаса" },
+  },
+);
 
 export function achievementById(id: string): AchievementDef | undefined {
   return ACHIEVEMENTS.find((a) => a.id === id);
