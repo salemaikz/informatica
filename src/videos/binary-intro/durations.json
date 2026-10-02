@@ -1,0 +1,20 @@
+{
+  "ru": {
+    "title": 5.78,
+    "lamps": 13.7,
+    "decimal": 11.66,
+    "weights": 10.97,
+    "example": 12.17,
+    "division": 14.88,
+    "outro": 4.73
+  },
+  "kk": {
+    "title": 5.09,
+    "lamps": 13.66,
+    "decimal": 10.25,
+    "weights": 11.45,
+    "example": 8.98,
+    "division": 14.98,
+    "outro": 4.18
+  }
+}

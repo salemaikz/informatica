@@ -1,0 +1,225 @@
+"use client";
+
+import clsx from "clsx";
+import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import type { SessionResult } from "@/lib/types";
+import type { LessonFeedbackResponse } from "@/lib/ai-types";
+import { useApp } from "@/lib/store";
+import { lessonFeedback } from "@/lib/ai";
+import { buildStudentContext } from "@/lib/student-context";
+import { achievementById } from "@/lib/gamification";
+import { masteryLevel } from "@/lib/mastery";
+import { skillById } from "@/content/skills";
+import { useT } from "@/i18n/useT";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { Markdown } from "@/components/Markdown";
+import { Mascot } from "@/components/mascot/Mascot";
+
+export const MASTERY_COLOR = {
+  new: "var(--border)",
+  weak: "var(--danger)",
+  progress: "var(--warning)",
+  mastered: "var(--success)",
+} as const;
+
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export type FeedbackState = { status: "loading" } | { status: "done"; data: LessonFeedbackResponse } | { status: "failed" };
+
+/**
+ * Запрашивает у ИИ отзыв об уроке и обновляет «память наставника».
+ * Вызывается из обработчика завершения урока (не из эффекта), поэтому запрос уходит ровно один раз.
+ */
+export function requestLessonFeedback(result: SessionResult, onState: (s: FeedbackState) => void) {
+  const app = useApp.getState();
+  if (!app.spendAi()) {
+    onState({ status: "failed" });
+    return;
+  }
+  onState({ status: "loading" });
+  const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
+  const skills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
+  lessonFeedback({
+    context: buildStudentContext(app),
+    lesson: result.title,
+    accuracy: result.accuracy,
+    durationSec: result.durationSec,
+    mistakes: mistakes.slice(0, 8).map((m) => ({ q: m.prompt, given: m.given, expected: m.expected })),
+    skills: skills.map((id) => ({ title: skillById(id)?.title[app.profile.lang] ?? id, mastery: app.skills[id]?.mastery ?? 0 })),
+  })
+    .then((data) => {
+      if (data.memory) useApp.getState().setMemory(data.memory);
+      onState({ status: "done", data });
+    })
+    .catch(() => onState({ status: "failed" }));
+}
+
+export function Results({
+  kind,
+  lessonId,
+  title,
+  result,
+  bonusXp,
+  achievements,
+  feedback,
+}: {
+  kind: "lesson" | "drill";
+  lessonId?: string;
+  title: string;
+  result: SessionResult;
+  bonusXp: number;
+  achievements: string[];
+  feedback: FeedbackState;
+}) {
+  const router = useRouter();
+  const { t, l } = useT();
+  const skills = useApp((s) => s.skills);
+
+  const accuracy = Math.round(result.accuracy * 100);
+  const totalXp = result.xp + bonusXp;
+  const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
+  const sessionSkills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
+
+  useEffect(() => {
+    void import("canvas-confetti").then(({ default: confetti }) => {
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.35 }, colors: ["#1a91d6", "#21b26f", "#f0b400", "#7656f5"] });
+    });
+  }, []);
+
+  const staticFeedback = accuracy >= 90 ? t("res.static.great") : accuracy >= 60 ? t("res.static.good") : t("res.static.ok");
+  const accTone = accuracy >= 80 ? "text-success" : accuracy >= 50 ? "text-warning-strong" : "text-danger";
+
+  return (
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 px-4 pb-32 pt-8">
+      <div className="flex flex-col items-center gap-2 text-center animate-pop">
+        <Mascot mood="celebrate" size={112} />
+        <h1 className="text-3xl font-extrabold">{kind === "lesson" ? t("res.lesson") : t("res.drill")}</h1>
+        <p className="font-semibold text-muted">{title}</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { icon: <Zap size={18} />, label: t("res.xp"), value: `+${totalXp}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
+          { icon: <Target size={18} />, label: t("res.accuracy"), value: `${accuracy}%`, cls: clsx("border-success", accTone), bg: "bg-success" },
+          { icon: <Clock size={18} />, label: t("res.time"), value: formatTime(result.durationSec), cls: "border-primary text-primary", bg: "bg-primary" },
+        ].map((s, i) => (
+          <div key={i} style={{ animationDelay: `${150 + i * 120}ms`, animationFillMode: "both" }} className={clsx("overflow-hidden rounded-2xl border-2 animate-pop", s.cls)}>
+            <div className={clsx("flex items-center justify-center gap-1 py-1 text-xs font-extrabold text-white", s.bg)}>
+              {s.icon} {s.label}
+            </div>
+            <div className="bg-surface py-3 text-center text-2xl font-extrabold">{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {achievements.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {achievements.map((id) => {
+            const a = achievementById(id);
+            if (!a) return null;
+            return (
+              <div key={id} className="flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold-soft px-4 py-3 animate-pop">
+                <span className="text-3xl">{a.icon}</span>
+                <div>
+                  <p className="text-xs font-extrabold uppercase text-warning-strong">{t("res.achievement")}</p>
+                  <p className="font-extrabold">{l(a.title)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-3xl border-2 border-ai/30 bg-ai-soft p-4 sm:p-5">
+        <p className="mb-2 flex items-center gap-1.5 font-extrabold text-ai">
+          <Sparkles size={18} /> {t("res.ai")}
+        </p>
+        {feedback.status === "loading" && (
+          <div className="flex flex-col gap-2" aria-busy>
+            <div className="h-4 w-11/12 animate-pulse rounded bg-ai/15" />
+            <div className="h-4 w-9/12 animate-pulse rounded bg-ai/15" />
+          </div>
+        )}
+        {feedback.status === "done" && (
+          <div className="animate-fade-in">
+            <Markdown>{feedback.data.feedback}</Markdown>
+            {feedback.data.focus.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {feedback.data.focus.map((f, i) => (
+                  <li key={i} className="rounded-full bg-surface px-3 py-1 text-sm font-bold text-ai">
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {feedback.status === "failed" && <p className="font-semibold">{staticFeedback}</p>}
+      </div>
+
+      {sessionSkills.length > 0 && (
+        <Card>
+          <p className="mb-3 font-extrabold">{t("res.skills")}</p>
+          <div className="flex flex-col gap-3">
+            {sessionSkills.map((id) => {
+              const st = skills[id];
+              const lvl = masteryLevel(st);
+              return (
+                <div key={id}>
+                  <div className="mb-1 flex justify-between text-sm font-bold">
+                    <span>{skillById(id) ? l(skillById(id)!.title) : id}</span>
+                    <span style={{ color: MASTERY_COLOR[lvl] }}>{t(`mastery.${lvl}`)}</span>
+                  </div>
+                  <ProgressBar value={st?.mastery ?? 0} color={MASTERY_COLOR[lvl]} height={10} />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {kind === "lesson" && lessonId && (
+        <Link href={`/notes/${lessonId}`} className="flex items-center gap-3 rounded-3xl border-2 border-primary/40 bg-primary-soft px-4 py-3 font-bold text-primary">
+          <BookOpen size={22} />
+          <span className="flex-1">{t("res.conspect")}</span>
+          <span className="text-sm underline">{t("res.openConspect")}</span>
+        </Link>
+      )}
+
+      {mistakes.length > 0 && (
+        <Card>
+          <p className="mb-2 font-extrabold">{t("stats.mistakes")}</p>
+          <ul className="flex flex-col gap-2">
+            {mistakes.map((m, i) => (
+              <li key={i} className="rounded-xl bg-surface-2 px-3 py-2 text-sm">
+                <p className="font-semibold">{m.prompt}</p>
+                <p className="mt-1">
+                  <span className="font-bold text-danger line-through">{m.given || "—"}</span>
+                  <span className="mx-2 text-muted">→</span>
+                  <span className="font-mono font-bold text-success">{m.expected}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-bg pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+        <div className="mx-auto flex max-w-xl px-4">
+          <Button size="lg" block onClick={() => router.push(kind === "lesson" ? "/learn" : "/practice")} autoFocus>
+            {t("common.continue")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

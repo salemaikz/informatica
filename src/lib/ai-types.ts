@@ -1,0 +1,72 @@
+// Общие типы запросов к ИИ (клиент ↔ сервер).
+
+import type { Lang } from "./types";
+
+export interface StudentContext {
+  name: string;
+  lang: Lang;
+  grade: string;
+  goal: string;
+  style: string;
+  level: number;
+  xp: number;
+  streak: number;
+  weak: string[];
+  strong: string[];
+  mistakes: { q: string; given: string; expected: string }[];
+  memory: string;
+  notes: string;
+  lessons: string[];
+}
+
+/** Задание, к которому относится вопрос (подсказка / разбор ошибки). */
+export interface TaskContext {
+  prompt: string;
+  /** Варианты, если есть. */
+  options?: string[];
+  correct?: string;
+  given?: string;
+  explanation?: string;
+}
+
+export type TutorMode = "chat" | "hint" | "explain";
+
+export interface TutorRequest {
+  mode: TutorMode;
+  messages: { role: "user" | "assistant"; content: string }[];
+  context: StudentContext;
+  task?: TaskContext;
+  /** dataURL изображения для последнего сообщения. */
+  image?: string;
+}
+
+export interface CheckSolutionRequest {
+  lang: Lang;
+  context: StudentContext;
+  task: { prompt: string; reference: string; answer: string };
+  typedAnswer?: string;
+  image?: string;
+}
+
+export interface CheckSolutionResponse {
+  verdict: "correct" | "partial" | "incorrect" | "unreadable";
+  score: number;
+  feedback: string;
+  steps: { text: string; ok: boolean }[];
+  tip: string;
+}
+
+export interface LessonFeedbackRequest {
+  context: StudentContext;
+  lesson: string;
+  accuracy: number;
+  durationSec: number;
+  mistakes: { q: string; given: string; expected: string }[];
+  skills: { title: string; mastery: number }[];
+}
+
+export interface LessonFeedbackResponse {
+  feedback: string;
+  memory: string;
+  focus: string[];
+}

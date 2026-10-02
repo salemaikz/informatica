@@ -1,0 +1,113 @@
+"use client";
+
+import clsx from "clsx";
+import { Flame, Target, Zap } from "lucide-react";
+import Link from "next/link";
+import { useDaily, useLevel, useStreak } from "@/lib/hooks";
+import { levelTitle } from "@/lib/gamification";
+import { weakSkills } from "@/lib/mastery";
+import { useApp } from "@/lib/store";
+import { skillById } from "@/content/skills";
+import { useT } from "@/i18n/useT";
+import { Card } from "@/components/ui/Card";
+import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
+
+export function StreakChip() {
+  const { current, activeToday } = useStreak();
+  const { t } = useT();
+  return (
+    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
+      <Flame size={20} fill={activeToday ? "currentColor" : "none"} /> {current}
+    </span>
+  );
+}
+
+export function XpChip() {
+  const { xp } = useLevel();
+  return (
+    <span title="XP" className="flex items-center gap-1 font-extrabold text-warning-strong">
+      <Zap size={20} className="text-gold" fill="currentColor" /> {xp}
+    </span>
+  );
+}
+
+export function LevelChip() {
+  const { level } = useLevel();
+  const { t } = useT();
+  return (
+    <span title={t("stats.level")} className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-primary px-1.5 text-sm font-extrabold text-white">
+      {level}
+    </span>
+  );
+}
+
+export function DailyGoalCard({ compact }: { compact?: boolean }) {
+  const { t } = useT();
+  const { xp, goal, progress, done } = useDaily();
+  return (
+    <Card className={clsx("flex items-center gap-4", compact && "p-3 sm:p-4")}>
+      <Ring value={progress} color={done ? "var(--success)" : "var(--gold)"}>
+        <Target size={20} className={done ? "text-success" : "text-gold"} />
+      </Ring>
+      <div className="min-w-0 flex-1">
+        <p className="font-extrabold">{done ? t("learn.dailyDone") : t("learn.dailyGoal")}</p>
+        <p className="text-sm font-bold text-muted">
+          {xp} / {goal} XP
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+export function LevelCard() {
+  const { t, l } = useT();
+  const { level, current, needed, progress } = useLevel();
+  const { current: streak, best } = useStreak();
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl font-extrabold text-white shadow-[0_4px_0_var(--primary-strong)]">
+          {level}
+        </span>
+        <div className="flex-1">
+          <p className="font-extrabold">{l(levelTitle(level))}</p>
+          <p className="text-sm font-bold text-muted">
+            {current} / {needed} XP
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="flex items-center justify-end gap-1 text-lg font-extrabold text-streak">
+            <Flame size={18} fill="currentColor" /> {streak}
+          </p>
+          <p className="text-xs font-bold text-muted">{t("stats.best", { n: best })}</p>
+        </div>
+      </div>
+      <ProgressBar value={progress} color="var(--primary)" height={10} />
+    </Card>
+  );
+}
+
+export function WeakTopicsCard() {
+  const { t, l } = useT();
+  const skills = useApp((s) => s.skills);
+  const weak = weakSkills(skills).slice(0, 3);
+  if (!weak.length) return null;
+  return (
+    <Card className="border-danger/30">
+      <p className="mb-2 font-extrabold">{t("learn.weak.title")}</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {weak.map((id) => (
+          <span key={id} className="rounded-full bg-danger-soft px-3 py-1 text-sm font-bold text-danger">
+            {skillById(id) ? l(skillById(id)!.title) : id}
+          </span>
+        ))}
+      </div>
+      <Link
+        href="/drill?mode=smart"
+        className="flex h-11 items-center justify-center rounded-2xl bg-danger font-extrabold text-white shadow-[0_4px_0_var(--danger-strong)] active:translate-y-[3px] active:shadow-none"
+      >
+        {t("learn.weak.cta")}
+      </Link>
+    </Card>
+  );
+}
