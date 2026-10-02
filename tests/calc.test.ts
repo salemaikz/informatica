@@ -27,7 +27,7 @@ import {
   type CalcState,
   type Conversion,
 } from "@/lib/calc";
-import { loadScratch, sanitizePages, saveScratch } from "@/lib/scratch";
+import { loadScratch, MAX_SCRATCH_PAGES, sanitizePages, saveScratch } from "@/lib/scratch";
 
 const NUMBERS = [0, 1, 2, 7, 8, 10, 15, 16, 25, 100, 255, 256, 1000, 4095, 65535];
 
@@ -738,7 +738,7 @@ describe("calcPress", () => {
 });
 
 describe("scratch (сохранение черновика)", () => {
-  it("sanitizePages отбрасывает мусор и режет до 3 листов", () => {
+  it("sanitizePages отбрасывает мусор и режет до MAX_SCRATCH_PAGES листов", () => {
     expect(sanitizePages(null)).toEqual([]);
     expect(sanitizePages("x")).toEqual([]);
     const raw = [
@@ -747,11 +747,10 @@ describe("scratch (сохранение черновика)", () => {
       { id: "p3", text: 5 },
       { text: "no id" },
       { id: "p4", text: "x", image: "javascript:alert(1)", updatedAt: 1 },
-      { id: "p5", text: "x" },
-      { id: "p6", text: "x" },
+      ...Array.from({ length: MAX_SCRATCH_PAGES + 2 }, (_, i) => ({ id: `q${i}`, text: "x" })),
     ];
     const pages = sanitizePages(raw);
-    expect(pages.length).toBe(3);
+    expect(pages.length).toBe(MAX_SCRATCH_PAGES);
     expect(pages[0]).toEqual({ id: "p1", text: "abc", updatedAt: 5 });
     expect(pages[1].image).toBe("data:image/png;base64,AAA");
     expect(pages[2].id).toBe("p4");
@@ -769,8 +768,8 @@ describe("scratch (сохранение черновика)", () => {
     // отдаём копии: правка результата не портит память
     loaded[0].text = "изменено";
     expect((await loadScratch())[0].text).toBe("привет");
-    // не больше 3 листов
-    await saveScratch(Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, text: String(i), updatedAt: i })));
-    expect((await loadScratch()).length).toBe(3);
+    // не больше MAX_SCRATCH_PAGES листов
+    await saveScratch(Array.from({ length: MAX_SCRATCH_PAGES + 3 }, (_, i) => ({ id: `p${i}`, text: String(i), updatedAt: i })));
+    expect((await loadScratch()).length).toBe(MAX_SCRATCH_PAGES);
   });
 });

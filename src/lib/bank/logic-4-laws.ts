@@ -204,7 +204,7 @@ const RULES: Rule[] = [
     level: 2,
     lhs: (x, y) => or(x, and(x, y)),
     rhs: (x) => x,
-    alts: (x, y) => [x, and(x, or(x, y)), or(x, and(y, x)), not(not(x))],
+    alts: (x, y) => [x, and(x, or(x, y)), or(x, and(y, x)), and(x, or(y, x))],
   },
   {
     id: "absorb-and",
@@ -212,7 +212,7 @@ const RULES: Rule[] = [
     level: 2,
     lhs: (x, y) => and(x, or(x, y)),
     rhs: (x) => x,
-    alts: (x, y) => [x, or(x, and(x, y)), and(x, or(y, x)), not(not(x))],
+    alts: (x, y) => [x, or(x, and(x, y)), and(x, or(y, x)), or(x, and(y, x))],
   },
 ];
 
@@ -436,7 +436,15 @@ const counterText = (stem: Expr, opt: Expr): L => {
   };
 };
 
-const lawName = (l: L) => ({ ru: l.ru, kk: l.kk });
+const counterEq = (l: Expr, r: Expr): L => {
+  const d = firstDiff(l, r);
+  if (!d) return { ru: "Это равенство верно.", kk: "Бұл теңдік дұрыс." };
+  const as = assignText(d.vars, d.env);
+  return {
+    ru: `Неверно: при ${as} левая часть равна ${evalE(l, d.env)}, а правая — ${evalE(r, d.env)}.`,
+    kk: `Қате: ${as} болғанда сол жағы ${evalE(l, d.env)}, ал оң жағы ${evalE(r, d.env)}.`,
+  };
+};
 
 /** Выбор из 4: верный (равносильный stem) и три неверных; whyWrong — контрпримеры. */
 function makeChoice(rand: Rand, stem: Expr, correct: Expr, wrong: Expr[]) {
@@ -504,11 +512,8 @@ function trace(e: Expr, env: Env): string {
 
 /** Шаги упрощения: «Шаг 1 (закон): X = Y.» — формат разбирает независимая проверка. */
 function chainText(chain: { law: L; from: Expr; to: Expr }[]): L {
-  const line = (lang: "ru" | "kk") => chain.map((s, i) => `Шаг ${i + 1} (${s.law[lang]}): ${show(s.from)} = ${show(s.to)}.`).join(" ");
-  return {
-    ru: line("ru"),
-    kk: line("kk").replace(/Шаг/g, "Қадам"),
-  };
+  const line = (lang: "ru" | "kk", word: string) => chain.map((s, i) => `${word} ${i + 1} (${s.law[lang]}): ${show(s.from)} = ${show(s.to)}.`).join(" ");
+  return { ru: line("ru", "Шаг"), kk: line("kk", "Қадам") };
 }
 
 // ---------- Задания: уровень 1 ----------
@@ -548,7 +553,6 @@ function qEqTrue(rand: Rand, seed: number): QuestionStep {
   for (const r of CONST_RULES) pairs.push({ l: r.lhs(x), r: r.rhs(x) });
   for (const r of RULES.filter((r) => r.level === 1)) pairs.push({ l: r.lhs(x, y, y), r: r.rhs(x, y, y) });
   const good = pick(rand, pairs);
-  const vars = varList(good.l, good.r);
   // Неверные равенства: левая часть из другого закона, правая — «подмена» (мутация верной правой части).
   const bad: Eq[] = [];
   const seen = new Set<string>([`${show(good.l)} = ${show(good.r)}`]);
@@ -563,7 +567,6 @@ function qEqTrue(rand: Rand, seed: number): QuestionStep {
   }
   const all = shuffle([good, ...bad], rand);
   const idx = all.indexOf(good);
-  void vars;
   return {
     id: `g:${SKILL}:eqtrue:${compact(show(good.l))}:${seed}`,
     type: "choice",
@@ -575,7 +578,7 @@ function qEqTrue(rand: Rand, seed: number): QuestionStep {
     },
     options: all.map((e) => `${show(e.l)} = ${show(e.r)}`),
     correct: idx,
-    whyWrong: all.map((e, i): L | null => (i === idx ? null : counterText(e.l, e.r))),
+    whyWrong: all.map((e, i): L | null => (i === idx ? null : counterEq(e.l, e.r))),
     hint: HINT_EQTRUE,
     explanation: {
       ru: `Верно равенство ${show(good.l)} = ${show(good.r)}. В остальных есть набор значений, на котором части различаются.`,
@@ -658,7 +661,7 @@ function qNotEquiv(rand: Rand, seed: number): QuestionStep {
   const rule = pick(rand, RULES.filter((r) => r.alts && r.alts(v("A"), v("B"), v("C")).length >= 3));
   const [x, y, z] = ruleInputs(rand, 2);
   const stem = rule.lhs(x, y, z);
-  const alts = shuffle(rule.alts!(x, y, z).map(norm), rand);
+  const alts = shuffle(rule.alts!(x, y, z), rand);
   const good: Expr[] = [];
   const seen = new Set<string>([show(stem)]);
   for (const a of alts) {
@@ -742,7 +745,9 @@ function qSimplify(rand: Rand, seed: number): QuestionStep {
   const rule = pick(rand, SIMPLIFY);
   const [x, y] = simplifyInputs(rand);
   const { lhs, result, chain } = simplifyChain(rule, x, y);
-  const pool = shuffle(simplifyPool(x, y), rand).filter((e) => !equivalent(lhs, e));
+  const all = simplifyPool(x, y).filter((e) => !equivalent(lhs, e));
+  // Константы 0 и 1 — запасные варианты: сначала правдоподобные выражения.
+  const pool = [...shuffle(all.filter((e) => e.t !== "c"), rand), ...shuffle(all.filter((e) => e.t === "c"), rand)];
   const wrong = pool.slice(0, 3);
   const c = makeChoice(rand, lhs, result, wrong);
   const s = show(lhs);
@@ -924,7 +929,7 @@ function whoQuestion(rand: Rand, seed: number): ChoiceStep {
       const nm = optName(o);
       if (nm === null) return { ru: "Условие определяет расстановку однозначно — перебор всех шести вариантов даёт ровно одну подходящую.", kk: "Шарт орналасуды бірмәнді анықтайды — алты нұсқаны түгел қарағанда дәл біреуі сәйкес келеді." };
       const idx = names.indexOf(nm);
-      const perm = PERMS.find((p) => p[idx] === target && trueCount(pz.statements[0], p) + 0 >= 0 && !solutionsOf(pz.statements).includes(p))!;
+      const perm = PERMS.find((p) => p[idx] === target && !solutionsOf(pz.statements).includes(p))!;
       const r = failReason(perm);
       return {
         ru: `Если ${nm} на ${target} месте, условие нарушается: например, для расстановки ${permText(perm)} ${r.ru}.`,
@@ -1027,18 +1032,18 @@ const LAW_PAIRS: { level: Level; left: Text; right: Text }[] = [
   { level: 1, left: { ru: "«Или не» — всегда истина", kk: "«Немесе емес» — әрқашан ақиқат" }, right: "A ∨ ¬A = 1" },
   { level: 1, left: { ru: "«И не» — всегда ложь", kk: "«Және емес» — әрқашан жалған" }, right: "A ∧ ¬A = 0" },
   { level: 1, left: "A ∧ 1", right: "A" },
-  { level: 1, left: "A ∨ 0", right: "A" },
   { level: 1, left: "A ∨ 1", right: "1" },
   { level: 1, left: "A ∧ 0", right: "0" },
-  { level: 1, left: "¬¬B", right: "B" },
+  { level: 1, left: "A ∨ B", right: "B ∨ A" },
+  { level: 1, left: "A ∧ B", right: "B ∧ A" },
   { level: 2, left: { ru: "Закон де Моргана для И", kk: "ЖӘНЕ үшін де Морган заңы" }, right: "¬(A ∧ B) = ¬A ∨ ¬B" },
   { level: 2, left: { ru: "Закон де Моргана для ИЛИ", kk: "НЕМЕСЕ үшін де Морган заңы" }, right: "¬(A ∨ B) = ¬A ∧ ¬B" },
   { level: 2, left: { ru: "Распределительный закон", kk: "Үлестіру заңы" }, right: "A ∧ (B ∨ C) = (A ∧ B) ∨ (A ∧ C)" },
   { level: 2, left: { ru: "Замена импликации", kk: "Импликацияны ауыстыру" }, right: "A → B = ¬A ∨ B" },
   { level: 2, left: { ru: "Поглощение", kk: "Жұтылу" }, right: "A ∨ (A ∧ B) = A" },
-  { level: 2, left: { ru: "Переместительный закон", kk: "Орын ауыстыру заңы" }, right: "A ∧ B = B ∧ A" },
   { level: 2, left: { ru: "Сочетательный закон", kk: "Топтау заңы" }, right: "(A ∧ B) ∧ C = A ∧ (B ∧ C)" },
-  { level: 2, left: "¬(A ∨ B)", right: "¬A ∧ ¬B" },
+  { level: 2, left: "A → B", right: "¬A ∨ B" },
+  { level: 2, left: "A ∧ (A ∨ B)", right: "A" },
 ];
 
 function pair(level: Level, seed: number): Pair {

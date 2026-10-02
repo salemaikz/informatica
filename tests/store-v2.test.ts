@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mergeState, migrateState, useApp } from "@/lib/store";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
-import { bumpStreak, liveStreak, streakAtRisk } from "@/lib/gamification";
+import { bumpStreak, liveStreak, streakAtRisk, type Streak } from "@/lib/gamification";
 import { DAY_MS, dueLessons, lessonXpFactor, REPLAY_XP, scaleXp, scheduleAfter } from "@/lib/review";
 import { migrateLegacyNotes, notesInFolder, repairNotebook, systemFolderId, titleFromBody } from "@/lib/notebook";
 
@@ -32,7 +32,7 @@ const lessonResult = (over: Partial<SessionResult> = {}): SessionResult => ({
 
 describe("серия: заморозки", () => {
   it("каждые 7 дней — заморозка, не больше двух", () => {
-    let s = { current: 6, best: 6, lastDay: "2026-10-01", freezes: 0 };
+    let s: Streak = { current: 6, best: 6, lastDay: "2026-10-01", freezes: 0 };
     s = bumpStreak(s, "2026-10-02");
     expect(s.current).toBe(7);
     expect(s.freezes).toBe(1);
