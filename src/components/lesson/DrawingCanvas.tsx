@@ -26,6 +26,21 @@ interface BaseImage {
   tint: string;
 }
 
+/**
+ * Масштаб сохранённого PNG: 2 пикселя на CSS-пиксель, всегда — независимо от devicePixelRatio и ширины панели.
+ * Поэтому рисунок не растёт/не сжимается при смене экрана и не обрезается при пересохранении.
+ */
+const EXPORT_SCALE = 2;
+/** Защита от испорченных данных: слишком большую картинку не восстанавливаем (память холста, особенно на iOS). */
+const MAX_IMAGE_PX = 4096;
+
+/** Освобождает память временного холста (iOS держит их до сборки мусора и быстро упирается в лимит). */
+function freeCanvas(c: HTMLCanvasElement | null) {
+  if (!c) return;
+  c.width = 0;
+  c.height = 0;
+}
+
 function tintImage(img: HTMLImageElement, color: string): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = img.naturalWidth;
@@ -61,6 +76,8 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
     const [tool, setTool] = useState<"pen" | "eraser">("pen");
     const [count, setCount] = useState(0);
     const base = useRef<BaseImage | null>(null);
+    /** Размер холста в CSS-пикселях (не зависит от dpr). */
+    const size = useRef({ w: 0, h: 0 });
     const initialRef = useRef(initialImage);
     const [hasBase, setHasBase] = useState(false);
 
@@ -93,11 +110,12 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
       const b = base.current;
       if (b) {
         if (!b.tinted || b.tint !== ink) {
+          freeCanvas(b.tinted);
           b.tinted = tintImage(b.img, ink);
           b.tint = ink;
         }
-        // Сохранённый рисунок — под штрихами, поэтому ластик стирает и его.
-        ctx.drawImage(b.tinted, 0, 0, b.tinted.width / dpr, b.tinted.height / dpr);
+        // Сохранённый рисунок — под штрихами, поэтому ластик стирает и его. Размер — по фиксированному масштабу.
+        ctx.drawImage(b.tinted, 0, 0, b.tinted.width / EXPORT_SCALE, b.tinted.height / EXPORT_SCALE);
       }
       draw(ctx, strokes.current, ink);
     }, [draw]);
@@ -110,6 +128,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
       const img = new Image();
       img.onload = () => {
         if (!alive) return;
+        if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth > MAX_IMAGE_PX || img.naturalHeight > MAX_IMAGE_PX) return;
         base.current = { img, tinted: null, tint: "" };
         setHasBase(true);
         redraw();
@@ -120,6 +139,31 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
       };
     }, [redraw]);
 
+    // Смена темы: цвет чернил берётся из --text, поэтому перерисовываем (и перекрашиваем сохранённый рисунок).
+    useEffect(() => {
+      const mo = new MutationObserver(() => redraw());
+      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      const onScheme = () => redraw();
+      mq.addEventListener("change", onScheme);
+      return () => {
+        mo.disconnect();
+        mq.removeEventListener("change", onScheme);
+      };
+    }, [redraw]);
+
+    // Освобождаем перекрашенную копию при размонтировании.
+    useEffect(
+      () => () => {
+        const b = base.current;
+        if (b) {
+          freeCanvas(b.tinted);
+          b.tinted = null;
+        }
+      },
+      [],
+    );
+
     useEffect(() => {
       const resize = () => {
         const c = canvasRef.current;
@@ -128,6 +172,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
         const dpr = window.devicePixelRatio || 1;
         const width = w.clientWidth;
         const height = fixedHeight ?? Math.max(260, Math.min(420, Math.round(width * 0.75)));
+        size.current = { w: width, h: height };
         c.style.width = `${width}px`;
         c.style.height = `${height}px`;
         c.width = Math.round(width * dpr);
@@ -145,44 +190,55 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
       onChange?.(strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current);
     };
 
+    /** Слой «сохранённый рисунок + штрихи» на прозрачном фоне: pxW×pxH пикселей, `scale` пикселей на CSS-пиксель. */
+    const renderLayer = useCallback(
+      (pxW: number, pxH: number, scale: number): HTMLCanvasElement => {
+        const layer = document.createElement("canvas");
+        layer.width = Math.max(1, pxW);
+        layer.height = Math.max(1, pxH);
+        const lctx = layer.getContext("2d")!;
+        lctx.setTransform(scale, 0, 0, scale, 0, 0);
+        const b = base.current;
+        // Базу рисуем в её логическом размере: при scale = EXPORT_SCALE это пиксель в пиксель, без пересэмплинга.
+        if (b) lctx.drawImage(b.img, 0, 0, b.img.naturalWidth / EXPORT_SCALE, b.img.naturalHeight / EXPORT_SCALE);
+        draw(lctx, strokes.current, "#111111");
+        return layer;
+      },
+      [draw],
+    );
+
     useImperativeHandle(ref, () => ({
       isEmpty: () => strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current,
       exportCanvas: () => {
         const c = canvasRef.current;
         if (!c) return null;
+        const dpr = window.devicePixelRatio || 1;
         const out = document.createElement("canvas");
         out.width = c.width;
         out.height = c.height;
         const ctx = out.getContext("2d")!;
-        const dpr = window.devicePixelRatio || 1;
-        // Сначала рисуем штрихи на прозрачном слое (чтобы ластик работал), затем подкладываем белый фон.
-        const layer = document.createElement("canvas");
-        layer.width = c.width;
-        layer.height = c.height;
-        const lctx = layer.getContext("2d")!;
-        lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        draw(lctx, strokes.current, "#111111");
+        // Сначала рисуем всё на прозрачном слое (чтобы ластик работал), затем подкладываем белый фон.
+        const layer = renderLayer(c.width, c.height, dpr);
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, out.width, out.height);
         ctx.drawImage(layer, 0, 0);
+        freeCanvas(layer);
         return out;
       },
       exportImage: () => {
         const c = canvasRef.current;
         if (!c || c.width === 0 || c.height === 0) return null;
         if (!base.current && strokes.current.every((s) => s.tool === "eraser")) return "";
-        const dpr = window.devicePixelRatio || 1;
-        const layer = document.createElement("canvas");
-        layer.width = c.width;
-        layer.height = c.height;
-        const lctx = layer.getContext("2d")!;
-        lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        if (base.current) {
-          const { img } = base.current;
-          lctx.drawImage(img, 0, 0, img.naturalWidth / dpr, img.naturalHeight / dpr);
+        // Слой не меньше сохранённого рисунка: то, что вышло за текущую ширину панели, не обрезаем.
+        const img = base.current?.img;
+        const w = Math.max(size.current.w, img ? img.naturalWidth / EXPORT_SCALE : 0);
+        const h = Math.max(size.current.h, img ? img.naturalHeight / EXPORT_SCALE : 0);
+        const layer = renderLayer(Math.ceil(w * EXPORT_SCALE), Math.ceil(h * EXPORT_SCALE), EXPORT_SCALE);
+        try {
+          return layer.toDataURL("image/png");
+        } finally {
+          freeCanvas(layer);
         }
-        draw(lctx, strokes.current, "#111111");
-        return layer.toDataURL("image/png");
       },
     }));
 
@@ -218,6 +274,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
     };
     const clear = () => {
       strokes.current = [];
+      freeCanvas(base.current?.tinted ?? null);
       base.current = null;
       setHasBase(false);
       redraw();

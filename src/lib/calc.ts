@@ -541,25 +541,53 @@ export function evaluateExpression(expr: string): number | null {
 }
 
 /**
- * Предпросмотр для набираемого выражения: отбрасывает висящие операторы/точку/«(» в конце
- * и закрывает незакрытые скобки, затем вычисляет.
+ * Достраивает набираемое выражение до вычислимого: отбрасывает висящие операторы/точку/«(» в конце
+ * и закрывает незакрытые скобки. Пустое → null. Одну и ту же логику используют предпросмотр и «=».
  */
-export function previewExpression(expr: string): number | null {
+export function completeExpression(expr: string): string | null {
   const s = expr.replace(/[+\-−×÷*/(\s.,]+$/, "");
   if (!s) return null;
   const open = (s.match(/\(/g) ?? []).length - (s.match(/\)/g) ?? []).length;
-  return evaluateExpression(open > 0 ? s + ")".repeat(open) : s);
+  return open > 0 ? s + ")".repeat(open) : s;
+}
+
+/** Предпросмотр для набираемого выражения: достраивает его (completeExpression) и вычисляет. */
+export function previewExpression(expr: string): number | null {
+  const s = completeExpression(expr);
+  return s === null ? null : evaluateExpression(s);
 }
 
 /**
- * Число → строка для дисплея: без шума плавающей точки, не больше 10 значащих цифр.
- * Целые до 10¹⁵ показываем полностью (результат 2⁴⁰ нужен целиком).
+ * Число → строка для дисплея: без шума плавающей точки, не больше `digits` значащих цифр в дробях.
+ * Безопасные целые (до 2⁵³−1) печатаем точно, без выдуманных нулей; большие — в экспоненциальной форме.
+ * Дробям добавляем разряды под целую часть, чтобы 12345678901.5 не терял единицы.
  */
 export function formatNumber(n: number, digits = 10): string {
   if (!Number.isFinite(n)) return "—";
   if (n === 0) return "0";
-  if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
-  return String(Number(n.toPrecision(digits)));
+  if (Number.isInteger(n)) {
+    if (Math.abs(n) <= Number.MAX_SAFE_INTEGER) return String(n);
+    return Number(n.toExponential(Math.max(0, digits - 1))).toExponential();
+  }
+  const intDigits = Math.abs(n) >= 1 ? Math.floor(Math.log10(Math.abs(n))) + 1 : 0;
+  const precision = Math.min(15, Math.max(digits, intDigits + 2));
+  return String(Number(n.toPrecision(precision)));
+}
+
+/**
+ * Результат «=» как текст выражения — с полной точностью (15 значащих цифр), без округления до дисплея.
+ * Безопасные целые — точно, большие целые — в экспоненциальной форме (String дописал бы выдуманные нули).
+ */
+export function exactText(n: number): string {
+  if (n === 0) return "0";
+  if (Number.isInteger(n) && Math.abs(n) > Number.MAX_SAFE_INTEGER) return n.toExponential();
+  return String(n);
+}
+
+/** Результат после «=» для дисплея: округляем только здесь, а в состоянии держим полную точность. */
+export function displayResult(expr: string): string {
+  const n = Number(expr);
+  return displayExpr(Number.isFinite(n) ? formatNumber(n) : expr);
 }
 
 /** Для показа: десятичная запятая и настоящий минус. */
@@ -628,12 +656,25 @@ export function calcPress(state: CalcState, rawKey: string): CalcState {
   if (key === "C") return CALC_INIT;
 
   if (key === "=") {
-    const v = evaluateExpression(expr);
-    if (v === null) return state;
-    return { expr: formatNumber(v), fresh: true, prev: isPlainNumber(expr) ? "" : expr };
+    if (fresh) return state; // результат уже посчитан
+    // Считаем то же, что показывает предпросмотр: «5+=» и «2+(3=» дают 5.
+    const done = completeExpression(expr);
+    const v = done === null ? null : evaluateExpression(done);
+    if (done === null || v === null) return state;
+    // В выражении держим полную точность, до 10 знаков округляет только дисплей (displayResult).
+    return { expr: exactText(v), fresh: true, prev: isPlainNumber(done) ? "" : done };
   }
 
-  if (key === "⌫") return next(expr.slice(0, -1));
+  if (key === "⌫") {
+    // Результат «=» стираем целиком: по символам от «1e-7» остался бы битый «1e-».
+    if (fresh) return CALC_INIT;
+    const e = expr.slice(0, -1);
+    // Остался один вычисленный результат (после снятия оператора) — снова «свежий», а не набранное число.
+    if (isPlainNumber(e) && (/e/i.test(e) || e.replace(/[-.]/g, "").length > MAX_NUM_DIGITS)) {
+      return { expr: e, fresh: true, prev: "" };
+    }
+    return next(e);
+  }
 
   if (/^[0-9]$/.test(key)) {
     if (fresh) return next(key);

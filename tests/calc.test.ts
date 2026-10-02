@@ -5,10 +5,13 @@ import {
   CALC_INIT,
   calcPress,
   checkDigits,
+  completeExpression,
   convert,
   convertUnits,
   displayExpr,
+  displayResult,
   evaluateExpression,
+  exactText,
   formatIn,
   formatNumber,
   INFO_UNITS,
@@ -436,6 +439,51 @@ describe("formatNumber", () => {
     expect(formatNumber(NaN)).toBe("—");
     expect(formatNumber(Infinity)).toBe("—");
   });
+  it("безопасные целые — точно, без выдуманных нулей (2⁵⁰)", () => {
+    expect(formatNumber(2 ** 50)).toBe("1125899906842624");
+    expect(formatNumber(-(2 ** 50))).toBe("-1125899906842624");
+    expect(formatNumber(Number.MAX_SAFE_INTEGER)).toBe("9007199254740991");
+    expect(formatNumber(123456789012345)).toBe("123456789012345");
+  });
+  it("целые за пределом безопасных — экспоненциальная форма, не нули", () => {
+    expect(formatNumber(2 ** 60)).toBe("1.152921505e+18");
+    expect(formatNumber(-(2 ** 60))).toBe("-1.152921505e+18");
+    expect(formatNumber(2 ** 53)).toBe("9.007199255e+15");
+    expect(formatNumber(1e20)).toBe("1e+20");
+  });
+  it("дроби с большой целой частью не теряют целые цифры", () => {
+    expect(formatNumber(12345678901.5)).toBe("12345678901.5");
+    expect(formatNumber(123456789012.25)).toBe("123456789012.25");
+    expect(formatNumber(1234567.891)).toBe("1234567.891");
+    expect(formatNumber(99999999999.99)).toBe("99999999999.99");
+    // 13 цифр целой части + 2 дробные = потолок в 15 значащих: дробь урезается, целая часть цела.
+    expect(formatNumber(1234567890123.456)).toBe("1234567890123.46");
+  });
+  it("маленькие числа — экспонента без нулей на конце", () => {
+    expect(formatNumber(1e-7)).toBe("1e-7");
+    expect(formatNumber(1.5e-10)).toBe("1.5e-10");
+    expect(formatNumber(-2.5e-8)).toBe("-2.5e-8");
+    expect(formatNumber(0.000001)).toBe("0.000001");
+  });
+});
+
+describe("exactText / displayResult", () => {
+  it("exactText: безопасные целые точно, большие — экспонента, дроби — как есть", () => {
+    expect(exactText(0)).toBe("0");
+    expect(exactText(-0)).toBe("0");
+    expect(exactText(2 ** 50)).toBe("1125899906842624");
+    expect(exactText(2 ** 60)).toBe("1.152921504606847e+18");
+    expect(exactText(1e21)).toBe("1e+21");
+    expect(exactText(1 / 3)).toBe("0.3333333333333333");
+    expect(exactText(1e-7)).toBe("1e-7");
+    expect(exactText(-1.5e-7)).toBe("-1.5e-7");
+  });
+  it("displayResult округляет только для показа: запятая и настоящий минус", () => {
+    expect(displayResult("0.333333333333333")).toBe("0,3333333333");
+    expect(displayResult("0.999999999999999")).toBe("1");
+    expect(displayResult("-1.5e-7")).toBe("−1,5e−7");
+    expect(displayResult("1125899906842624")).toBe("1125899906842624");
+  });
 });
 
 describe("previewExpression", () => {
@@ -455,6 +503,22 @@ describe("previewExpression", () => {
   });
 });
 
+describe("completeExpression", () => {
+  it("достраивает выражение так же, как предпросмотр", () => {
+    expect(completeExpression("5+")).toBe("5");
+    expect(completeExpression("2+(3")).toBe("2+(3)");
+    expect(completeExpression("2×(3+")).toBe("2×(3)");
+    expect(completeExpression("2+3×(")).toBe("2+3");
+    expect(completeExpression("(2+3)")).toBe("(2+3)");
+    expect(completeExpression("5.")).toBe("5");
+  });
+  it("пусто → null", () => {
+    expect(completeExpression("")).toBeNull();
+    expect(completeExpression("+")).toBeNull();
+    expect(completeExpression("(")).toBeNull();
+  });
+});
+
 describe("displayExpr / isPlainNumber", () => {
   it("запятая и настоящий минус", () => {
     expect(displayExpr("-1.5×2")).toBe("−1,5×2");
@@ -464,6 +528,8 @@ describe("displayExpr / isPlainNumber", () => {
     expect(isPlainNumber("-12.5")).toBe(true);
     expect(isPlainNumber("5.")).toBe(true);
     expect(isPlainNumber("1e+21")).toBe(true);
+    expect(isPlainNumber("1.152921504606847e+18")).toBe(true);
+    expect(isPlainNumber("-1.5e-7")).toBe(true);
     expect(isPlainNumber("2+3")).toBe(false);
     expect(isPlainNumber("")).toBe(false);
     expect(isPlainNumber("-")).toBe(false);
@@ -565,6 +631,109 @@ describe("calcPress", () => {
     const s = type(["2"]);
     expect(calcPress(s, "a")).toBe(s);
     expect(calcPress(s, "Shift")).toBe(s);
+  });
+
+  describe("«=»: точность и дисплей", () => {
+    const keys = (s: string) => [...s];
+    const shown = (s: CalcState) => displayResult(s.expr);
+
+    it("2⁵⁰ считается и показывается точно, без выдуманных нулей", () => {
+      const s = type(keys("1024×1024×1024×1024×1024="));
+      expect(s.expr).toBe("1125899906842624");
+      expect(shown(s)).toBe("1125899906842624");
+    });
+    it("за пределом безопасных целых — экспонента", () => {
+      const s = type([...keys("1024×1024×1024×1024×1024×1024×1024="), "×", "1", "0", "2", "4", "="]);
+      expect(s.expr).toMatch(/e\+\d+$/);
+      expect(shown(s)).toMatch(/^\d(?:,\d+)?e\+\d+$/);
+      expect(shown(s)).not.toMatch(/0000/);
+    });
+    it("дробь с большой целой частью не теряет цифры", () => {
+      const s = type(keys("12345678901.5+0="));
+      expect(shown(s)).toBe("12345678901,5");
+    });
+    it("в состоянии полная точность, а не округление до 10 знаков", () => {
+      const s = type(keys("1÷3="));
+      expect(s.expr).toBe("0.333333333333333");
+      expect(shown(s)).toBe("0,3333333333");
+    });
+    it("1÷3= ×3= даёт 1, а не 0,9999999999", () => {
+      const third = type(keys("1÷3="));
+      const s = type(["×", "3", "="], third);
+      expect(Number(s.expr)).toBeCloseTo(1, 14);
+      expect(shown(s)).toBe("1");
+      expect(s.prev).toBe("0.333333333333333×3");
+    });
+    it("2÷3= ×3= даёт 2", () => {
+      const s = type(["×", "3", "="], type(keys("2÷3=")));
+      expect(shown(s)).toBe("2");
+    });
+    it("повторный «=» ничего не меняет", () => {
+      const r = type(keys("2+3×4="));
+      expect(calcPress(r, "=")).toBe(r);
+    });
+  });
+
+  describe("«=» вычисляет то же, что предпросмотр", () => {
+    it("висящий оператор: 5+= → 5", () => {
+      expect(type(["5", "+", "="])).toEqual({ expr: "5", fresh: true, prev: "" });
+      expect(type(["6", "×", "="]).expr).toBe("6");
+      expect(type(["8", "-", "="]).expr).toBe("8");
+    });
+    it("незакрытая скобка: 2+(3= → 5", () => {
+      expect(type(["2", "+", "(", "3", "="])).toEqual({ expr: "5", fresh: true, prev: "2+(3)" });
+      expect(type(["2", "×", "(", "3", "+", "4", "="]).expr).toBe("14");
+    });
+    it("висящая «(» после оператора и точка", () => {
+      expect(type(["2", "+", "3", "×", "(", "="]).expr).toBe("5");
+      expect(type(["5", ".", "="]).expr).toBe("5");
+    });
+    it("совпадает с previewExpression на наборе выражений", () => {
+      for (const e of ["2+3×", "2+3×(", "2×(3+4", "2×(3+", "5.", "7", "(2+3", "10-", "2×-"]) {
+        const s: CalcState = { expr: e, fresh: false, prev: "" };
+        const preview = previewExpression(e);
+        const r = calcPress(s, "=");
+        if (preview === null) expect(r).toBe(s);
+        else expect(Number(r.expr)).toBe(preview);
+      }
+    });
+    it("пустое и ошибочное по-прежнему не ломает", () => {
+      expect(calcPress(type(["("]), "=").expr).toBe("(");
+      expect(calcPress(type(["-"]), "=").expr).toBe("-");
+      const div0 = type(["1", "÷", "0"]);
+      expect(calcPress(div0, "=")).toBe(div0);
+    });
+  });
+
+  describe("⌫ после результата", () => {
+    it("стирает результат целиком, а не по символу", () => {
+      expect(type([..."2+3=", "⌫"])).toEqual(CALC_INIT);
+      expect(type([..."12×12=", "⌫"])).toEqual(CALC_INIT);
+    });
+    it("экспонента: 1e-7 не превращается в «1e-»", () => {
+      const r = type(["1", "÷", "1", "0", "0", "0", "0", "0", "0", "0", "="]);
+      expect(r.expr).toBe("1e-7");
+      const back = calcPress(r, "⌫");
+      expect(back).toEqual(CALC_INIT);
+      expect(calcPress(r, "Backspace")).toEqual(CALC_INIT);
+    });
+    it("после оператора: снятие оператора возвращает «свежий» результат, дальше — стирание целиком", () => {
+      const r = type(["1", "÷", "1", "0", "0", "0", "0", "0", "0", "0", "=", "×"]);
+      expect(r.expr).toBe("1e-7×");
+      const noOp = calcPress(r, "⌫");
+      expect(noOp).toEqual({ expr: "1e-7", fresh: true, prev: "" });
+      expect(calcPress(noOp, "⌫")).toEqual(CALC_INIT);
+      // и цифра теперь начинает заново, а не дописывается к экспоненте
+      expect(calcPress(noOp, "5").expr).toBe("5");
+    });
+    it("длинная дробь после снятия оператора — тоже свежая", () => {
+      const r = type([..."1÷3=", "+", "⌫"]);
+      expect(r).toEqual({ expr: "0.333333333333333", fresh: true, prev: "" });
+    });
+    it("обычный набор ⌫ работает по символам", () => {
+      expect(type([..."2+35", "⌫"]).expr).toBe("2+3");
+      expect(type([..."2+3=", "+", "⌫"])).toEqual({ expr: "5", fresh: false, prev: "" });
+    });
   });
 });
 

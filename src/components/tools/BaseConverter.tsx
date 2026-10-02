@@ -81,7 +81,8 @@ function NumberField({
     <div className="relative min-w-0">
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        // Регистр не трогаем (иначе курсор прыгает в конец): заглавными показывает CSS, convert/arith регистр не различают.
+        onChange={(e) => onChange(e.target.value)}
         inputMode="text"
         autoCapitalize="characters"
         autoComplete="off"
@@ -361,7 +362,7 @@ export function BaseConverter() {
           <input
             id="tools-base-input"
             value={value}
-            onChange={(e) => setValue(e.target.value.toUpperCase())}
+            onChange={(e) => setValue(e.target.value)}
             inputMode="text"
             autoCapitalize="characters"
             autoComplete="off"

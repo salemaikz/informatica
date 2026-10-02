@@ -7,6 +7,7 @@ import {
   CALC_INIT,
   calcPress,
   displayExpr,
+  displayResult,
   formatNumber,
   isPlainNumber,
   previewExpression,
@@ -93,16 +94,32 @@ export function Calculator({ active }: { active: boolean }) {
   const { expr, fresh, prev } = st;
   const plain = isPlainNumber(expr);
   const preview = fresh || plain || expr === "" ? null : previewExpression(expr);
-  const big = expr === "" ? "0" : fresh || plain ? displayExpr(expr) : preview !== null ? displayExpr(formatNumber(preview)) : "—";
+  // После «=» в состоянии полная точность, на дисплее — округлённый результат.
+  const big =
+    expr === ""
+      ? "0"
+      : fresh
+        ? displayResult(expr)
+        : plain
+          ? displayExpr(expr)
+          : preview !== null
+            ? displayExpr(formatNumber(preview))
+            : "—";
   const line = fresh ? (prev ? `${displayExpr(prev)} =` : "") : plain ? "" : displayExpr(expr);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-2xl bg-surface-2 px-4 py-3 text-right" role="group" aria-label={t("tools.calc")}>
+      <div
+        className="rounded-2xl bg-surface-2 px-4 py-3 text-right [@media(max-height:700px)]:py-2"
+        role="group"
+        aria-label={t("tools.calc")}
+      >
         <div className="min-h-6 max-h-16 overflow-y-auto break-all font-mono text-base text-muted" aria-hidden={!line}>
           {line || " "}
         </div>
         <div
+          aria-live="polite"
+          aria-atomic="true"
           className={cn(
             "mt-1 break-all font-mono font-bold text-text",
             big.length > 18 ? "text-xl" : big.length > 11 ? "text-2xl" : "text-4xl",
@@ -122,7 +139,8 @@ export function Calculator({ active }: { active: boolean }) {
             onClick={() => press(k.key)}
             aria-label={k.key === "⌫" ? t("tools.backspace") : k.key === "=" ? t("tools.equals") : k.key === "C" ? t("tools.clear") : undefined}
             className={cn(
-              "flex h-14 items-center justify-center rounded-2xl font-mono text-2xl font-bold transition-[transform,filter] duration-75",
+              // На низких экранах (360×640) клавиши ниже, чтобы весь нижний ряд помещался без прокрутки.
+              "flex h-14 items-center justify-center rounded-2xl font-mono text-2xl font-bold transition-[transform,filter] duration-75 [@media(max-height:700px)]:h-12",
               "select-none hover:brightness-95 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
               KIND_CLASS[k.kind],
             )}

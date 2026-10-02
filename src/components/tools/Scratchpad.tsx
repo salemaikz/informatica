@@ -8,6 +8,8 @@ import { cn } from "@/lib/cn";
 import { loadScratch, MAX_SCRATCH_PAGES, saveScratch, type ScratchPage } from "@/lib/scratch";
 
 const SAVE_DELAY = 600;
+/** Сколько секунд после первого нажатия «Очистить» ждём подтверждения вторым нажатием. */
+const CONFIRM_MS = 3000;
 const CANVAS_HEIGHT = 320;
 
 const emptyPage = (i: number): ScratchPage => ({ id: `p${i + 1}`, text: "", updatedAt: 0 });
@@ -27,6 +29,8 @@ export function Scratchpad() {
   const [loaded, setLoaded] = useState(false);
   const [cur, setCur] = useState(0);
   const [mode, setMode] = useState<Mode>("draw");
+  // Лист, для которого «Очистить» ждёт подтверждения (второе нажатие в течение CONFIRM_MS).
+  const [armedPage, setArmedPage] = useState<number | null>(null);
   // Меняется при загрузке и очистке — пересоздаёт холст (он читает сохранённый рисунок только при монтировании).
   const [gen, setGen] = useState(0);
   const canvas = useRef<DrawingHandle>(null);
@@ -61,6 +65,13 @@ export function Scratchpad() {
     return () => clearTimeout(id);
   }, [pages]);
 
+  // Подтверждение очистки гаснет само.
+  useEffect(() => {
+    if (armedPage === null) return;
+    const id = setTimeout(() => setArmedPage(null), CONFIRM_MS);
+    return () => clearTimeout(id);
+  }, [armedPage]);
+
   // Не теряем несохранённое при закрытии вкладки и размонтировании.
   useEffect(() => {
     const flush = () => {
@@ -90,13 +101,20 @@ export function Scratchpad() {
     patch(cur, { image: img || undefined });
   };
 
+  const page = pages[cur];
+  const hasContent = (p: ScratchPage) => p.text.trim() !== "" || !!p.image;
+  const armed = armedPage === cur && hasContent(page);
+
+  // Первое нажатие только «взводит» кнопку, второе (в течение 3 с) стирает текст и рисунок листа.
   const clearPage = () => {
+    if (!armed) {
+      setArmedPage(cur);
+      return;
+    }
+    setArmedPage(null);
     patch(cur, { text: "", image: undefined });
     setGen((g) => g + 1);
   };
-
-  const page = pages[cur];
-  const hasContent = (p: ScratchPage) => p.text.trim() !== "" || !!p.image;
 
   return (
     <div className="flex flex-col gap-3">
@@ -108,7 +126,10 @@ export function Scratchpad() {
               type="button"
               role="tab"
               aria-selected={cur === i}
-              onClick={() => setCur(i)}
+              onClick={() => {
+                setCur(i);
+                setArmedPage(null);
+              }}
               className={cn(
                 "relative h-10 flex-1 rounded-xl border-2 px-2 text-sm font-bold transition-colors",
                 "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
@@ -152,9 +173,15 @@ export function Scratchpad() {
           type="button"
           onClick={clearPage}
           disabled={!hasContent(page)}
-          className="flex h-12 items-center gap-1.5 rounded-xl border-2 border-border px-3 text-sm font-bold text-muted transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className={cn(
+            "flex h-12 items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold transition-colors",
+            "disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            armed
+              ? "border-danger bg-danger-soft text-danger"
+              : "border-border text-muted hover:text-danger disabled:hover:text-muted",
+          )}
         >
-          <Trash2 size={16} aria-hidden /> {t("tools.clear")}
+          <Trash2 size={16} aria-hidden /> {armed ? t("common.delete") : t("tools.clear")}
         </button>
       </div>
 
