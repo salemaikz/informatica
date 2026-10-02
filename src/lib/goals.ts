@@ -85,11 +85,11 @@ export function goalStatus(forecast: { score: number; basis: string }, targetSco
 
 export interface PlanTopic {
   topic: EntTopicId;
-  /** Вес темы в 50 баллах ЕНТ. */
+  /** Доля темы в 50 баллах ЕНТ (0..1, `topicWeight`). */
   weight: number;
   /** Освоение 0..1. */
   mastery: number;
-  /** weight × (1 − mastery): сколько баллов можно «забрать» на этой теме. */
+  /** weight × (1 − mastery): какую долю 50 баллов можно «забрать» на этой теме (× 50 — баллы). */
   gain: number;
 }
 
@@ -138,4 +138,26 @@ export function nextLessonId(units: { lessons: { id: string; status: string }[] 
 export function lessonsForTopic(topic: EntTopicId, lessons: { id: string; skills: string[]; entTopics?: EntTopicId[] }[]): string[] {
   const bySkill = new Set(SKILLS.filter((s) => s.ent === topic).map((s) => s.id));
   return lessons.filter((l) => l.entTopics?.includes(topic) || l.skills.some((s) => bySkill.has(s))).map((l) => l.id);
+}
+
+// ---------- Даты по-русски и по-казахски ----------
+// Intl с локалью kk-KZ есть не во всех браузерах (Chromium без полного ICU отдаёт английский),
+// поэтому месяцы — свои.
+
+const MONTHS_RU = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const MONTHS_KK = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+
+/** «ГГГГ-ММ-ДД» → «30 января 2027» / «2027 жылғы 30 қаңтар»; неверная строка → "". */
+export function formatExamDate(day: string, lang: Lang): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return "";
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  return lang === "kk" ? `${y} жылғы ${d} ${MONTHS_KK[mo - 1]}` : `${d} ${MONTHS_RU[mo - 1]} ${y}`;
+}
+
+/** Короткая дата для подписи графика: «30.01». */
+export function formatDayMonth(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

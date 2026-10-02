@@ -884,7 +884,6 @@ function short(level: Level, seed: number): ShortQuestion {
   if (level === 2) {
     const a = int(rand, 3, 30);
     const b = int(rand, 2, 6);
-    const c = int(rand, 2, 7);
     const t = int(rand, 0, 1);
     const expr = t === 0 ? `${a} + ${b} ** 2` : `${a} // ${b} + ${a} % ${b}`;
     const value = t === 0 ? a + b * b : Math.floor(a / b) + (a % b);

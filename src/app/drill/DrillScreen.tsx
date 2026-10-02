@@ -9,15 +9,15 @@ import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
 import {
-  buildExtern,
+  buildExternSession,
   buildMistakes,
   buildReview,
   buildSkill,
   buildSmart,
   buildTopic,
   EXTERN_PASS,
-  externLessons,
   externPassed,
+  externStartLesson,
   hasBank,
   lessonAccuracies,
   unitById,
@@ -53,8 +53,9 @@ function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic
       return { steps: topic ? buildTopic(topic, s.skills, seed) : [] };
     }
     case "extern": {
-      const lessons = externLessons(p.unit, s.lessons);
-      return { steps: buildExtern(p.unit, s.lessons, seed), externLessons: lessons };
+      const ex = buildExternSession(p.unit, s.lessons, seed);
+      // Засчитать нечего — экран «нечего сдавать», а не тренировка без итога.
+      return ex.lessons.length ? { steps: ex.steps, externLessons: ex.lessons } : { steps: [] };
     }
     case "review": {
       const r = buildReview(s.lessons, s.skills, Date.now(), seed);
@@ -85,11 +86,12 @@ export function DrillScreen({ mode, skill, unit, topic }: { mode: DrillMode; ski
           completeLessons(session.externLessons, "extern", result.accuracy);
           setOutcome({ passed: true, accuracy: result.accuracy, credited: session.externLessons.length });
         } else {
-          setOutcome({ passed: false, accuracy: result.accuracy, lessonId: session.externLessons[0] });
+          // Начинать — с первого непройденного урока раздела (даже если экстерн его не проверял).
+          setOutcome({ passed: false, accuracy: result.accuracy, lessonId: externStartLesson(unit, useApp.getState().lessons) ?? session.externLessons[0] });
         }
       }
     },
-    [mode, session, completeLessons, markReviewed],
+    [mode, unit, session, completeLessons, markReviewed],
   );
 
   const externUnit = unitById(unit);

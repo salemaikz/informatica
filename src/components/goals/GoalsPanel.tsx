@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { UNITS, getLesson } from "@/content/course";
 import { entTopicById } from "@/content/ent-topics";
 import { cn } from "@/lib/cn";
-import { daysText, examTrend, lessonsForTopic, weeklyPlan } from "@/lib/goals";
+import { daysText, examTrend, formatDayMonth, formatExamDate, lessonsForTopic, weeklyPlan } from "@/lib/goals";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -14,6 +14,10 @@ import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { useGoalData } from "./useGoalData";
+
+/** Высота области столбиков и подписей графика пробников, px. */
+const CHART_H = 96;
+const LABEL_H = 20;
 
 const STATUS_TONE = { none: "muted", below: "warning", on: "success", above: "success" } as const;
 
@@ -53,12 +57,14 @@ export function GoalsPanel({ className }: { className?: string }) {
 
   const plan = useMemo(() => weeklyPlan(forecast.byTopic, 3), [forecast.byTopic]);
   const ready = useMemo(
-    () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (getLesson(r.id) ? [getLesson(r.id)!] : [])),
+    // Только готовые уроки: черновики «скоро» могут уже лежать в реестре.
+    () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (r.status === "available" && getLesson(r.id) ? [getLesson(r.id)!] : [])),
     [],
   );
   const trend = useMemo(() => examTrend(exams), [exams]);
 
-  const dateText = examDate ? new Intl.DateTimeFormat(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${examDate}T00:00:00`)) : "";
+  const dateText = examDate ? formatExamDate(examDate, lang) : "";
+  const noData = forecast.basis === "none";
   const dayLabels = t("stats.days").split(",");
   const left = Math.max(0, week.goal - week.done);
 
@@ -70,7 +76,7 @@ export function GoalsPanel({ className }: { className?: string }) {
           icon={<Target size={22} />}
           title={t("goals.panel.title")}
           action={
-            <ButtonLink href="/profile#goals" variant="ghost" size="sm">
+            <ButtonLink href="/profile#goals" variant="ghost" size="sm" className="h-10">
               {t("goals.panel.edit")}
             </ButtonLink>
           }
@@ -86,7 +92,7 @@ export function GoalsPanel({ className }: { className?: string }) {
             {examDate && <p className="text-sm font-bold text-muted">{t("goals.panel.examOn", { date: dateText })}</p>}
           </div>
           {daysLeft === null && (
-            <ButtonLink href="/profile#goals" variant="secondary" size="sm">
+            <ButtonLink href="/profile#goals" variant="secondary" size="sm" className="h-10">
               {t("goals.panel.setDate")}
             </ButtonLink>
           )}
@@ -150,7 +156,7 @@ export function GoalsPanel({ className }: { className?: string }) {
       {/* План недели */}
       <Card>
         <SectionHead icon={<ListChecks size={22} />} title={t("goals.plan.title")} />
-        <p className="-mt-2 mb-3 text-sm font-semibold text-muted">{t("goals.plan.hint")}</p>
+        <p className="-mt-2 mb-3 text-sm font-semibold text-muted">{t(noData ? "goals.plan.hintStart" : "goals.plan.hint")}</p>
         {plan.length === 0 ? (
           <p className="font-semibold text-success-strong">{t("goals.plan.empty")}</p>
         ) : (
@@ -168,15 +174,21 @@ export function GoalsPanel({ className }: { className?: string }) {
                       {t("goals.plan.gain", { n: Math.max(1, Math.round(p.gain * 50)) })}
                     </Pill>
                   </div>
-                  <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
-                  <ProgressBar value={p.mastery} color={p.mastery < 0.6 ? "var(--danger)" : "var(--warning)"} height={8} className="mt-1" label={l(topic.short)} />
+                  {noData ? (
+                    <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.notStarted")}</p>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
+                      <ProgressBar value={p.mastery} color={p.mastery < 0.6 ? "var(--danger)" : "var(--warning)"} height={8} className="mt-1" label={l(topic.short)} />
+                    </>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {lesson && (
-                      <ButtonLink href={`/lesson/${lesson}`} size="sm" variant={done ? "secondary" : "primary"} icon={<Play size={16} fill="currentColor" />}>
+                      <ButtonLink href={`/lesson/${lesson}`} size="sm" className="h-10" variant={done ? "secondary" : "primary"} icon={<Play size={16} fill="currentColor" />}>
                         {t("goals.plan.lesson")}
                       </ButtonLink>
                     )}
-                    <ButtonLink href={`/drill?mode=topic&topic=${p.topic}`} size="sm" variant="secondary" icon={<Dumbbell size={16} />}>
+                    <ButtonLink href={`/drill?mode=topic&topic=${p.topic}`} size="sm" className="h-10" variant="secondary" icon={<Dumbbell size={16} />}>
                       {t("goals.plan.train")}
                     </ButtonLink>
                   </div>
@@ -193,25 +205,30 @@ export function GoalsPanel({ className }: { className?: string }) {
         {trend.length === 0 ? (
           <div className="flex flex-col items-start gap-3">
             <p className="font-semibold text-muted">{t("goals.history.empty")}</p>
-            <ButtonLink href="/exam" size="sm">
+            <ButtonLink href="/exam" size="sm" className="h-10">
               {t("goals.history.start")}
             </ButtonLink>
           </div>
         ) : (
           <>
             <p className="text-sm font-bold text-muted">{t("goals.history.last", { score: trend[trend.length - 1].score })}</p>
-            <div className="relative mt-3 h-32" role="img" aria-label={t("goals.history.chart")}>
+            {/* Высоты в пикселях: столбик не сжимается, и линия цели стоит ровно на своём уровне. */}
+            <div className="relative mt-3" style={{ height: CHART_H + LABEL_H * 2 + 8 }} role="img" aria-label={t("goals.history.chart")}>
               {/* линия цели */}
-              <div className="absolute inset-x-0 border-t-2 border-dashed border-muted/60" style={{ bottom: `calc(${(targetScore / 50) * 100}% * 0.8 + 20px)` }} />
+              <div className="absolute inset-x-0 border-t-2 border-dashed border-muted/60" style={{ bottom: LABEL_H + 4 + (Math.min(50, targetScore) / 50) * CHART_H }} />
               <div className="relative flex h-full items-end justify-around gap-1.5">
-                {trend.map((p) => (
-                  <div key={p.at} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-                    <span className="text-sm font-extrabold">{p.score}</span>
+                {trend.map((p, i) => (
+                  <div key={`${p.at}-${i}`} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                    <span className="text-sm font-extrabold leading-5" style={{ height: LABEL_H }}>
+                      {p.score}
+                    </span>
                     <div
-                      className={cn("w-full max-w-9 rounded-t-lg", p.score >= targetScore ? "bg-success" : "bg-primary")}
-                      style={{ height: `calc(${(p.score / 50) * 100}% * 0.8)`, minHeight: 4 }}
+                      className={cn("w-full max-w-9 shrink-0 rounded-t-lg", p.score >= targetScore ? "bg-success" : "bg-primary")}
+                      style={{ height: Math.max(4, (p.score / 50) * CHART_H) }}
                     />
-                    <span className="h-4 text-[11px] font-bold text-muted">{new Intl.DateTimeFormat(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "numeric" }).format(new Date(p.at))}</span>
+                    <span className="text-[11px] font-bold leading-5 text-muted" style={{ height: LABEL_H }}>
+                      {formatDayMonth(p.at)}
+                    </span>
                   </div>
                 ))}
               </div>

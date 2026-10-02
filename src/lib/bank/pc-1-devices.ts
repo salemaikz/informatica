@@ -13,7 +13,6 @@ import type { Pair, Rand, ShortQuestion, SkillBank, Statement } from "./types";
 const SKILL = "pc.devices";
 
 const w = (ru: string, kk: string): L => ({ ru, kk });
-const int = (rand: Rand, min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 const pick = <T,>(rand: Rand, arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
 
 // ---------- Расчётные задания ----------
@@ -53,7 +52,7 @@ function calcPixels(rand: Rand): Calc {
     wrongs: [
       { v: String(px + py), why: w("Ширину и высоту нужно умножить, а не сложить: пиксели стоят рядами.", "Ені мен биіктігін қосуға емес, көбейтуге болады: пиксельдер қатарлап тұрады.") },
       { v: String(2 * (px + py)), why: w("Так считают периметр рамки, а не число всех пикселей.", "Бұлай жиектің периметрін санайды, барлық пиксельдер санын емес.") },
-      { v: String(total / 10), why: w("Потеряна цифра: проверь умножение.", "Бір цифр жоғалған: көбейтуді тексер.") },
+      { v: String(Math.floor(total / 10)), why: w("Потеряна цифра: проверь умножение.", "Бір цифр жоғалған: көбейтуді тексер.") },
       { v: String(total * 2), why: w("Результат удвоен: проверь умножение.", "Нәтиже екі еселенген: көбейтуді тексер.") },
     ],
     hint: w(
@@ -240,7 +239,6 @@ const SPK = w("Колонки", "Динамиктер");
 const MIC = w("Микрофон", "Микрофон");
 const PROJ = w("Проектор", "Проектор");
 const PLOT = w("Плоттер", "Плоттер");
-const HEADPH = w("Наушники", "Құлаққап");
 const TOUCH = w("Сенсорный экран", "Сенсорлық экран");
 const HDD = w("HDD (жёсткий диск)", "HDD (қатты диск)");
 const SSD = "SSD";

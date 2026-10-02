@@ -36,8 +36,9 @@ export const DRILL_COUNT = 8;
 /** «Экстерн»: порог зачёта раздела и максимум заданий. */
 export const EXTERN_PASS = 0.8;
 export const EXTERN_MAX = 12;
-/** Урок игрой: порог зачёта урока (доля верных). */
+/** Урок игрой: порог зачёта урока (доля верных) и минимум ответов (2 из 2 — ещё не урок). */
 export const GAME_PASS = 0.7;
+export const GAME_MIN_TOTAL = 5;
 /** Проверка себя: минимум заданий (добираем из банка). */
 export const CHECK_MIN = 6;
 
@@ -297,10 +298,20 @@ export function externLessons(unitId: string | undefined, done: Record<string, L
     .map((l) => l.id);
 }
 
-/** По 2 задания уровня B–C на навык (если навыков больше 6 — по одному), всего до 12. */
-export function buildExtern(unitId: string | undefined, done: Record<string, LessonStat>, seed: number): QuestionStep[] {
-  const skills = skillsOfLessons(externLessons(unitId, done)).slice(0, EXTERN_MAX);
-  if (!skills.length) return [];
+export interface ExternSession {
+  steps: QuestionStep[];
+  /** Уроки, которые засчитаем при зачёте: только те, чьи навыки все попали в задания. */
+  lessons: string[];
+}
+
+/**
+ * По 2 задания уровня B–C на навык (если навыков больше 6 — по одному), всего до 12.
+ * Навыки сверх 12 в задания не попадают — их уроки экстерн не засчитывает (иначе урок засчитался бы без проверки).
+ */
+export function buildExternSession(unitId: string | undefined, done: Record<string, LessonStat>, seed: number): ExternSession {
+  const candidates = externLessons(unitId, done);
+  const skills = skillsOfLessons(candidates).slice(0, EXTERN_MAX);
+  if (!skills.length) return { steps: [], lessons: [] };
   const per = skills.length * 2 <= EXTERN_MAX ? 2 : 1;
   const rand = seeded(seed);
   const steps: QuestionStep[] = [];
@@ -319,7 +330,19 @@ export function buildExtern(unitId: string | undefined, done: Record<string, Les
       }
     }
   });
-  return sortByLevel(steps);
+  const tested = new Set(steps.map((s) => s.skill));
+  const lessons = candidates.filter((id) => LESSONS[id].skills.every((s) => tested.has(s)));
+  return { steps: sortByLevel(steps), lessons };
+}
+
+/** Только задания экстерна (см. buildExternSession). */
+export function buildExtern(unitId: string | undefined, done: Record<string, LessonStat>, seed: number): QuestionStep[] {
+  return buildExternSession(unitId, done, seed).steps;
+}
+
+/** С какого урока начать, если экстерн не сдан: первый готовый непройденный урок раздела. */
+export function externStartLesson(unitId: string | undefined, done: Record<string, LessonStat>): string | undefined {
+  return readyLessons(unitById(unitId)).find((l) => !isDone(done[l.id]))?.id;
 }
 
 export const externPassed = (accuracy: number): boolean => accuracy >= EXTERN_PASS;
@@ -393,9 +416,9 @@ export function gameOpen(meta: GameLike, completedSkills: SkillId[]): boolean {
   return meta.skills.some(hasBank);
 }
 
-/** Игра засчитывает урок: доля верных ≥ 70%. */
+/** Игра засчитывает урок: ответов не меньше GAME_MIN_TOTAL и доля верных ≥ 70%. */
 export function gamePassed(correct: number, total: number): boolean {
-  return total > 0 && correct / total >= GAME_PASS;
+  return total >= GAME_MIN_TOTAL && correct / total >= GAME_PASS;
 }
 
 /** Игра пишет урок в прогресс: урок ещё не пройден или пора повторить (иначе игра «накручивала» бы счётчик прохождений). */

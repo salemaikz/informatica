@@ -9,7 +9,7 @@ import { gameById } from "@/games/registry";
 import { GAME_COMPONENTS } from "@/games/components";
 import { gameStatKey, type GameReward } from "@/lib/games";
 import { useApp } from "@/lib/store";
-import { GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
+import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
 import { getLesson } from "@/content/course";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
@@ -48,7 +48,8 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const completeLessons = useApp((s) => s.completeLessons);
   const lesson = lessonId ? getLesson(lessonId) : undefined;
   const hasContext = !!lesson || (skills?.length ?? 0) > 0;
-  const supported = !hasContext || gameSupportsSkills(meta, skills ?? []);
+  // Урок без навыков (или навыки без нужной формы) — игре нечего проверять: зачёт урока «чужими» заданиями нечестен.
+  const supported = !hasContext || (!!skills?.length && gameSupportsSkills(meta, skills));
   // Навыки для игры: универсальные берут любые с нужной формой, остальные — только свои (пересечение с темой урока).
   const playSkills = hasContext && skills?.length ? gameSkillsFor(meta, skills) : undefined;
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
@@ -96,12 +97,14 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
             <X size={24} />
           </button>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex items-center gap-2 truncate text-lg font-extrabold leading-tight">
-              <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
+            <span className="flex min-w-0 items-center gap-2 text-lg font-extrabold leading-tight">
+              <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" />
+              <span className="truncate">{l(meta.title)}</span>
             </span>
             {lesson && (
-              <span className="flex items-center gap-1 truncate text-xs font-bold text-muted">
-                <BookOpen size={12} className="shrink-0" /> {t("modes.game.lesson", { title: l(lesson.title) })}
+              <span className="flex min-w-0 items-center gap-1 text-xs font-bold text-muted">
+                <BookOpen size={12} className="shrink-0" />
+                <span className="truncate">{t("modes.game.lesson", { title: l(lesson.title) })}</span>
               </span>
             )}
           </span>
@@ -233,10 +236,12 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
             )}
             {phase.credited === false && (
               <p className="rounded-2xl bg-warning-soft px-3 py-2 text-center text-sm font-bold text-warning-strong">
-                {t("modes.game.notCredited", {
-                  need: Math.round(GAME_PASS * 100),
-                  n: phase.result.total ? Math.round((phase.result.correct / phase.result.total) * 100) : 0,
-                })}
+                {phase.result.total < GAME_MIN_TOTAL
+                  ? t("modes.game.tooShort", { min: GAME_MIN_TOTAL })
+                  : t("modes.game.notCredited", {
+                      need: Math.round(GAME_PASS * 100),
+                      n: Math.round((phase.result.correct / phase.result.total) * 100),
+                    })}
               </p>
             )}
             <div className="flex-1" />
