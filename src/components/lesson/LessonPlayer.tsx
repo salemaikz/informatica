@@ -1,15 +1,17 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Check, Clapperboard, Eye, Handshake, Hand, Lightbulb, Minus, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AnswerRecord, Lang, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { AnswerRecord, Lang, LessonVia, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
-import { useApp } from "@/lib/store";
+import { lessonXpFactorNow, useApp } from "@/lib/store";
+import { scaleXp } from "@/lib/review";
+import { formatFactor } from "@/lib/drill";
 // В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { ignoreKey } from "@/lib/keys";
@@ -60,6 +62,12 @@ export interface PlayerProps {
   steps: Step[];
   /** Для работы над ошибками: id шага → id задания-ошибки, которую закрыть при верном ответе. */
   mistakeMap?: Record<string, string>;
+  /** Режим урока: check — «Проверить себя» (пометка сверху, итог с via: "check"). По умолчанию learn. */
+  via?: LessonVia;
+  /** Вызывается один раз по завершении, после finishSession (тренировка: сдвиг повторения, зачёт экстерна). */
+  onSessionFinish?: (result: SessionResult) => void;
+  /** Блок на экране итогов (например, «Раздел засчитан»). */
+  resultsExtra?: ReactNode;
 }
 
 const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];
@@ -140,7 +148,7 @@ function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
 /** Первые слова текста — заголовок шага для ИИ, когда у шага нет title. */
 const firstWords = (text: string, n = 8) => text.split(" ").slice(0, n).join(" ");
 
-export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: PlayerProps) {
+export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, onSessionFinish, resultsExtra }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
   const recordAnswer = useApp((s) => s.recordAnswer);
@@ -170,6 +178,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const [goalReached, setGoalReached] = useState(false);
   const [session, setSession] = useState<{ result: SessionResult; bonusXp: number; achievements: string[] } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
+  // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется.
+  const [xpFactor] = useState(() => (kind === "lesson" ? lessonXpFactorNow(lessonId) : 1));
   const startedAt = useRef(0);
   const skippedRef = useRef(0);
   const stepStartedAt = useRef(0);
@@ -191,6 +201,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       const result: SessionResult = {
         kind,
         lessonId,
+        via,
         title,
         answers: finalRecords,
         xp: finalXp,
@@ -201,12 +212,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp } = finishSession(result);
+      onSessionFinish?.(result);
       const achievements = useApp.getState().consumeNewAchievements();
       giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : "complete");
       setSession({ result, bonusXp, achievements });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, title],
+    [finishSession, kind, lessonId, via, title, onSessionFinish],
   );
 
   const next = useCallback(() => {
@@ -250,7 +262,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
     (res: StepResult) => {
       if (!question) return;
       const newCombo = res.correct ? combo + 1 : 0;
-      const gained = xpForAnswer(res.correct, item.retry, newCombo);
+      const gained = scaleXp(xpForAnswer(res.correct, item.retry, newCombo), xpFactor);
       const rec: AnswerRecord = {
         stepId: question.id,
         skill: question.skill,
@@ -288,7 +300,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       else giveFeedback("wrong");
       if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
-    [question, combo, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo],
+    [question, combo, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor],
   );
 
   const check = useCallback(
@@ -440,6 +452,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         bonusXp={session.bonusXp}
         achievements={session.achievements}
         feedback={feedback}
+        via={via}
+        xpFactor={xpFactor}
+        extra={resultsExtra}
       />
     );
   }
@@ -475,6 +490,20 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
           </button>
           <ToolboxButton variant="icon" />
         </div>
+        {(via === "check" || xpFactor < 1) && (
+          <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 px-4 pb-2">
+            {via === "check" && (
+              <Pill tone="primary" icon={<ClipboardCheck size={14} />}>
+                {t("modes.check.badge")}
+              </Pill>
+            )}
+            {xpFactor < 1 && (
+              <Pill tone="warning" icon={<Repeat size={14} />}>
+                {t("modes.replay.badge", { f: formatFactor(xpFactor) })}
+              </Pill>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Контент шага */}

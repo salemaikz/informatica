@@ -1,18 +1,25 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, Lock, RotateCcw, Timer, Trophy } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Repeat, RotateCcw, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
-import { SKILLS } from "@/content/skills";
-import { unlockedSkills } from "@/content/course";
+import { useState } from "react";
+import { skillById } from "@/content/skills";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
+import { dueLessons } from "@/lib/review";
+import { gameOpen, skillsByUnit, skillsOfLessons } from "@/lib/drill";
+import { skillsWithShape } from "@/lib/bank";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
+import { iconFor } from "@/components/scenes/icons";
 import { GAMES } from "@/games/registry";
+
+/** Разделы курса с навыками — считаем один раз (данные курса не меняются). */
+const GROUPS = skillsByUnit();
 
 export default function PracticePage() {
   const { t, l } = useT();
@@ -20,8 +27,17 @@ export default function PracticePage() {
   const lessons = useApp((s) => s.lessons);
   const mistakes = useApp((s) => s.mistakes);
   const games = useApp((s) => s.games);
-  const unlocked = new Set(unlockedSkills(Object.keys(lessons)));
-  const anyUnlocked = unlocked.size > 0;
+  const [now] = useState(() => Date.now());
+  const [openUnits, setOpenUnits] = useState<ReadonlySet<string>>(new Set());
+  const due = dueLessons(lessons, now).length;
+  const completedSkills = skillsOfLessons(Object.keys(lessons).filter((id) => (lessons[id]?.completions ?? 0) > 0));
+
+  const toggle = (id: string) =>
+    setOpenUnits((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   return (
     <div className="flex flex-col gap-5">
@@ -32,12 +48,12 @@ export default function PracticePage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Link
-          href={anyUnlocked ? "/drill?mode=smart" : "/learn"}
+          href="/drill?mode=smart"
           className="flex flex-col gap-2 rounded-3xl bg-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
         >
           <Brain size={30} />
           <span className="text-lg font-extrabold">{t("prac.smart")}</span>
-          <span className="text-sm font-semibold opacity-90">{anyUnlocked ? t("prac.smart.desc") : t("prac.locked")}</span>
+          <span className="text-sm font-semibold opacity-90">{t("prac.smart.desc")}</span>
         </Link>
         <Link
           href={mistakes.length ? "/drill?mode=mistakes" : "#"}
@@ -57,18 +73,53 @@ export default function PracticePage() {
         </Link>
       </div>
 
+      {/* Повторение (разминка): тема «остывает» — повторяем по расписанию. */}
+      <Link
+        href="/drill?mode=review"
+        className={clsx(
+          "flex items-center gap-4 rounded-3xl border-2 p-4 active:translate-y-0.5",
+          due > 0 ? "border-warning/50 bg-warning-soft" : "border-border bg-surface hover:bg-surface-2",
+        )}
+      >
+        <span className={clsx("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl", due > 0 ? "bg-warning text-white" : "bg-surface-2 text-muted")}>
+          <Repeat size={26} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg font-extrabold">{t("modes.review.title")}</span>
+          <span className="block text-sm font-semibold text-muted">
+            {due > 0 ? t("modes.review.due", { n: due }) : t("modes.review.none")}
+          </span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-muted" />
+      </Link>
+
+      {/* Пробный ЕНТ. */}
+      <Link href="/exam" className="flex items-center gap-4 rounded-3xl border-2 border-border bg-surface p-4 hover:bg-surface-2 active:translate-y-0.5">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <Timer size={26} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg font-extrabold">{t("modes.prac.exam")}</span>
+          <span className="block text-sm font-semibold text-muted">{t("modes.prac.exam.desc")}</span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-muted" />
+      </Link>
+
       {GAMES.length > 0 && (
         <section>
           <h2 className="text-lg font-extrabold">{t("games.title")}</h2>
           <p className="mb-3 text-sm font-semibold text-muted">{t("games.subtitle")}</p>
           <div className="grid grid-cols-2 gap-3">
             {GAMES.map((g) => {
-              const open = g.skills.some((s) => unlocked.has(s));
+              const open = gameOpen(g, completedSkills);
               const best = games[g.id]?.best;
+              // Универсальные игры берут навыки пройденных уроков (если они есть), остальные — свои.
+              const own = g.shape ? skillsWithShape(completedSkills, g.shape).slice(0, 12) : [];
+              const href = open ? (own.length ? `/game/${g.id}?skills=${own.join(",")}` : `/game/${g.id}`) : "#";
               return (
                 <Link
                   key={g.id}
-                  href={open ? `/game/${g.id}` : "#"}
+                  href={href}
                   aria-disabled={!open}
                   className={clsx(
                     "flex flex-col gap-2 rounded-3xl border-2 bg-surface p-3.5 transition-transform active:translate-y-0.5",
@@ -80,15 +131,14 @@ export default function PracticePage() {
                   </span>
                   <span className="font-extrabold leading-tight">{l(g.title)}</span>
                   <span className="line-clamp-2 text-xs font-semibold text-muted">{l(g.description)}</span>
+                  {g.shape && <span className="text-xs font-extrabold text-primary">{t("modes.prac.anyTopic")}</span>}
                   <span className="mt-auto flex items-center gap-1 text-xs font-extrabold text-warning-strong">
                     {open ? (
                       <>
                         <Trophy size={14} className="text-gold" /> {best ?? "—"}
                       </>
                     ) : (
-                      <>
-                        <Lock size={12} className="text-muted" /> <span className="text-muted">{t("games.locked")}</span>
-                      </>
+                      <span className="text-muted">{t("common.soon")}</span>
                     )}
                   </span>
                 </Link>
@@ -98,49 +148,68 @@ export default function PracticePage() {
         </section>
       )}
 
-      <div className="flex items-center gap-4 rounded-3xl border-2 border-dashed border-border p-4 text-muted">
-        <Timer size={28} />
-        <div className="flex-1">
-          <p className="font-extrabold text-text">{t("prac.ent")}</p>
-          <p className="text-sm font-semibold">{t("prac.ent.desc")}</p>
-        </div>
-        <Pill>{t("common.soon")}</Pill>
-      </div>
-
-      <Card>
-        <p className="mb-3 text-lg font-extrabold">{t("prac.skills")}</p>
-        <ul className="flex flex-col divide-y-2 divide-border">
-          {SKILLS.map((sk) => {
-            const st = skills[sk.id];
-            const lvl = masteryLevel(st);
-            const open = unlocked.has(sk.id);
+      <section>
+        <h2 className="text-lg font-extrabold">{t("prac.skills")}</h2>
+        <p className="mb-3 text-sm font-semibold text-muted">{t("modes.prac.skillsHint")}</p>
+        <div className="flex flex-col gap-3">
+          {GROUPS.map(({ unit, skills: unitSkills }) => {
+            const expanded = openUnits.has(unit.id);
+            const UnitIcon = iconFor(unit.icon ?? "box");
+            const trainable = unitSkills.filter((s) => s.hasBank).length;
             return (
-              <li key={sk.id} className="flex items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold leading-tight">{l(sk.title)}</p>
-                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-muted">
-                    <span className="h-2 w-2 rounded-full" style={{ background: MASTERY_COLOR[lvl] }} />
-                    {t(`mastery.${lvl}`)} {st ? `· ${Math.round(st.mastery * 100)}%` : ""}
-                  </p>
-                  <ProgressBar value={st?.mastery ?? 0} color={MASTERY_COLOR[lvl]} height={10} />
-                </div>
-                {open ? (
-                  <Link
-                    href={`/drill?mode=skill&skill=${encodeURIComponent(sk.id)}`}
-                    className="shrink-0 rounded-xl border-2 border-primary/40 bg-primary-soft px-3 py-2 text-sm font-extrabold text-primary"
-                  >
-                    {t("prac.train")}
-                  </Link>
-                ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center text-muted" title={t("prac.locked")}>
-                    <Lock size={18} />
+              <Card key={unit.id} className="p-0 sm:p-0">
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={`unit-${unit.id}`}
+                  onClick={() => toggle(unit.id)}
+                  className="flex w-full items-center gap-3 rounded-3xl p-3.5 text-left hover:bg-surface-2"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: unit.color }}>
+                    <UnitIcon size={22} strokeWidth={2.4} />
                   </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-extrabold leading-tight">{l(unit.title)}</span>
+                    <span className="block text-xs font-bold text-muted">{t("modes.prac.groupCount", { n: trainable })}</span>
+                  </span>
+                  <ChevronDown size={20} className={clsx("shrink-0 text-muted transition-transform", expanded && "rotate-180")} />
+                </button>
+                {expanded && (
+                  <ul id={`unit-${unit.id}`} className="flex flex-col divide-y-2 divide-border border-t-2 border-border px-3.5">
+                    {unitSkills.map(({ id, hasBank }) => {
+                      const sk = skillById(id)!;
+                      const st = skills[id];
+                      const lvl = masteryLevel(st);
+                      return (
+                        <li key={id} className="flex items-center gap-3 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold leading-tight">{l(sk.title)}</p>
+                            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-muted">
+                              <span className="h-2 w-2 rounded-full" style={{ background: MASTERY_COLOR[lvl] }} />
+                              {t(`mastery.${lvl}`)} {st ? `· ${Math.round(st.mastery * 100)}%` : ""}
+                            </p>
+                            <ProgressBar value={st?.mastery ?? 0} color={MASTERY_COLOR[lvl]} height={10} />
+                          </div>
+                          {hasBank ? (
+                            <Link
+                              href={`/drill?mode=skill&skill=${encodeURIComponent(id)}`}
+                              className="shrink-0 rounded-xl border-2 border-primary/40 bg-primary-soft px-3 py-2 text-sm font-extrabold text-primary"
+                            >
+                              {t("prac.train")}
+                            </Link>
+                          ) : (
+                            <Pill className="shrink-0">{t("common.soon")}</Pill>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-              </li>
+              </Card>
             );
           })}
-        </ul>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }

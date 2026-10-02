@@ -402,6 +402,15 @@ function mutations(e: Expr, vars: string[]): Expr[] {
   return out;
 }
 
+/** «Глупые» варианты: A ∨ A, A ∧ ¬A (операнды совпадают или противоположны) — их ученик отбросит не думая. */
+function isSilly(e: Expr): boolean {
+  if (e.t === "not") return isSilly(e.a);
+  if (e.t !== "bin") return false;
+  const a = show(e.a);
+  const b = show(e.b);
+  return a === b || a === show(neg(e.b)) || isSilly(e.a) || isSilly(e.b);
+}
+
 const size = (e: Expr): number => (e.t === "v" || e.t === "c" ? 1 : e.t === "not" ? 1 + size(e.a) : 1 + size(e.a) + size(e.b));
 
 /** Три неверных варианта: не равносильны stem, записаны по-разному, не совпадают с верным. */
@@ -413,7 +422,7 @@ function distractors(rand: Rand, stem: Expr, correct: Expr, vars: string[], limi
     for (const m of pool) {
       if (picked.length >= 3) break;
       const s = show(m);
-      if (seen.has(s) || size(m) > limit || equivalent(stem, m)) continue;
+      if (seen.has(s) || size(m) > limit || isSilly(m) || equivalent(stem, m)) continue;
       seen.add(s);
       picked.push(m);
     }
@@ -816,7 +825,7 @@ const NAME_SETS = [
   ["Айдар", "Мади", "Данияр"],
   ["Асем", "Динара", "Томирис"],
   ["Ерлан", "Санжар", "Алибек"],
-  ["Айгүл", "Нұрлан", "Мадина"],
+  ["Арман", "Мирас", "Дана"],
 ];
 
 const PERMS: number[][] = [
@@ -895,7 +904,7 @@ function whoQuestion(rand: Rand, seed: number): ChoiceStep {
   const failReason = (perm: number[]): { ru: string; kk: string } => {
     for (let i = 0; i < 3; i++) {
       const c = trueCount(pz.statements[i], perm);
-      if (c !== 1) return { ru: `у ${names[i]} верных высказываний ${c}, а должно быть одно`, kk: `${names[i]} ұйғарымында ақиқат пікір саны ${c}, ал біреу болуы керек` };
+      if (c !== 1) return { ru: `${names[i]} — верных высказываний ${c} вместо одного`, kk: `${names[i]} — ақиқат пікір саны ${c} (біреу болуы керек)` };
     }
     return { ru: "подходит", kk: "сәйкес келеді" };
   };
@@ -932,8 +941,8 @@ function whoQuestion(rand: Rand, seed: number): ChoiceStep {
       const perm = PERMS.find((p) => p[idx] === target && !solutionsOf(pz.statements).includes(p))!;
       const r = failReason(perm);
       return {
-        ru: `Если ${nm} на ${target} месте, условие нарушается: например, для расстановки ${permText(perm)} ${r.ru}.`,
-        kk: `${nm} ${target}-орында болса, шарт бұзылады: мысалы, ${permText(perm)} орналасуы үшін ${r.kk}.`,
+        ru: `Если ${nm} на ${target} месте, условие нарушается: например, расстановка ${permText(perm)} не подходит — ${r.ru}.`,
+        kk: `${nm} ${target}-орында болса, шарт бұзылады: мысалы, ${permText(perm)} орналасуы сәйкес келмейді — ${r.kk}.`,
       };
     }),
     hint: HINT_WHO,
@@ -1029,8 +1038,8 @@ function statement(level: Level, seed: number): Statement {
 
 const LAW_PAIRS: { level: Level; left: Text; right: Text }[] = [
   { level: 1, left: { ru: "Двойное отрицание", kk: "Қос терістеу" }, right: "¬¬A = A" },
-  { level: 1, left: { ru: "«Или не» — всегда истина", kk: "«Немесе емес» — әрқашан ақиқат" }, right: "A ∨ ¬A = 1" },
-  { level: 1, left: { ru: "«И не» — всегда ложь", kk: "«Және емес» — әрқашан жалған" }, right: "A ∧ ¬A = 0" },
+  { level: 1, left: { ru: "«A или не A» — всегда истина", kk: "«A немесе A емес» — әрқашан ақиқат" }, right: "A ∨ ¬A = 1" },
+  { level: 1, left: { ru: "«A и не A» — всегда ложь", kk: "«A және A емес» — әрқашан жалған" }, right: "A ∧ ¬A = 0" },
   { level: 1, left: "A ∧ 1", right: "A" },
   { level: 1, left: "A ∨ 1", right: "1" },
   { level: 1, left: "A ∧ 0", right: "0" },

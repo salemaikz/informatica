@@ -167,8 +167,8 @@ function subWalk(a: string, b: string): L {
     const v = c.a - c.b - c.bin;
     const expr = `${c.a} − ${c.b}${c.bin ? " − 1" : ""} = ${v < 0 ? `−${-v}` : v}`;
     if (v < 0) {
-      ru.push(`Разряд ${i + 1}: ${expr} — не хватает → занимаем 1 у соседа слева (она стоит 2): пишем ${v + 2}.`);
-      kk.push(`Разряд ${i + 1}: ${expr} — жетпейді → сол жақтағы көршіден 1 қарыз аламыз (ол 2 тұрады): ${v + 2} жазамыз.`);
+      ru.push(`Разряд ${i + 1}: ${expr} — не хватает → занимаем 1 у соседа слева (она стоит 2): ${v < 0 ? `−${-v}` : v} + 2 = ${v + 2}, пишем ${v + 2}.`);
+      kk.push(`Разряд ${i + 1}: ${expr} — жетпейді → сол жақтағы көршіден 1 қарыз аламыз (ол 2 тұрады): ${v < 0 ? `−${-v}` : v} + 2 = ${v + 2}, ${v + 2} жазамыз.`);
     } else {
       ru.push(`Разряд ${i + 1}: ${expr} → пишем ${v}.`);
       kk.push(`Разряд ${i + 1}: ${expr} → ${v} жазамыз.`);
@@ -418,8 +418,8 @@ function mulQuestion(rand: Rand, level: Level, seed: number, mode: "choice" | "i
       rand,
       ans,
       [
-        { v: N + "0".repeat(k - 1), why: T(`Нулей на один меньше: умножение на ${m} = 2${sup(k)} дописывает ${k}, а не ${k - 1}.`, `Нөл бірге аз: ${m} = 2${sup(k)} санына көбейту ${k} нөл жазады, ${k - 1} емес.`) },
-        { v: N + "0".repeat(k + 1), why: T(`Нулей на один больше: нужно дописать ровно ${k}.`, `Нөл бірге артық: дәл ${k} нөл жазу керек.`) },
+        { v: N + "0".repeat(k - 1), why: T(`Нулей на один меньше: при умножении на ${m} = 2${sup(k)} нужно дописать ${k} ${zerosRu(k)}.`, `Нөл бірге аз: ${m} = 2${sup(k)} санына көбейткенде ${k} нөл жазу керек.`) },
+        { v: N + "0".repeat(k + 1), why: T(`Нулей на один больше: нужно дописать ровно ${k} ${zerosRu(k)}.`, `Нөл бірге артық: дәл ${k} нөл жазу керек.`) },
         { v: N + "1".repeat(k), why: T("Дописаны единицы, а при умножении на 2 дописывают нули.", "Бірліктер жазылған, ал 2-ге көбейткенде нөлдер жазылады.") },
         { v: String(n * m), why: WHY.decimal },
         { v: N.length > k ? trimZeros(N.slice(0, N.length - k)) : "", why: T("Это деление, а не умножение: цифры отброшены, а не дописаны.", "Бұл бөлу, көбейту емес: цифрлар жазылмай, алынып тасталған.") },
@@ -451,7 +451,7 @@ function divQuestion(rand: Rand, level: Level, seed: number, mode: "choice" | "i
   const ans = bin(n >> k);
   const dropped = N.slice(N.length - k);
   const explanation = T(
-    `${m} = 2${sup(k)}, значит отбрасываем справа ${k} ${k === 1 ? "цифру" : "цифры"}: ${N} → ${ans} (отброшено ${dropped} — это остаток). Проверка: ${n} : ${m} = ${n >> k} (нацело), а ${rec(ans, 2)} = ${n >> k}.`,
+    `${m} = 2${sup(k)}, значит отбрасываем справа ${k} ${digitsRu(k)}: ${N} → ${ans} (отброшено ${dropped} — это остаток). Проверка: ${n} : ${m} = ${n >> k} (нацело), а ${rec(ans, 2)} = ${n >> k}.`,
     `${m} = 2${sup(k)}, демек оң жақтан ${k} цифрды алып тастаймыз: ${N} → ${ans} (${dropped} алынып тасталды — бұл қалдық). Тексеру: ${n} : ${m} = ${n >> k} (бүтін бөлігі), ал ${rec(ans, 2)} = ${n >> k}.`,
   );
   const prompt = {
@@ -464,8 +464,8 @@ function divQuestion(rand: Rand, level: Level, seed: number, mode: "choice" | "i
       ans,
       [
         { v: trimZeros(dropped), why: T("Это отброшенные цифры (остаток), а ответ — то, что осталось слева.", "Бұл алынып тасталған цифрлар (қалдық), ал жауап — сол жақта қалғаны.") },
-        { v: trimZeros(N.slice(0, Math.max(1, N.length - k + 1))), why: T(`Отброшено на одну цифру меньше: деление на ${m} убирает ${k}.`, `Бір цифр аз алынып тасталған: ${m}-ге бөлу ${k} цифрды алып тастайды.`) },
-        { v: N.length - k - 1 >= 1 ? trimZeros(N.slice(0, N.length - k - 1)) : "", why: T(`Отброшено на одну цифру больше: убрать нужно ровно ${k}.`, `Бір цифр артық алынып тасталған: дәл ${k} цифрды алу керек.`) },
+        { v: trimZeros(N.slice(0, Math.max(1, N.length - k + 1))), why: T(`Отброшено на одну цифру меньше: при делении на ${m} = 2${sup(k)} убирают ${k} ${digitsRu(k)}.`, `Бір цифр аз алынып тасталған: ${m} = 2${sup(k)} санына бөлгенде ${k} цифрды алып тастау керек.`) },
+        { v: N.length - k - 1 >= 1 ? trimZeros(N.slice(0, N.length - k - 1)) : "", why: T(`Отброшено на одну цифру больше: убрать нужно ровно ${k} ${digitsRu(k)}.`, `Бір цифр артық алынып тасталған: дәл ${k} цифрды алу керек.`) },
         { v: N + "0".repeat(k), why: T("Это умножение, а не деление: нули дописаны вместо того, чтобы убрать цифры.", "Бұл көбейту, бөлу емес: цифрларды алудың орнына нөлдер жазылған.") },
         { v: String(n >> k), why: WHY.decimal },
       ],
@@ -570,9 +570,13 @@ function sumOtherQuestion(rand: Rand, level: Level, seed: number, mode: "choice"
   const groups = sum.padStart(Math.ceil(sum.length / k) * k, "0").match(new RegExp(`.{${k}}`, "g")) ?? [];
   const leftGroups = sum.match(new RegExp(`.{1,${k}}`, "g")) ?? [];
   const leftAns = leftGroups.map((g) => parseInt(g, 2).toString(16).toUpperCase()).join("");
+  const expand = ans
+    .split("")
+    .map((d, i) => `${dv(d)} · ${base ** (ans.length - 1 - i)}`)
+    .join(" + ");
   const explanation = T(
-    `Сначала сумма в двоичной системе: ${rec(A, 2)} + ${rec(B, 2)} = ${rec(sum, 2)} (${a} + ${b} = ${a + b}). Теперь группы по ${k} бита справа налево: ${groups.join(" | ")} → ${rec(ans, base)}. Проверка: ${a + b} в системе с основанием ${base} — ${ans}.`,
-    `Алдымен екілік жүйедегі қосынды: ${rec(A, 2)} + ${rec(B, 2)} = ${rec(sum, 2)} (${a} + ${b} = ${a + b}). Енді оңнан солға қарай ${k} биттен топтар: ${groups.join(" | ")} → ${rec(ans, base)}. Тексеру: ${a + b} саны негізі ${base} жүйеде — ${ans}.`,
+    `Сначала сумма в двоичной системе: ${rec(A, 2)} + ${rec(B, 2)} = ${rec(sum, 2)} (${a} + ${b} = ${a + b}). Теперь группы по ${k} бита справа налево: ${groups.join(" | ")} → ${rec(ans, base)}. Проверка: ${expand} = ${a + b}.`,
+    `Алдымен екілік жүйедегі қосынды: ${rec(A, 2)} + ${rec(B, 2)} = ${rec(sum, 2)} (${a} + ${b} = ${a + b}). Енді оңнан солға қарай ${k} биттен топтар: ${groups.join(" | ")} → ${rec(ans, base)}. Тексеру: ${expand} = ${a + b}.`,
   );
   const prompt = {
     ru: `Сложи ${rec(A, 2)} + ${rec(B, 2)} и запиши результат в ${SYS[base].ru} системе`,
@@ -588,9 +592,9 @@ function sumOtherQuestion(rand: Rand, level: Level, seed: number, mode: "choice"
       ans,
       [
         { v: leftAns, why: T("Группы бит взяты слева направо. Резать нужно справа налево, недостающие нули пишут слева.", "Бит топтары солдан оңға қарай алынған. Оңнан солға қарай бөлу керек, жетпейтін нөлдер сол жаққа жазылады.") },
-        { v: String(a + b), why: WHY.decimal },
+        { v: String(a + b), why: T(`Это десятичное значение суммы, а не запись в ${SYS[base].ru} системе.`, `Бұл — қосындының ондық мәні, ${SYS[base].kk} жүйедегі жазба емес.`) },
         { v: sum, why: T("Это двоичная запись суммы, а не запись в нужной системе.", "Бұл қосындының екілік жазбасы, керек жүйедегі жазба емес.") },
-        { v: ans.split("").reverse().join(""), why: T("Цифры записаны в обратном порядке.", "Цифрлар кері ретпен жазылған.") },
+        { v: ans.split("").reverse().join("").replace(/^0.*/, ""), why: T("Цифры записаны в обратном порядке.", "Цифрлар кері ретпен жазылған.") },
         { v: toBase(a + b + 1, base), why: WHY.off },
       ],
       () => toBase(a + b + int(rand, 2, 5), base),
@@ -624,8 +628,8 @@ function sumOtherQuestion(rand: Rand, level: Level, seed: number, mode: "choice"
 
 /** C: сколько единиц в двоичной записи суммы. */
 function onesInSumQuestion(rand: Rand, level: Level, seed: number): QuestionStep {
-  const a = int(rand, 20, 120);
-  const b = int(rand, 20, 120);
+  const a = int(rand, 20, 62);
+  const b = int(rand, 20, 62);
   const A = bin(a);
   const B = bin(b);
   const sum = bin(a + b);
@@ -695,7 +699,8 @@ function compareQuestion(rand: Rand, level: Level, seed: number): QuestionStep {
     c = int(rand, 30, 90);
     d = int(rand, 3, 25);
     guard++;
-  } while (guard < 50 && (a + b === c - d || Math.abs(a + b - (c - d)) < 2));
+  } while (guard < 50 && Math.abs(a + b - (c - d)) < 2);
+  if (a + b === c - d) d += 2; // страховка: ответ «A = B» не допускаем
   const v1 = a + b;
   const v2 = c - d;
   const E1 = `${rec(bin(a), 2)} + ${rec(bin(b), 2)}`;
@@ -757,6 +762,7 @@ function mixedQuestion(rand: Rand, level: Level, seed: number): QuestionStep {
 
 const SUPS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 const zerosRu = (k: number) => (k === 1 ? "ноль" : k < 5 ? "нуля" : "нулей");
+const digitsRu = (k: number) => (k === 1 ? "цифру" : k < 5 ? "цифры" : "цифр");
 function sup(n: number): string {
   return String(n).replace(/\d/g, (d) => SUPS[Number(d)]);
 }
@@ -988,7 +994,10 @@ function makeShort(level: Level, seed: number): ShortQuestion {
       prompt: same(`${rec(bin(n), 2)} · ${2 ** k} = ?₂`),
       answer: bin(n << k),
       mode: "binary",
-      explanation: T(`${2 ** k} = 2${sup(k)}: дописываем справа ${k} ${zerosRu(k)}.`, `${2 ** k} = 2${sup(k)}: оң жаққа ${k} нөл жазамыз.`),
+      explanation: T(
+        `${2 ** k} = 2${sup(k)}: дописываем справа ${k} ${zerosRu(k)} → ${rec(bin(n << k), 2)}.`,
+        `${2 ** k} = 2${sup(k)}: оң жаққа ${k} нөл жазамыз → ${rec(bin(n << k), 2)}.`,
+      ),
       hint: HINT_MUL,
     };
   }

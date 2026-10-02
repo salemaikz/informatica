@@ -1,0 +1,243 @@
+// Раздел «Теория»: чтение уроков без заданий, группировка результатов поиска, подсветка, недавние запросы.
+// Чистая логика без React (тесты — tests/theory.test.ts).
+
+import type { TaskContext } from "./ai-types";
+import { fold, queryTokens, search, type SearchIndex, type SearchKind, type SearchResult } from "./search";
+import { plain, tx } from "./text";
+import type { InfoStep, Lang, Lesson, Step, Unit } from "./types";
+
+// ---------- Чтение урока ----------
+
+/** Шаги без проверки ответа — то, что показывает «Теория». */
+export function isInfoStep(step: Step): step is InfoStep {
+  return step.type === "theory" || step.type === "story" || step.type === "worked" || step.type === "explore" || step.type === "video";
+}
+
+/** Информационные шаги урока по порядку. */
+export function infoSteps(lesson: Lesson): InfoStep[] {
+  return lesson.steps.filter(isInfoStep);
+}
+
+/** Слов в тексте (для оценки времени чтения). */
+export function countWords(text: string): number {
+  return plain(text).split(/\s+/).filter(Boolean).length;
+}
+
+/** Текст шага на языке ученика: всё, что читают (заголовок, текст, подшаги). */
+export function stepText(step: InfoStep, lang: Lang): string {
+  switch (step.type) {
+    case "theory":
+      return `${tx(step.title, lang)}. ${tx(step.body, lang)}`;
+    case "story":
+      return `${step.title ? tx(step.title, lang) + ". " : ""}${tx(step.body, lang)}`;
+    case "worked":
+      return [tx(step.title, lang), ...step.steps.map((s) => tx(s.text, lang)), step.result ? tx(step.result, lang) : ""].join(". ");
+    case "explore":
+      return `${tx(step.title, lang)}. ${step.body ? tx(step.body, lang) : ""}`;
+    case "video":
+      return tx(step.title, lang);
+  }
+}
+
+/** Скорость чтения учебного текста, слов в минуту. */
+const WORDS_PER_MIN = 140;
+
+export interface ReadingStats {
+  /** Блоков теории: текст, ситуации, разборы, песочницы, видео. */
+  cards: number;
+  /** Минут на чтение вместе с конспектом (не меньше 1). */
+  minutes: number;
+}
+
+/** «N карточек теории · M мин чтения». Песочница — +30 с, видео — +1 мин. */
+export function readingStats(lesson: Lesson, lang: Lang): ReadingStats {
+  const steps = infoSteps(lesson);
+  let words = countWords(tx(lesson.conspect, lang));
+  let extra = 0;
+  for (const s of steps) {
+    words += countWords(stepText(s, lang));
+    if (s.type === "explore") extra += 0.5;
+    if (s.type === "video") extra += 1;
+  }
+  return { cards: steps.length, minutes: Math.max(1, Math.ceil(words / WORDS_PER_MIN + extra)) };
+}
+
+/** Id готовых уроков в порядке курса. */
+export function readableLessonIds(units: Unit[]): string[] {
+  const ids: string[] = [];
+  for (const u of units) for (const l of u.lessons) if (l.status === "available" && !ids.includes(l.id)) ids.push(l.id);
+  return ids;
+}
+
+/** Соседние уроки в порядке курса (null — край списка или урока нет). */
+export function adjacentLessons(order: string[], id: string): { prev: string | null; next: string | null } {
+  const i = order.indexOf(id);
+  if (i < 0) return { prev: null, next: null };
+  return { prev: order[i - 1] ?? null, next: order[i + 1] ?? null };
+}
+
+/** Контекст для «Спросить Бита» по блоку теории. */
+export function blockContext(step: InfoStep, lesson: Lesson, lang: Lang): TaskContext {
+  const title = step.type === "story" ? tx(step.title ?? lesson.title, lang) : tx(step.title, lang);
+  const text = step.type === "worked"
+    ? [...step.steps.map((s, i) => `${i + 1}. ${plain(tx(s.text, lang))}`), step.result ? plain(tx(step.result, lang)) : ""].filter(Boolean).join(" ")
+    : step.type === "theory"
+      ? plain(tx(step.body, lang))
+      : plain(stepText(step, lang));
+  return { prompt: title, theory: text, stepKey: step.id };
+}
+
+/** Контекст для вопроса по конспекту урока. */
+export function conspectContext(lesson: Lesson, lang: Lang): TaskContext {
+  return { prompt: tx(lesson.title, lang), theory: plain(tx(lesson.conspect, lang)), stepKey: "conspect" };
+}
+
+// ---------- Результаты поиска ----------
+
+export type SearchGroup = "lesson" | "theory" | "conspect" | "note" | "skill";
+
+/** Порядок групп на экране. Темы ЕНТ идут вместе с навыками. */
+export const GROUP_ORDER: SearchGroup[] = ["lesson", "theory", "conspect", "note", "skill"];
+
+export function groupOf(kind: SearchKind): SearchGroup {
+  return kind === "topic" ? "skill" : kind;
+}
+
+/** Результаты по группам (в каждой — порядок поиска). Пустые группы отсутствуют. */
+export function groupResults(results: SearchResult[]): { group: SearchGroup; items: SearchResult[] }[] {
+  const by = new Map<SearchGroup, SearchResult[]>();
+  for (const r of results) {
+    const g = groupOf(r.doc.kind);
+    const list = by.get(g);
+    if (list) list.push(r);
+    else by.set(g, [r]);
+  }
+  return GROUP_ORDER.filter((g) => by.has(g)).map((g) => ({ group: g, items: by.get(g)! }));
+}
+
+// ---------- Мягкий запрос ----------
+
+/** Служебные слова (уже «сложенные»: қ → к, ү → у …) — в мягком запросе не обязательны. */
+const STOP_WORDS = new Set(["на", "по", "для", "как", "что", "это", "из", "от", "до", "при", "или", "про", "жане", "мен", "бен", "пен", "ушин", "калай", "деген", "не"]);
+
+/** Срезает окончание длинного кириллического слова: «двоичную» → «двоич», «кестесі» → «кесте», «байты» → «байт». */
+function stem(token: string): string {
+  if (!/^\p{Script=Cyrillic}+$/u.test(token)) return token;
+  const cut = token.length >= 8 ? 3 : token.length >= 6 ? 2 : token.length >= 4 ? 1 : 0;
+  return token.slice(0, token.length - cut);
+}
+
+/**
+ * Запасной запрос, когда точный ничего не нашёл: поиск идёт по префиксу и требует все слова,
+ * поэтому «перевод в двоичную» не находит «двоичная система». Срезаем окончания и служебные слова.
+ * Пустая строка — смягчать нечего (запрос не изменится).
+ */
+export function relaxQuery(query: string): string {
+  const tokens = queryTokens(query);
+  const meaningful = tokens.filter((t) => !STOP_WORDS.has(t));
+  const relaxed = [...new Set((meaningful.length ? meaningful : tokens).map(stem))].filter((t) => t.length >= 2);
+  return relaxed.join(" ") === tokens.join(" ") ? "" : relaxed.join(" ");
+}
+
+/** Склейка результатов двух индексов (уроки/теория и записи ученика): по убыванию очков, не больше limit. */
+export function mergeResults(a: SearchResult[], b: SearchResult[], limit: number): SearchResult[] {
+  return [...a, ...b].sort((x, y) => y.score - x.score).slice(0, limit);
+}
+
+/**
+ * Поиск по нескольким индексам (курс и записи ученика) со склейкой по очкам.
+ * Ничего не нашлось — повтор с мягким запросом (relaxQuery). query — запрос, по которому найдено (для подсветки заголовков).
+ */
+export function searchAll(
+  sources: { index: SearchIndex; limit: number }[],
+  query: string,
+  limit: number,
+): { results: SearchResult[]; query: string } {
+  const run = (q: string) => sources.map((s) => search(s.index, q, s.limit)).reduce((a, b) => mergeResults(a, b, limit), []);
+  const strict = run(query);
+  if (strict.length) return { results: strict, query };
+  const soft = relaxQuery(query);
+  return soft ? { results: run(soft), query: soft } : { results: strict, query };
+}
+
+// ---------- Подсветка ----------
+
+export interface TextPart {
+  text: string;
+  mark: boolean;
+}
+
+/** Режет текст на куски по диапазонам подсветки (диапазоны не пересекаются и отсортированы; лишнее отбрасывается). */
+export function highlightParts(text: string, ranges: [number, number][]): TextPart[] {
+  const parts: TextPart[] = [];
+  let pos = 0;
+  for (const [a, b] of ranges) {
+    const s = Math.max(a, pos);
+    const e = Math.min(b, text.length);
+    if (e <= s) continue;
+    if (s > pos) parts.push({ text: text.slice(pos, s), mark: false });
+    parts.push({ text: text.slice(s, e), mark: true });
+    pos = e;
+  }
+  if (pos < text.length) parts.push({ text: text.slice(pos), mark: false });
+  return parts.length ? parts : [{ text, mark: false }];
+}
+
+/** Диапазоны совпадений слов запроса (по префиксу, с «мягкими» казахскими буквами) в произвольной строке — для заголовков. */
+export function highlightRanges(text: string, query: string): [number, number][] {
+  const tokens = queryTokens(query);
+  if (!tokens.length) return [];
+  const ranges: [number, number][] = [];
+  for (const m of text.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const folded = fold(m[0]);
+    let len = 0;
+    for (const t of tokens) if (t.length > len && folded.startsWith(t)) len = t.length;
+    if (len) ranges.push([m.index, m.index + len]);
+  }
+  return ranges;
+}
+
+// ---------- Недавние запросы ----------
+
+export const RECENT_KEY = "informatica-search-recent";
+export const RECENT_MAX = 6;
+
+/** Добавляет запрос в начало списка: без повторов (без учёта регистра), не короче 2 символов, не больше max. */
+export function pushRecent(list: string[], query: string, max = RECENT_MAX): string[] {
+  const q = query.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (q.length < 2) return list;
+  const key = q.toLowerCase();
+  return [q, ...list.filter((x) => x.toLowerCase() !== key)].slice(0, max);
+}
+
+/** Разбор сохранённого списка (данные недоверенные). */
+export function parseRecent(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    // Через pushRecent — те же правила (обрезка, без повторов): повтор дал бы одинаковые key у чипов.
+    return v
+      .filter((x): x is string => typeof x === "string")
+      .reduceRight<string[]>((list, x) => pushRecent(list, x), [])
+      .slice(0, RECENT_MAX);
+  } catch {
+    return [];
+  }
+}
+
+/** Адрес поиска по запросу. */
+export function searchHref(query: string): string {
+  const q = query.trim();
+  return q ? `/search?q=${encodeURIComponent(q)}` : "/search";
+}
+
+/** Форма русского числительного: 0 — «1 карточка», 1 — «2 карточки», 2 — «5 карточек». */
+export function pluralIndex(n: number): 0 | 1 | 2 {
+  const a = Math.abs(Math.trunc(n));
+  const m10 = a % 10;
+  const m100 = a % 100;
+  if (m10 === 1 && m100 !== 11) return 0;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 1;
+  return 2;
+}

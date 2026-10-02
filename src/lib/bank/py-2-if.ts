@@ -182,7 +182,7 @@ function randCond(rand: Rand, x: number): Cond {
     value,
     why: {
       ru: `${x} ${value ? "лежит" : "не лежит"} между ${lo} и ${hi}: ${tf(value)}`,
-      kk: `${x} саны ${lo} мен ${hi} аралығында ${value ? "жатыр" : "жатпайды"}: ${tf(value)}`,
+      kk: `${x} саны ${lo}…${hi} аралығында ${value ? "жатыр" : "жатпайды"}: ${tf(value)}`,
     },
   };
 }
@@ -490,7 +490,7 @@ function genRangeIn(rand: Rand, level: Level, seed: number): InputStep {
     },
     explanation: {
       ru: `x = ${x}, условие «${cond}» — ${tf(condValue)}. ${inside ? `Число ${x} лежит в диапазоне от ${a} до ${b}` : `Число ${x} вне диапазона от ${a} до ${b}`}, поэтому выводится ${out}.`,
-      kk: `x = ${x}, «${cond}» шарты — ${tf(condValue)}. ${x} саны ${a} мен ${b} диапазонында ${inside ? "жатыр" : "жатпайды"}, сондықтан ${out} шығады.`,
+      kk: `x = ${x}, «${cond}» шарты — ${tf(condValue)}. ${x} саны ${a}…${b} диапазонында ${inside ? "жатыр" : "жатпайды"}, сондықтан ${out} шығады.`,
     },
   };
 }
@@ -571,9 +571,9 @@ function genFindX(rand: Rand, level: Level, seed: number): ChoiceStep {
     return { ru: `При x = ${x}: ${reason.ru}, выводится ${o}.`, kk: `x = ${x} болғанда: ${reason.kk}, ${o} шығады.` };
   };
   const rightWhy: Record<number, L> = {
-    1: { ru: `Единица выводится в первой ветке, значит нужно x > ${a}.`, kk: `Бірлік бірінші тармақта шығады, демек x > ${a} болуы керек.` },
-    2: { ru: `Вывод 2 стоит в elif: нужно, чтобы x > ${a} было неверно, а x > ${b} и x кратно ${m} — верно.`, kk: `2 шығару elif тармағында тұр: x > ${a} жалған, ал x > ${b} және x ${m} санына еселі ақиқат болуы керек.` },
-    3: { ru: `Тройка выводится в else: нужно, чтобы оба условия выше были неверны.`, kk: `Үштік else тармағында шығады: жоғарыдағы екі шарт та жалған болуы керек.` },
+    1: { ru: `Единица выводится в первой ветке, значит нужно x > ${a}.`, kk: `1 саны бірінші тармақта шығады, демек x > ${a} болуы керек.` },
+    2: { ru: `Вывод 2 стоит в elif: нужно, чтобы x > ${a} было неверно, а x > ${b} и x кратно ${m} — верно.`, kk: `2 санын шығару elif тармағында тұр: x > ${a} жалған, ал x > ${b} және x ${m} санына еселі ақиқат болуы керек.` },
+    3: { ru: `Тройка выводится в else: нужно, чтобы оба условия выше были неверны.`, kk: `3 саны else тармағында шығады: жоғарыдағы екі шарт та жалған болуы керек.` },
   };
   return choice(
     rand,
@@ -732,7 +732,7 @@ function condTemplate(rand: Rand): CondTemplate {
         { text: `x % 2 == 0 or x > ${a}`, why: { ru: "С or подойдёт любое чётное и любое число больше границы, даже нечётное.", kk: "or болғанда кез келген жұп сан да, шектен үлкен кез келген сан да (тақ болса да) сәйкес келеді." } },
         { text: `x % 2 == 1 and x > ${a}`, why: { ru: "Остаток 1 означает нечётное число, а нужно чётное.", kk: "Қалдық 1 — тақ сан дегенді білдіреді, ал жұп сан керек." } },
         { text: `x % 2 == 0 and x < ${a}`, why: { ru: "Знак < выбирает числа меньше границы, а нужны больше.", kk: "< белгісі шектен кіші сандарды таңдайды, ал үлкені керек." } },
-        { text: `x % 2 == 0 and x >= ${a}`, why: { ru: `Число ${a} при чётном ${a} подошло бы, хотя «больше ${a}» его исключает.`, kk: `${a} жұп болса, ол сәйкес келер еді, ал «x > ${a}» шарты оны қоспайды.` } },
+        { text: `x % 2 == 0 and x >= ${a}`, why: { ru: `Чётное число ${a} подошло бы, хотя «больше ${a}» его исключает.`, kk: `Жұп ${a} саны сәйкес келер еді, ал «x > ${a}» шарты оны қоспайды.` } },
       ],
       test: (x) => [x % 2 === 0 && x > a, x % 2 === 0 || x > a, x % 2 === 1 && x > a, x % 2 === 0 && x < a, x % 2 === 0 && x >= a],
     };
@@ -741,10 +741,10 @@ function condTemplate(rand: Rand): CondTemplate {
     const a = int(rand, 3, 20);
     const b = a + int(rand, 5, 25);
     return {
-      describe: { ru: `x лежит строго между ${a} и ${b}`, kk: `x ${a} мен ${b} аралығында, шеттері кірмейді` },
+      describe: { ru: `x лежит строго между ${a} и ${b}`, kk: `x ${a}…${b} аралығында, шеттері кірмейді` },
       right: `${a} < x < ${b}`,
       wrong: [
-        { text: `${a} <= x <= ${b}`, why: { ru: "Знаки <= включают границы, а «строго между» их исключает.", kk: "<= белгілері шектерді қосады, ал «қатаң аралығында» оларды қоспайды." } },
+        { text: `${a} <= x <= ${b}`, why: { ru: "Знаки <= включают границы, а «строго между» их исключает.", kk: "<= белгілері шектерді қосады, ал шарт бойынша шеттері кірмеуі керек." } },
         { text: `x > ${a} or x < ${b}`, why: { ru: "С or условие верно для любого числа.", kk: "or болғанда шарт кез келген сан үшін ақиқат." } },
         { text: `x < ${a} and x > ${b}`, why: { ru: "Такого x не существует: число не может быть и меньше меньшей границы, и больше большей.", kk: "Мұндай x жоқ: сан кіші шектен кіші де, үлкен шектен үлкен де бола алмайды." } },
         { text: `x > ${a} and x <= ${b}`, why: { ru: `Верхняя граница ${b} включена, а должна быть исключена.`, kk: `Жоғарғы шек ${b} қосылған, ал ол қосылмауы керек.` } },
@@ -815,7 +815,7 @@ function genCondPick(rand: Rand, level: Level, seed: number): ChoiceStep {
       },
       explanation: {
         ru: `Нужно записать «${tpl.describe.ru}»: ${tpl.right}. В остальных вариантах перепутаны and и or, знаки сравнения или границы.`,
-        kk: `«${tpl.describe.kk}» жазу керек: ${tpl.right}. Қалған нұсқаларда and мен or, салыстыру белгілері немесе шектер шатастырылған.`,
+        kk: `«${tpl.describe.kk}» дегенді былай жазамыз: ${tpl.right}. Қалған нұсқаларда and мен or, салыстыру белгілері немесе шектер шатастырылған.`,
       },
     },
     tpl.right,
@@ -894,7 +894,7 @@ function genStatement(rand: Rand, level: Level): Statement {
         value: v,
         explanation: {
           ru: `Число ${x} ${v ? "лежит" : "не лежит"} между ${lo} и ${hi} (границы входят): ${tf(v)}.`,
-          kk: `${x} саны ${lo} мен ${hi} аралығында ${v ? "жатыр" : "жатпайды"} (шеттері қоса): ${tf(v)}.`,
+          kk: `${x} саны ${lo}…${hi} аралығында ${v ? "жатыр" : "жатпайды"} (шеттерін қоса): ${tf(v)}.`,
         },
       };
     }
@@ -907,7 +907,10 @@ function genStatement(rand: Rand, level: Level): Statement {
       level,
       text: { ru: `При x = ${x} условие x % ${m} == ${r} верно`, kk: `x = ${x} болғанда x % ${m} == ${r} шарты ақиқат` },
       value: v,
-      explanation: same(`${x} % ${m} = ${x % m}, в условии ${r}: ${tf(v)}`),
+      explanation: {
+        ru: `${x} % ${m} = ${x % m}, а в условии ${r}: ${tf(v)}`,
+        kk: `${x} % ${m} = ${x % m}, ал шартта ${r} тұр: ${tf(v)}`,
+      },
     };
   }
   // C: равносильные условия (сверка перебором)
@@ -926,9 +929,17 @@ function genStatement(rand: Rand, level: Level): Statement {
     variant === 0 ? [!(x > a), x < a] : variant === 1 ? [!(x > a && x < b), x <= a && x >= b] : [!(x === a), x > a];
   const t = broken ? testBroken : f.test;
   let equal = true;
+  let cx = 0;
+  let cl = false;
+  let cr = false;
   for (let x = -5; x <= b + 10; x++) {
     const [l, r] = t(x);
-    if (l !== r) equal = false;
+    if (l !== r && equal) {
+      equal = false;
+      cx = x;
+      cl = l;
+      cr = r;
+    }
   }
   return {
     id: `s:${SKILL}:equiv:${a}:${b}:${variant}:${broken ? 1 : 0}`,
@@ -941,7 +952,10 @@ function genStatement(rand: Rand, level: Level): Statement {
     value: equal,
     explanation: equal
       ? { ru: "Да: условие, записанное через not, даёт то же значение при любом x.", kk: "Иә: not арқылы жазылған шарт кез келген x үшін сол мәнді береді." }
-      : { ru: "Нет: на некоторых значениях x условия дают разные результаты (например, на границе).", kk: "Жоқ: x-тің кейбір мәндерінде шарттар әртүрлі нәтиже береді (мысалы, шекте)." },
+      : {
+          ru: `Нет: например, при x = ${cx} первое условие даёт ${tf(cl)}, а второе — ${tf(cr)}.`,
+          kk: `Жоқ: мысалы, x = ${cx} болғанда бірінші шарт ${tf(cl)}, ал екіншісі ${tf(cr)} береді.`,
+        },
   };
 }
 
@@ -958,7 +972,7 @@ const OP_MEANING: Record<string, L> = {
   ">=": { ru: "больше или равно", kk: "үлкен немесе тең" },
   and: { ru: "И: верны оба условия", kk: "ЖӘНЕ: екі шарт та ақиқат" },
   or: { ru: "ИЛИ: верно хотя бы одно", kk: "НЕМЕСЕ: кемінде біреуі ақиқат" },
-  not: { ru: "НЕ: меняет True на False", kk: "ЕМЕС: True-ды False-қа ауыстырады" },
+  not: { ru: "НЕ: меняет True на False и наоборот", kk: "ЕМЕС: True-ды False-қа және керісінше ауыстырады" },
 };
 
 function genPair(rand: Rand, level: Level): Pair {
@@ -977,7 +991,7 @@ function genPair(rand: Rand, level: Level): Pair {
     if (kind === 3) {
       const lo = int(rand, 1, 20);
       const hi = lo + int(rand, 3, 20);
-      return { id: `p:${SKILL}:range:${lo}:${hi}`, skill: SKILL, level, left: `${lo} <= x <= ${hi}`, right: { ru: `x от ${lo} до ${hi}, границы входят`, kk: `x ${lo} мен ${hi} аралығында, шеттері қоса` } };
+      return { id: `p:${SKILL}:range:${lo}:${hi}`, skill: SKILL, level, left: `${lo} <= x <= ${hi}`, right: { ru: `x от ${lo} до ${hi}, границы входят`, kk: `x ${lo}…${hi} аралығында, шеттерін қоса` } };
     }
     const c = int(rand, 1, 30);
     return { id: `p:${SKILL}:ne:${c}`, skill: SKILL, level, left: `x != ${c}`, right: { ru: `x не равно ${c}`, kk: `x пен ${c} тең емес` } };
@@ -1004,7 +1018,7 @@ function genShort(rand: Rand, level: Level): ShortQuestion {
       id: `q:${SKILL}:cmp:${x}:${op}:${k}`,
       skill: SKILL,
       level,
-      prompt: { ru: `Значение выражения ${x} ${op} ${k}: True или False?`, kk: `${x} ${op} ${k} өрнегінің мәні: True ме, False па?` },
+      prompt: { ru: `Значение выражения ${x} ${op} ${k}: True или False?`, kk: `${x} ${op} ${k} өрнегінің мәні: True ма, False па?` },
       answer: tf(v),
       mode: "text",
       explanation: same(`${x} ${op} ${k} — ${tf(v)}`),
@@ -1022,7 +1036,7 @@ function genShort(rand: Rand, level: Level): ShortQuestion {
       level,
       prompt: {
         ru: `x = ${x}. Значение условия x % ${m} == ${r} and x > ${t}: True или False?`,
-        kk: `x = ${x}. x % ${m} == ${r} and x > ${t} шартының мәні: True ме, False па?`,
+        kk: `x = ${x}. x % ${m} == ${r} and x > ${t} шартының мәні: True ма, False па?`,
       },
       answer: tf(v),
       mode: "text",

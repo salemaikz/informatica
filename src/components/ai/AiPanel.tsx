@@ -1,11 +1,11 @@
 "use client";
 
-import { BookmarkPlus, Check, Lightbulb, Send, Sparkles } from "lucide-react";
+import { BookmarkPlus, Lightbulb, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
-import { useApp } from "@/lib/store";
+import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
@@ -41,7 +41,6 @@ export function AiPanel({
   suggestions?: DictKey[];
 }) {
   const { t } = useT();
-  const saveToNotes = useApp((s) => s.saveToNotes);
   const { ask, stop, streaming, error } = useTutor();
   // Бесплатный текст: подсказка автора или разбор неверного варианта (+ объяснение урока).
   const [staticText] = useState(() =>
@@ -50,7 +49,6 @@ export function AiPanel({
   const autoStart = mode !== "ask" && !staticText;
   const [turns, setTurns] = useState<TutorTurn[]>(autoStart ? [{ role: "assistant", content: "" }] : []);
   const [draft, setDraft] = useState("");
-  const [saved, setSaved] = useState<number[]>([]);
   const runId = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -131,15 +129,14 @@ export function AiPanel({
               {m.content && !(streaming && i === turns.length - 1) && (
                 <button
                   type="button"
-                  onClick={() => {
-                    saveToNotes(noteKey, m.content);
-                    setSaved((s) => [...s, i]);
-                  }}
-                  disabled={saved.includes(i)}
-                  className="mt-2 flex items-center gap-1 text-xs font-extrabold text-ai disabled:text-success"
+                  // Открываем шторку выбора папки — молча в конспект не сохраняем.
+                  onClick={() =>
+                    useSaveToNotes.getState().open({ source: "ai", text: m.content, lessonId: noteKey === "general" ? undefined : noteKey })
+                  }
+                  className="mt-2 flex min-h-9 items-center gap-1 text-xs font-extrabold text-ai"
                 >
-                  {saved.includes(i) ? <Check size={14} /> : <BookmarkPlus size={14} />}
-                  {saved.includes(i) ? t("common.saved") : t("tutor.saveNote")}
+                  <BookmarkPlus size={14} />
+                  {t("tutor.saveNote")}
                 </button>
               )}
             </div>

@@ -24,7 +24,7 @@ const GATE_NAME: Record<Op | "not", L> = {
   and: { ru: "И", kk: "ЖӘНЕ" },
   or: { ru: "ИЛИ", kk: "НЕМЕСЕ" },
   not: { ru: "НЕ", kk: "ЕМЕС" },
-  xor: { ru: "Исключающее ИЛИ", kk: "Ерекшелеуші НЕМЕСЕ" },
+  xor: { ru: "XOR", kk: "XOR" },
   nand: { ru: "И-НЕ", kk: "ЖӘНЕ-ЕМЕС" },
   nor: { ru: "ИЛИ-НЕ", kk: "НЕМЕСЕ-ЕМЕС" },
 };
@@ -629,7 +629,7 @@ function statement(level: Level, seed: number): Statement {
       value: claim === actual,
       explanation: {
         ru: `${GATE_NAME[op].ru}: при ${as} выход равен ${actual}.`,
-        kk: `${GATE_NAME[op].kk}: ${as} болғанда шығыс ${actual} тең.`,
+        kk: `${GATE_NAME[op].kk}: ${as} болғанда шығыс мәні: ${actual}.`,
       },
     };
   }
@@ -674,14 +674,14 @@ function statement(level: Level, seed: number): Statement {
 const PAIRS: { level: Level; left: L; right: L }[] = [
   { level: 1, left: { ru: "И", kk: "ЖӘНЕ" }, right: { ru: "1 только при 1 и 1", kk: "тек 1 және 1 болғанда 1" } },
   { level: 1, left: { ru: "ИЛИ", kk: "НЕМЕСЕ" }, right: { ru: "1, если хотя бы один вход равен 1", kk: "кемінде бір кіріс 1 болса, 1" } },
-  { level: 1, left: { ru: "НЕ", kk: "ЕМЕС" }, right: { ru: "переворачивает сигнал", kk: "сигналды төңкереді" } },
+  { level: 1, left: { ru: "НЕ", kk: "ЕМЕС" }, right: { ru: "переворачивает сигнал", kk: "сигналды терістейді" } },
   { level: 1, left: { ru: "Вход схемы", kk: "Схема кірісі" }, right: { ru: "сюда подаётся сигнал 0 или 1", kk: "мұнда 0 немесе 1 сигналы беріледі" } },
   { level: 2, left: { ru: "И-НЕ", kk: "ЖӘНЕ-ЕМЕС" }, right: { ru: "0 только при 1 и 1", kk: "тек 1 және 1 болғанда 0" } },
   { level: 2, left: { ru: "ИЛИ-НЕ", kk: "НЕМЕСЕ-ЕМЕС" }, right: { ru: "1 только при 0 и 0", kk: "тек 0 және 0 болғанда 1" } },
   { level: 2, left: { ru: "Исключающее ИЛИ", kk: "Ерекшелеуші НЕМЕСЕ" }, right: { ru: "1, когда входы разные", kk: "кірістер әртүрлі болғанда 1" } },
   { level: 2, left: { ru: "Вентиль", kk: "Вентиль" }, right: { ru: "логический элемент схемы", kk: "схеманың логикалық элементі" } },
   { level: 3, left: { ru: "Сумма в полусумматоре", kk: "Жартылай сумматордағы қосынды" }, right: { ru: "A ⊕ B", kk: "A ⊕ B" } },
-  { level: 3, left: { ru: "Перенос в полусумматоре", kk: "Жартылай сумматордағы көшіру" }, right: { ru: "A ∧ B", kk: "A ∧ B" } },
+  { level: 3, left: { ru: "Перенос в полусумматоре", kk: "Жартылай сумматордағы ауысу" }, right: { ru: "A ∧ B", kk: "A ∧ B" } },
   { level: 3, left: { ru: "1 + 1 в двоичной системе", kk: "Екілік жүйедегі 1 + 1" }, right: { ru: "10₂", kk: "10₂" } },
   { level: 3, left: { ru: "Схема читается", kk: "Схема оқылады" }, right: { ru: "от входов к выходу", kk: "кірістен шығысқа қарай" } },
 ];
@@ -714,7 +714,7 @@ function short(level: Level, seed: number): ShortQuestion {
       mode: "number",
       explanation: {
         ru: `${GATE_NAME[op].ru}: при ${as} выход равен ${val}.`,
-        kk: `${GATE_NAME[op].kk}: ${as} болғанда шығыс ${val} тең.`,
+        kk: `${GATE_NAME[op].kk}: ${as} болғанда шығыс мәні: ${val}.`,
       },
     };
   }

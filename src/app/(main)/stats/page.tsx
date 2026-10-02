@@ -1,6 +1,6 @@
 "use client";
 
-import { BookCheck, Clock, Flame, Sparkles, Target, Trash2, Trophy, Zap } from "lucide-react";
+import { BookCheck, Clock, Flame, Snowflake, Sparkles, Target, Trash2, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SKILLS } from "@/content/skills";
@@ -14,6 +14,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
 import { WeekChart } from "@/components/app/WeekChart";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
+import { GoalsPanel } from "@/components/goals/GoalsPanel";
 
 function Tile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string | number; sub?: string }) {
   return (
@@ -45,6 +46,7 @@ export default function StatsPage() {
   const setMemory = useApp((s) => s.setMemory);
   const { xp, level } = useLevel();
   const { current, best } = useStreak();
+  const freezes = useApp((s) => s.streak.freezes ?? 0);
 
   const totals = Object.values(days).reduce((a, d) => ({ answers: a.answers + d.answers, correct: a.correct + d.correct, seconds: a.seconds + d.seconds }), { answers: 0, correct: 0, seconds: 0 });
   const accuracy = totals.answers ? Math.round((totals.correct / totals.answers) * 100) : 0;
@@ -54,6 +56,8 @@ export default function StatsPage() {
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
+      <GoalsPanel />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Tile icon={<Zap size={14} className="text-gold" />} label={t("stats.totalXp")} value={xp} />
         <Tile icon={<Trophy size={14} className="text-primary" />} label={t("stats.level")} value={level} sub={l(levelTitle(level))} />
@@ -62,6 +66,16 @@ export default function StatsPage() {
         <Tile icon={<Clock size={14} className="text-primary" />} label={t("stats.time")} value={formatDuration(totals.seconds, lang)} />
         <Tile icon={<BookCheck size={14} className="text-primary" />} label={t("stats.lessons")} value={Object.keys(lessons).length} />
       </div>
+
+      <Card className="flex items-start gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <Snowflake size={24} />
+        </span>
+        <div className="min-w-0">
+          <p className="font-extrabold">{t("goals.streak.freezes", { n: freezes })}</p>
+          <p className="text-sm font-semibold text-muted">{t("goals.streak.freezeHint")}</p>
+        </div>
+      </Card>
 
       <Card>
         <p className="mb-4 font-extrabold">{t("stats.week")}</p>

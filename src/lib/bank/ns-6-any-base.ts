@@ -222,8 +222,8 @@ const HINT = {
     kk: "Негізге бөліп, қалдықтарды төменнен жоғары оқы. 10 және одан үлкен қалдықты әріппен жаз: 10 = A, 11 = B, 12 = C…",
   },
   valid: {
-    ru: "Цифры идут от 0 до основания минус 1. Найди запись, в которой есть цифра, не меньшая основания.",
-    kk: "Цифрлар 0-ден негіз минус 1 болғанға дейін жүреді. Негізден кіші емес цифры бар жазбаны тап.",
+    ru: "Цифры идут от 0 до (основание − 1). Проверь, нет ли в записи цифры, не меньшей основания.",
+    kk: "Цифрлар 0-ден (негіз − 1) санына дейін болады. Әр жазбада негізден кіші емес цифр жоқ екенін тексер.",
   },
   compare: {
     ru: "Записи «на глаз» сравнивать нельзя: основания разные. Переведи каждое число в десятичную систему.",
@@ -448,9 +448,11 @@ function genCompare(rand: Rand, level: Level, seed: number): QuestionStep {
   const options = items.map((c) => rec(c.s, c.b));
   const correct = items.indexOf(target);
   const longest = items.reduce((a, c) => (c.s.length > a.s.length ? c : a));
+  // «Самая длинная запись» — только если она одна такая.
+  const longestUnique = items.filter((c) => c.s.length === longest.s.length).length === 1;
   const whyWrong: (L | null)[] = items.map((c, i) => {
     if (i === correct) return null;
-    if (c === longest && biggest) {
+    if (c === longest && longestUnique && biggest) {
       return {
         ru: `Запись самая длинная, но число равно ${c.n} — меньше, чем ${target.n}.`,
         kk: `Жазбасы ең ұзын, бірақ сан ${c.n} санына тең — ${target.n} санынан кіші.`,
@@ -530,7 +532,7 @@ function genMinBase(rand: Rand, level: Level, seed: number): QuestionStep {
         v: String(minBase + 1),
         why: {
           ru: `Такое основание допустимо, но оно не наименьшее: подходит и ${minBase}.`,
-          kk: `Мұндай негіз жарайды, бірақ ең кішісі емес: ${minBase} те жарайды.`,
+          kk: `Мұндай негіз жарайды, бірақ ең кішісі емес: ${minBase} негізі де жарайды.`,
         },
       },
       {
@@ -637,8 +639,8 @@ function genCount(rand: Rand, level: Level, seed: number): QuestionStep {
       reveal,
       hint: HINT.count,
       explanation: {
-        ru: `${n} = ${rec(s, b)} (${s.length} цифр). Единиц в записи: ${count}.`,
-        kk: `${n} = ${rec(s, b)} (${s.length} цифр). Жазбадағы бірліктер саны: ${count}.`,
+        ru: `${ladderChain(n, b, "ru")}. Снизу вверх: ${n} = ${rec(s, b)}. Единиц в записи: ${count}.`,
+        kk: `${ladderChain(n, b, "kk")}. Төменнен жоғары: ${n} = ${rec(s, b)}. Жазбадағы бірліктер саны: ${count}.`,
       },
     };
   }
@@ -846,7 +848,7 @@ function statement(level: Level, seed: number): Statement {
       id: id("findx", `${d1}${d0}:${n}:${claim}`),
       skill: SKILL,
       level,
-      text: same(`${d1}${d0}(x) = ${n}₁₀ при x = ${claim}`),
+      text: { ru: `${d1}${d0}(x) = ${n}₁₀ при x = ${claim}`, kk: `x = ${claim} болғанда ${d1}${d0}(x) = ${n}₁₀` },
       value: claim === x,
       explanation: same(`${d1}·x + ${d0} = ${n} → x = ${x}`),
     };

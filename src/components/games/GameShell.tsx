@@ -1,23 +1,29 @@
 "use client";
 
-import { Feather, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, Check, Feather, Info, Map as MapIcon, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
+import type { SkillId } from "@/lib/types";
 import type { GameMode, GameResult } from "@/games/types";
 import { gameById } from "@/games/registry";
 import { GAME_COMPONENTS } from "@/games/components";
 import { gameStatKey, type GameReward } from "@/lib/games";
 import { useApp } from "@/lib/store";
+import { GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
+import { getLesson } from "@/content/course";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 
-type Phase = { name: "intro" } | { name: "playing"; round: number } | { name: "result"; result: GameResult; reward: GameReward };
+type Phase =
+  | { name: "intro" }
+  | { name: "playing"; round: number }
+  | { name: "result"; result: GameResult; reward: GameReward; credited: boolean | null };
 
 const MODES: { id: GameMode; icon: LucideIcon; title: DictKey; desc: DictKey }[] = [
   { id: "calm", icon: Feather, title: "game.mode.calm", desc: "game.mode.calm.desc" },
@@ -25,8 +31,11 @@ const MODES: { id: GameMode; icon: LucideIcon; title: DictKey; desc: DictKey }[]
   { id: "blitz", icon: Zap, title: "game.mode.blitz", desc: "game.mode.blitz.desc" },
 ];
 
-/** Оболочка мини-игры: вступление с правилами → игра → итоги (очки, рекорд, XP). */
-export function GameShell({ id }: { id: string }) {
+/**
+ * Оболочка мини-игры: вступление с правилами → игра → итоги (очки, рекорд, XP).
+ * lessonId — «урок игрой»: при ≥ 70% верных урок засчитывается. skills — навыки урока/темы для игры.
+ */
+export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: string; skills?: SkillId[] }) {
   const router = useRouter();
   const { t, l, lang } = useT();
   const meta = gameById(id)!;
@@ -36,6 +45,12 @@ export function GameShell({ id }: { id: string }) {
   const statKey = gameStatKey(id, mode);
   const stat = useApp((s) => (statKey ? s.games[statKey] : undefined));
   const recordGame = useApp((s) => s.recordGame);
+  const completeLessons = useApp((s) => s.completeLessons);
+  const lesson = lessonId ? getLesson(lessonId) : undefined;
+  const hasContext = !!lesson || (skills?.length ?? 0) > 0;
+  const supported = !hasContext || gameSupportsSkills(meta, skills ?? []);
+  // Навыки для игры: универсальные берут любые с нужной формой, остальные — только свои (пересечение с темой урока).
+  const playSkills = hasContext && skills?.length ? gameSkillsFor(meta, skills) : undefined;
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [round, setRound] = useState(0);
   const Game = GAME_COMPONENTS[id];
@@ -57,8 +72,16 @@ export function GameShell({ id }: { id: string }) {
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.35 }, colors: ["#f0b400", "#1a91d6", "#21b26f"] }),
       );
     }
-    setPhase({ name: "result", result, reward });
+    // Урок игрой: ≥ 70% верных засчитывает урок. Повторно в расписание не пишем, пока урок не «остыл».
+    let credited: boolean | null = null;
+    if (lesson) {
+      credited = gamePassed(result.correct, result.total);
+      if (credited && gameCanCredit(useApp.getState().lessons[lesson.id])) completeLessons([lesson.id], "game", result.correct / result.total);
+    }
+    setPhase({ name: "result", result, reward, credited });
   };
+
+  const exitHref = lesson ? "/learn" : "/practice";
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -66,14 +89,21 @@ export function GameShell({ id }: { id: string }) {
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4">
           <button
             type="button"
-            onClick={() => router.push("/practice")}
+            onClick={() => router.push(exitHref)}
             aria-label={t("common.close")}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2"
           >
             <X size={24} />
           </button>
-          <span className="flex flex-1 items-center gap-2 truncate text-lg font-extrabold">
-            <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="flex items-center gap-2 truncate text-lg font-extrabold leading-tight">
+              <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
+            </span>
+            {lesson && (
+              <span className="flex items-center gap-1 truncate text-xs font-bold text-muted">
+                <BookOpen size={12} className="shrink-0" /> {t("modes.game.lesson", { title: l(lesson.title) })}
+              </span>
+            )}
           </span>
           {phase.name === "playing" && <ToolboxButton variant="icon" />}
           {statKey && (
@@ -95,6 +125,16 @@ export function GameShell({ id }: { id: string }) {
               <h1 className="text-2xl font-extrabold">{l(meta.title)}</h1>
               <p className="font-semibold text-muted">{l(meta.description)}</p>
             </div>
+            {lesson && supported && (
+              <p className="flex items-start gap-2 rounded-2xl bg-primary-soft px-3 py-2 text-sm font-bold text-primary">
+                <BookOpen size={16} className="mt-0.5 shrink-0" /> {t("modes.game.lessonHint", { need: Math.round(GAME_PASS * 100) })}
+              </p>
+            )}
+            {!supported && (
+              <p className="flex items-start gap-2 rounded-2xl bg-warning-soft px-3 py-2 text-sm font-bold text-warning-strong">
+                <Info size={16} className="mt-0.5 shrink-0" /> {t("modes.game.unsupported")}
+              </p>
+            )}
             <div className="rounded-3xl border-2 border-border bg-surface p-4">
               <p className="mb-1 text-sm font-extrabold text-muted">{t("game.rules")}</p>
               <p className="whitespace-pre-line font-semibold leading-relaxed">{l(meta.rules)}</p>
@@ -140,7 +180,7 @@ export function GameShell({ id }: { id: string }) {
             <div className="flex-1" />
             {/* Кнопка всегда видна внизу экрана, даже если правила и выбор темпа не помещаются. */}
             <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-bg from-70% to-transparent px-4 pb-4 pt-6">
-              <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
+              <Button size="lg" block onClick={start} disabled={!supported} icon={<Play size={20} fill="currentColor" />} autoFocus>
                 {t("game.play")}
               </Button>
             </div>
@@ -149,7 +189,7 @@ export function GameShell({ id }: { id: string }) {
 
         {phase.name === "playing" && (
           <Suspense fallback={<div className="mt-6 h-96 animate-pulse rounded-3xl bg-surface-2" />}>
-            <Game key={phase.round} lang={lang} sound={sound} mode={mode} onFinish={finish} />
+            <Game key={phase.round} lang={lang} sound={sound} mode={mode} onFinish={finish} skills={playSkills} />
           </Suspense>
         )}
 
@@ -186,14 +226,33 @@ export function GameShell({ id }: { id: string }) {
               </MascotSays>
             )}
             {!statKey && <p className="text-center text-sm font-bold text-muted">{t("game.calmNoRecord")}</p>}
+            {phase.credited === true && (
+              <p className="flex items-center justify-center gap-2 rounded-2xl border-2 border-success/40 bg-success-soft px-3 py-3 text-center font-extrabold text-success-strong animate-pop">
+                <Check size={20} strokeWidth={3} /> {t("modes.game.credited")}
+              </p>
+            )}
+            {phase.credited === false && (
+              <p className="rounded-2xl bg-warning-soft px-3 py-2 text-center text-sm font-bold text-warning-strong">
+                {t("modes.game.notCredited", {
+                  need: Math.round(GAME_PASS * 100),
+                  n: phase.result.total ? Math.round((phase.result.correct / phase.result.total) * 100) : 0,
+                })}
+              </p>
+            )}
             <div className="flex-1" />
             <div className="flex flex-col gap-3">
               <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>
                 {t("game.again")}
               </Button>
-              <Button variant="secondary" block onClick={() => router.push("/practice")}>
-                {t("game.toPractice")}
-              </Button>
+              {lesson ? (
+                <ButtonLink href="/learn" variant="secondary" block icon={<MapIcon size={18} />}>
+                  {t("modes.game.toMap")}
+                </ButtonLink>
+              ) : (
+                <Button variant="secondary" block onClick={() => router.push("/practice")}>
+                  {t("game.toPractice")}
+                </Button>
+              )}
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookmarkPlus, Camera, Check, ImagePlus, Send, Sparkles, Square, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Camera, ImagePlus, Send, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/lib/store";
 import { compressImage } from "@/lib/image";
@@ -10,6 +10,7 @@ import type { DictKey } from "@/i18n/dict";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useTutor } from "@/components/ai/useTutor";
+import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 
 const SUGGESTIONS: DictKey[] = ["tutor.s1", "tutor.s2", "tutor.s3", "tutor.s4"];
 
@@ -18,12 +19,10 @@ export default function TutorPage() {
   const chat = useApp((s) => s.chat);
   const addChat = useApp((s) => s.addChat);
   const clearChat = useApp((s) => s.clearChat);
-  const saveToNotes = useApp((s) => s.saveToNotes);
   const { ask, stop, streaming, error } = useTutor();
   const [draft, setDraft] = useState("");
   const [image, setImage] = useState<string | undefined>();
   const [pending, setPending] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -102,15 +101,12 @@ export default function TutorPage() {
               <Markdown>{m.content}</Markdown>
               <button
                 type="button"
-                disabled={saved.includes(m.id)}
-                onClick={() => {
-                  saveToNotes("general", m.content);
-                  setSaved((s) => [...s, m.id]);
-                }}
-                className="mt-2 flex items-center gap-1 text-xs font-extrabold text-ai disabled:text-success"
+                // Открываем шторку выбора папки — молча в конспект не сохраняем.
+                onClick={() => useSaveToNotes.getState().open({ source: "ai", text: m.content })}
+                className="mt-2 flex min-h-9 items-center gap-1 text-xs font-extrabold text-ai"
               >
-                {saved.includes(m.id) ? <Check size={14} /> : <BookmarkPlus size={14} />}
-                {saved.includes(m.id) ? t("common.saved") : t("tutor.saveNote")}
+                <BookmarkPlus size={14} />
+                {t("tutor.saveNote")}
               </button>
             </div>
           ),

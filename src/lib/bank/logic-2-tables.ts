@@ -138,7 +138,11 @@ function exprHard(rand: Rand): { e: Expr; vars: string[] } {
     const o3 = pick(rand, ["and", "or"] as Op[]);
     return { e: bin(o3, bin(o1, p, q), bin(o2, r, s)), vars };
   }
-  const names = shuffle([...THREE, pick(rand, THREE)], rand);
+  // Повтор одной переменной — в разных скобках, иначе выходит нелепое (A ∧ A) или (C → ¬C).
+  const [a, b, c] = shuffle(THREE, rand);
+  const d = pick(rand, [a, b]);
+  const second = rand() < 0.5 ? [c, d] : [d, c];
+  const names = rand() < 0.5 ? [a, b, ...second] : [...second, a, b];
   const [p, q, r, s] = names.map((n) => lit(rand, n));
   const o1 = pick(rand, OPS);
   const o2 = pick(rand, THREE_OPS);
@@ -182,6 +186,14 @@ const tuple = (bits: Bit[]) => `(${bits.join(", ")})`;
 const varList = (vars: string[]) => vars.join(", ");
 const word = (truth: boolean): L => (truth ? { ru: "истинно", kk: "ақиқат" } : { ru: "ложно", kk: "жалған" });
 const compact = (s: string) => s.replace(/ /g, "");
+/** Русское согласование с числом: 1 строку, 2 строки, 5 строк. */
+const ruNoun = (n: number, forms: [string, string, string]) => {
+  const d = n % 10;
+  const h = n % 100;
+  if (d === 1 && h !== 11) return forms[0];
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return forms[1];
+  return forms[2];
+};
 
 interface Opt {
   text: Text;
@@ -212,14 +224,14 @@ function qRows(rand: Rand, seed: number): QuestionStep {
       text: String(n * n),
       why: {
         ru: `${n}${sup(2)} = ${n * n} — степень записана наоборот: нужно 2 в степени ${n}, а не ${n} в степени 2.`,
-        kk: `${n}${sup(2)} = ${n * n} — дәреже кері жазылған: ${n}-тің 2-дәрежесі емес, 2-нің ${n}-дәрежесі керек.`,
+        kk: `${n}${sup(2)} = ${n * n} — дәреже кері жазылған: ${n}${sup(2)} емес, 2${sup(n)} керек.`,
       },
     },
     {
       text: String(2 * n),
       why: {
-        ru: `${n} · 2 = ${2 * n} — переменные не складываются: каждая новая удваивает число строк.`,
-        kk: `${n} · 2 = ${2 * n} — қате: әр жаңа айнымалы жолдар санын екі есе арттырады.`,
+        ru: `${n} · 2 = ${2 * n} — число переменных не умножают на 2: каждая новая переменная удваивает число строк, получается 2${sup(n)}.`,
+        kk: `${n} · 2 = ${2 * n} — айнымалылар санын 2-ге көбейтпейді: әр жаңа айнымалы жолдар санын екі есе арттырады, 2${sup(n)} шығады.`,
       },
     },
     {
@@ -354,7 +366,7 @@ function countQuestion(kind: string, e: Expr, vars: string[], wantOnes: boolean,
     hint: HINT_TABLE,
     explanation: {
       ru: `Составляем таблицу из ${col.length} строк. Итоговый столбец: ${col}. ${wantOnes ? "Единиц" : "Нулей"} в нём: ${k}. Проверка: ${ones} + ${zeros} = ${col.length}.`,
-      kk: `${col.length} жолдан тұратын кесте құрамыз. Қорытынды баған: ${col}. ${wantOnes ? "Бірлер" : "Нөлдер"} саны: ${k}. Тексеру: ${ones} + ${zeros} = ${col.length}.`,
+      kk: `${col.length} жолдан тұратын кесте құрамыз. Қорытынды баған: ${col}. ${wantOnes ? "Бірліктер" : "Нөлдер"} саны: ${k}. Тексеру: ${ones} + ${zeros} = ${col.length}.`,
     },
   };
 }
@@ -378,11 +390,11 @@ function qColumn(rand: Rand, seed: number): QuestionStep {
       ru: `Выпиши значения F = ${s} для наборов (A, B) в порядке 00, 01, 10, 11 — четыре цифры подряд.`,
       kk: `F = ${s} өрнегінің мәндерін (A, B) жиындарының 00, 01, 10, 11 ретімен жаз — төрт цифр қатар.`,
     },
-    answers: [col],
+    answers: [col, col.split("").join(",")],
     mode: "text",
     hint: {
-      ru: "Выпиши четыре набора и для каждого вычисли выражение по порядку: скобки, затем ¬, затем остальное.",
-      kk: "Төрт жиынды жазып, әрқайсысы үшін өрнекті ретімен есепте: жақша, сосын ¬, соңында қалғаны.",
+      ru: "Выпиши четыре набора и для каждого вычисли выражение: сначала то, что в скобках, потом остальное по приоритету.",
+      kk: "Төрт жиынды жазып, әрқайсысы үшін өрнекті есепте: алдымен жақшадағыны, сосын қалғанын басымдық бойынша.",
     },
     explanation: {
       ru: `Считаем F на наборах: ${rows}. Итоговый столбец: ${col}.`,
@@ -566,7 +578,7 @@ function statement(level: Level, seed: number): Statement {
       skill: SKILL,
       level,
       text: {
-        ru: `Таблица истинности выражения с ${n} переменными содержит ${claim} строк`,
+        ru: `Таблица истинности выражения с ${n} переменными содержит ${claim} ${ruNoun(claim, ["строку", "строки", "строк"])}`,
         kk: `${n} айнымалысы бар өрнектің ақиқат кестесінде ${claim} жол бар`,
       },
       value: claim === real,
@@ -607,11 +619,11 @@ function statement(level: Level, seed: number): Statement {
       skill: SKILL,
       level,
       text: {
-        ru: `Выражение ${s} истинно ровно на ${claim} наборах из ${N}`,
+        ru: `Выражение ${s} истинно ровно на ${claim} ${claim % 10 === 1 && claim % 100 !== 11 ? "наборе" : "наборах"} из ${N}`,
         kk: `Барлық ${N} жиынның ішінде ${s} өрнегі ${claim} жиында ақиқат болады`,
       },
       value: claim === ones,
-      explanation: { ru: `Итоговый столбец: ${col} — единиц ${ones}.`, kk: `Қорытынды баған: ${col} — бірлер ${ones}.` },
+      explanation: { ru: `Итоговый столбец: ${col}, единиц в нём: ${ones}.`, kk: `Қорытынды баған: ${col}, ондағы бірліктер саны: ${ones}.` },
     };
   }
   // equal: равны ли итоговые столбцы двух записей
@@ -659,7 +671,7 @@ function pair(level: Level, seed: number): Pair {
     id: `p:${SKILL}:ones:${compact(s)}`,
     skill: SKILL,
     level,
-    left: { ru: `Единиц в столбце F: ${s}`, kk: `F бағанындағы бірлер: ${s}` },
+    left: { ru: `Единиц в столбце F: ${s}`, kk: `F бағанындағы бірліктер саны: ${s}` },
     right: String(ones),
   };
 }

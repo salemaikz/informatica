@@ -1,23 +1,27 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
+import { BookOpen, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import type { SessionResult } from "@/lib/types";
+import { useEffect, useState, type ReactNode } from "react";
+import type { LessonVia, SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
+import { DAY_MS, REPLAY_XP } from "@/lib/review";
+import { formatFactor, nextLessonId } from "@/lib/drill";
+import { getLesson } from "@/content/course";
+import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { masteryLevel } from "@/lib/mastery";
 import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Pill } from "@/components/ui/Pill";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
@@ -80,6 +84,9 @@ export function Results({
   bonusXp,
   achievements,
   feedback,
+  via,
+  xpFactor = 1,
+  extra,
 }: {
   kind: "lesson" | "drill";
   lessonId?: string;
@@ -88,10 +95,23 @@ export function Results({
   bonusXp: number;
   achievements: string[];
   feedback: FeedbackState;
+  /** Режим урока (check — «Проверить себя»). */
+  via?: LessonVia;
+  /** Множитель XP за этот урок (< 1 — повтор). */
+  xpFactor?: number;
+  /** Дополнительный блок под заголовком (например, итог экстерна). */
+  extra?: ReactNode;
 }) {
   const router = useRouter();
   const { t, l } = useT();
   const skills = useApp((s) => s.skills);
+  const lessons = useApp((s) => s.lessons);
+  const dueAt = useApp((s) => (lessonId ? s.lessons[lessonId]?.dueAt : undefined));
+  // «Сейчас» фиксируем при показе итогов: для расчёта «повторение через N дней».
+  const [shownAt] = useState(() => Date.now());
+  const nextDays = dueAt !== undefined ? Math.max(1, Math.round((dueAt - shownAt) / DAY_MS)) : null;
+  const next = kind === "lesson" && lessonId ? nextLessonId(lessonId, lessons) : null;
+  const lesson = lessonId ? getLesson(lessonId) : undefined;
 
   const accuracy = Math.round(result.accuracy * 100);
   const totalXp = result.xp + bonusXp;
@@ -143,9 +163,23 @@ export function Results({
         transition={springBouncy}
       >
         <Mascot mood="celebrate" size={112} />
-        <h1 className="text-3xl font-extrabold">{kind === "lesson" ? t("res.lesson") : t("res.drill")}</h1>
+        <h1 className="text-3xl font-extrabold">
+          {via === "check" ? t("modes.check.title") : kind === "lesson" ? t("res.lesson") : t("res.drill")}
+        </h1>
         <p className="font-semibold text-muted">{title}</p>
+        {kind === "lesson" && (xpFactor < 1 || nextDays !== null) && (
+          <div className="mt-1 flex flex-wrap justify-center gap-2">
+            {xpFactor < 1 && (
+              <Pill tone="warning" icon={<Repeat size={14} />}>
+                {t(xpFactor === REPLAY_XP.review ? "modes.review.res" : "modes.replay.res", { f: formatFactor(xpFactor) })}
+              </Pill>
+            )}
+            {nextDays !== null && <Pill tone="muted">{t("modes.nextReview", { n: nextDays })}</Pill>}
+          </div>
+        )}
       </m.div>
+
+      {extra}
 
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -244,11 +278,35 @@ export function Results({
       )}
 
       {kind === "lesson" && lessonId && (
-        <Link href={`/notes/${lessonId}`} className="flex items-center gap-3 rounded-3xl border-2 border-primary/40 bg-primary-soft px-4 py-3 font-bold text-primary">
-          <BookOpen size={22} />
-          <span className="flex-1">{t("res.conspect")}</span>
-          <span className="text-sm underline">{t("res.openConspect")}</span>
-        </Link>
+        <Card appear>
+          <p className="mb-3 font-extrabold">{t("modes.next.title")}</p>
+          <div className="flex flex-col gap-3">
+            {next ? (
+              <ButtonLink href={`/lesson/${next}`} size="lg" block icon={<StepForward size={20} />}>
+                {t("modes.next.lesson")}
+              </ButtonLink>
+            ) : (
+              <ButtonLink href="/learn" size="lg" block icon={<MapIcon size={20} />}>
+                {t("modes.next.map")}
+              </ButtonLink>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <ButtonLink href="/drill?mode=smart" variant="secondary" block icon={<RotateCcw size={18} className="shrink-0" />} className="h-auto min-h-11 py-2 text-center leading-tight">
+                {t("modes.next.weak")}
+              </ButtonLink>
+              <Button
+                variant="secondary"
+                block
+                icon={<BookOpen size={18} className="shrink-0" />}
+                className="h-auto min-h-11 py-2 leading-tight"
+                disabled={!lesson}
+                onClick={() => lesson && useSaveToNotes.getState().open({ source: "lesson", lessonId, title: l(lesson.title), text: l(lesson.conspect) })}
+              >
+                {t("modes.next.note")}
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {mistakes.length > 0 && (

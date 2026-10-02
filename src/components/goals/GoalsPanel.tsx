@@ -1,0 +1,225 @@
+"use client";
+
+import { CalendarDays, ClipboardCheck, Dumbbell, ListChecks, Play, Target } from "lucide-react";
+import { useMemo } from "react";
+import { UNITS, getLesson } from "@/content/course";
+import { entTopicById } from "@/content/ent-topics";
+import { cn } from "@/lib/cn";
+import { daysText, examTrend, lessonsForTopic, weeklyPlan } from "@/lib/goals";
+import { useApp } from "@/lib/store";
+import { useT } from "@/i18n/useT";
+import type { DictKey } from "@/i18n/dict";
+import { ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { useGoalData } from "./useGoalData";
+
+const STATUS_TONE = { none: "muted", below: "warning", on: "success", above: "success" } as const;
+
+function SectionHead({ icon, title, action }: { icon: React.ReactNode; title: string; action?: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <p className="flex min-w-0 items-center gap-2 text-lg font-extrabold">
+        <span className="text-primary">{icon}</span> {title}
+      </p>
+      {action}
+    </div>
+  );
+}
+
+/** Шкала 0–50: вероятный интервал, прогноз и цель. */
+function ForecastScale({ low, high, score, target }: { low: number; high: number; score: number; target: number }) {
+  const pct = (v: number) => `${(Math.max(0, Math.min(50, v)) / 50) * 100}%`;
+  return (
+    <div className="relative mt-6 h-4" aria-hidden="true">
+      <div className="absolute inset-0 rounded-full bg-surface-2" />
+      <div className="absolute inset-y-0 rounded-full bg-primary/25" style={{ left: pct(low), width: `calc(${pct(high)} - ${pct(low)})` }} />
+      <div className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-primary" style={{ left: pct(score) }} />
+      <div className="absolute -top-1.5 bottom-[-6px] w-0.5 -translate-x-1/2 rounded-full bg-text" style={{ left: pct(target) }} />
+    </div>
+  );
+}
+
+/**
+ * Панель целей для страницы «Прогресс»: отсчёт до ЕНТ, прогноз с интервалом против цели,
+ * неделя, план недели (3 темы) и история пробников.
+ */
+export function GoalsPanel({ className }: { className?: string }) {
+  const { t, l, lang } = useT();
+  const { daysLeft, examDate, forecast, goal, week, targetScore } = useGoalData();
+  const lessons = useApp((s) => s.lessons);
+  const exams = useApp((s) => s.exams);
+
+  const plan = useMemo(() => weeklyPlan(forecast.byTopic, 3), [forecast.byTopic]);
+  const ready = useMemo(
+    () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (getLesson(r.id) ? [getLesson(r.id)!] : [])),
+    [],
+  );
+  const trend = useMemo(() => examTrend(exams), [exams]);
+
+  const dateText = examDate ? new Intl.DateTimeFormat(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${examDate}T00:00:00`)) : "";
+  const dayLabels = t("stats.days").split(",");
+  const left = Math.max(0, week.goal - week.done);
+
+  return (
+    <div className={cn("flex flex-col gap-4", className)}>
+      {/* Цель и прогноз */}
+      <Card>
+        <SectionHead
+          icon={<Target size={22} />}
+          title={t("goals.panel.title")}
+          action={
+            <ButtonLink href="/profile#goals" variant="ghost" size="sm">
+              {t("goals.panel.edit")}
+            </ButtonLink>
+          }
+        />
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("goals.panel.countdown")}</p>
+            {daysLeft !== null && daysLeft >= 0 ? (
+              <p className="text-3xl font-extrabold leading-tight">{daysText(daysLeft, lang)}</p>
+            ) : (
+              <p className="text-lg font-extrabold leading-tight text-muted">{daysLeft === null ? t("goals.panel.noDate") : t("goals.card.past")}</p>
+            )}
+            {examDate && <p className="text-sm font-bold text-muted">{t("goals.panel.examOn", { date: dateText })}</p>}
+          </div>
+          {daysLeft === null && (
+            <ButtonLink href="/profile#goals" variant="secondary" size="sm">
+              {t("goals.panel.setDate")}
+            </ButtonLink>
+          )}
+        </div>
+
+        <div className="mt-4 border-t-2 border-border pt-4">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("goals.forecast.title")}</p>
+          {forecast.basis === "none" ? (
+            <p className="mt-1 font-semibold text-muted">{t("goals.forecast.none")}</p>
+          ) : (
+            <>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <p className="text-3xl font-extrabold leading-tight">{t("goals.forecast.value", { score: forecast.score })}</p>
+                <Pill tone={STATUS_TONE[goal.status]}>{t(`goals.status.${goal.status}` as DictKey)}</Pill>
+              </div>
+              <p className="text-sm font-bold text-muted">{t("goals.forecast.range", { low: forecast.low, high: forecast.high })}</p>
+              <ForecastScale low={forecast.low} high={forecast.high} score={forecast.score} target={targetScore} />
+              <div className="mt-2 flex items-center justify-between gap-2 text-sm font-bold">
+                <span className="text-muted">{t("goals.forecast.target", { target: targetScore })}</span>
+                {goal.status !== "on" && (
+                  <span className={goal.gap > 0 ? "text-warning-strong" : "text-success-strong"}>
+                    {goal.gap > 0 ? t("goals.forecast.gap", { n: goal.gap }) : t("goals.forecast.reserve", { n: -goal.gap })}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-xs font-semibold text-muted">{t("goals.forecast.honest")}</p>
+            </>
+          )}
+        </div>
+      </Card>
+
+      {/* Неделя */}
+      <Card>
+        <SectionHead icon={<CalendarDays size={22} />} title={t("goals.week.title")} />
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-2xl font-extrabold">{t("goals.week.progress", { done: week.done, goal: week.goal })}</p>
+          <p className={cn("text-sm font-extrabold", week.reached ? "text-success-strong" : "text-muted")}>
+            {week.reached ? t("goals.week.reached") : t("goals.week.left", { n: left })}
+          </p>
+        </div>
+        <ProgressBar value={week.ratio} color={week.reached ? "var(--success)" : "var(--primary)"} height={12} className="mt-2" label={t("goals.week.title")} />
+        <ul className="mt-4 grid grid-cols-7 gap-1.5">
+          {week.days.map((d, i) => (
+            <li key={d.key} className="flex flex-col items-center gap-1">
+              <span className={cn("text-xs font-extrabold", d.today ? "text-primary" : "text-muted")}>{dayLabels[i]}</span>
+              <span
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-extrabold",
+                  d.lessons > 0 ? "border-primary bg-primary text-white" : d.today ? "border-primary text-primary" : "border-border text-muted",
+                  d.future && "opacity-50",
+                )}
+                aria-label={`${dayLabels[i]}: ${d.lessons}`}
+              >
+                {d.lessons > 0 ? d.lessons : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {/* План недели */}
+      <Card>
+        <SectionHead icon={<ListChecks size={22} />} title={t("goals.plan.title")} />
+        <p className="-mt-2 mb-3 text-sm font-semibold text-muted">{t("goals.plan.hint")}</p>
+        {plan.length === 0 ? (
+          <p className="font-semibold text-success-strong">{t("goals.plan.empty")}</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {plan.map((p) => {
+              const topic = entTopicById(p.topic);
+              const ids = lessonsForTopic(p.topic, ready);
+              const lesson = ids.find((id) => !lessons[id]) ?? ids[0];
+              const done = lesson ? !!lessons[lesson] : false;
+              return (
+                <li key={p.topic} className="rounded-2xl border-2 border-border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-extrabold leading-snug">{l(topic.title)}</p>
+                    <Pill tone="primary" className="shrink-0">
+                      {t("goals.plan.gain", { n: Math.max(1, Math.round(p.gain * 50)) })}
+                    </Pill>
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
+                  <ProgressBar value={p.mastery} color={p.mastery < 0.6 ? "var(--danger)" : "var(--warning)"} height={8} className="mt-1" label={l(topic.short)} />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {lesson && (
+                      <ButtonLink href={`/lesson/${lesson}`} size="sm" variant={done ? "secondary" : "primary"} icon={<Play size={16} fill="currentColor" />}>
+                        {t("goals.plan.lesson")}
+                      </ButtonLink>
+                    )}
+                    <ButtonLink href={`/drill?mode=topic&topic=${p.topic}`} size="sm" variant="secondary" icon={<Dumbbell size={16} />}>
+                      {t("goals.plan.train")}
+                    </ButtonLink>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+
+      {/* История пробников */}
+      <Card>
+        <SectionHead icon={<ClipboardCheck size={22} />} title={t("goals.history.title")} />
+        {trend.length === 0 ? (
+          <div className="flex flex-col items-start gap-3">
+            <p className="font-semibold text-muted">{t("goals.history.empty")}</p>
+            <ButtonLink href="/exam" size="sm">
+              {t("goals.history.start")}
+            </ButtonLink>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm font-bold text-muted">{t("goals.history.last", { score: trend[trend.length - 1].score })}</p>
+            <div className="relative mt-3 h-32" role="img" aria-label={t("goals.history.chart")}>
+              {/* линия цели */}
+              <div className="absolute inset-x-0 border-t-2 border-dashed border-muted/60" style={{ bottom: `calc(${(targetScore / 50) * 100}% * 0.8 + 20px)` }} />
+              <div className="relative flex h-full items-end justify-around gap-1.5">
+                {trend.map((p) => (
+                  <div key={p.at} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                    <span className="text-sm font-extrabold">{p.score}</span>
+                    <div
+                      className={cn("w-full max-w-9 rounded-t-lg", p.score >= targetScore ? "bg-success" : "bg-primary")}
+                      style={{ height: `calc(${(p.score / 50) * 100}% * 0.8)`, minHeight: 4 }}
+                    />
+                    <span className="h-4 text-[11px] font-bold text-muted">{new Intl.DateTimeFormat(lang === "kk" ? "kk-KZ" : "ru-RU", { day: "numeric", month: "numeric" }).format(new Date(p.at))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+

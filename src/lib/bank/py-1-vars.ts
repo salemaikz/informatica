@@ -75,6 +75,7 @@ function numInput(
   p: { id: string; level: Level; scene: Scene; reveal?: Scene; hint: L; explanation: L; prompt?: L },
   answer: string,
   mode: "number" | "text" = "number",
+  extra: string[] = [],
 ): InputStep {
   return {
     id: p.id,
@@ -85,7 +86,7 @@ function numInput(
     scene: p.scene,
     reveal: p.reveal,
     hint: p.hint,
-    answers: [answer],
+    answers: [answer, ...extra],
     mode,
     explanation: p.explanation,
   };
@@ -121,7 +122,7 @@ function genTrace(rand: Rand, level: Level, seed: number) {
         level,
         scene: code(lines),
         reveal: reveal(lines, [["x", value]], [String(value)]),
-        hint: ln("Идём строка за строкой: каждая строка меняет значение x.", "Жолдан жолға жүреміз: әр жол x мәнін өзгертеді."),
+        hint: ln("Идём строка за строкой: каждая строка меняет значение x.", "Жолма-жол жүреміз: әр жол x мәнін өзгертеді."),
         explanation: ln(`Следим за x сверху вниз: ${trail}. Выведется ${value}.`, `x мәнін жоғарыдан төмен қарай бақылаймыз: ${trail}. ${value} шығады.`),
       },
       String(value),
@@ -192,7 +193,7 @@ function genTrace(rand: Rand, level: Level, seed: number) {
   // C: обмен значений и одновременное присваивание
   const v = int(rand, 0, 2);
   const id = `g:py.vars:trace3:${v}-${A}-${B}:${seed}`;
-  const hint = ln("Запиши a и b после каждой строки. Помни: в a, b = ..., ... правая часть вычисляется целиком до присваивания.", "Әр жолдан кейін a және b жаз. Есіңде болсын: a, b = ..., ... жазбасында оң жағы меншіктеуге дейін толық есептеледі.");
+  const hint = ln("Запиши a и b после каждой строки. Помни: в a, b = ..., ... правая часть вычисляется целиком до присваивания.", "Әр жолдан кейін a және b мәндерін жаз. Есіңде болсын: a, b = ..., ... жазбасында оң жағы меншіктеуге дейін толық есептеледі.");
   let lines: string[];
   let res: [number, number];
   let wrongs: [number, number, L][];
@@ -201,7 +202,7 @@ function genTrace(rand: Rand, level: Level, seed: number) {
     lines = [`a = ${A}`, `b = ${B}`, "a = a + b", "b = a - b", "a = a - b", "print(a, b)"];
     res = [B, A];
     wrongs = [
-      [A, B, ln("Это значения до строк 3–5: они как раз меняют a и b местами.", "Бұл 3–5-жолдарға дейінгі мәндер: олар a мен b-ны дәл ауыстырады.")],
+      [A, B, ln("Это значения до строк 3–5: они как раз меняют a и b местами.", "Бұл 3–5-жолдарға дейінгі мәндер: дәл осы жолдар a мен b мәндерінің орнын ауыстырады.")],
       [A + B, A, ln("Это значения после строки 4, но строка 5 ещё меняет a.", "Бұл 4-жолдан кейінгі мәндер, бірақ 5-жол a-ны тағы өзгертеді.")],
       [B, B, ln("После строки 4 в b лежит старое a, а не b.", "4-жолдан кейін b ішінде b емес, ескі a жатыр.")],
       [A + B, B, ln("Строки 4 и 5 меняют обе переменные.", "4 және 5-жолдар екі айнымалыны да өзгертеді.")],
@@ -304,7 +305,7 @@ function genDivmod(rand: Rand, level: Level, seed: number) {
         { text: `${exact} ${r}`, why: ln("Это результат обычного деления /, а в программе стоит //.", "Бұл қарапайым бөлу / нәтижесі, ал программада // тұр.") },
         { text: `${q} ${frac}`, why: ln("Цифры после точки в a / b — не остаток от деления.", "a / b ішіндегі нүктеден кейінгі цифрлар — бөлгендегі қалдық емес.") },
         { text: `${exact} ${q}`, why: ln("Ни одна из операций не даёт дробное число: // и % работают с целыми.", "Ешбір амал бөлшек сан бермейді: // және % бүтін сандармен жұмыс істейді.") },
-        { text: `${q + 1} ${r}`, why: ln("// не округляет вверх: лишние конфеты не образуют ещё одну полную группу.", "// жоғары қарай дөңгелектемейді: артық бөлік тағы бір толық топ құрамайды.") },
+        { text: `${q + 1} ${r}`, why: ln("// не округляет вверх: остаток не образует ещё одну полную группу.", "// жоғары қарай дөңгелектемейді: қалдық тағы бір толық топ құрамайды.") },
         { text: `${q} ${b - r}`, why: ln("Остаток — это то, что осталось после полных групп, а не то, чего не хватает до следующей.", "Қалдық — толық топтардан кейін қалғаны, келесі топқа жетпейтіні емес.") },
       ],
     );
@@ -323,7 +324,7 @@ function genDivmod(rand: Rand, level: Level, seed: number) {
     prompt: ln(`Известно: n // ${b} = ${q} и n % ${b} = ${r}. Чему равно n?`, `Белгілі: n // ${b} = ${q} және n % ${b} = ${r}. n неге тең?`),
     answers: [String(n)],
     mode: "number" as const,
-    hint: ln("Из частного и остатка число собирается так: делитель умножить на неполное частное и прибавить остаток.", "Бөлінді мен қалдықтан сан былай құралады: бөлгішті бөліндіге көбейтіп, қалдықты қосады."),
+    hint: ln("Из частного и остатка число собирается так: делитель умножить на неполное частное и прибавить остаток.", "Бөлінді мен қалдықтан сан былай құралады: бөлгішті бөліндіге көбейтіп, қалдықты қосу керек."),
     explanation: ln(
       `n = ${b} * ${q} + ${r} = ${b * q} + ${r} = ${n}. Проверка: ${n} // ${b} = ${q}, ${n} % ${b} = ${r}.`,
       `n = ${b} * ${q} + ${r} = ${b * q} + ${r} = ${n}. Тексеру: ${n} // ${b} = ${q}, ${n} % ${b} = ${r}.`,
@@ -335,14 +336,14 @@ function genDivmod(rand: Rand, level: Level, seed: number) {
 
 function genExpr(rand: Rand, level: Level, seed: number) {
   const hintPrec = ln("Порядок действий: скобки, затем **, затем * / // %, затем + и −.", "Амалдар реті: жақша, содан кейін **, сосын * / // %, одан кейін + және −.");
-  const mkInput = (kind: string, params: number[], expr: string, value: number, steps: string) =>
+  const mkInput = (kind: string, params: number[], expr: string, value: number, steps: L) =>
     numInput(
       {
         id: `g:py.vars:expr${level}:${kind}-${params.join("-")}:${seed}`,
         level,
         scene: code([`print(${expr})`]),
         hint: hintPrec,
-        explanation: ln(`${steps}. Выведется ${value}.`, `${steps}. ${value} шығады.`),
+        explanation: ln(`${steps.ru}. Выведется ${value}.`, `${steps.kk}. ${value} шығады.`),
       },
       String(value),
     );
@@ -352,11 +353,22 @@ function genExpr(rand: Rand, level: Level, seed: number) {
     const b = int(rand, 2, 9);
     const c = int(rand, 2, 5);
     const t = int(rand, 0, 2);
-    if (t === 0) return mkInput("a", [a, b, c], `${a} + ${b} * ${c}`, a + b * c, `Сначала умножение: ${b} * ${c} = ${b * c}, потом сложение: ${a} + ${b * c} = ${a + b * c}`);
-    if (t === 1) return mkInput("b", [a, b, c], `(${a} + ${b}) * ${c}`, (a + b) * c, `Скобки первыми: ${a} + ${b} = ${a + b}, потом ${a + b} * ${c} = ${(a + b) * c}`);
+    if (t === 0)
+      return mkInput("a", [a, b, c], `${a} + ${b} * ${c}`, a + b * c, ln(
+        `Сначала умножение: ${b} * ${c} = ${b * c}, потом сложение: ${a} + ${b * c} = ${a + b * c}`,
+        `Алдымен көбейту: ${b} * ${c} = ${b * c}, содан кейін қосу: ${a} + ${b * c} = ${a + b * c}`,
+      ));
+    if (t === 1)
+      return mkInput("b", [a, b, c], `(${a} + ${b}) * ${c}`, (a + b) * c, ln(
+        `Скобки первыми: ${a} + ${b} = ${a + b}, потом ${a + b} * ${c} = ${(a + b) * c}`,
+        `Алдымен жақша: ${a} + ${b} = ${a + b}, содан кейін ${a + b} * ${c} = ${(a + b) * c}`,
+      ));
     const x = a * b > c ? a * b - c : a * b + c;
     const op = a * b > c ? "-" : "+";
-    return mkInput("c", [a, b, c], `${a} * ${b} ${op} ${c}`, x, `Сначала умножение: ${a} * ${b} = ${a * b}, потом ${a * b} ${op} ${c} = ${x}`);
+    return mkInput("c", [a, b, c], `${a} * ${b} ${op} ${c}`, x, ln(
+      `Сначала умножение: ${a} * ${b} = ${a * b}, потом ${a * b} ${op} ${c} = ${x}`,
+      `Алдымен көбейту: ${a} * ${b} = ${a * b}, содан кейін ${a * b} ${op} ${c} = ${x}`,
+    ));
   }
 
   if (level === 2) {
@@ -364,12 +376,35 @@ function genExpr(rand: Rand, level: Level, seed: number) {
     const a = int(rand, 3, 30);
     const b = int(rand, 2, 6);
     const c = int(rand, 2, 7);
-    if (t === 0) return mkInput("a", [a, b], `${a} + ${b} ** 2`, a + b * b, `Степень первой: ${b} ** 2 = ${b * b}, потом ${a} + ${b * b} = ${a + b * b}`);
-    if (t === 1) return mkInput("b", [a, b, c], `${a} * ${b} % ${c}`, (a * b) % c, `Слева направо: ${a} * ${b} = ${a * b}, потом ${a * b} % ${c} = ${(a * b) % c}`);
-    if (t === 2) return mkInput("c", [a, b], `${a} // ${b} + ${a} % ${b}`, Math.floor(a / b) + (a % b), `${a} // ${b} = ${Math.floor(a / b)}, ${a} % ${b} = ${a % b}, сумма ${Math.floor(a / b) + (a % b)}`);
-    if (t === 3) return mkInput("d", [a, b], `(${a} + ${b}) ** 2`, (a + b) ** 2, `Скобки: ${a} + ${b} = ${a + b}, потом ${a + b} ** 2 = ${(a + b) ** 2}`);
-    const m = a + 40;
-    return mkInput("e", [m, b, c], `${m} - ${b} ** 2 * ${c}`, m - b * b * c, `Сначала степень: ${b} ** 2 = ${b * b}, потом ${b * b} * ${c} = ${b * b * c}, потом ${m} − ${b * b * c} = ${m - b * b * c}`);
+    if (t === 0)
+      return mkInput("a", [a, b], `${a} + ${b} ** 2`, a + b * b, ln(
+        `Сначала степень: ${b} ** 2 = ${b * b}, потом ${a} + ${b * b} = ${a + b * b}`,
+        `Алдымен дәреже: ${b} ** 2 = ${b * b}, содан кейін ${a} + ${b * b} = ${a + b * b}`,
+      ));
+    if (t === 1)
+      return mkInput("b", [a, b, c], `${a} * ${b} % ${c}`, (a * b) % c, ln(
+        `* и % равны по приоритету, идём слева направо: ${a} * ${b} = ${a * b}, потом ${a * b} % ${c} = ${(a * b) % c}`,
+        `* пен % басымдығы тең, солдан оңға орындаймыз: ${a} * ${b} = ${a * b}, содан кейін ${a * b} % ${c} = ${(a * b) % c}`,
+      ));
+    if (t === 2) {
+      const q = Math.floor(a / b);
+      const r = a % b;
+      return mkInput("c", [a, b], `${a} // ${b} + ${a} % ${b}`, q + r, ln(
+        `${a} // ${b} = ${q}, ${a} % ${b} = ${r}, сумма: ${q} + ${r} = ${q + r}`,
+        `${a} // ${b} = ${q}, ${a} % ${b} = ${r}, қосынды: ${q} + ${r} = ${q + r}`,
+      ));
+    }
+    if (t === 3)
+      return mkInput("d", [a, b], `(${a} + ${b}) ** 2`, (a + b) ** 2, ln(
+        `Сначала скобки: ${a} + ${b} = ${a + b}, потом ${a + b} ** 2 = ${(a + b) ** 2}`,
+        `Алдымен жақша: ${a} + ${b} = ${a + b}, содан кейін ${a + b} ** 2 = ${(a + b) ** 2}`,
+      ));
+    // Уменьшаемое подбираем так, чтобы ответ был неотрицательным.
+    const m = b * b * c + a;
+    return mkInput("e", [m, b, c], `${m} - ${b} ** 2 * ${c}`, m - b * b * c, ln(
+      `Сначала степень: ${b} ** 2 = ${b * b}, потом ${b * b} * ${c} = ${b * b * c}, в конце ${m} − ${b * b * c} = ${m - b * b * c}`,
+      `Алдымен дәреже: ${b} ** 2 = ${b * b}, содан кейін ${b * b} * ${c} = ${b * b * c}, соңында ${m} − ${b * b * c} = ${m - b * b * c}`,
+    ));
   }
 
   // C: выбор из 4; неверные варианты — типичные ошибки приоритета
@@ -398,7 +433,7 @@ function genExpr(rand: Rand, level: Level, seed: number) {
     } else if (t === 1) {
       expr = `${a} * ${b} // ${c} % ${d}`;
       value = Math.floor((a * b) / c) % d;
-      steps = `слева направо: ${a} * ${b} = ${a * b}; ${a * b} // ${c} = ${Math.floor((a * b) / c)}; ${Math.floor((a * b) / c)} % ${d} = ${value}`;
+      steps = `${a} * ${b} = ${a * b}; ${a * b} // ${c} = ${Math.floor((a * b) / c)}; ${Math.floor((a * b) / c)} % ${d} = ${value}`;
       wrong = [
         [a * (Math.floor(b / c) % d), ln("Скобки поставлены не там: операции идут слева направо.", "Жақша қате қойылған: амалдар солдан оңға орындалады.")],
         [Math.floor((a * b) / (c % d)), ln("Сначала выполнено %, хотя оно стоит правее //.", "% бұрын орындалған, ал ол // амалының оң жағында тұр.")],
@@ -411,7 +446,7 @@ function genExpr(rand: Rand, level: Level, seed: number) {
       value = Math.floor((a + b) ** 2 / c) + d;
       steps = `${a} + ${b} = ${a + b}; ${a + b} ** 2 = ${(a + b) ** 2}; ${(a + b) ** 2} // ${c} = ${Math.floor((a + b) ** 2 / c)}; + ${d} = ${value}`;
       wrong = [
-        [Math.floor((a + b) ** 2 / (c + d)), ln("Деление выполнено после сложения: // и + стоят по приоритету не так.", "Бөлу қосудан кейін орындалған: // және + басымдығы олай емес.")],
+        [Math.floor((a + b) ** 2 / (c + d)), ln("Сложение выполнено раньше деления, хотя // старше +.", "Қосу бөлуден бұрын орындалған, ал // амалының басымдығы + амалынан жоғары.")],
         [a + Math.floor(b ** 2 / c) + d, ln("Скобки проигнорированы: степень применена только к b.", "Жақша ескерілмеген: дәреже тек b-ға қолданылған.")],
         [(a + b) ** 2 + d, ln("Пропущено деление // на c.", "c-ға // бөлу өткізіп жіберілген.")],
         [Math.floor((a + b) ** 2 / c), ln("Забыто последнее слагаемое.", "Соңғы қосылғыш ұмытылған.")],
@@ -429,7 +464,10 @@ function genExpr(rand: Rand, level: Level, seed: number) {
         prompt: WHAT_PRINTS,
         scene: code([`print(${expr})`]),
         hint: hintPrec,
-        explanation: ln(`Порядок действий: ${steps}. Выведется ${value}.`, `Амалдар реті: ${steps}. ${value} шығады.`),
+        explanation: ln(
+          `Порядок действий${t === 1 ? " (* // % равны по приоритету — слева направо)" : ""}: ${steps}. Выведется ${value}.`,
+          `Амалдар реті${t === 1 ? " (* // % басымдығы тең — солдан оңға)" : ""}: ${steps}. ${value} шығады.`,
+        ),
       },
       String(value),
       usable.map(([v, why]) => ({ text: String(v), why })),
@@ -574,6 +612,13 @@ const NOT_THIS: Record<(typeof TYPES)[number], L> = {
   bool: ln("Это не bool: результат не True и не False.", "Бұл bool емес: нәтиже True да, False та емес."),
 };
 
+const TYPE_DESC: Record<(typeof TYPES)[number], L> = {
+  int: ln("целое число", "бүтін сан"),
+  float: ln("дробное число", "бөлшек сан"),
+  str: ln("текст (строка)", "мәтін (жол)"),
+  bool: ln("логическое значение True или False", "True немесе False логикалық мәні"),
+};
+
 const TYPE_CASES: TypeCase[] = [
   { expr: "7 / 2", type: "float", level: 1, trap: { type: "int", why: ln("Деление / всегда даёт float.", "/ бөлуі әрқашан float береді.") } },
   { expr: "7 // 2", type: "int", level: 1, trap: { type: "float", why: ln("Целочисленное деление // даёт int.", "Бүтін бөлу // int береді.") } },
@@ -606,8 +651,6 @@ function genType(rand: Rand, level: Level, seed: number) {
     text: t,
     why: c.trap && c.trap.type === t ? c.trap.why : NOT_THIS[t],
   }));
-  // Типичную ловушку ставим первой, чтобы она точно попала в варианты.
-  wrongs.sort((a) => (c.trap && a.text === c.trap.type ? -1 : 1));
   const opts = choice(
     rand,
     {
@@ -616,7 +659,10 @@ function genType(rand: Rand, level: Level, seed: number) {
       prompt: ln("Какой тип имеет значение x?", "x мәні қандай типке жатады?"),
       scene: code(lines),
       hint: ln("int — целое число, float — дробное, str — текст в кавычках, bool — True или False. Посмотри на знак операции и на кавычки.", "int — бүтін сан, float — бөлшек сан, str — тырнақшадағы мәтін, bool — True немесе False. Амал белгісі мен тырнақшаға қара."),
-      explanation: ln(`Выражение ${c.expr} имеет тип ${c.type}.`, `${c.expr} өрнегінің типі — ${c.type}.`),
+      explanation: ln(
+        `Значение x = ${c.expr} — ${TYPE_DESC[c.type].ru}, тип ${c.type}.${c.trap ? ` ${c.trap.why.ru}` : ""}`,
+        `x = ${c.expr} мәні — ${TYPE_DESC[c.type].kk}, типі ${c.type}.${c.trap ? ` ${c.trap.why.kk}` : ""}`,
+      ),
     },
     c.type,
     wrongs,
@@ -647,6 +693,7 @@ function genString(rand: Rand, level: Level, seed: number) {
         },
         value,
         "text",
+        [`'${value}'`],
       );
     }
     const a = int(rand, 1, 9);
@@ -662,6 +709,7 @@ function genString(rand: Rand, level: Level, seed: number) {
       },
       value,
       "text",
+      [`'${value}'`],
     );
   }
   const a = int(rand, 2, 8);
@@ -676,7 +724,7 @@ function genString(rand: Rand, level: Level, seed: number) {
         scene: code(lines),
         reveal: reveal(lines, [["a", `'${a}'`], ["b", `'${b}'`]], [value]),
         hint: ln("Первое выражение складывает строки, второе — числа после int().", "Бірінші өрнек жолдарды қосады, екіншісі — int()-тен кейінгі сандарды."),
-        explanation: ln(`a + b склеивает строки: '${a}' + '${b}' = ${a}${b}. int(a) + int(b) = ${a} + ${b} = ${a + b}. Через пробел: ${value}.`, `a + b жолдарды жалғайды: '${a}' + '${b}' = ${a}${b}. int(a) + int(b) = ${a} + ${b} = ${a + b}. Бос орын арқылы: ${value}.`),
+        explanation: ln(`a + b склеивает строки: '${a}' + '${b}' = ${a}${b}. int(a) + int(b) = ${a} + ${b} = ${a + b}. Через пробел: ${value}.`, `a + b жолдарды жалғайды: '${a}' + '${b}' = ${a}${b}. int(a) + int(b) = ${a} + ${b} = ${a + b}. Бос орынмен бөліп: ${value}.`),
       },
       value,
       "text",
@@ -719,7 +767,7 @@ const FACTS: Fact[] = [
   { level: 1, text: ln("Операция % даёт остаток от деления", "% амалы бөлгендегі қалдықты береді"), value: true, explanation: ln("Например, 17 % 5 = 2.", "Мысалы, 17 % 5 = 2.") },
   { level: 1, text: ln("Операция // даёт остаток от деления", "// амалы бөлгендегі қалдықты береді"), value: false, explanation: ln("// даёт целую часть деления, а остаток даёт %.", "// бөлудің бүтін бөлігін береді, ал қалдықты % береді.") },
   { level: 1, text: ln("Знак ** в Python означает степень", "Python-да ** белгісі дәрежені білдіреді"), value: true, explanation: ln("2 ** 3 = 8.", "2 ** 3 = 8.") },
-  { level: 1, text: ln("print(a, b) выводит значения через пробел", "print(a, b) мәндерді бос орын арқылы шығарады"), value: true, explanation: ln("Чтобы вывести слитно, пишут print(a, b, sep='').", "Тұтас шығару үшін print(a, b, sep='') деп жазады.") },
+  { level: 1, text: ln("print(a, b) выводит значения через пробел", "print(a, b) мәндерді бос орынмен бөліп шығарады"), value: true, explanation: ln("Чтобы вывести слитно, пишут print(a, b, sep='').", "Тұтас шығару үшін print(a, b, sep='') деп жазады.") },
   { level: 2, text: ln("input() возвращает число", "input() сан қайтарады"), value: false, explanation: ln("input() всегда возвращает строку; число получают так: int(input()).", "input() әрқашан жол қайтарады; санды былай алады: int(input()).") },
   { level: 2, text: ln("int(input()) превращает введённую строку в целое число", "int(input()) енгізілген жолды бүтін санға айналдырады"), value: true, explanation: ln("input() читает строку, а int() переводит её в число.", "input() жолды оқиды, ал int() оны санға айналдырады.") },
   { level: 2, text: ln("Результат операции / всегда имеет тип float", "/ амалының нәтижесі әрқашан float типті болады"), value: true, explanation: ln("Даже 6 / 2 даёт 3.0, а не 3.", "Тіпті 6 / 2 нәтижесі де 3 емес, 3.0.") },

@@ -90,8 +90,20 @@ const reverse = (s: string) => s.split("").reverse().join("");
 // Причины неверных вариантов (показываются бесплатно при ошибке).
 const WHY = {
   reversed: T(
-    "Цифры записаны в обратном порядке: первая группа бит — самая левая.",
-    "Цифрлар кері ретпен жазылған: бірінші бит тобы — ең сол жақтағы.",
+    "Цифры записаны в обратном порядке: цифра левой группы бит и в ответе стоит слева.",
+    "Цифрлар кері ретпен жазылған: сол жақтағы бит тобының цифры жауапта да сол жақта тұрады.",
+  ),
+  asDecimal: T(
+    "Число принято за десятичное и переведено в двоичную как десятичное.",
+    "Сан ондық деп алынып, екілік жүйеге ондық сан ретінде аударылған.",
+  ),
+  near: T(
+    "Это соседняя цифра: значение отличается на единицу. Сложи веса заново.",
+    "Бұл — көрші цифр: мәні бірге ерекшеленеді. Салмақтарды қайта қос.",
+  ),
+  oneOff: T(
+    "Ошибка на единицу: выпиши двоичную запись и пересчитай её цифры.",
+    "Бірге қателесу: екілік жазбаны жазып, цифрларын қайта сана.",
   ),
   left: T(
     "Группы взяты слева направо. Резать нужно справа налево, а недостающие нули дописывать слева.",
@@ -233,8 +245,8 @@ function bin2baseInput(rand: Rand, level: Level, seed: number, base: 8 | 16, len
       kk: `Оңнан солға қарай ${groupWord(base).kk} бөл. Сол жақта бит жетпесе — сол жағына нөл жаз.`,
     },
     explanation: {
-      ru: `Группы по ${k} бита справа налево, слева дописаны нули: ${g.join(" | ")}. ${groupsLine(b, base)}. Ответ: ${rec(ans, base)}. Проверка: значение числа ${parseInt(b, 2)}.`,
-      kk: `Оңнан солға қарай ${k} биттен топтар, сол жағына нөл жазылған: ${g.join(" | ")}. ${groupsLine(b, base)}. Жауабы: ${rec(ans, base)}. Тексеру: санның мәні ${parseInt(b, 2)}.`,
+      ru: `Группы по ${k} бита справа налево${b.length % k ? " (слева дописаны нули)" : ""}: ${g.join(" | ")}. ${groupsLine(b, base)}. Ответ: ${rec(ans, base)}. Проверка: значение числа ${parseInt(b, 2)}.`,
+      kk: `Оңнан солға қарай ${k} биттен топтар${b.length % k ? " (сол жағына нөл жазылды)" : ""}: ${g.join(" | ")}. ${groupsLine(b, base)}. Жауабы: ${rec(ans, base)}. Тексеру: санның мәні ${parseInt(b, 2)}.`,
     },
   };
 }
@@ -253,7 +265,7 @@ function base2binChoice(rand: Rand, level: Level, seed: number, base: 8 | 16, le
     [
       { v: lost, why: WHY.lostZeros },
       { v: orderRev, why: WHY.order },
-      { v: decimalBin, why: WHY.decimal },
+      { v: decimalBin, why: WHY.asDecimal },
       { v: flipBit(rand, ans), why: WHY.bit },
     ],
     () => flipBit(rand, ans),
@@ -271,8 +283,8 @@ function base2binChoice(rand: Rand, level: Level, seed: number, base: 8 | 16, le
       kk: `Әр цифр — дәл ${k} бит, сол жақта нөлдер шықса да.`,
     },
     explanation: {
-      ru: `Каждую цифру заменяем ${k} битами: ${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Склеиваем: ${exact}. Нули в самом начале убираем: ${ans}₂.`,
-      kk: `Әр цифрды ${k} битпен ауыстырамыз: ${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Жалғаймыз: ${exact}. Ең басындағы нөлдерді алып тастаймыз: ${ans}₂.`,
+      ru: `Каждую цифру заменяем ${k} битами: ${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Склеиваем: ${exact}${exact === ans ? "" : `. Нули в самом начале убираем: ${ans}`}₂.`,
+      kk: `Әр цифрды ${k} битпен ауыстырамыз: ${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Жалғаймыз: ${exact}${exact === ans ? "" : `. Ең басындағы нөлдерді алып тастаймыз: ${ans}`}₂.`,
     },
   };
 }
@@ -297,8 +309,8 @@ function base2binInput(rand: Rand, level: Level, seed: number, base: 8 | 16, len
       kk: `Әр цифр — дәл ${k} бит. Санның ішіндегі нөлдерді жоғалтпа, ең басындағы артық нөлдерді алып тастауға болады.`,
     },
     explanation: {
-      ru: `${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Склеиваем: ${exact}. Нули в самом начале убираем: ${ans}₂.`,
-      kk: `${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Жалғаймыз: ${exact}. Ең басындағы нөлдерді алып тастаймыз: ${ans}₂.`,
+      ru: `${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Склеиваем: ${exact}${exact === ans ? "" : `. Нули в самом начале убираем: ${ans}`}₂.`,
+      kk: `${s.split("").map((d) => `${d} → ${parseInt(d, 16).toString(2).padStart(k, "0")}`).join(", ")}. Жалғаймыз: ${exact}${exact === ans ? "" : `. Ең басындағы нөлдерді алып тастаймыз: ${ans}`}₂.`,
     },
   };
 }
@@ -318,8 +330,8 @@ function digitChoice(rand: Rand, level: Level, seed: number): QuestionStep {
       rand,
       bits,
       [
-        { v: near(d - 1), why: WHY.off },
-        { v: near(d + 1), why: WHY.off },
+        { v: near(d - 1), why: WHY.near },
+        { v: near(d + 1), why: WHY.near },
         { v: d.toString(2), why: WHY.lostZeros },
         { v: reverse(bits), why: WHY.flip },
       ],
@@ -332,7 +344,7 @@ function digitChoice(rand: Rand, level: Level, seed: number): QuestionStep {
       level,
       prompt: {
         ru: `Какими ${k} битами записывается цифра ${sym} в ${SYS_GEN[base].ru} системе?`,
-        kk: `${SYS_GEN[base].kk[0].toUpperCase()}${SYS_GEN[base].kk.slice(1)} жүйенің ${sym} цифры қандай ${k} биттен тұрады?`,
+        kk: `${SYS_GEN[base].kk[0].toUpperCase()}${SYS_GEN[base].kk.slice(1)} жүйенің ${sym} цифры қандай ${k} битпен жазылады?`,
       },
       ...o,
       hint: {
@@ -340,8 +352,8 @@ function digitChoice(rand: Rand, level: Level, seed: number): QuestionStep {
         kk: `Цифрдың мәнін тап${base === 16 ? " (A = 10 … F = 15)" : ""} және оны ${k === 3 ? "4, 2, 1" : "8, 4, 2, 1"} салмақтарына жікте.`,
       },
       explanation: {
-        ru: `${sym} = ${d}. Веса ${k === 3 ? "4, 2, 1" : "8, 4, 2, 1"}: ${bits}. Бит всегда ровно ${k}, нули слева сохраняются.`,
-        kk: `${sym} = ${d}. Салмақтар ${k === 3 ? "4, 2, 1" : "8, 4, 2, 1"}: ${bits}. Бит әрқашан дәл ${k}, сол жақтағы нөлдер сақталады.`,
+        ru: `${sym} = ${d}. Веса ${k === 3 ? "4, 2, 1" : "8, 4, 2, 1"}: ${bits}. Битов всегда ровно ${k}, нули слева сохраняются.`,
+        kk: `${sym} = ${d}. Салмақтар ${k === 3 ? "4, 2, 1" : "8, 4, 2, 1"}: ${bits}. Әрқашан дәл ${k} бит болады, сол жақтағы нөлдер сақталады.`,
       },
     };
   }
@@ -351,8 +363,8 @@ function digitChoice(rand: Rand, level: Level, seed: number): QuestionStep {
     rand,
     sym,
     [
-      { v: around(d - 1), why: WHY.off },
-      { v: around(d + 1), why: WHY.off },
+      { v: around(d - 1), why: WHY.near },
+      { v: around(d + 1), why: WHY.near },
       { v: d >= 10 ? String(d) : "", why: T("Это десятичное значение: в шестнадцатеричной системе значение 10–15 записывается одной буквой.", "Бұл — ондық мән: он алтылық жүйеде 10–15 мәні бір әріппен жазылады.") },
       { v: around(parseInt(reverse(bits), 2)), why: WHY.flip },
     ],
@@ -397,8 +409,8 @@ function matchHex(rand: Rand, level: Level, seed: number): QuestionStep {
       kk: "Төрттіктің салмақтарын жаз: 8, 4, 2, 1. Есіңде болсын: A = 10, B = 11, C = 12, D = 13, E = 14, F = 15.",
     },
     explanation: {
-      ru: `${digits.map((d) => `${toBase(d, 16)} = ${d} → ${d.toString(2).padStart(4, "0")}`).join("; ")}. Бит всегда четыре, нули слева сохраняются.`,
-      kk: `${digits.map((d) => `${toBase(d, 16)} = ${d} → ${d.toString(2).padStart(4, "0")}`).join("; ")}. Бит әрқашан төртеу, сол жақтағы нөлдер сақталады.`,
+      ru: `${digits.map((d) => `${toBase(d, 16)} = ${d} → ${d.toString(2).padStart(4, "0")}`).join("; ")}. Битов всегда четыре, нули слева сохраняются.`,
+      kk: `${digits.map((d) => `${toBase(d, 16)} = ${d} → ${d.toString(2).padStart(4, "0")}`).join("; ")}. Әрқашан төрт бит болады, сол жақтағы нөлдер сақталады.`,
     },
   };
 }
@@ -433,8 +445,8 @@ function splitChoice(rand: Rand, level: Level, seed: number): QuestionStep {
     skill: SKILL,
     level,
     prompt: {
-      ru: `Как правильно разбить ${rec(b, 2)} для перевода в ${SYS_GEN[base].ru} систему?`,
-      kk: `${rec(b, 2)} санын ${SYS_GEN[base].kk} жүйеге аудару үшін қалай дұрыс бөлу керек?`,
+      ru: `Как правильно разбить ${rec(b, 2)} для перевода в ${SYS[base].ru} систему?`,
+      kk: `${rec(b, 2)} санын ${SYS[base].kk} жүйеге аудару үшін қалай дұрыс бөлу керек?`,
     },
     ...o,
     hint: {
@@ -520,10 +532,10 @@ function lenChoice(rand: Rand, level: Level, seed: number): QuestionStep {
     rand,
     String(bits.length),
     [
-      { v: String(s.length * k), why: T("Нули в начале записи не считаются: старшая цифра даёт меньше бит.", "Жазбаның басындағы нөлдер есептелмейді: аға цифр аз бит береді.") },
+      { v: String(s.length * k), why: T("Нули в начале записи не считаются: левая цифра может дать меньше бит.", "Жазбаның басындағы нөлдер есептелмейді: сол жақтағы цифр азырақ бит беруі мүмкін.") },
       { v: String(s.length), why: T("Это число цифр в исходной записи, а не в двоичной.", "Бұл — бастапқы жазбадағы цифрлар саны, екілік жазбадағы емес.") },
-      { v: String(bits.length + 1), why: WHY.off },
-      { v: String(bits.length - 1), why: WHY.off },
+      { v: String(bits.length + 1), why: WHY.oneOff },
+      { v: String(bits.length - 1), why: WHY.oneOff },
     ],
     () => String(bits.length + int(rand, 2, 3)),
   );
@@ -542,8 +554,8 @@ function lenChoice(rand: Rand, level: Level, seed: number): QuestionStep {
       kk: `Әр цифрды ${k} бит тобымен ауыстыр, содан кейін ең басындағы нөлдерді алып таста.`,
     },
     explanation: {
-      ru: `${rec(s, base)} → ${bits}₂, это ${bits.length} цифр. Всего бит в группах ${s.length * k}, но нули в начале старшей группы в запись не входят.`,
-      kk: `${rec(s, base)} → ${bits}₂, бұл ${bits.length} цифр. Топтардағы барлық бит ${s.length * k}, бірақ аға топтың басындағы нөлдер жазбаға кірмейді.`,
+      ru: `${rec(s, base)} → ${bits}₂, количество цифр: ${bits.length}.${bits.length < s.length * k ? ` Бит в группах: ${s.length * k}, но нули в начале левой группы в запись не входят.` : ""}`,
+      kk: `${rec(s, base)} → ${bits}₂, цифрлар саны: ${bits.length}.${bits.length < s.length * k ? ` Топтардағы биттер саны: ${s.length * k}, бірақ сол жақтағы топтың басындағы нөлдер жазбаға кірмейді.` : ""}`,
     },
   };
 }
@@ -560,8 +572,8 @@ function ndigitsInput(rand: Rand, level: Level, seed: number): QuestionStep {
     skill: SKILL,
     level,
     prompt: {
-      ru: `Двоичная запись числа состоит из ${n} цифр. Сколько цифр в записи этого числа в ${SYS_GEN[base].ru} системе?`,
-      kk: `Санның екілік жазбасы ${n} цифрдан тұрады. Осы санның ${SYS_GEN[base].kk} жүйедегі жазбасында неше цифр бар?`,
+      ru: `Количество цифр в двоичной записи числа: ${n}. Сколько цифр в записи этого числа в ${SYS_GEN[base].ru} системе?`,
+      kk: `Санның екілік жазбасындағы цифрлар саны: ${n}. Осы санның ${SYS_GEN[base].kk} жүйедегі жазбасында неше цифр бар?`,
     },
     answers: [String(ans)],
     mode: "number",
@@ -570,8 +582,8 @@ function ndigitsInput(rand: Rand, level: Level, seed: number): QuestionStep {
       kk: `Бір цифр ${k} битті ауыстырады. Барлық битті сыйғызу үшін ${k} биттен қанша топ керек (соңғысы толық болмауы мүмкін)?`,
     },
     explanation: {
-      ru: `Группы по ${k} бита: ${n} : ${k} = ${(n / k).toFixed(2).replace(/\.?0+$/, "")}, неполную группу тоже считаем цифрой. Цифр: ${ans}.`,
-      kk: `${k} биттік топтар: ${n} : ${k} = ${(n / k).toFixed(2).replace(/\.?0+$/, "")}, толық емес топ та цифр болады. Цифрлар: ${ans}.`,
+      ru: `Режем по ${k} бита: ${n} = ${k} · ${Math.floor(n / k)} + ${n % k}. ${n % k ? "Остаток — неполная группа, она тоже даёт цифру." : "Все группы полные."} Цифр: ${ans}.`,
+      kk: `${k} биттен бөлеміз: ${n} = ${k} · ${Math.floor(n / k)} + ${n % k}. ${n % k ? "Қалдық — толық емес топ, ол да бір цифр береді." : "Барлық топ толық."} Цифрлар саны: ${ans}.`,
     },
   };
 }
@@ -697,8 +709,8 @@ function makeStatement(level: Level, seed: number): Statement {
     },
     value: claim === bits.length,
     explanation: {
-      ru: `${rec(s, base)} → ${bits}₂: ${bits.length} цифр (нули в начале не считаются).`,
-      kk: `${rec(s, base)} → ${bits}₂: ${bits.length} цифр (басындағы нөлдер есептелмейді).`,
+      ru: `${rec(s, base)} → ${bits}₂, количество цифр: ${bits.length} (нули в начале не считаются).`,
+      kk: `${rec(s, base)} → ${bits}₂, цифрлар саны: ${bits.length} (басындағы нөлдер есептелмейді).`,
     },
   };
 }
@@ -715,7 +727,7 @@ function makePair(level: Level, seed: number): Pair {
   }
   if (level === 2) {
     const s = randDigits(rand, 2, 16);
-    return { id: `p:ns.octhex:hex2:${s}`, skill: SKILL, level, left: rec(s, 16), right: rec(digitsToBits(s, 16), 2) };
+    return { id: `p:ns.octhex:hex2:${s}`, skill: SKILL, level, left: rec(s, 16), right: rec(trimZeros(digitsToBits(s, 16)), 2) };
   }
   const o = randDigits(rand, 3, 8);
   const bits = trimZeros(digitsToBits(o, 8));
