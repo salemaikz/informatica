@@ -1,0 +1,146 @@
+"use client";
+
+import { Play, RotateCcw, Trophy, X, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import type { GameResult } from "@/games/types";
+import { gameById } from "@/games/registry";
+import { GAME_COMPONENTS } from "@/games/components";
+import type { GameReward } from "@/lib/games";
+import { useApp } from "@/lib/store";
+import { playSound } from "@/lib/sound";
+import { useT } from "@/i18n/useT";
+import { Button } from "@/components/ui/Button";
+import { Mascot, MascotSays } from "@/components/mascot/Mascot";
+
+type Phase = { name: "intro" } | { name: "playing"; round: number } | { name: "result"; result: GameResult; reward: GameReward };
+
+/** Оболочка мини-игры: вступление с правилами → игра → итоги (очки, рекорд, XP). */
+export function GameShell({ id }: { id: string }) {
+  const router = useRouter();
+  const { t, l, lang } = useT();
+  const meta = gameById(id)!;
+  const sound = useApp((s) => s.profile.sound);
+  const stat = useApp((s) => s.games[id]);
+  const recordGame = useApp((s) => s.recordGame);
+  const [phase, setPhase] = useState<Phase>({ name: "intro" });
+  const [round, setRound] = useState(0);
+  const Game = GAME_COMPONENTS[id];
+
+  const start = () => {
+    const next = round + 1;
+    setRound(next);
+    setPhase({ name: "playing", round: next });
+  };
+
+  const finish = (result: GameResult) => {
+    const reward = recordGame(id, result);
+    if (sound) playSound("complete");
+    if (reward.newBest && stat) {
+      void import("canvas-confetti").then(({ default: confetti }) =>
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.35 }, colors: ["#f0b400", "#1a91d6", "#21b26f"] }),
+      );
+    }
+    setPhase({ name: "result", result, reward });
+  };
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
+        <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4">
+          <button
+            type="button"
+            onClick={() => router.push("/practice")}
+            aria-label={t("common.close")}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2"
+          >
+            <X size={24} />
+          </button>
+          <span className="flex-1 truncate text-lg font-extrabold">
+            {meta.icon} {l(meta.title)}
+          </span>
+          <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
+            <Trophy size={16} className="text-gold" /> {stat?.best ?? 0}
+          </span>
+        </div>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-8">
+        {phase.name === "intro" && (
+          <div className="flex flex-1 flex-col gap-5 pt-4 animate-fade-in">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <span className="flex h-24 w-24 items-center justify-center rounded-[2rem] text-5xl text-white shadow-lg" style={{ background: meta.color }}>
+                {meta.icon}
+              </span>
+              <h1 className="text-2xl font-extrabold">{l(meta.title)}</h1>
+              <p className="font-semibold text-muted">{l(meta.description)}</p>
+            </div>
+            <div className="rounded-3xl border-2 border-border bg-surface p-4">
+              <p className="mb-1 text-sm font-extrabold text-muted">{t("game.rules")}</p>
+              <p className="whitespace-pre-line font-semibold leading-relaxed">{l(meta.rules)}</p>
+            </div>
+            <div className="flex justify-center gap-4 text-sm font-bold text-muted">
+              <span>{stat ? t("game.best", { n: stat.best }) : t("game.noBest")}</span>
+              {stat && <span>· {t("game.plays", { n: stat.plays })}</span>}
+              <span>· {t("game.seconds", { n: meta.durationSec })}</span>
+            </div>
+            <div className="flex-1" />
+            <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
+              {t("game.play")}
+            </Button>
+          </div>
+        )}
+
+        {phase.name === "playing" && (
+          <Suspense fallback={<div className="mt-6 h-96 animate-pulse rounded-3xl bg-surface-2" />}>
+            <div className="flex flex-1 flex-col pt-2">
+              <Game key={phase.round} lang={lang} sound={sound} onFinish={finish} />
+            </div>
+          </Suspense>
+        )}
+
+        {phase.name === "result" && (
+          <div className="flex flex-1 flex-col gap-5 pt-6 animate-fade-in">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <Mascot mood={phase.reward.newBest ? "celebrate" : "happy"} size={100} />
+              <p className="text-sm font-extrabold uppercase text-muted">{t("game.over")}</p>
+              <p className="text-5xl font-black">{phase.result.score}</p>
+              <p className="font-bold text-muted">{t("game.score")}</p>
+              {phase.reward.newBest && (
+                <span className="flex items-center gap-1.5 rounded-full bg-gold-soft px-4 py-1.5 font-extrabold text-warning-strong animate-pop">
+                  <Trophy size={18} className="text-gold" /> {t("game.newBest")}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border-2 border-success bg-surface p-3 text-center">
+                <p className="text-xs font-extrabold text-muted">{t("game.correct")}</p>
+                <p className="text-2xl font-extrabold text-success-strong">
+                  {phase.result.correct}/{phase.result.total}
+                </p>
+              </div>
+              <div className="rounded-2xl border-2 border-gold bg-surface p-3 text-center">
+                <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
+                  <Zap size={14} className="text-gold" /> XP
+                </p>
+                <p className="text-2xl font-extrabold text-warning-strong">+{phase.reward.xp}</p>
+              </div>
+            </div>
+            <MascotSays mood="happy" size={56}>
+              {stat ? t("game.best", { n: stat.best }) : ""}
+            </MascotSays>
+            <div className="flex-1" />
+            <div className="flex flex-col gap-3">
+              <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>
+                {t("game.again")}
+              </Button>
+              <Button variant="secondary" block onClick={() => router.push("/practice")}>
+                {t("game.toPractice")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}

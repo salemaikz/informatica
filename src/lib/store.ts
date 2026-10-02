@@ -6,6 +6,8 @@ import type { AnswerRecord, ExplainStyle, Goal, Grade, Lang, SessionResult, Them
 import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
 import { masteryLevel, updateSkill, type SkillStat } from "./mastery";
 import { todayKey } from "./text";
+import { gameReward, type GameReward } from "./games";
+import type { GameResult } from "@/games/types";
 
 // Локальное хранилище прогресса (MVP). Всё лежит в localStorage устройства.
 // План: заменить на синхронизацию с бэкендом (см. docs/ROADMAP.md) — интерфейс действий не менять.
@@ -67,6 +69,12 @@ export interface ChatMessage {
   at: number;
 }
 
+export interface GameStat {
+  best: number;
+  plays: number;
+  lastAt: number;
+}
+
 export interface AppState {
   onboarded: boolean;
   profile: Profile;
@@ -84,6 +92,8 @@ export interface AppState {
   chat: ChatMessage[];
   aiUsage: { day: string; count: number };
   maxCombo: number;
+  /** Рекорды мини-игр. */
+  games: Record<string, GameStat>;
 }
 
 export interface AppActions {
@@ -106,6 +116,8 @@ export interface AppActions {
   refundAi: () => void;
   /** Закрыть ошибку(и) по id задания. */
   dismissMistake: (stepId: string) => void;
+  /** Итог мини-игры: XP, рекорд, освоение навыков, серия. */
+  recordGame: (gameId: string, result: GameResult) => GameReward;
   resetProgress: () => void;
 }
 
@@ -141,6 +153,7 @@ const initialState: AppState = {
   chat: [],
   aiUsage: { day: "", count: 0 },
   maxCombo: 0,
+  games: {},
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -319,6 +332,33 @@ export const useApp = create<AppState & AppActions>()(
       },
 
       dismissMistake: (stepId) => set((s) => ({ mistakes: s.mistakes.filter((m) => m.stepId !== stepId) })),
+
+      recordGame: (gameId, result) => {
+        const s = get();
+        const reward = gameReward(result, s.games[gameId]?.best);
+        const today = todayKey();
+        const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
+        let skills = s.skills;
+        for (const [skill, score] of Object.entries(reward.skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score) };
+        let next: AppState = {
+          ...s,
+          xp: s.xp + reward.xp,
+          skills,
+          streak: result.total > 0 ? bumpStreak(s.streak, today) : s.streak,
+          days: {
+            ...s.days,
+            [today]: { ...day, xp: day.xp + reward.xp, answers: day.answers + result.total, correct: day.correct + result.correct },
+          },
+          games: {
+            ...s.games,
+            [gameId]: { best: Math.max(s.games[gameId]?.best ?? 0, result.score), plays: (s.games[gameId]?.plays ?? 0) + 1, lastAt: Date.now() },
+          },
+        };
+        next = { ...next, ...withAchievement(next, "gamer") };
+        next = { ...next, ...evaluate(next) };
+        set(next);
+        return reward;
+      },
 
       resetProgress: () => set({ ...initialState }),
     }),

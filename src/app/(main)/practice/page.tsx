@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, Lock, RotateCcw, Timer } from "lucide-react";
+import { Brain, Lock, RotateCcw, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { SKILLS } from "@/content/skills";
 import { unlockedSkills } from "@/content/course";
@@ -12,12 +12,14 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
+import { GAMES } from "@/games/registry";
 
 export default function PracticePage() {
   const { t, l } = useT();
   const skills = useApp((s) => s.skills);
   const lessons = useApp((s) => s.lessons);
   const mistakes = useApp((s) => s.mistakes);
+  const games = useApp((s) => s.games);
   const unlocked = new Set(unlockedSkills(Object.keys(lessons)));
   const anyUnlocked = unlocked.size > 0;
 
@@ -54,6 +56,47 @@ export default function PracticePage() {
           </span>
         </Link>
       </div>
+
+      {GAMES.length > 0 && (
+        <section>
+          <h2 className="text-lg font-extrabold">{t("games.title")}</h2>
+          <p className="mb-3 text-sm font-semibold text-muted">{t("games.subtitle")}</p>
+          <div className="grid grid-cols-2 gap-3">
+            {GAMES.map((g) => {
+              const open = g.skills.some((s) => unlocked.has(s));
+              const best = games[g.id]?.best;
+              return (
+                <Link
+                  key={g.id}
+                  href={open ? `/game/${g.id}` : "#"}
+                  aria-disabled={!open}
+                  className={clsx(
+                    "flex flex-col gap-2 rounded-3xl border-2 bg-surface p-3.5 transition-transform active:translate-y-0.5",
+                    open ? "border-border hover:bg-surface-2" : "pointer-events-none border-dashed border-border opacity-60",
+                  )}
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl" style={{ background: g.color }}>
+                    {g.icon}
+                  </span>
+                  <span className="font-extrabold leading-tight">{l(g.title)}</span>
+                  <span className="line-clamp-2 text-xs font-semibold text-muted">{l(g.description)}</span>
+                  <span className="mt-auto flex items-center gap-1 text-xs font-extrabold text-warning-strong">
+                    {open ? (
+                      <>
+                        <Trophy size={14} className="text-gold" /> {best ?? "—"}
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={12} className="text-muted" /> <span className="text-muted">{t("games.locked")}</span>
+                      </>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="flex items-center gap-4 rounded-3xl border-2 border-dashed border-border p-4 text-muted">
         <Timer size={28} />

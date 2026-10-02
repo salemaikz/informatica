@@ -135,6 +135,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: { ru: "Пройди тренировку слабых тем", kk: "Әлсіз тақырыптар жаттығуын өт" },
   },
   {
+    id: "gamer",
+    icon: "🎮",
+    title: { ru: "Игрок", kk: "Ойыншы" },
+    description: { ru: "Сыграй в мини-игру", kk: "Шағын ойын ойна" },
+  },
+  {
     id: "binary_master",
     icon: "🧠",
     title: { ru: "Повелитель битов", kk: "Биттер әміршісі" },
