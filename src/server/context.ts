@@ -48,6 +48,8 @@ export function sanitizeTask(raw: unknown): TaskContext | undefined {
     correct: str(t.correct, 200),
     given: str(t.given, 200),
     explanation: str(t.explanation, 800),
+    theory: str(t.theory, 1500),
+    answered: t.answered === true,
   };
 }
 

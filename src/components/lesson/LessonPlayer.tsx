@@ -115,7 +115,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const [checkError, setCheckError] = useState<DictKey | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
-  const [ai, setAi] = useState<"hint" | "explain" | null>(null);
+  const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
   const [session, setSession] = useState<{ result: SessionResult; bonusXp: number; achievements: string[] } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   const startedAt = useRef(0);
@@ -313,7 +313,10 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, step, next, check, exitOpen, ai, session]);
 
+  // Контекст для ИИ: задание (с ответом, если ученик уже ответил) или теория текущего шага.
   const taskCtx = useMemo<TaskContext | null>(() => {
+    if (step.type === "theory") return { prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
+    if (step.type === "video") return { prompt: tx(step.title, lang), theory: tx(step.title, lang) };
     if (!question) return null;
     return {
       prompt: promptText(question, lang),
@@ -321,8 +324,14 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       correct: expectedText(question, lang),
       given: result?.given,
       explanation: plain(tx(question.explanation, lang)),
+      answered: phase === "feedback",
     };
-  }, [question, lang, result]);
+  }, [step, question, lang, result, phase]);
+  const askSuggestions: DictKey[] = !question
+    ? ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"]
+    : phase === "feedback"
+      ? ["tutor.q.simpler", "tutor.q.example"]
+      : ["tutor.q.start", "tutor.q.simpler", "tutor.q.example"];
 
   if (session) {
     return (
@@ -358,6 +367,15 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
+          <button
+            type="button"
+            onClick={() => setAi("ask")}
+            aria-label={t("tutor.askButton")}
+            title={t("tutor.askButton")}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-ai-soft text-ai hover:brightness-95"
+          >
+            <Sparkles size={20} />
+          </button>
           <ToolboxButton variant="icon" />
         </div>
       </header>
@@ -395,6 +413,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
             <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
             {step.visual && <Visual id={step.visual} />}
             <Markdown className="text-[17px]">{l(step.body)}</Markdown>
+            <button
+              type="button"
+              onClick={() => setAi("ask")}
+              className="flex items-center gap-1.5 self-start rounded-xl bg-ai-soft px-3 py-2 text-sm font-extrabold text-ai hover:brightness-95"
+            >
+              <Sparkles size={16} /> {t("tutor.askInline")}
+            </button>
           </div>
         )}
 
@@ -572,7 +597,15 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       </Modal>
 
       {ai && taskCtx && (
-        <AiPanel key={`${item.key}:${ai}`} open onClose={() => setAi(null)} mode={ai} task={taskCtx} noteKey={noteKey} />
+        <AiPanel
+          key={`${item.key}:${ai}`}
+          open
+          onClose={() => setAi(null)}
+          mode={ai}
+          task={taskCtx}
+          noteKey={noteKey}
+          suggestions={ai === "ask" ? askSuggestions : []}
+        />
       )}
     </div>
   );

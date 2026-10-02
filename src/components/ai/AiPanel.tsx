@@ -4,30 +4,44 @@ import { BookmarkPlus, Check, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { useT } from "@/i18n/useT";
+import type { DictKey } from "@/i18n/dict";
 import { useApp } from "@/lib/store";
 import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useTutor, type TutorTurn } from "./useTutor";
 
-/** Шторка с ИИ внутри урока: подсказка к заданию или разбор ошибки + уточняющие вопросы. */
+const TITLE: Record<Exclude<TutorMode, "chat">, DictKey> = {
+  hint: "tutor.hintTitle",
+  explain: "tutor.explainTitle",
+  ask: "tutor.askTitle",
+};
+
+/**
+ * Шторка с ИИ внутри урока: подсказка к заданию, разбор ошибки или вопрос по шагу + уточняющие вопросы.
+ * В режиме «вопрос» ИИ молчит, пока ученик не спросит (своими словами или быстрой кнопкой).
+ */
 export function AiPanel({
   open,
   onClose,
   mode,
   task,
   noteKey,
+  suggestions = [],
 }: {
   open: boolean;
   onClose: () => void;
   mode: Exclude<TutorMode, "chat">;
   task: TaskContext;
   noteKey: string;
+  /** Быстрые вопросы (режим «вопрос»). */
+  suggestions?: DictKey[];
 }) {
   const { t } = useT();
   const saveToNotes = useApp((s) => s.saveToNotes);
   const { ask, stop, streaming, error } = useTutor();
-  const [turns, setTurns] = useState<TutorTurn[]>([{ role: "assistant", content: "" }]);
+  const autoStart = mode !== "ask";
+  const [turns, setTurns] = useState<TutorTurn[]>(autoStart ? [{ role: "assistant", content: "" }] : []);
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState<number[]>([]);
   const runId = useRef(0);
@@ -43,6 +57,7 @@ export function AiPanel({
 
   // Первый ответ (подсказка/разбор) запрашиваем сразу при открытии.
   useEffect(() => {
+    if (!autoStart) return;
     let alive = true;
     // Запрос к внешнему API при открытии панели; синхронно меняется только статус «загрузка».
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -58,10 +73,10 @@ export function AiPanel({
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
-  const send = () => {
-    const q = draft.trim();
+  const send = (text?: string) => {
+    const q = (text ?? draft).trim();
     if (!q || streaming) return;
-    setDraft("");
+    if (!text) setDraft("");
     const history: TutorTurn[] = [...turns, { role: "user", content: q }];
     const id = ++runId.current;
     setTurns([...history, { role: "assistant", content: "" }]);
@@ -69,11 +84,11 @@ export function AiPanel({
   };
 
   return (
-    <Modal open={open} onClose={onClose} label={t(mode === "hint" ? "tutor.hintTitle" : "tutor.explainTitle")} className="sm:max-w-lg">
+    <Modal open={open} onClose={onClose} label={t(TITLE[mode])} className="sm:max-w-lg">
       <div className="mb-3 flex items-center gap-3">
         <Mascot mood="thinking" size={44} />
         <h3 className="flex items-center gap-1.5 text-lg font-extrabold text-ai">
-          <Sparkles size={18} /> {t(mode === "hint" ? "tutor.hintTitle" : "tutor.explainTitle")}
+          <Sparkles size={18} /> {t(TITLE[mode])}
         </h3>
       </div>
       <div className="flex max-h-[52dvh] flex-col gap-3 overflow-y-auto pr-1">
@@ -102,6 +117,20 @@ export function AiPanel({
             </div>
           ),
         )}
+        {turns.length === 0 && suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => send(t(k))}
+                className="rounded-full border-2 border-ai/30 bg-ai-soft px-3 py-1.5 text-sm font-extrabold text-ai hover:brightness-95"
+              >
+                {t(k)}
+              </button>
+            ))}
+          </div>
+        )}
         {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-semibold text-danger">{t(error)}</p>}
         <div ref={bottom} />
       </div>
@@ -115,7 +144,8 @@ export function AiPanel({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("tutor.followUp")}
+          placeholder={t(turns.length === 0 ? "tutor.askPlaceholder" : "tutor.followUp")}
+          autoFocus={!autoStart}
           className="h-11 min-w-0 flex-1 rounded-2xl border-2 border-border bg-surface px-3 font-semibold outline-none focus:border-ai"
         />
         <button

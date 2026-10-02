@@ -9,7 +9,7 @@ import { tutorSystemPrompt } from "@/server/prompts";
 
 export const maxDuration = 60;
 
-const MODES: TutorMode[] = ["chat", "hint", "explain"];
+const MODES: TutorMode[] = ["chat", "hint", "explain", "ask"];
 
 type Msg = OpenAI.Chat.ChatCompletionMessageParam;
 
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     )
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
 
-  if (mode === "chat" && history.length === 0) return jsonError(400, "empty");
+  if ((mode === "chat" || mode === "ask") && history.length === 0) return jsonError(400, "empty");
 
   const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task) }];
   history.forEach((m, i) => {

@@ -27,9 +27,13 @@ export interface TaskContext {
   correct?: string;
   given?: string;
   explanation?: string;
+  /** Текст теории текущего шага (режим «вопрос по уроку»). */
+  theory?: string;
+  /** Ученик уже ответил на задание — ответ можно обсуждать открыто. */
+  answered?: boolean;
 }
 
-export type TutorMode = "chat" | "hint" | "explain";
+export type TutorMode = "chat" | "hint" | "explain" | "ask";
 
 export interface TutorRequest {
   mode: TutorMode;
