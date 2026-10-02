@@ -26,7 +26,7 @@ export const historyDict = {
   "history.filter.lessons": { ru: "Уроки", kk: "Сабақтар" },
   "history.filter.drills": { ru: "Тренировки", kk: "Жаттығулар" },
   "history.filter.exams": { ru: "Пробный ЕНТ", kk: "Сынақ ҰБТ" },
-  "history.filter.open": { ru: "С ошибками", kk: "Қателері барлар" },
+  "history.filter.open": { ru: "С ошибками", kk: "Қателері бар" },
 
   "history.day.today": { ru: "Сегодня", kk: "Бүгін" },
   "history.day.yesterday": { ru: "Вчера", kk: "Кеше" },
@@ -78,7 +78,7 @@ export const historyDict = {
   "history.detail.noMistakes": { ru: "В этом тесте ошибок нет — так держать!", kk: "Бұл тестте қате жоқ — осылай жалғастыр!" },
   "history.detail.examNote": {
     ru: "Пропущенные вопросы не попадают в список ошибок. Полный разбор — в результатах попытки.",
-    kk: "Өткізіп алынған сұрақтар қателер тізіміне кірмейді. Толық талдау — әрекет нәтижесінде.",
+    kk: "Өткізіп жіберілген сұрақтар қателер тізіміне кірмейді. Толық талдау — әрекет нәтижесінде.",
   },
   "history.detail.openExam": { ru: "Открыть разбор", kk: "Талдауды ашу" },
   "history.detail.replay": { ru: "Пройти снова", kk: "Қайта өту" },
