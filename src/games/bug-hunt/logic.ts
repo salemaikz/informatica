@@ -1,3 +1,4 @@
+import type { GameMode } from "@/games/types";
 import { divisionLadder, toBinary } from "@/lib/check";
 import { fmt, shuffle } from "@/lib/text";
 import type { L, SkillId } from "@/lib/types";
@@ -497,6 +498,8 @@ export interface TierState {
 }
 
 export const START_TIER: TierState = { tier: 0, correctSinceUp: 0, wrongRow: 0 };
+/** Для раундов с лесенкой уровней: «потолок» адаптации открыт, расписание задаёт рост. */
+const OPEN_TIER: TierState = { tier: 2, correctSinceUp: 0, wrongRow: 0 };
 
 export function updateTier(s: TierState, correct: boolean): TierState {
   if (correct) {
@@ -512,4 +515,100 @@ export function updateTier(s: TierState, correct: boolean): TierState {
 /** Верна ли находка: номер строки с ошибкой или "none". */
 export function isCorrectFind(p: Puzzle, choice: number | "none"): boolean {
   return p.fault ? choice === p.fault.line : choice === "none";
+}
+
+// ---------- режимы темпа ----------
+
+export interface ModeConfig {
+  /** Заданий в раунде; null — раунд идёт по общим часам. */
+  puzzles: number | null;
+  /** Общие часы раунда, мс (только блиц). */
+  roundMs: number | null;
+  /** Предел реального времени раунда, мс (защита от простоя в блице). */
+  wallCapMs: number | null;
+  /** Время на правку строки, мс; null — без таймера. */
+  fixMs: number | null;
+  /** Через сколько мс разбор сам переходит к следующему заданию; null — только по «Далее». */
+  revealMs: number | null;
+  /** То же после верного «Ошибок нет». */
+  cleanMs: number | null;
+  /** Есть ли кнопка паузы. */
+  pause: boolean;
+  /** Лесенка уровней по номеру задания; null — адаптивно, начиная с уровня 0. */
+  tiers: Tier[] | null;
+  /** Первое задание всегда с ошибкой (чтобы механика была понятна). */
+  firstFault: boolean;
+}
+
+export const MODE_CONFIG: Record<GameMode, ModeConfig> = {
+  // Как раньше: общие часы 90 с, на строку и правку считанные секунды.
+  blitz: {
+    puzzles: null,
+    roundMs: ROUND_MS,
+    wallCapMs: WALL_CAP_MS,
+    fixMs: FIX_MS,
+    revealMs: 4000,
+    cleanMs: 900,
+    pause: false,
+    tiers: null,
+    firstFault: false,
+  },
+  // 8 заданий без общих часов; время на задание — taskTimeMs.
+  normal: {
+    puzzles: 8,
+    roundMs: null,
+    wallCapMs: null,
+    fixMs: 15_000,
+    revealMs: 5000,
+    cleanMs: 1200,
+    pause: true,
+    tiers: [0, 0, 0, 1, 1, 1, 2, 2],
+    firstFault: true,
+  },
+  // 6 заданий, без таймеров; после каждого — «Далее».
+  calm: {
+    puzzles: 6,
+    roundMs: null,
+    wallCapMs: null,
+    fixMs: null,
+    revealMs: null,
+    cleanMs: null,
+    pause: false,
+    tiers: [0, 0, 1, 1, 2, 2],
+    firstFault: true,
+  },
+};
+
+/** Время на поиск ошибки в «Обычном» по уровню — для задания из NORMAL_REF_LINES строк. */
+export const NORMAL_FIND_MS: Record<Tier, number> = { 0: 35_000, 1: 45_000, 2: 55_000 };
+export const NORMAL_REF_LINES = 6;
+export const NORMAL_PER_LINE_MS = 2000;
+export const NORMAL_MIN_MS = 25_000;
+
+/** Время на поиск ошибки, мс: блиц — как раньше, «Обычный» — по уровню и числу строк, «Спокойный» — без лимита (null). */
+export function taskTimeMs(tier: Tier, lineCount: number, mode: GameMode): number | null {
+  if (mode === "calm") return null;
+  if (mode === "blitz") return puzzleTimeMs(tier, lineCount);
+  return Math.max(NORMAL_MIN_MS, NORMAL_FIND_MS[tier] + (lineCount - NORMAL_REF_LINES) * NORMAL_PER_LINE_MS);
+}
+
+/** Бонус в секундах для findPoints. Блиц — остаток секунд; «Обычный» — доля остатка времени × 10; «Спокойный» — фиксированный. */
+export const CALM_BONUS_SEC = 5;
+export function bonusSeconds(mode: GameMode, leftMs: number, totalMs: number): number {
+  if (mode === "blitz") return leftMs / 1000;
+  if (mode === "calm" || totalMs <= 0) return CALM_BONUS_SEC;
+  return (Math.max(0, Math.min(totalMs, leftMs)) / totalMs) * 10;
+}
+
+/** Начальное состояние адаптации уровня для режима. */
+export function startTierState(mode: GameMode): TierState {
+  return MODE_CONFIG[mode].tiers ? OPEN_TIER : START_TIER;
+}
+
+/** Уровень задания: в блице — адаптивно с нуля; иначе — лесенка по номеру (с 0), но ошибки подряд опускают потолок. */
+export function tierFor(mode: GameMode, index: number, adaptive: TierState): Tier {
+  const ladder = MODE_CONFIG[mode].tiers;
+  if (!ladder) return adaptive.tier;
+  const planned = ladder[Math.min(Math.max(0, index), ladder.length - 1)];
+  return Math.min(planned, adaptive.tier) as Tier;
 }

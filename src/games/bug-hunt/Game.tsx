@@ -1,26 +1,28 @@
 "use client";
 
-import { Check, Flame, X } from "lucide-react";
+import { Check, Flame, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot/Mascot";
-import type { GameAttempt, GameProps } from "@/games/types";
+import type { GameAttempt, GameMode, GameProps } from "@/games/types";
+import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
+import { ignoreKey } from "@/lib/keys";
 import { playSound } from "@/lib/sound";
 import { useApp } from "@/lib/store";
 import { fmt, seeded, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
   FIX_BONUS,
-  FIX_MS,
-  ROUND_MS,
-  START_TIER,
-  WALL_CAP_MS,
+  MODE_CONFIG,
+  bonusSeconds,
   findPoints,
   generatePuzzle,
   isCorrectFind,
   multiplier,
   pickTemplate,
-  puzzleTimeMs,
+  startTierState,
+  taskTimeMs,
+  tierFor,
   updateTier,
   wantNoFault,
   type Puzzle,
@@ -32,8 +34,6 @@ import { S } from "./strings";
 type Phase = "boot" | "play" | "fix" | "reveal" | "end";
 type Outcome = "clean" | "found" | "fixed" | "fixFailed" | "wrong" | "timeout" | null;
 
-const REVEAL_MS = 4000;
-const CLEAN_MS = 900;
 const NEXT_GRACE_MS = 400;
 const END_MS = 700;
 
@@ -52,6 +52,9 @@ interface View {
   gain: number;
   gainKey: number;
   key: number;
+  /** Номер текущего задания, с 1 (0 — ещё не началось). */
+  index: number;
+  paused: boolean;
 }
 
 interface Game extends View {
@@ -72,36 +75,43 @@ interface Api {
   pick: (c: number | "none") => void;
   fix: (i: number) => void;
   next: () => void;
+  pause: (on: boolean) => void;
 }
 
-const INITIAL: View = {
-  phase: "boot",
-  puzzle: null,
-  picked: null,
-  outcome: null,
-  fixPicked: null,
-  score: 0,
-  streak: 0,
-  roundLeft: ROUND_MS,
-  puzzleLeft: 0,
-  puzzleTotal: 1,
-  fixLeft: FIX_MS,
-  gain: 0,
-  gainKey: 0,
-  key: 0,
-};
-
-function makeGame(): Game {
+function initialView(mode: GameMode): View {
+  const cfg = MODE_CONFIG[mode];
   return {
-    ...INITIAL,
+    phase: "boot",
+    puzzle: null,
+    picked: null,
+    outcome: null,
+    fixPicked: null,
+    score: 0,
+    streak: 0,
+    roundLeft: cfg.roundMs ?? 0,
+    puzzleLeft: 0,
+    puzzleTotal: 0,
+    fixLeft: cfg.fixMs ?? 0,
+    gain: 0,
+    gainKey: 0,
+    key: 0,
+    index: 0,
+    paused: false,
+  };
+}
+
+function makeGame(mode: GameMode): Game {
+  return {
+    ...initialView(mode),
     wall: 0,
     revealLeft: 0,
     revealStart: 0,
     endLeft: END_MS,
     attempts: [],
-    tier: START_TIER,
+    tier: startTierState(mode),
     prevTemplate: null,
-    prevNoFault: false,
+    // Первое задание — с ошибкой, если режим этого требует.
+    prevNoFault: MODE_CONFIG[mode].firstFault,
     rand: Math.random,
     last: null,
     finished: false,
@@ -124,12 +134,16 @@ function snapshot(g: Game): View {
     gain: g.gain,
     gainKey: g.gainKey,
     key: g.key,
+    index: g.index,
+    paused: g.paused,
   };
 }
 
-export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
-  const [v, setV] = useState<View>(INITIAL);
-  const gameRef = useRef<Game>(makeGame());
+export default function BugHuntGame({ lang, sound, mode, onFinish }: GameProps) {
+  const { t } = useT();
+  const cfg = MODE_CONFIG[mode];
+  const [v, setV] = useState<View>(() => initialView(mode));
+  const gameRef = useRef<Game>(makeGame(mode));
   const apiRef = useRef<Api | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const propsRef = useRef({ sound, onFinish });
@@ -140,6 +154,8 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
 
   useEffect(() => {
     const g = gameRef.current;
+    const wallOver = () => cfg.wallCapMs !== null && g.wall >= cfg.wallCapMs;
+    const roundOver = () => cfg.roundMs !== null && g.roundLeft <= 0;
     let raf = 0;
     let lastSync = 0;
     let focusRaf = 0;
@@ -161,13 +177,15 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
     const startPuzzle = () => {
       if (g.key === 0) g.rand = seeded((Date.now() ^ 0x5bd1e995) >>> 0);
       const mastery = (skill: string) => useApp.getState().skills[skill]?.mastery ?? 0.3;
+      const tier = tierFor(mode, g.index, g.tier);
       const template = pickTemplate(g.rand, mastery, g.prevTemplate);
-      const noFault = wantNoFault(g.rand, g.tier.tier, g.prevNoFault);
-      const p = generatePuzzle(g.rand, g.tier.tier, template, !noFault);
+      const noFault = wantNoFault(g.rand, tier, g.prevNoFault);
+      const p = generatePuzzle(g.rand, tier, template, !noFault);
       g.prevTemplate = p.template;
       g.prevNoFault = p.fault === null;
       g.puzzle = p;
-      g.puzzleTotal = puzzleTimeMs(g.tier.tier, p.lines.length);
+      g.index += 1;
+      g.puzzleTotal = taskTimeMs(tier, p.lines.length, mode) ?? 0;
       g.puzzleLeft = g.puzzleTotal;
       g.picked = null;
       g.outcome = null;
@@ -194,7 +212,7 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       g.outcome = outcome;
       g.gain = 0;
       g.phase = "reveal";
-      g.revealLeft = REVEAL_MS;
+      g.revealLeft = cfg.revealMs ?? Infinity;
       g.revealStart = g.wall;
       snd("wrong");
       sync();
@@ -207,7 +225,7 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       g.picked = choice;
       if (!isCorrectFind(p, choice)) return miss("wrong");
       g.attempts.push({ skill: p.skill, correct: true });
-      const pts = findPoints(g.puzzleLeft / 1000, g.streak);
+      const pts = findPoints(bonusSeconds(mode, g.puzzleLeft, g.puzzleTotal), g.streak);
       g.score += pts;
       g.gain = pts;
       g.gainKey += 1;
@@ -217,11 +235,11 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       if (p.fault) {
         g.outcome = "found";
         g.phase = "fix";
-        g.fixLeft = FIX_MS;
+        g.fixLeft = cfg.fixMs ?? 0;
       } else {
         g.outcome = "clean";
         g.phase = "reveal";
-        g.revealLeft = CLEAN_MS;
+        g.revealLeft = cfg.cleanMs ?? Infinity;
         g.revealStart = g.wall;
       }
       sync();
@@ -242,7 +260,7 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       }
       snd(ok ? "correct" : "wrong");
       g.phase = "reveal";
-      g.revealLeft = REVEAL_MS;
+      g.revealLeft = cfg.revealMs ?? Infinity;
       g.revealStart = g.wall;
       sync();
       focusLine();
@@ -251,8 +269,16 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
     const next = (auto = false) => {
       if (g.phase !== "reveal") return;
       if (!auto && g.wall - g.revealStart < NEXT_GRACE_MS) return;
-      if (g.roundLeft <= 0 || g.wall >= WALL_CAP_MS) return endRound();
+      if (roundOver() || wallOver() || (cfg.puzzles !== null && g.index >= cfg.puzzles)) return endRound();
       startPuzzle();
+      sync();
+    };
+
+    const setPaused = (on: boolean) => {
+      if (on === g.paused || g.phase === "end") return;
+      // Пауза — только пока идёт отсчёт (поиск или правка).
+      if (on && !(cfg.pause && (g.phase === "play" || g.phase === "fix"))) return;
+      g.paused = on;
       sync();
     };
 
@@ -279,20 +305,22 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
         sync();
         return;
       }
+      // На паузе время стоит.
+      if (g.paused) return;
       if (g.phase !== "end") g.wall += dt;
       if (g.phase === "play") {
-        g.roundLeft = Math.max(0, g.roundLeft - dt);
-        g.puzzleLeft = Math.max(0, g.puzzleLeft - dt);
-        if (g.roundLeft <= 0 || g.wall >= WALL_CAP_MS) return endRound();
-        if (g.puzzleLeft <= 0) return miss("timeout");
+        if (cfg.roundMs !== null) g.roundLeft = Math.max(0, g.roundLeft - dt);
+        if (g.puzzleTotal > 0) g.puzzleLeft = Math.max(0, g.puzzleLeft - dt);
+        if (roundOver() || wallOver()) return endRound();
+        if (g.puzzleTotal > 0 && g.puzzleLeft <= 0) return miss("timeout");
       } else if (g.phase === "fix") {
-        g.fixLeft = Math.max(0, g.fixLeft - dt);
-        if (g.wall >= WALL_CAP_MS) return endRound();
-        if (g.fixLeft <= 0) return resolveFix(null);
+        if (cfg.fixMs !== null) g.fixLeft = Math.max(0, g.fixLeft - dt);
+        if (wallOver()) return endRound();
+        if (cfg.fixMs !== null && g.fixLeft <= 0) return resolveFix(null);
       } else if (g.phase === "reveal") {
         g.revealLeft -= dt;
         if (g.revealLeft <= 0) return next(true);
-        if (g.wall >= WALL_CAP_MS) return endRound();
+        if (wallOver()) return endRound();
       } else if (g.phase === "end") {
         g.endLeft -= dt;
         if (g.endLeft <= 0) return finish();
@@ -303,11 +331,20 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       }
     };
 
-    apiRef.current = { pick, fix: (i) => resolveFix(i), next: () => next() };
+    apiRef.current = { pick, fix: (i) => resolveFix(i), next: () => next(), pause: setPaused };
 
     const onKey = (e: KeyboardEvent) => {
+      if (ignoreKey(e)) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const k = e.key;
+      if (g.paused) {
+        if (k === "p" || k === "P" || k === "Escape") setPaused(false);
+        return;
+      }
+      if ((k === "p" || k === "P") && cfg.pause) {
+        setPaused(true);
+        return;
+      }
       if (g.phase === "play") {
         if (k === "0" || k === "n" || k === "N") pick("none");
         else if (/^[1-8]$/.test(k)) {
@@ -330,7 +367,7 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
       window.removeEventListener("keydown", onKey);
       apiRef.current = null;
     };
-  }, []);
+  }, [mode, cfg]);
 
   const p = v.puzzle;
   const fault = p?.fault ?? null;
@@ -338,11 +375,28 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
   const revealed = v.phase === "reveal" || v.phase === "fix";
   const missed = v.outcome === "wrong" || v.outcome === "timeout";
   const mult = multiplier(v.streak);
-  const secs = Math.ceil(v.roundLeft / 1000);
-  const roundFrac = Math.max(0, Math.min(1, v.roundLeft / ROUND_MS));
-  const puzzleFrac = playing ? Math.max(0, Math.min(1, v.puzzleLeft / v.puzzleTotal)) : 0;
+  const blitz = mode === "blitz";
+  const timedTask = v.puzzleTotal > 0;
   const fixDone = v.outcome === "fixed" || v.outcome === "fixFailed";
   const showSheet = !!fault && (v.phase === "fix" || (v.phase === "reveal" && fixDone));
+
+  // Блиц: общие часы раунда. «Обычный»: секунды текущего этапа (поиск или правка).
+  const roundFrac = cfg.roundMs ? Math.max(0, Math.min(1, v.roundLeft / cfg.roundMs)) : 0;
+  const stageLeft = v.phase === "play" ? v.puzzleLeft : v.phase === "fix" && cfg.fixMs ? v.fixLeft : null;
+  const stageTotal = v.phase === "play" ? v.puzzleTotal : (cfg.fixMs ?? 1);
+  const stageFrac = stageLeft === null ? 1 : Math.max(0, Math.min(1, stageLeft / stageTotal));
+  const timerLow = blitz ? roundFrac < 0.17 : stageFrac < 0.3;
+  const timerSecs = blitz ? Math.ceil(v.roundLeft / 1000) : stageLeft === null ? null : Math.ceil(stageLeft / 1000);
+  const puzzleFrac = playing && timedTask ? Math.max(0, Math.min(1, v.puzzleLeft / v.puzzleTotal)) : 0;
+
+  // Прогресс по заданиям (спокойный и обычный режимы).
+  const total = cfg.puzzles ?? 0;
+  const doneCount = Math.max(0, v.index - (v.phase === "reveal" || v.phase === "end" ? 0 : 1));
+  const progressFrac = total ? Math.min(1, doneCount / total) : 0;
+  const taskNo = Math.min(total, Math.max(1, v.index));
+
+  // В спокойном и обычном режимах разбор ошибки — карточкой «Почему так».
+  const whyCard = !blitz && (missed || v.outcome === "fixFailed");
 
   const mood =
     v.phase === "play" || v.phase === "boot"
@@ -385,174 +439,280 @@ export default function BugHuntGame({ lang, sound, onFinish }: GameProps) {
     return "idle" as const;
   };
 
+  const canPause = cfg.pause && (playing || v.phase === "fix");
+
   return (
     <div className="relative mx-auto flex h-[calc(100dvh-56px)] w-full max-w-[640px] touch-manipulation select-none flex-col px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
-      <div className="flex h-11 shrink-0 items-center gap-2">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xs text-muted">{tx(S.score, lang)}</span>
-          <span className="font-mono text-xl font-bold tabular-nums text-text">{v.score}</span>
-          {v.gain > 0 && revealed && (
+      {/* На паузе всё поле скрыто (visibility), чтобы нельзя было думать «в паузе». */}
+      <div className={cn("flex min-h-0 flex-1 flex-col", v.paused && "invisible")} aria-hidden={v.paused}>
+        <div className="flex h-11 shrink-0 items-center gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xs text-muted">{tx(S.score, lang)}</span>
+            <span className="font-mono text-xl font-bold tabular-nums text-text">{v.score}</span>
+            {v.gain > 0 && revealed && (
+              <span
+                key={v.gainKey}
+                className="animate-pop rounded-md bg-gold-soft px-1.5 font-mono text-sm font-bold text-gold motion-reduce:animate-none"
+              >
+                +{v.gain}
+              </span>
+            )}
+          </div>
+          <div className="flex-1" />
+          {v.streak > 0 && (
             <span
-              key={v.gainKey}
-              className="animate-pop rounded-md bg-gold-soft px-1.5 font-mono text-sm font-bold text-gold motion-reduce:animate-none"
+              className="flex items-center gap-1 rounded-full bg-streak-soft px-2 py-0.5 text-sm font-bold text-streak"
+              aria-label={`${tx(S.streak, lang)} ${v.streak}`}
             >
-              +{v.gain}
+              <Flame size={14} aria-hidden />
+              <span className="font-mono tabular-nums">{v.streak}</span>
+              {mult > 1 && <span className="font-mono">×{mult}</span>}
             </span>
           )}
-        </div>
-        <div className="flex-1" />
-        {v.streak > 0 && (
-          <span
-            className="flex items-center gap-1 rounded-full bg-streak-soft px-2 py-0.5 text-sm font-bold text-streak"
-            aria-label={`${tx(S.streak, lang)} ${v.streak}`}
-          >
-            <Flame size={14} aria-hidden />
-            <span className="font-mono tabular-nums">{v.streak}</span>
-            {mult > 1 && <span className="font-mono">×{mult}</span>}
-          </span>
-        )}
-        <span
-          className={cn(
-            "font-mono text-base font-semibold tabular-nums",
-            roundFrac < 0.17 ? "text-warning-strong" : "text-muted",
+          {(blitz || cfg.fixMs !== null) && (
+            <span
+              className={cn(
+                "min-w-9 text-right font-mono text-base font-semibold tabular-nums",
+                timerLow ? "text-warning-strong" : "text-muted",
+              )}
+            >
+              {timerSecs === null ? "" : fmt(tx(S.seconds, lang), { n: timerSecs })}
+            </span>
           )}
-        >
-          {fmt(tx(S.seconds, lang), { n: secs })}
-        </span>
-        <Mascot mood={mood} size={32} />
-      </div>
-      <div className="h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className={cn("h-full rounded-full", roundFrac < 0.17 ? "bg-warning" : "bg-primary")}
-          style={{ width: `${roundFrac * 100}%` }}
-        />
-      </div>
-
-      <div
-        key={v.key}
-        ref={scrollRef}
-        className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-surface p-3"
-      >
-        {p && (
-          <div className="animate-slide-up motion-reduce:animate-none">
-            <p className="text-sm text-muted">
-              <Mono text={tx(p.header, lang)} />
-            </p>
-            <p className="mt-0.5 text-base font-semibold text-text">{tx(S.findPrompt, lang)}</p>
-            <div className="mb-3 mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-2">
+          <Mascot mood={mood} size={32} />
+        </div>
+        {blitz ? (
+          <div className="h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className={cn("h-full rounded-full", roundFrac < 0.17 ? "bg-warning" : "bg-primary")}
+              style={{ width: `${roundFrac * 100}%` }}
+            />
+          </div>
+        ) : (
+          <div className="flex h-10 shrink-0 items-center gap-2">
+            <div
+              role="progressbar"
+              aria-label={fmt(tx(S.taskOf, lang), { i: taskNo, n: total })}
+              aria-valuemin={0}
+              aria-valuemax={total}
+              aria-valuenow={doneCount}
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2"
+            >
               <div
-                className={cn("h-full rounded-full", puzzleFrac < 0.3 ? "bg-warning" : "bg-primary")}
-                style={{ width: `${puzzleFrac * 100}%` }}
+                className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"
+                style={{ width: `${progressFrac * 100}%` }}
               />
             </div>
-            <ol className="flex flex-col gap-1.5">
-              {p.lines.map((line, i) => {
-                const st = lineState(i);
-                const fixedText =
-                  v.outcome === "fixed" && fault && i === fault.line ? tx(fault.fixOptions[fault.fixCorrect], lang) : null;
-                const text = fixedText ?? tx(line, lang);
-                return (
-                  <li key={i} data-focus-line={st === "found" || st === "missed" || st === "false" ? "" : undefined}>
-                    <button
-                      type="button"
-                      disabled={!playing}
-                      aria-label={fmt(tx(S.lineAria, lang), { i: i + 1, text })}
-                      onClick={() => apiRef.current?.pick(i)}
-                      className={cn(
-                        "flex min-h-11 w-full items-start gap-2 rounded-lg border-2 px-2 py-2 text-left whitespace-normal transition-colors",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                        st === "idle" && "border-transparent hover:bg-surface-2 disabled:hover:bg-transparent",
-                        st === "found" && "border-success bg-success-soft",
-                        st === "clean" && "border-transparent bg-success-soft",
-                        st === "missed" && "animate-shake border-danger bg-danger-soft motion-reduce:animate-none",
-                        st === "false" && "border-border bg-surface-2",
-                      )}
-                    >
-                      <span className="w-6 shrink-0 pt-1 text-xs text-muted">{i + 1}</span>
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            "block break-words font-mono text-[17px] leading-snug",
-                            fixedText ? "text-success-strong" : "text-text",
-                          )}
-                        >
-                          {text}
-                        </span>
-                        {st === "missed" && (
-                          <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-danger-strong">
-                            <X size={14} aria-hidden /> {tx(S.missedHere, lang)}
-                          </span>
-                        )}
-                        {st === "false" && (
-                          <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted">
-                            <Check size={14} aria-hidden /> {tx(S.falseAlarm, lang)}
-                          </span>
-                        )}
-                      </span>
-                      {(st === "found" || fixedText) && (
-                        <Check size={20} className="mt-0.5 shrink-0 text-success-strong" aria-hidden />
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
+            <span className="font-mono text-sm tabular-nums text-muted">
+              {taskNo} / {total}
+            </span>
+            {cfg.pause && (
+              <button
+                type="button"
+                disabled={!canPause}
+                aria-label={t("game.pause")}
+                onClick={() => apiRef.current?.pause(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-surface text-muted transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 disabled:hover:bg-surface"
+              >
+                <Pause size={18} aria-hidden />
+              </button>
+            )}
           </div>
         )}
+
+        <div
+          key={v.key}
+          ref={scrollRef}
+          className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-surface p-3"
+        >
+          {p && (
+            <div className="animate-slide-up motion-reduce:animate-none">
+              <p className="text-sm text-muted">
+                <Mono text={tx(p.header, lang)} />
+              </p>
+              <p className="mt-0.5 text-base font-semibold text-text">{tx(S.findPrompt, lang)}</p>
+              {timedTask ? (
+                <div className="mb-3 mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className={cn("h-full rounded-full", puzzleFrac < 0.3 ? "bg-warning" : "bg-primary")}
+                    style={{ width: `${puzzleFrac * 100}%` }}
+                  />
+                </div>
+              ) : (
+                <div className="h-3" aria-hidden />
+              )}
+              <ol className="flex flex-col gap-1.5">
+                {p.lines.map((line, i) => {
+                  const st = lineState(i);
+                  const fixedText =
+                    v.outcome === "fixed" && fault && i === fault.line
+                      ? tx(fault.fixOptions[fault.fixCorrect], lang)
+                      : null;
+                  const text = fixedText ?? tx(line, lang);
+                  // После промаха (не в блице) под неверной строкой показываем верный вариант.
+                  const rightText = !blitz && st === "missed" && fault ? tx(fault.fixOptions[fault.fixCorrect], lang) : null;
+                  return (
+                    <li
+                      key={i}
+                      data-focus-line={st === "found" || st === "missed" || st === "false" ? "" : undefined}
+                    >
+                      <button
+                        type="button"
+                        disabled={!playing}
+                        aria-label={fmt(tx(S.lineAria, lang), { i: i + 1, text })}
+                        onClick={() => apiRef.current?.pick(i)}
+                        className={cn(
+                          "flex min-h-11 w-full items-start gap-2 rounded-lg border-2 px-2 py-2 text-left whitespace-normal transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                          st === "idle" && "border-transparent hover:bg-surface-2 disabled:hover:bg-transparent",
+                          st === "found" && "border-success bg-success-soft",
+                          st === "clean" && "border-transparent bg-success-soft",
+                          st === "missed" && "animate-shake border-danger bg-danger-soft motion-reduce:animate-none",
+                          st === "false" && "border-border bg-surface-2",
+                        )}
+                      >
+                        <span className="w-6 shrink-0 pt-1 text-xs text-muted">{i + 1}</span>
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={cn(
+                              "block break-words font-mono text-[17px] leading-snug",
+                              fixedText ? "text-success-strong" : st === "missed" ? "text-danger-strong" : "text-text",
+                            )}
+                          >
+                            {text}
+                          </span>
+                          {st === "missed" && (
+                            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-danger-strong">
+                              <X size={14} aria-hidden /> {tx(S.missedHere, lang)}
+                            </span>
+                          )}
+                          {st === "false" && (
+                            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted">
+                              <Check size={14} aria-hidden /> {tx(S.falseAlarm, lang)}
+                            </span>
+                          )}
+                        </span>
+                        {(st === "found" || fixedText) && (
+                          <Check size={20} className="mt-0.5 shrink-0 text-success-strong" aria-hidden />
+                        )}
+                      </button>
+                      {rightText && (
+                        <div className="ml-6 mt-1 flex items-center gap-2 rounded-lg border-2 border-success bg-success-soft px-2 py-1.5">
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold text-success-strong">
+                              {tx(S.shouldBe, lang)}
+                            </span>
+                            <span className="block break-words font-mono text-[17px] leading-snug text-success-strong">
+                              {rightText}
+                            </span>
+                          </span>
+                          <Check size={20} className="shrink-0 text-success-strong" aria-hidden />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 py-1" aria-live="polite">
+          {whyCard && p ? (
+            <div className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-text">
+              {v.outcome === "timeout" && (
+                <span className="mr-1 font-semibold text-danger-strong">{tx(S.puzzleTimeUp, lang)}.</span>
+              )}
+              {v.outcome === "fixFailed" && v.fixPicked === null && (
+                <span className="mr-1 font-semibold text-danger-strong">{t("game.timeUp")}.</span>
+              )}
+              {fault ? (
+                <>
+                  <span className="font-semibold text-muted">{t("game.why")}: </span>
+                  <Mono text={tx(fault.explain, lang)} />
+                </>
+              ) : (
+                <span className="font-semibold text-success-strong">
+                  <Mono text={tx(S.noneWas, lang)} />
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex min-h-8 items-center gap-2 text-sm">
+              {message && (
+                <>
+                  {message.ok ? (
+                    <Check size={18} className="shrink-0 text-success-strong" aria-hidden />
+                  ) : (
+                    <X size={18} className="shrink-0 text-danger-strong" aria-hidden />
+                  )}
+                  <span className={message.ok ? "text-success-strong" : "text-danger-strong"}>
+                    <Mono text={message.text} />
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0">
+          {playing || v.phase === "boot" ? (
+            <button
+              type="button"
+              disabled={!playing}
+              onClick={() => apiRef.current?.pick("none")}
+              className="h-14 w-full rounded-xl border-2 border-border bg-surface font-semibold text-text transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {tx(S.noError, lang)}
+            </button>
+          ) : showSheet && fault ? (
+            <FixSheet
+              lang={lang}
+              options={fault.fixOptions}
+              correct={fault.fixCorrect}
+              picked={v.fixPicked}
+              done={v.phase !== "fix"}
+              frac={cfg.fixMs ? Math.max(0, v.fixLeft / cfg.fixMs) : null}
+              nextLabel={t("common.next")}
+              onPick={(i) => apiRef.current?.fix(i)}
+              onNext={() => apiRef.current?.next()}
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={v.phase !== "reveal"}
+              onClick={() => apiRef.current?.next()}
+              className="h-14 w-full rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              {t("common.next")}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex min-h-10 shrink-0 items-center gap-2 py-1 text-sm" aria-live="polite">
-        {message && (
-          <>
-            {message.ok ? (
-              <Check size={18} className="shrink-0 text-success-strong" aria-hidden />
-            ) : (
-              <X size={18} className="shrink-0 text-danger-strong" aria-hidden />
-            )}
-            <span className={message.ok ? "text-success-strong" : "text-danger-strong"}>
-              <Mono text={message.text} />
-            </span>
-          </>
-        )}
-      </div>
-
-      <div className="shrink-0">
-        {playing || v.phase === "boot" ? (
+      {v.paused && (
+        <div
+          role="dialog"
+          aria-label={t("game.paused")}
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5 bg-bg px-6"
+        >
+          <Pause size={44} className="text-muted" aria-hidden />
+          <p className="text-2xl font-extrabold text-text">{t("game.paused")}</p>
           <button
             type="button"
-            disabled={!playing}
-            onClick={() => apiRef.current?.pick("none")}
-            className="h-14 w-full rounded-xl border-2 border-border bg-surface font-semibold text-text transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            autoFocus
+            onClick={() => apiRef.current?.pause(false)}
+            className="flex h-14 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
-            {tx(S.noError, lang)}
+            <Play size={20} fill="currentColor" aria-hidden /> {t("common.continue")}
           </button>
-        ) : showSheet && fault ? (
-          <FixSheet
-            lang={lang}
-            options={fault.fixOptions}
-            correct={fault.fixCorrect}
-            picked={v.fixPicked}
-            done={v.phase !== "fix"}
-            frac={Math.max(0, v.fixLeft / FIX_MS)}
-            onPick={(i) => apiRef.current?.fix(i)}
-            onNext={() => apiRef.current?.next()}
-          />
-        ) : (
-          <button
-            type="button"
-            disabled={v.phase !== "reveal"}
-            onClick={() => apiRef.current?.next()}
-            className="h-14 w-full rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          >
-            {tx(S.next, lang)}
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {v.phase === "end" && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg/80">
           <span className="animate-pop text-4xl font-extrabold text-text motion-reduce:animate-none">
-            {tx(S.timeUp, lang)}
+            {tx(blitz ? S.timeUp : S.done, lang)}
           </span>
         </div>
       )}
@@ -567,6 +727,7 @@ function FixSheet({
   picked,
   done,
   frac,
+  nextLabel,
   onPick,
   onNext,
 }: {
@@ -575,7 +736,9 @@ function FixSheet({
   correct: number;
   picked: number | null;
   done: boolean;
-  frac: number;
+  /** Доля оставшегося времени на правку; null — без таймера. */
+  frac: number | null;
+  nextLabel: string;
   onPick: (i: number) => void;
   onNext: () => void;
 }) {
@@ -583,12 +746,14 @@ function FixSheet({
     <div className="animate-slide-up rounded-2xl border border-border bg-surface p-3 shadow-lg motion-reduce:animate-none">
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-base font-semibold text-text">{tx(S.fixPrompt, lang)}</p>
-        <div className="h-1 w-16 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className={cn("h-full rounded-full", frac < 0.3 ? "bg-warning" : "bg-primary")}
-            style={{ width: done ? 0 : `${frac * 100}%` }}
-          />
-        </div>
+        {frac !== null && (
+          <div className="h-1 w-16 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className={cn("h-full rounded-full", frac < 0.3 ? "bg-warning" : "bg-primary")}
+              style={{ width: done ? 0 : `${frac * 100}%` }}
+            />
+          </div>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         {options.map((o, i) => {
@@ -624,7 +789,7 @@ function FixSheet({
           onClick={onNext}
           className="mt-2 h-12 w-full rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
-          {tx(S.next, lang)}
+          {nextLabel}
         </button>
       )}
     </div>

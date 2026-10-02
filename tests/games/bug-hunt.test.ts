@@ -2,11 +2,18 @@ import { describe, expect, it } from "vitest";
 import { toBinary } from "@/lib/check";
 import { seeded } from "@/lib/text";
 import type { L } from "@/lib/types";
+import type { GameMode } from "@/games/types";
 import {
+  CALM_BONUS_SEC,
   FIX_BONUS,
+  FIX_MS,
+  MODE_CONFIG,
+  NORMAL_FIND_MS,
+  ROUND_MS,
   SKILL_OF,
   START_TIER,
   TEMPLATES,
+  bonusSeconds,
   findPoints,
   generatePuzzle,
   ladderRange,
@@ -14,8 +21,11 @@ import {
   pickTemplate,
   propsRange,
   puzzleTimeMs,
+  startTierState,
   sup,
+  taskTimeMs,
   templateWeight,
+  tierFor,
   updateTier,
   wantNoFault,
   isCorrectFind,
@@ -323,5 +333,158 @@ describe("strings", () => {
       expect(v.ru.length).toBeGreaterThan(0);
       expect(v.kk.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------- режимы темпа ----------
+
+const MODES: GameMode[] = ["calm", "normal", "blitz"];
+const LINES = [3, 4, 5, 6, 7, 8];
+
+describe("MODE_CONFIG", () => {
+  it("blitz keeps today's constants", () => {
+    const c = MODE_CONFIG.blitz;
+    expect(c.roundMs).toBe(ROUND_MS);
+    expect(ROUND_MS).toBe(90_000);
+    expect(c.fixMs).toBe(FIX_MS);
+    expect(FIX_MS).toBe(8000);
+    expect(c.puzzles).toBeNull();
+    expect(c.wallCapMs).toBe(120_000);
+    expect(c.pause).toBe(false);
+    expect(c.tiers).toBeNull();
+    for (const tier of tiers) for (const n of LINES) expect(taskTimeMs(tier, n, "blitz")).toBe(puzzleTimeMs(tier, n));
+  });
+
+  it("calm has no time limits and no auto-advance", () => {
+    const c = MODE_CONFIG.calm;
+    expect(c.roundMs).toBeNull();
+    expect(c.wallCapMs).toBeNull();
+    expect(c.fixMs).toBeNull();
+    expect(c.revealMs).toBeNull();
+    expect(c.cleanMs).toBeNull();
+    expect(c.pause).toBe(false);
+    expect(c.puzzles).toBe(6);
+    for (const tier of tiers) for (const n of LINES) expect(taskTimeMs(tier, n, "calm")).toBeNull();
+  });
+
+  it("normal: fixed task count, no round clock, pause, more time than blitz", () => {
+    const c = MODE_CONFIG.normal;
+    expect(c.puzzles).toBe(8);
+    expect(c.roundMs).toBeNull();
+    expect(c.wallCapMs).toBeNull();
+    expect(c.pause).toBe(true);
+    expect(c.fixMs!).toBeGreaterThan(MODE_CONFIG.blitz.fixMs!);
+    expect(c.revealMs!).toBeGreaterThanOrEqual(2000);
+    expect(c.revealMs!).toBeGreaterThanOrEqual(MODE_CONFIG.blitz.revealMs!);
+    for (const tier of tiers) {
+      for (const n of LINES) {
+        const normal = taskTimeMs(tier, n, "normal")!;
+        expect(normal, `tier ${tier}, ${n} lines`).toBeGreaterThanOrEqual(1.5 * puzzleTimeMs(tier, n));
+      }
+    }
+  });
+
+  it("normal: harder tasks get more time (by tier and by line count)", () => {
+    expect(NORMAL_FIND_MS[0]).toBeLessThan(NORMAL_FIND_MS[1]);
+    expect(NORMAL_FIND_MS[1]).toBeLessThan(NORMAL_FIND_MS[2]);
+    expect([0, 1, 2].map((t) => taskTimeMs(t as Tier, 6, "normal"))).toEqual([35_000, 45_000, 55_000]);
+    for (const n of LINES) {
+      expect(taskTimeMs(0, n, "normal")!).toBeLessThan(taskTimeMs(1, n, "normal")!);
+      expect(taskTimeMs(1, n, "normal")!).toBeLessThan(taskTimeMs(2, n, "normal")!);
+    }
+    for (const tier of tiers) {
+      for (let i = 1; i < LINES.length; i++) {
+        expect(taskTimeMs(tier, LINES[i], "normal")!).toBeGreaterThan(taskTimeMs(tier, LINES[i - 1], "normal")!);
+      }
+    }
+  });
+});
+
+describe("difficulty ramp", () => {
+  it("every mode starts at tier 0", () => {
+    for (const m of MODES) expect(tierFor(m, 0, startTierState(m))).toBe(0);
+  });
+
+  it("fixed rounds have a non-decreasing ladder 0 → 2 with one entry per task", () => {
+    for (const m of ["calm", "normal"] as const) {
+      const ladder = MODE_CONFIG[m].tiers!;
+      expect(ladder.length).toBe(MODE_CONFIG[m].puzzles);
+      expect(ladder[0]).toBe(0);
+      expect(ladder[ladder.length - 1]).toBe(2);
+      for (let i = 1; i < ladder.length; i++) expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1]);
+    }
+  });
+
+  it("perfect play follows the ladder in calm and normal", () => {
+    for (const m of ["calm", "normal"] as const) {
+      let st = startTierState(m);
+      const seen: Tier[] = [];
+      for (let i = 0; i < MODE_CONFIG[m].puzzles!; i++) {
+        seen.push(tierFor(m, i, st));
+        st = updateTier(st, true);
+      }
+      expect(seen).toEqual(MODE_CONFIG[m].tiers);
+    }
+  });
+
+  it("mistakes ease the ladder but never lift it above the plan", () => {
+    for (const m of ["calm", "normal"] as const) {
+      let st = startTierState(m);
+      st = updateTier(updateTier(st, false), false);
+      const last = MODE_CONFIG[m].puzzles! - 1;
+      expect(tierFor(m, last, st)).toBe(1);
+      for (let i = 0; i <= last; i++) expect(tierFor(m, i, st)).toBeLessThanOrEqual(MODE_CONFIG[m].tiers![i]);
+    }
+  });
+
+  it("blitz stays adaptive from tier 0", () => {
+    let st = startTierState("blitz");
+    expect(st).toEqual(START_TIER);
+    const seen: Tier[] = [];
+    for (let i = 0; i < 7; i++) {
+      seen.push(tierFor("blitz", i, st));
+      st = updateTier(st, true);
+    }
+    expect(seen).toEqual([0, 0, 0, 1, 1, 1, 2]);
+  });
+
+  it("calm and normal never open with a clean puzzle", () => {
+    for (const m of ["calm", "normal"] as const) {
+      expect(MODE_CONFIG[m].firstFault).toBe(true);
+      const rand = seeded(77);
+      for (let i = 0; i < 200; i++) expect(wantNoFault(rand, 0, MODE_CONFIG[m].firstFault)).toBe(false);
+    }
+  });
+
+  it("every ladder tier yields valid puzzles with an explanation", () => {
+    const rand = seeded(31);
+    for (const m of ["calm", "normal"] as const) {
+      for (const tier of MODE_CONFIG[m].tiers!) {
+        for (const template of TEMPLATES) {
+          const p = generatePuzzle(rand, tier, template, true);
+          expect(p.fault!.explain.ru.length).toBeGreaterThan(0);
+          expect(p.fault!.explain.kk.length).toBeGreaterThan(0);
+          expect(p.fault!.fixOptions[p.fault!.fixCorrect]).toBeDefined();
+        }
+      }
+    }
+  });
+});
+
+describe("mode scoring", () => {
+  it("blitz bonus is the seconds left", () => {
+    expect(bonusSeconds("blitz", 7400, 18000)).toBeCloseTo(7.4);
+    expect(findPoints(bonusSeconds("blitz", 12_000, 18_000), 0)).toBe(20);
+  });
+  it("normal bonus is the share of time left × 10", () => {
+    expect(bonusSeconds("normal", 35_000, 35_000)).toBe(10);
+    expect(bonusSeconds("normal", 17_500, 35_000)).toBe(5);
+    expect(bonusSeconds("normal", 0, 35_000)).toBe(0);
+    expect(bonusSeconds("normal", 99_000, 35_000)).toBe(10);
+    expect(findPoints(bonusSeconds("normal", 17_500, 35_000), 3)).toBe(30);
+  });
+  it("calm bonus is flat", () => {
+    expect(bonusSeconds("calm", 0, 0)).toBe(CALM_BONUS_SEC);
+    expect(findPoints(bonusSeconds("calm", 0, 0), 0)).toBe(10 + CALM_BONUS_SEC);
   });
 });
