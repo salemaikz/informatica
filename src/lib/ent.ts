@@ -17,7 +17,10 @@ export function multiPoints(correct: number[], chosen: number[]): 0 | 1 | 2 {
   const picked = new Set(chosen);
   let c = 0;
   let w = 0;
-  for (const i of picked) (right.has(i) ? c++ : w++);
+  for (const i of picked) {
+    if (right.has(i)) c++;
+    else w++;
+  }
   return entPoints(right.size, c, w);
 }
 
