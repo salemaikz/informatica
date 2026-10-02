@@ -144,7 +144,8 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
 // ---------- Основание и цифры ----------
 
 function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
-  const kind = level === 1 ? "digits" : level === 2 ? pick(rand, ["digits", "invalid"] as const) : "invalid";
+  // A/B — «сколько цифр» и «какая запись не двоичная», C — только ловушки с записью (в т.ч. восьмеричной).
+  const kind = level === 3 ? "invalid" : pick(rand, ["digits", "invalid"] as const);
   if (kind === "digits") {
     const base = pick(rand, [2, 8, 10, 16, 5, 3]);
     const o = options(rand, String(base), [String(base - 1), String(base + 1), "10", "2", "9"]);
@@ -213,7 +214,7 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
 // ---------- Свойства ----------
 
 function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
-  const kind = pick(rand, level === 1 ? (["parity", "pow"] as const) : level === 2 ? (["length", "ones", "pow", "parity"] as const) : (["ones", "length"] as const));
+  const kind = pick(rand, level === 1 ? (["parity", "pow", "length"] as const) : level === 2 ? (["length", "ones", "pow", "parity"] as const) : (["ones", "length"] as const));
   const [lo, hi] = rangeForLevel(level);
   const n = int(rand, lo, hi);
   const bin = toBinary(n);
