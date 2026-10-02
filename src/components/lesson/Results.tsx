@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
@@ -60,7 +60,10 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
       if (data.memory) useApp.getState().setMemory(data.memory);
       onState({ status: "done", data });
     })
-    .catch(() => onState({ status: "failed" }));
+    .catch(() => {
+      useApp.getState().refundAi();
+      onState({ status: "failed" });
+    });
 }
 
 export function Results({
@@ -88,6 +91,13 @@ export function Results({
   const totalXp = result.xp + bonusXp;
   const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
   const sessionSkills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
+
+  // Защита от двойного клика: второй клик «Продолжить» из урока не должен сразу уводить с итогов.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setArmed(true), 700);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     void import("canvas-confetti").then(({ default: confetti }) => {
@@ -215,7 +225,7 @@ export function Results({
 
       <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-bg pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <div className="mx-auto flex max-w-xl px-4">
-          <Button size="lg" block onClick={() => router.push(kind === "lesson" ? "/learn" : "/practice")} autoFocus>
+          <Button size="lg" block disabled={!armed} onClick={() => router.push(kind === "lesson" ? "/learn" : "/practice")}>
             {t("common.continue")}
           </Button>
         </div>

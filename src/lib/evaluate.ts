@@ -107,7 +107,8 @@ export function evaluate(step: QuestionStep, a: Answer, lang: Lang): StepResult 
   }
   if (step.type === "match" && a.type === "match") {
     const score = Math.max(0, 1 - 0.25 * a.wrong);
-    return { correct: a.wrong === 0, score, given: a.wrong ? `ошибок: ${a.wrong}` : "", expected };
+    const given = a.wrong ? (lang === "kk" ? `қате: ${a.wrong}` : `ошибок: ${a.wrong}`) : "";
+    return { correct: a.wrong === 0, score, given, expected };
   }
   if (step.type === "order" && a.type === "order") {
     const given = a.order.map((i) => tx(step.items[i], lang)).join(" → ");

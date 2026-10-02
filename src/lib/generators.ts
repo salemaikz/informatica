@@ -158,7 +158,9 @@ function genBase(rand: Rand, _m: number, seed: number): QuestionStep {
       },
     };
   }
-  const valid = Array.from({ length: 3 }, () => toBinary(int(rand, 5, 60)));
+  const validSet = new Set<string>();
+  while (validSet.size < 3) validSet.add(toBinary(int(rand, 5, 60)));
+  const valid = [...validSet];
   const raw = toBinary(int(rand, 9, 60));
   const pos = int(rand, 1, raw.length - 1);
   const fixedBad = `${raw.slice(0, pos)}2${raw.slice(pos + 1)}`;

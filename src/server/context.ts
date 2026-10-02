@@ -53,9 +53,8 @@ export function sanitizeTask(raw: unknown): TaskContext | undefined {
 
 /** Проверяет dataURL картинки: только jpeg/png/webp и не больше ~4 МБ. */
 export function sanitizeImage(v: unknown): string | undefined {
-  if (typeof v !== "string") return undefined;
+  if (typeof v !== "string" || v.length > 4_000_000) return undefined;
   if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) return undefined;
-  if (v.length > 4_000_000) return undefined;
   return v;
 }
 

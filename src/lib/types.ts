@@ -181,6 +181,8 @@ export interface SessionResult {
   maxCombo: number;
   durationSec: number;
   accuracy: number;
+  /** Сколько заданий пропущено. */
+  skipped?: number;
 }
 
 export type Grade = "8" | "9" | "10" | "11" | "other";

@@ -45,6 +45,7 @@ export function useTutor() {
         return text;
       } catch (e) {
         if (ctrl.signal.aborted) return null;
+        useApp.getState().refundAi();
         setError(e instanceof AiError && e.code === "rate_limited" ? "tutor.limit" : "tutor.error");
         return null;
       } finally {

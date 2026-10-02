@@ -102,7 +102,10 @@ export interface AppActions {
   removeSavedNote: (key: string, id: string) => void;
   /** Учитывает обращение к ИИ; false — дневной лимит исчерпан. */
   spendAi: () => boolean;
-  dismissMistake: (id: string) => void;
+  /** Вернуть обращение, если запрос к ИИ не удался. */
+  refundAi: () => void;
+  /** Закрыть ошибку(и) по id задания. */
+  dismissMistake: (stepId: string) => void;
   resetProgress: () => void;
 }
 
@@ -182,21 +185,26 @@ export const useApp = create<AppState & AppActions>()(
           const today = todayKey();
           const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
           const skills = rec.skill ? { ...s.skills, [rec.skill]: updateSkill(s.skills[rec.skill], rec.score) } : s.skills;
+          // Одна запись на задание: повторная ошибка обновляет запись (и сохраняет урок),
+          // верный ответ закрывает её.
           let mistakes = s.mistakes;
+          const existing = s.mistakes.find((m) => m.stepId === rec.stepId);
           if (!rec.correct && !rec.retry) {
             mistakes = [
               {
-                id: uid(),
+                id: existing?.id ?? uid(),
                 stepId: rec.stepId,
-                lessonId,
+                lessonId: lessonId ?? existing?.lessonId,
                 skill: rec.skill,
                 prompt: rec.prompt,
                 given: rec.given,
                 expected: rec.expected,
                 at: Date.now(),
               },
-              ...s.mistakes,
+              ...s.mistakes.filter((m) => m.stepId !== rec.stepId),
             ].slice(0, MAX_MISTAKES);
+          } else if (rec.correct && existing) {
+            mistakes = s.mistakes.filter((m) => m.stepId !== rec.stepId);
           }
           const next: AppState = {
             ...s,
@@ -220,7 +228,8 @@ export const useApp = create<AppState & AppActions>()(
       finishSession: (result) => {
         const s = get();
         const firstTry = result.answers.filter((a) => !a.retry);
-        const perfect = firstTry.length > 0 && firstTry.every((a) => a.correct);
+        // Пропущенное задание (например, решение по фото) — уже не «без ошибок».
+        const perfect = firstTry.length > 0 && firstTry.every((a) => a.correct) && !result.skipped;
         let bonusXp = result.kind === "lesson" ? XP.lessonComplete : XP.drillComplete;
         if (result.kind === "lesson" && perfect) bonusXp += XP.perfectLesson;
 
@@ -297,6 +306,9 @@ export const useApp = create<AppState & AppActions>()(
           return { notes: { ...s.notes, [key]: { ...n, saved: n.saved.filter((x) => x.id !== id) } } };
         }),
 
+      refundAi: () =>
+        set((s) => (s.aiUsage.day === todayKey() && s.aiUsage.count > 0 ? { aiUsage: { ...s.aiUsage, count: s.aiUsage.count - 1 } } : {})),
+
       spendAi: () => {
         const today = todayKey();
         const u = get().aiUsage;
@@ -306,7 +318,7 @@ export const useApp = create<AppState & AppActions>()(
         return true;
       },
 
-      dismissMistake: (id) => set((s) => ({ mistakes: s.mistakes.filter((m) => m.id !== id) })),
+      dismissMistake: (stepId) => set((s) => ({ mistakes: s.mistakes.filter((m) => m.stepId !== stepId) })),
 
       resetProgress: () => set({ ...initialState }),
     }),

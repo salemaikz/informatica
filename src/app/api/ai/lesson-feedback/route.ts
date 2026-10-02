@@ -32,6 +32,7 @@ export async function POST(req: Request) {
   } catch {
     return jsonError(400, "bad_json");
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "bad_json");
   const ctx = sanitizeContext(body.context);
   const mistakes = (Array.isArray(body.mistakes) ? body.mistakes : []).slice(0, 10).map((m) => {
     const o = (m ?? {}) as Record<string, unknown>;

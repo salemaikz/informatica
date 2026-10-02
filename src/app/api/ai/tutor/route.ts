@@ -24,6 +24,7 @@ export async function POST(req: Request) {
   } catch {
     return jsonError(400, "bad_json");
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "bad_json");
 
   const mode = MODES.includes(body.mode as TutorMode) ? (body.mode as TutorMode) : "chat";
   const ctx = sanitizeContext(body.context);

@@ -45,7 +45,7 @@ export interface PlayerProps {
   lessonId?: string;
   title: string;
   steps: Step[];
-  /** Для работы над ошибками: id шага → id ошибки, которую закрыть при верном ответе. */
+  /** Для работы над ошибками: id шага → id задания-ошибки, которую закрыть при верном ответе. */
   mistakeMap?: Record<string, string>;
 }
 
@@ -102,6 +102,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const [session, setSession] = useState<{ result: SessionResult; bonusXp: number; achievements: string[] } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   const startedAt = useRef(0);
+  const skippedRef = useRef(0);
   const stepStartedAt = useRef(0);
 
   useEffect(() => {
@@ -127,6 +128,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         maxCombo: finalMaxCombo,
         durationSec: Math.round((Date.now() - startedAt.current) / 1000),
         accuracy,
+        skipped: skippedRef.current,
       };
       const { bonusXp } = finishSession(result);
       const achievements = useApp.getState().consumeNewAchievements();
@@ -202,8 +204,16 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         setCheckError(null);
         setAiNote(null);
         const app = useApp.getState();
+        if (!app.spendAi()) {
+          // Лимит исчерпан: проверяем хотя бы введённый ответ, иначе просим ввести его.
+          if (a.typed.trim()) apply(evaluate(question, a, lang));
+          else {
+            setPhase("answering");
+            setCheckError("tutor.limit");
+          }
+          return;
+        }
         try {
-          if (!app.spendAi()) throw new Error("limit");
           const details = await checkSolution({
             lang,
             context: buildStudentContext(app),
@@ -226,6 +236,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
             details,
           });
         } catch {
+          useApp.getState().refundAi();
           if (a.typed.trim()) {
             apply(evaluate(question, a, lang));
           } else {
@@ -251,6 +262,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
 
   const skip = () => {
     if (!question) return;
+    skippedRef.current += 1;
     setDone((d) => d + 1);
     next();
   };
@@ -258,9 +270,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   // Enter — проверить / продолжить.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || exitOpen || ai || session) return;
-      if (e.target instanceof HTMLTextAreaElement) return;
-      if (e.target instanceof HTMLInputElement && e.target.closest("[role=dialog]")) return;
+      if (e.key !== "Enter" || e.repeat || exitOpen || ai || session) return;
+      const el = e.target as HTMLElement | null;
+      if (el instanceof HTMLTextAreaElement) return;
+      if (el instanceof HTMLInputElement && el.closest("[role=dialog]")) return;
+      // Кнопки вне области задания (крестик, нижняя панель) обрабатывают Enter сами — без двойного срабатывания.
+      // Внутри задания Enter = «Проверить», а вариант выбирается пробелом или кликом.
+      if (el && (el.tagName === "BUTTON" || el.tagName === "A") && !el.closest("main")) return;
       e.preventDefault();
       if (phase === "feedback" || (step && !isQuestion(step))) next();
       else void check();
@@ -426,7 +442,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
             {phase === "feedback" && result && !result.correct && (
               <Button variant="ai" onClick={() => setAi("explain")} icon={<Sparkles size={18} />} className="shrink-0">
                 <span className="hidden sm:inline">{t("fb.why")}</span>
-                <span className="sm:hidden">ИИ</span>
+                <span className="sm:hidden">{t("fb.ai.short")}</span>
               </Button>
             )}
             {phase === "answering" && question?.type === "solution" && (

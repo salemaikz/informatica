@@ -113,6 +113,7 @@ export const dict = {
   "fb.partial": { ru: "Почти!", kk: "Сәл қалды!" },
   "fb.correctAnswer": { ru: "Правильный ответ:", kk: "Дұрыс жауап:" },
   "fb.why": { ru: "Объясни, ИИ", kk: "Түсіндірші, ЖИ" },
+  "fb.ai.short": { ru: "ИИ", kk: "ЖИ" },
 
   "bits.current": { ru: "Сейчас: {n}", kk: "Қазір: {n}" },
   "bits.target": { ru: "Нужно: {n}", kk: "Керек: {n}" },

@@ -62,6 +62,13 @@ export function NoteScreen({ id }: { id: string }) {
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => {
+                // Сохраняем сразу при уходе из поля (переход по ссылке не потеряет последние символы).
+                if (draft !== (useApp.getState().notes[id]?.own ?? "")) {
+                  setOwnNote(id, draft.slice(0, 4000));
+                  setSavedAt(Date.now());
+                }
+              }}
               placeholder={t("notes.minePlaceholder")}
               rows={5}
               className="w-full resize-y rounded-2xl border-2 border-border bg-surface-2 p-3 font-semibold outline-none focus:border-primary"

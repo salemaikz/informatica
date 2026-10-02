@@ -1,11 +1,11 @@
 "use client";
 
-import clsx from "clsx";
+import { cn } from "@/lib/cn";
 import { Camera, CircleCheck, CircleX, ImagePlus, PenLine, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SolutionStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
-import { compressImage } from "@/lib/image";
+import { canvasToJpeg, compressImage } from "@/lib/image";
 import { DrawingCanvas, type DrawingHandle } from "../DrawingCanvas";
 import type { StepProps } from "./types";
 
@@ -19,7 +19,6 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
   const [photo, setPhoto] = useState<string | undefined>();
   const canvas = useRef<DrawingHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const typed = answer?.type === "solution" ? answer.typed : "";
 
   const image = tab === "draw" ? drawImage : photo;
@@ -27,26 +26,27 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
   // Держим ответ в актуальном состоянии: картинка текущей вкладки + введённый ответ.
   const emit = (img: string | undefined, text: string) => onAnswer({ type: "solution", image: img, typed: text });
 
-  // Таймер дебаунса читает актуальные значения через ref.
-  const latest = useRef({ tab, typed });
+  // Асинхронное сжатие фото не должно записать ответ в уже следующий шаг.
+  const alive = useRef(true);
   useEffect(() => {
-    latest.current = { tab, typed };
-  });
-  useEffect(() => () => clearTimeout(timer.current), []);
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
+  // Рисунок экспортируем сразу по окончании штриха (синхронно), чтобы «Проверить» всегда видел актуальный рисунок.
   const onCanvasChange = (empty: boolean) => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      const c = canvas.current?.exportCanvas();
-      const img = empty || !c ? undefined : await compressImage(c, 1024);
-      setDrawImage(img);
-      if (latest.current.tab === "draw") emit(img, latest.current.typed);
-    }, 350);
+    const c = canvas.current?.exportCanvas();
+    const img = empty || !c ? undefined : canvasToJpeg(c, 1024);
+    setDrawImage(img);
+    if (tab === "draw") emit(img, typed);
   };
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     const img = await compressImage(file, 1280);
+    if (!alive.current) return;
     setPhoto(img);
     emit(img, typed);
   };
@@ -60,15 +60,20 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Холст не размонтируем при проверке — иначе штрихи (они в ref) пропадут. */}
+      <div className={tab === "draw" && !locked ? "" : "hidden"}>
+        <DrawingCanvas ref={canvas} onChange={onCanvasChange} disabled={locked} />
+      </div>
+
       {!locked && (
         <>
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-surface-2 p-1">
+          <div className="order-first grid grid-cols-2 gap-1 rounded-2xl bg-surface-2 p-1">
             {(["draw", "photo"] as const).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => switchTab(k)}
-                className={clsx(
+                className={cn(
                   "flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-extrabold transition-colors",
                   tab === k ? "bg-surface text-text shadow-sm" : "text-muted",
                 )}
@@ -77,10 +82,6 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
                 {k === "draw" ? t("sol.draw") : t("sol.photo")}
               </button>
             ))}
-          </div>
-
-          <div className={tab === "draw" ? "" : "hidden"}>
-            <DrawingCanvas ref={canvas} onChange={onCanvasChange} />
           </div>
 
           {tab === "photo" && (
@@ -122,7 +123,7 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
 
       {locked && details && (
         <div
-          className={clsx(
+          className={cn(
             "rounded-2xl border-2 p-4 animate-fade-in",
             details.verdict === "correct"
               ? "border-success bg-success-soft"

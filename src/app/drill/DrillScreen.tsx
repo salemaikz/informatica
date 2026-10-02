@@ -25,7 +25,7 @@ function buildSession(mode: "smart" | "mistakes" | "skill", skill?: string) {
       if (!step && m.skill && canGenerate(m.skill)) step = generateStep(m.skill, s.skills[m.skill]?.mastery ?? 0, seed + i);
       if (step && !steps.some((x) => x.id === step!.id)) {
         steps.push(step);
-        map[step.id] = m.id;
+        map[step.id] = m.stepId;
       }
     });
     return { steps, map };

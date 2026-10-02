@@ -42,6 +42,7 @@ export async function POST(req: Request) {
   } catch {
     return jsonError(400, "bad_json");
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "bad_json");
   const lang = parseLang(body.lang);
   const ctx = sanitizeContext(body.context);
   const image = sanitizeImage(body.image);
