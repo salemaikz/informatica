@@ -241,8 +241,6 @@ const rect = (c1: number, r1: number, c2: number, r2: number): [number, number][
   return out;
 };
 
-const blank = (rows: number, cols: number): Cell[][] => Array.from({ length: rows }, () => Array.from({ length: cols }, () => null as Cell));
-
 /** Таблица случайных чисел. */
 function numbers(rand: Rand, rows: number, cols: number, min: number, max: number): Cell[][] {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => int(rand, min, max) as Cell));
@@ -331,11 +329,6 @@ function numWrongs(correct: number, cands: { v: number | undefined; why: L }[]):
   }
   return out;
 }
-
-const otherFormulaWhy = (alt: string, own: string): L => ({
-  ru: `Это значение другой формулы (${alt}), а в ячейке записана ${own}.`,
-  kk: `Бұл басқа формуланың мәні (${alt}), ал ұяшықта ${own} жазылған.`,
-});
 
 // ---------- Подсказки (не выдают ответ) ----------
 
