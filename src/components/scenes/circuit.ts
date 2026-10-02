@@ -64,8 +64,10 @@ export const CIRCUIT_GEO = {
   row: 66,
   /** Верхний отступ до центра первого ряда. */
   top: 26,
-  /** Нижний отступ под последним рядом (подпись вентиля). */
-  bottom: 32,
+  /** Нижний отступ под последним рядом (подпись вентиля: базовая линия на y + 35, плюс выносные элементы). */
+  bottom: 40,
+  /** Высота строки подписи вентиля (подпись в две строки — длинные казахские «ЖӘНЕ-ЕМЕС», «НЕМЕСЕ-ЕМЕС»). */
+  labelLine: 15,
   /** Сдвиг входных клемм двухвходового вентиля от центра по вертикали. */
   portDy: 11,
   /** Радиус кружка инверсии. */
@@ -78,6 +80,8 @@ export type Pt = [number, number];
 
 export interface CircuitNode {
   id: string;
+  /** Подпись терминала (у выхода — «F»; id выхода внутренний, чтобы не совпасть с id вентиля). */
+  label: string;
   kind: "input" | "gate" | "output";
   op?: GateOp;
   /** Столбец: входы — 0, вентиль — 1 + максимум столбцов его входов, выход F — последний. */
@@ -106,7 +110,20 @@ export interface CircuitLayout {
   outId: string;
 }
 
-export const OUT_ID = "F";
+/** Внутренний id узла-выхода: не может совпасть с именем входа или id вентиля из контента. */
+export const OUT_ID = "@out";
+/** Подпись выхода схемы. */
+export const OUT_LABEL = "F";
+
+/**
+ * Подпись вентиля в одну или две строки: длинную подпись с дефисом («НЕМЕСЕ-ЕМЕС») переносим после дефиса,
+ * чтобы подписи соседних столбцов (шаг 76) не наезжали друг на друга.
+ */
+export function gateLabelLines(label: string): string[] {
+  const dash = label.indexOf("-");
+  if (label.length <= 7 || dash <= 0 || dash === label.length - 1) return [label];
+  return [label.slice(0, dash + 1), label.slice(dash + 1)];
+}
 
 /** Столбцы вентилей: 1 + максимум столбцов входов. Входы — столбец 0. */
 export function circuitColumns(scene: CircuitScene): Record<string, number> {
@@ -134,13 +151,16 @@ export function inPort(n: CircuitNode, port: number, count: number): Pt {
  * среднего положения своих входов; внутри столбца вентили не ближе одного шага (порядок сохраняется).
  * Провода — ломаные: горизонталь от источника, вертикаль перед приёмником, горизонталь в клемму.
  */
-export function layoutCircuit(scene: CircuitScene): CircuitLayout {
+export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number } = {}): CircuitLayout {
   const G = CIRCUIT_GEO;
+  // Подписи вентилей в две строки — ряды и нижний отступ больше на строку.
+  const extra = Math.max(0, (opts.labelLines ?? 1) - 1) * G.labelLine;
+  const rowStep = G.row + extra;
   const cols = circuitColumns(scene);
   const nodes = new Map<string, CircuitNode>();
 
   scene.inputs.forEach((name, i) => {
-    nodes.set(name, { id: name, kind: "input", col: 0, x: G.x0, y: G.top + i * G.row, w: G.r * 2, h: G.r * 2 });
+    nodes.set(name, { id: name, label: name, kind: "input", col: 0, x: G.x0, y: G.top + i * rowStep, w: G.r * 2, h: G.r * 2 });
   });
 
   const lastY: Record<number, number> = {};
@@ -150,9 +170,9 @@ export function layoutCircuit(scene: CircuitScene): CircuitLayout {
     const ys = g.in.map((s) => nodes.get(s)?.y ?? G.top);
     const desired = ys.reduce((a, b) => a + b, 0) / ys.length;
     const prev = lastY[col];
-    const y = prev === undefined ? desired : Math.max(desired, prev + G.row);
+    const y = prev === undefined ? desired : Math.max(desired, prev + rowStep);
     lastY[col] = y;
-    nodes.set(g.id, { id: g.id, kind: "gate", op: g.op, col, x: G.x0 + col * G.pitch, y, w: G.gateW, h: G.gateH });
+    nodes.set(g.id, { id: g.id, label: g.id, kind: "gate", op: g.op, col, x: G.x0 + col * G.pitch, y, w: G.gateW, h: G.gateH });
   }
 
   const maxCol = Math.max(0, ...scene.gates.map((g) => cols[g.id]));
@@ -160,6 +180,7 @@ export function layoutCircuit(scene: CircuitScene): CircuitLayout {
   const outCol = maxCol + 1;
   const outNode: CircuitNode = {
     id: OUT_ID,
+    label: OUT_LABEL,
     kind: "output",
     col: outCol,
     x: G.x0 + outCol * G.pitch,
@@ -173,7 +194,8 @@ export function layoutCircuit(scene: CircuitScene): CircuitLayout {
   const route = (from: CircuitNode, to: CircuitNode, port: number, count: number) => {
     const [sx, sy] = outPort(from);
     const [tx, ty] = inPort(to, port, count);
-    const bendX = tx - 12;
+    // Излом у двухвходового вентиля — на разном расстоянии для клемм, чтобы вертикали проводов не сливались.
+    const bendX = tx - (count === 2 ? (port === 0 ? 16 : 8) : 12);
     const points: Pt[] = sy === ty ? [[sx, sy], [tx, ty]] : [[sx, sy], [bendX, sy], [bendX, ty], [tx, ty]];
     wires.push({ from: from.id, to: to.id, port, points });
   };
@@ -190,7 +212,7 @@ export function layoutCircuit(scene: CircuitScene): CircuitLayout {
   const maxY = Math.max(...all.map((n) => n.y));
   return {
     width: outNode.x + G.r + G.right,
-    height: maxY + G.bottom,
+    height: maxY + G.bottom + extra,
     nodes: all,
     wires,
     outId: OUT_ID,

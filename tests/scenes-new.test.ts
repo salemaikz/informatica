@@ -1,6 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyGate, circuitColumns, evalCircuit, layoutCircuit, inPort, outPort, OUT_ID, type CircuitScene } from "@/components/scenes/circuit";
+import {
+  applyGate,
+  CIRCUIT_GEO,
+  circuitColumns,
+  evalCircuit,
+  gateLabelLines,
+  layoutCircuit,
+  inPort,
+  outPort,
+  OUT_ID,
+  OUT_LABEL,
+  type CircuitScene,
+} from "@/components/scenes/circuit";
 import { arrowHead, countCrossings, flowCellWidth, flowGrid, layoutFlow, type FlowScene } from "@/components/scenes/flow";
 import { TOKEN_CLASS, tokenizeLine, type CodeLang, type Token } from "@/components/scenes/highlight";
 import { ICONS } from "@/components/scenes/icons";
@@ -89,6 +101,44 @@ describe("layoutCircuit", () => {
     const g1 = lay.nodes.find((n) => n.id === "g1")!;
     const g2 = lay.nodes.find((n) => n.id === "g2")!;
     expect(Math.abs(g1.y - g2.y)).toBeGreaterThanOrEqual(g1.h);
+  });
+
+  it("вентиль с id «F» не затирается узлом выхода (у выхода внутренний id, подпись F)", () => {
+    const f = circuit(["A", "B"], [gate("F", "and", ["A", "B"])], "F");
+    const lay = layoutCircuit(f);
+    const gateF = lay.nodes.find((n) => n.id === "F")!;
+    const out = lay.nodes.find((n) => n.id === OUT_ID)!;
+    expect(gateF.kind).toBe("gate");
+    expect(out.kind).toBe("output");
+    expect(out.label).toBe(OUT_LABEL);
+    expect(lay.wires.filter((w) => w.to === "F")).toHaveLength(2);
+    expect(lay.wires.filter((w) => w.from === "F" && w.to === OUT_ID)).toHaveLength(1);
+  });
+
+  it("под подписью нижнего вентиля хватает места (подпись не обрезается краем viewBox)", () => {
+    const one = circuit(["A"], [gate("n", "not", ["A"])], "n");
+    for (const lines of [1, 2]) {
+      const lay = layoutCircuit(one, { labelLines: lines });
+      const n = lay.nodes.find((x) => x.id === "n")!;
+      // Базовая линия последней строки подписи + выносные элементы (~4 px) — внутри высоты.
+      const lastBaseline = n.y + n.h / 2 + 15 + (lines - 1) * CIRCUIT_GEO.labelLine;
+      expect(lastBaseline + 4).toBeLessThanOrEqual(lay.height);
+    }
+  });
+
+  it("двухстрочные подписи: ряды раздвигаются, вентили одного столбца не наезжают подписью на соседа", () => {
+    const lay = layoutCircuit(sc, { labelLines: 2 });
+    const g1 = lay.nodes.find((n) => n.id === "g1")!;
+    const g2 = lay.nodes.find((n) => n.id === "g2")!;
+    // Вторая строка подписи верхнего вентиля (базовая линия) выше верхнего края нижнего вентиля.
+    const labelBottom = Math.min(g1.y, g2.y) + g1.h / 2 + 15 + CIRCUIT_GEO.labelLine;
+    expect(labelBottom).toBeLessThan(Math.max(g1.y, g2.y) - g2.h / 2);
+  });
+
+  it("у двухвходового вентиля изломы проводов на разных вертикалях", () => {
+    const lay = layoutCircuit(sc);
+    const bends = lay.wires.filter((w) => w.to === "g1" && w.points.length > 2).map((w) => w.points[1][0]);
+    expect(new Set(bends).size).toBe(bends.length);
   });
 
   it("провода — ломаные из горизонталей и вертикалей, от выхода источника до клеммы приёмника", () => {
@@ -322,7 +372,12 @@ describe("web", () => {
 
   it("закрывающий </style> в css не вырывается из блока стилей", () => {
     const doc = buildWebDoc("<p>x</p>", "p{}</style><b>hack</b>");
-    expect(doc.match(/<\/style/g)).toHaveLength(1);
+    expect(doc.match(/<\/style/gi)).toHaveLength(1);
+    // Вложенная комбинация: после наивного вырезания «</style» снова получилось бы «</style>».
+    const nested = buildWebDoc("<p>x</p>", "p{}</</stylestyle><b>hack</b>");
+    expect(nested.match(/<\/style/gi)).toHaveLength(1);
+    const upper = buildWebDoc("<p>x</p>", "p{}</STYLE><b>hack</b>");
+    expect(upper.match(/<\/style/gi)).toHaveLength(1);
   });
 
   it("высота окна — от 140 до 260 px", () => {
@@ -359,5 +414,24 @@ describe("иконки и словарь", () => {
   it("validateScene принимает собранные в тестах сцены", () => {
     expect(validateScene(circuit(["A", "B"], [gate("g", "and", ["A", "B"])], "g", { A: 1, B: 0 }))).toEqual([]);
     expect(validateScene({ kind: "web", html: "<p>x</p>", css: "p{color:red}" })).toEqual([]);
+  });
+});
+
+describe("подписи вентилей", () => {
+  it("длинные подписи с дефисом — в две строки после дефиса, короткие — как есть", () => {
+    expect(gateLabelLines("НЕМЕСЕ-ЕМЕС")).toEqual(["НЕМЕСЕ-", "ЕМЕС"]);
+    expect(gateLabelLines("ЖӘНЕ-ЕМЕС")).toEqual(["ЖӘНЕ-", "ЕМЕС"]);
+    expect(gateLabelLines("ИЛИ-НЕ")).toEqual(["ИЛИ-НЕ"]);
+    expect(gateLabelLines("НЕМЕСЕ")).toEqual(["НЕМЕСЕ"]);
+    expect(gateLabelLines("XOR")).toEqual(["XOR"]);
+  });
+
+  it("каждая строка подписи из словаря не длиннее 7 символов (не наезжает на соседний столбец)", () => {
+    for (const op of ["and", "or", "not", "nand", "nor", "xor"] as const) {
+      const entry = scenesDict[`scene.op.${op}`];
+      for (const text of [entry.ru, entry.kk]) {
+        for (const line of gateLabelLines(text)) expect(line.length).toBeLessThanOrEqual(7);
+      }
+    }
   });
 });

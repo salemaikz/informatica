@@ -214,6 +214,18 @@ interface DrawingCanvasProps {
   className?: string;
 }
 
+interface ToolPrefs {
+  tool: ToolId;
+  penColor: ColorId;
+  sizeIdx: Record<ToolId, number>;
+}
+
+/**
+ * Последний выбор инструмента, цвета и размеров. Холст пересоздаётся при смене листа и входе в полный экран —
+ * выбор не должен сбрасываться. Ластик не восстанавливаем: новый холст с ластиком выглядит «сломанным».
+ */
+let lastPrefs: ToolPrefs = { tool: "pen", penColor: "ink", sizeIdx: { ...DEFAULT_SIZE_INDEX } };
+
 const COLOR_KEYS: Record<ColorId, DictKey> = {
   ink: "canvas.color.ink",
   blue: "canvas.color.blue",
@@ -255,9 +267,25 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
   const [initial] = useState(() => sanitizeStrokes(initialStrokes ?? []));
   const [count, setCount] = useState(initial.length);
   const [hasBase, setHasBase] = useState(false);
-  const [tool, setTool] = useState<ToolId>("pen");
-  const [penColor, setPenColor] = useState<ColorId>("ink");
-  const [sizeIdx, setSizeIdx] = useState<Record<ToolId, number>>(DEFAULT_SIZE_INDEX);
+  const [tool, setToolState] = useState<ToolId>(() => (lastPrefs.tool === "eraser" ? "pen" : lastPrefs.tool));
+  const [penColor, setPenColorState] = useState<ColorId>(() => lastPrefs.penColor);
+  const [sizeIdx, setSizeIdxState] = useState<Record<ToolId, number>>(() => ({ ...lastPrefs.sizeIdx }));
+  /** Палец/стилус, которым рисуется текущий штрих (второе касание не должно дописывать в него точки). */
+  const pointerId = useRef<number | null>(null);
+
+  const setTool = (v: ToolId) => {
+    lastPrefs = { ...lastPrefs, tool: v };
+    setToolState(v);
+  };
+  const setPenColor = (v: ColorId) => {
+    lastPrefs = { ...lastPrefs, penColor: v };
+    setPenColorState(v);
+  };
+  const setSize = (v: ToolId, i: number) => {
+    const next = { ...sizeIdx, [v]: i };
+    lastPrefs = { ...lastPrefs, sizeIdx: next };
+    setSizeIdxState(next);
+  };
 
   const sizes = TOOL_SIZES[tool];
   const curSize = sizes[Math.min(sizeIdx[tool], sizes.length - 1)];
@@ -351,7 +379,13 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
   // Освобождаем временные холсты при размонтировании.
   useEffect(
     () => () => {
-      freeCanvas(base.current?.tinted ?? null);
+      const b = base.current;
+      if (b) {
+        // Обнуляем ссылку: освобождённый (0×0) холст нельзя рисовать — drawImage бросит исключение.
+        freeCanvas(b.tinted);
+        b.tinted = null;
+        b.tint = "";
+      }
       freeCanvas(cache.current);
       cache.current = null;
     },
@@ -481,23 +515,25 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
   };
 
   const onDown = (e: React.PointerEvent) => {
-    if (disabled || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (disabled || current.current || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointerId.current = e.pointerId;
     current.current = { tool, color: curColor, size: curSize, points: [pos(e)] };
     paint();
   };
   const onMove = (e: React.PointerEvent) => {
     const cur = current.current;
-    if (!cur) return;
+    if (!cur || e.pointerId !== pointerId.current) return;
     const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
     const r = canvasRef.current!.getBoundingClientRect();
     for (const ev of events) cur.points.push([ev.clientX - r.left, ev.clientY - r.top]);
     paint();
   };
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
     const cur = current.current;
-    if (!cur) return;
+    if (!cur || e.pointerId !== pointerId.current) return;
     current.current = null;
+    pointerId.current = null;
     if (strokes.current.length >= MAX_STROKES) {
       paint();
       return;
@@ -526,7 +562,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
   };
   const clear = () => {
     strokes.current = [];
-    freeCanvas(base.current?.tinted ?? null);
+    if (base.current) freeCanvas(base.current.tinted);
     base.current = null;
     setHasBase(false);
     rebuild();
@@ -535,7 +571,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
 
   const focusRing = "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
   const iconBtn = cn(
-    "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-surface text-muted transition-colors",
+    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-surface text-muted transition-colors",
     "hover:text-text disabled:cursor-not-allowed disabled:opacity-50",
     focusRing,
   );
@@ -546,10 +582,13 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
     { id: "eraser", icon: Eraser, label: t("sol.eraser") },
   ];
 
+  // Панель в два ряда, все кнопки ≥ 40 px; на 360 px (ширина контейнера ~328 px) оба ряда влезают:
+  // 1) инструменты + размеры (136 + 172 px), 2) цвета + отмена/очистка (208 + 84 px).
+  // Подписи инструментов — только если контейнер достаточно широк (container query, а не ширина экрана).
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-center gap-1.5">
-        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-xl bg-surface-2 p-1">
+    <div className={cn("@container flex flex-col gap-2", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
           {toolDefs.map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -559,66 +598,31 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
               title={label}
               onClick={() => setTool(id)}
               className={cn(
-                "flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-bold transition-colors",
+                "flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-bold transition-colors",
                 focusRing,
                 tool === id ? "bg-surface text-primary shadow-sm" : "text-muted hover:text-text",
               )}
             >
               <Icon size={18} aria-hidden />
-              <span className="hidden min-[420px]:inline">{label}</span>
+              <span className="hidden @min-[32rem]:inline">{label}</span>
             </button>
           ))}
         </div>
-        <button type="button" className={iconBtn} onClick={undo} disabled={!count} aria-label={t("sol.undo")} title={t("sol.undo")}>
-          <Undo2 size={18} aria-hidden />
-        </button>
-        <button
-          type="button"
-          className={iconBtn}
-          onClick={clear}
-          disabled={!count && !hasBase}
-          aria-label={t("sol.clear")}
-          title={t("sol.clear")}
-        >
-          <Trash2 size={18} aria-hidden />
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        {tool === "pen" && (
-          <div role="group" aria-label={t("canvas.colors")} className="flex items-center gap-2.5 px-1">
-            {PEN_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                aria-label={t(COLOR_KEYS[c])}
-                aria-pressed={penColor === c}
-                title={t(COLOR_KEYS[c])}
-                onClick={() => setPenColor(c)}
-                style={{ backgroundColor: pal[c] }}
-                className={cn(
-                  "h-8 w-8 rounded-full border border-border transition-shadow",
-                  focusRing,
-                  penColor === c && "ring-2 ring-primary ring-offset-2 ring-offset-surface",
-                )}
-              />
-            ))}
-          </div>
-        )}
         <div role="group" aria-label={t("canvas.sizes")} className="flex items-center gap-1">
           {sizes.map((s, i) => {
-            const active = sizeIdx[tool] === i;
+            const active = Math.min(sizeIdx[tool], sizes.length - 1) === i;
             const d = dotPx(tool, s);
+            const label = t(tool === "eraser" ? "canvas.eraserSize" : "canvas.size", { n: s });
             return (
               <button
                 key={s}
                 type="button"
-                aria-label={t(tool === "eraser" ? "canvas.eraserSize" : "canvas.size", { n: s })}
+                aria-label={label}
                 aria-pressed={active}
-                title={t(tool === "eraser" ? "canvas.eraserSize" : "canvas.size", { n: s })}
-                onClick={() => setSizeIdx((prev) => ({ ...prev, [tool]: i }))}
+                title={label}
+                onClick={() => setSize(tool, i)}
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border-2 transition-colors",
+                  "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors",
                   focusRing,
                   active ? "border-primary bg-primary-soft" : "border-border bg-surface hover:bg-surface-2",
                 )}
@@ -631,6 +635,48 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {tool === "pen" && (
+          <div role="group" aria-label={t("canvas.colors")} className="flex items-center gap-0.5">
+            {PEN_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={t(COLOR_KEYS[c])}
+                aria-pressed={penColor === c}
+                title={t(COLOR_KEYS[c])}
+                onClick={() => setPenColor(c)}
+                className={cn("flex h-10 w-10 items-center justify-center rounded-full", focusRing)}
+              >
+                <span
+                  aria-hidden
+                  style={{ backgroundColor: pal[c] }}
+                  className={cn(
+                    "block h-8 w-8 rounded-full border border-border transition-shadow",
+                    penColor === c && "ring-2 ring-primary ring-offset-2 ring-offset-surface",
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" className={iconBtn} onClick={undo} disabled={!count} aria-label={t("sol.undo")} title={t("sol.undo")}>
+            <Undo2 size={18} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={iconBtn}
+            onClick={clear}
+            disabled={!count && !hasBase}
+            aria-label={t("sol.clear")}
+            title={t("sol.clear")}
+          >
+            <Trash2 size={18} aria-hidden />
+          </button>
         </div>
       </div>
 
@@ -652,6 +698,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(funct
           onPointerUp={onUp}
           onPointerCancel={onUp}
           onPointerLeave={onUp}
+          onLostPointerCapture={onUp}
         />
       </div>
     </div>

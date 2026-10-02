@@ -105,27 +105,38 @@ function tokens(s: string): string {
 
 const NUMERIC = /^[\d\s.,]+$/;
 
-function containsAnswer(textTokens: string, answer: string, minLen: number): boolean {
-  const a = tokens(answer).trim();
-  if (a.length < minLen) return false;
-  return textTokens.includes(` ${a} `);
-}
-
 /**
  * Утёк ли верный ответ в подсказку. Совпадение — только целыми «словами» (токенами):
  * «10» не находится в «1010», «101» — в «1011₂».
  * Ответы короче 2 символов не проверяем; текстовый вариант choice — от 3 символов.
+ * `known` — текст, который ученик и так видит (условие задания): части ответа, которые в нём есть
+ * («Набери 11» → «1011₂ = 11»), утечкой не считаем — подсказка вправе их назвать.
+ * `options` — варианты ответа: часть, совпавшая с текстовым вариантом, проверяется от 3 символов.
  */
-export function leaksAnswer(text: string, correct: string, opts: { isOption?: boolean } = {}): boolean {
+export function leaksAnswer(
+  text: string,
+  correct: string,
+  opts: { isOption?: boolean; options?: string[]; known?: string } = {},
+): boolean {
   const answer = normText(correct);
   if (!answer) return false;
   const tt = tokens(text);
-  const minFor = (s: string) => (opts.isOption && !NUMERIC.test(normText(s)) ? 3 : 2);
-  if (containsAnswer(tt, answer, minFor(answer))) return true;
+  const known = tokens(opts.known ?? "");
+  const optionSet = new Set((opts.options ?? []).map((o) => normText(o).toLowerCase()));
+  const isOpt = (s: string) => opts.isOption || optionSet.has(normText(s).toLowerCase());
+  const hit = (part: string): boolean => {
+    const p = normText(part);
+    const a = tokens(p).trim();
+    const min = isOpt(p) && !NUMERIC.test(p) ? 3 : 2;
+    if (a.length < min || known.includes(` ${a} `)) return false;
+    return tt.includes(` ${a} `);
+  };
+  if (hit(answer)) return true;
+  // Сопоставление («a = b; c = d»): утечка — пара целиком; одна сторона пары видна ученику на экране.
+  const pairs = answer.split(";").filter((p) => p.trim());
+  if (pairs.length > 1) return pairs.some(hit);
   // Составные ответы («a, b», «1011₂ = 11»): проверяем и части — по отдельности они тоже ответ.
-  if (answer.length <= 40 && /[,;=]/.test(answer)) {
-    return answer.split(/[,;=]/).some((p) => containsAnswer(tt, p, minFor(p)));
-  }
+  if (answer.length <= 40 && /[,=]/.test(answer)) return answer.split(/[,=]/).some(hit);
   return false;
 }
 

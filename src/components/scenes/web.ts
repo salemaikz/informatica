@@ -6,9 +6,13 @@ export const WEB_BASE_CSS = "body{font-family: system-ui, sans-serif; margin:12p
 /** Запрещаем всё внешнее: ни скриптов, ни сети (img — только data:). */
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
-/** Документ для `<iframe sandbox="" srcDoc=…>`: базовый стиль + css сцены + html. Закрывающий </style> в css вырезается. */
+/**
+ * Документ для `<iframe sandbox="" srcDoc=…>`: базовый стиль + css сцены + html.
+ * Любой «<» в css заменяется CSS-экранированием \3c — из блока <style> не вырваться никакой комбинацией
+ * (одиночное вырезание «</style» обходится вложенным «</</stylestyle>»).
+ */
 export function buildWebDoc(html: string, css?: string): string {
-  const safeCss = (css ?? "").replace(/<\/style/gi, "");
+  const safeCss = (css ?? "").replace(/</g, "\\3c ");
   return (
     `<!doctype html><html><head><meta charset="utf-8">` +
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">` +

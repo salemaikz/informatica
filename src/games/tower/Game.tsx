@@ -2,7 +2,7 @@
 
 import { Flame, Trophy } from "lucide-react";
 import { m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Mascot, type Mood } from "@/components/mascot/Mascot";
 import { ChoiceView, MultiView } from "@/components/lesson/steps/ChoiceView";
 import { InputView } from "@/components/lesson/steps/InputView";
@@ -69,6 +69,18 @@ function TaskStepView(props: StepProps<TowerStep>) {
   }
 }
 
+/** Задание (условие, сцена, шаг). memo: таймер перерисовывает игру 10 раз в секунду, задание при этом не трогаем. */
+const TaskArea = memo(function TaskArea({ step, ...rest }: StepProps<TowerStep>) {
+  const { l } = useT();
+  return (
+    <>
+      <h2 className="text-lg font-extrabold leading-snug sm:text-xl">{l(step.prompt)}</h2>
+      {step.scene && <SceneView scene={step.scene} />}
+      <TaskStepView step={step} {...rest} />
+    </>
+  );
+});
+
 /** Башня сбоку: этажи снизу вверх, Бит стоит на текущем и поднимается пружиной. */
 function Tower({ floor, mood, reduce, label }: { floor: number; mood: Mood; reduce: boolean; label: string }) {
   const idx = Math.min(floor, FLOORS - 1);
@@ -132,7 +144,11 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
   const remainRef = useRef(BLITZ_MS);
   const elapsedRef = useRef(0);
   const timersRef = useRef<Set<number>>(new Set());
-  const apiRef = useRef<{ tick: (dt: number) => void; onKey: (e: KeyboardEvent) => void } | null>(null);
+  const apiRef = useRef<{
+    tick: (dt: number) => void;
+    onKey: (e: KeyboardEvent) => void;
+    onAnswer: StepProps<TowerStep>["onAnswer"];
+  } | null>(null);
 
   const shown = hinted ?? step;
   const level = taskLevel(step, st.floor);
@@ -163,7 +179,8 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
 
   /** Следующее задание того же (или нового) этажа. */
   const nextTask = (state: TowerState) => {
-    if (finishedRef.current) return;
+    // Двойной клик по «Дальше» / Enter до перерисовки не должен выдать задание дважды.
+    if (finishedRef.current || phaseRef.current === "answering") return;
     const nxt = drawNext(state, skills, seed);
     if (!nxt) {
       finish("pool", state);
@@ -202,7 +219,7 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
     if (!richReveal) later(() => nextTask(out.state), BLITZ_WRONG_MS);
   };
 
-  const onAnswer: StepProps<TowerStep>["onAnswer"] = (a, opts) => {
+  const handleAnswer: StepProps<TowerStep>["onAnswer"] = (a, opts) => {
     if (phaseRef.current !== "answering") return;
     setAnswer(a);
     // Выбор варианта и «пары» проверяются сразу, остальное — кнопкой «Проверить».
@@ -224,15 +241,18 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
     setSt((s) => ({ ...s, hintUsed: true }));
   };
 
-  // Свежие обработчики для таймера и клавиатуры (ref обновляется в эффекте, не во время рендера).
-  useEffect(() => {
+  // Свежие обработчики для ответа, таймера и клавиатуры (ref обновляется в эффекте, не во время рендера;
+  // layout — чтобы клик сразу после перерисовки не попал в старый обработчик).
+  useLayoutEffect(() => {
     apiRef.current = {
+      onAnswer: handleAnswer,
       tick: (dt) => {
         if (finishedRef.current || document.visibilityState === "hidden") return;
         if (mode === "blitz") {
           remainRef.current -= dt;
           setTick(Math.max(0, remainRef.current));
-          if (remainRef.current <= 0) finish("time", st);
+          // Вершина, взятая в последние секунды (идёт анимация подъёма), — всё равно вершина.
+          if (remainRef.current <= 0) finish(isTop(st) ? "top" : "time", st);
           return;
         }
         if (phaseRef.current !== "answering") return;
@@ -256,6 +276,9 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
       },
     };
   });
+
+  // Стабильный обработчик ответа для memo-задания (свежая логика — через apiRef).
+  const onAnswer = useCallback<StepProps<TowerStep>["onAnswer"]>((a, opts) => apiRef.current?.onAnswer(a, opts), []);
 
   useEffect(() => {
     const timers = timersRef.current;
@@ -308,7 +331,13 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
             </span>
           )}
         </div>
-        <span className="min-w-0 truncate text-base font-extrabold">{fmt(tx(S.floorOf, lang), { n: floorNo, total: FLOORS })}</span>
+        {/* На узком экране — коротко «N/10»: рядом серия, «50 на 50» и таймер; полная подпись — с sm. */}
+        <span className="min-w-0 truncate text-base font-extrabold">
+          <span className="sr-only sm:not-sr-only">{fmt(tx(S.floorOf, lang), { n: floorNo, total: FLOORS })}</span>
+          <span aria-hidden className="tabular-nums sm:hidden">
+            {floorNo}/{FLOORS}
+          </span>
+        </span>
         {st.cleanStreak >= 2 && (
           <span
             key={st.cleanStreak}
@@ -350,9 +379,7 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
       <div className="mt-3 flex min-h-0 flex-1 gap-3">
         <Tower floor={st.floor} mood={mood} reduce={reduce} label={fmt(tx(S.tower, lang), { n: floorNo, total: FLOORS })} />
         <div key={taskKey} className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-2 motion-safe:animate-fade-in">
-          <h2 className="text-lg font-extrabold leading-snug sm:text-xl">{l(shown.prompt)}</h2>
-          {shown.scene && <SceneView scene={shown.scene} />}
-          <TaskStepView step={shown} answer={answer} onAnswer={onAnswer} locked={locked} result={verdict?.result ?? null} />
+          <TaskArea step={shown} answer={answer} onAnswer={onAnswer} locked={locked} result={verdict?.result ?? null} />
         </div>
       </div>
 
@@ -360,13 +387,13 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
         {phase === "right" && verdict && (
           <p className="text-center text-lg font-extrabold text-success-strong motion-safe:animate-pop">
             {tx(S.right, lang)}
-            {verdict.bonus > 0 && <span className="ml-2 text-sm text-warning-strong">{fmt(tx(S.bonus, lang), { n: verdict.bonus })}</span>}
+            {verdict.bonus > 0 && <span className="ml-2 text-sm text-streak">{fmt(tx(S.bonus, lang), { n: verdict.bonus })}</span>}
           </p>
         )}
         {wrongShown && verdict && (
           <div className="flex max-h-[40dvh] flex-col gap-1.5 overflow-y-auto rounded-2xl border border-danger/30 bg-danger-soft p-3 motion-safe:animate-fade-in">
             <p className="text-base font-extrabold text-danger-strong">{verdict.timedOut ? t("game.timeUp") : tx(S.wrong, lang)}</p>
-            {shown.type !== "match" && (
+            {(shown.type !== "match" || verdict.timedOut) && (
               <p className="text-base font-bold">
                 <span className="font-mono">{fmt(tx(S.answerWas, lang), { a: verdict.result.expected })}</span>
               </p>
@@ -404,7 +431,7 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
           <p className="text-3xl font-black text-primary-strong motion-safe:animate-pop">
             {endKind === "top" ? tx(S.top, lang) : endKind === "time" ? t("game.timeUp") : t("game.over")}
           </p>
-          <p className="text-lg font-bold text-muted">{fmt(tx(S.stoppedAt, lang), { n: Math.min(st.floor + (endKind === "top" ? 0 : 1), FLOORS), total: FLOORS })}</p>
+          <p className="text-lg font-bold text-muted">{fmt(tx(S.stoppedAt, lang), { n: Math.min(st.floor, FLOORS), total: FLOORS })}</p>
         </div>
       )}
     </div>

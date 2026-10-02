@@ -55,6 +55,7 @@ export function CodeBlock({
             <div
               key={i}
               data-active={isActive || undefined}
+              aria-current={isActive ? "step" : undefined}
               className={cn(
                 "flex items-center border-l-[3px] border-l-transparent pr-3 transition-colors duration-200",
                 marked.has(i) && "bg-warning-soft",
@@ -64,7 +65,7 @@ export function CodeBlock({
               <span aria-hidden className="flex w-5 shrink-0 items-center justify-center text-primary">
                 <ChevronRight size={16} strokeWidth={3} className={cn("transition-opacity duration-200", isActive ? "opacity-100" : "opacity-0")} />
               </span>
-              <span aria-hidden className="w-6 shrink-0 select-none pr-2 text-right text-muted">
+              <span aria-hidden className="min-w-6 shrink-0 select-none pr-2 text-right text-muted">
                 {i + 1}
               </span>
               <CodeText line={line} lang={lang} />
@@ -115,20 +116,25 @@ export function CodeScene({ scene }: { scene: CodeScene }) {
             {vars.map((v) => {
               const changed = flash.names.includes(v.name);
               return (
-                <m.span
-                  // Ключ меняется только у изменившихся — они «мигают» заново, остальные не пересоздаются.
-                  key={changed ? `${v.name}:${flash.tick}` : v.name}
-                  initial={changed && !reduce ? { scale: 1.18 } : false}
-                  animate={{ scale: 1 }}
-                  transition={springBouncy}
+                <span
+                  key={v.name}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[13px] transition-colors duration-300",
                     changed ? "border-primary bg-primary-soft" : "border-border bg-surface",
                   )}
                 >
                   <span className="text-muted">{v.name} =</span>
-                  <span className="font-bold">{v.value}</span>
-                </m.span>
+                  {/* Значение «подпрыгивает» при изменении: новый ключ — новая анимация; рамка гаснет плавно. */}
+                  <m.span
+                    key={changed ? flash.tick : "still"}
+                    initial={changed && !reduce ? { scale: 1.3 } : false}
+                    animate={{ scale: 1 }}
+                    transition={springBouncy}
+                    className="inline-block font-bold"
+                  >
+                    {v.value}
+                  </m.span>
+                </span>
               );
             })}
           </div>

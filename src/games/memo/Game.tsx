@@ -40,6 +40,8 @@ interface Ui {
   /** Обычный темп: секунд до конца раунда. */
   roundSecs: number;
   summary: RoundSummary | null;
+  /** Надпись поверх поля в конце игры: «Время!» только когда действительно вышло время. */
+  overText: "timeUp" | "done";
   live: string;
   pop: { id: number; text: string } | null;
   lastOk: boolean | null;
@@ -72,6 +74,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       secs: Math.ceil((engine.cfg.clockMs ?? 0) / 1000),
       roundSecs: Math.ceil((engine.roundLimit ?? 0) / 1000),
       summary: null,
+      overText: "done",
       live: "",
       pop: null,
       lastOk: null,
@@ -88,6 +91,9 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
   const finishedRef = useRef(false);
   const api = useRef<Api | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  /** После «Дальше» вернуть фокус на поле (кнопка «Дальше» исчезает — иначе фокус уходит в body). */
+  const focusGrid = useRef(false);
 
   useEffect(() => {
     propsRef.current = { lang, onFinish };
@@ -113,12 +119,13 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       setUi(uiRef.current);
     };
 
-    const endGame = () => {
+    const endGame = (timeUp = false) => {
       if (uiRef.current.phase === "over") return;
       m0.overT = 0;
       m0.missLeft = null;
       m0.pauseLeft = null;
-      commit({ phase: "over", score: engine.score, live: tx(timed ? S.timeUp : S.done, propsRef.current.lang) });
+      const overText = timeUp ? "timeUp" : "done";
+      commit({ phase: "over", overText, score: engine.score, live: tx(S[overText], propsRef.current.lang) });
     };
 
     /** Показать поле нового раунда. */
@@ -183,7 +190,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
 
       if (r.kind === "first") {
         feedback("tap");
-        commit({ cards, live: "" });
+        commit({ cards, live: "", pop: null });
         return;
       }
       if (r.kind === "match") {
@@ -216,8 +223,10 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
 
     const next = () => {
       if (uiRef.current.phase !== "review") return;
-      if (engine.moreRounds && engine.nextRound()) startRoundUi();
-      else endGame();
+      if (engine.moreRounds && engine.nextRound()) {
+        focusGrid.current = true;
+        startRoundUi();
+      } else endGame();
     };
 
     const tick = () => {
@@ -238,7 +247,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
           if (secs !== uiRef.current.secs) commit({ secs });
           if (barRef.current) barRef.current.style.width = `${Math.max(0, (m0.clockMs / (cfg.clockMs ?? 1)) * 100)}%`;
           if (m0.clockMs <= 0 || m0.wallMs >= BLITZ_WALL_CAP_MS) {
-            endGame();
+            endGame(true);
             return;
           }
         }
@@ -286,6 +295,13 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       api.current = null;
     };
   }, [init, cfg, timed]);
+
+  // фокус — побочный эффект в DOM, не setState
+  useEffect(() => {
+    if (!focusGrid.current || ui.phase !== "play") return;
+    focusGrid.current = false;
+    gridRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [ui.phase, ui.round]);
 
   const playing = ui.phase === "play";
   const mood = ui.lastOk === false ? "sad" : ui.phase === "review" && ui.summary?.perfect ? "celebrate" : ui.lastOk ? "happy" : "neutral";
@@ -353,8 +369,9 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
 
       <div className="relative mt-2 min-h-0 flex-1">
         {ui.phase !== "over" && (
-          <div className="mx-auto flex h-full max-w-[420px] items-center">
-            <div className="grid w-full gap-1.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          // высота поля 4×3 ≈ его ширине: на низких экранах сужаем поле, чтобы оно не налезало на подсказку
+          <div className="mx-auto flex h-full w-full max-w-[min(420px,max(220px,calc(100dvh_-_232px)))] items-center">
+            <div ref={gridRef} className="grid w-full gap-1.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
               {ui.cards.map((c, i) => (
                 <MemoCard
                   key={c.key}
@@ -374,7 +391,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
 
         {ui.phase === "over" && (
           <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-bg/80">
-            <span className="animate-pop text-4xl font-extrabold text-text">{tx(timed ? S.timeUp : S.done, lang)}</span>
+            <span className="animate-pop text-4xl font-extrabold text-text">{tx(S[ui.overText], lang)}</span>
           </div>
         )}
       </div>
@@ -485,7 +502,12 @@ function MemoCard({
                 )}
               />
             )}
-            <span className={cn("leading-tight", mono ? "font-mono break-all" : "break-words", cardTextClass(text, mono))}>{text}</span>
+            <span
+              lang={lang}
+              className={cn("leading-tight", mono ? "font-mono break-all" : "hyphens-auto break-words", cardTextClass(text, mono))}
+            >
+              {text}
+            </span>
           </div>
         </m.div>
       </div>
@@ -516,12 +538,12 @@ function Review({ summary, lang, pop }: { summary: RoundSummary; lang: Lang; pop
       </p>
       <p className="px-1 text-xs font-bold text-muted">{tx(S.review, lang)}</p>
       <ul className="flex flex-col gap-1.5">
-        {summary.pairs.map(({ pair, outcome }) => {
+        {summary.pairs.map(({ pair, outcome }, i) => {
           const l = tx(pair.left, lang);
           const r = tx(pair.right, lang);
           const { Icon, cls, label } = OUTCOME_ICON[outcome];
           return (
-            <li key={pair.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl bg-surface-2 px-2.5 py-2">
+            <li key={i} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl bg-surface-2 px-2.5 py-2">
               <span className={cn("text-sm leading-tight font-bold text-text", isFormula(l) && "font-mono")}>{l}</span>
               <ArrowLeftRight size={14} className="text-muted" aria-hidden />
               <span className={cn("text-sm leading-tight font-bold text-text", isFormula(r) && "font-mono")}>{r}</span>

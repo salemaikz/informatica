@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_STROKE_POINTS,
+  MAX_TOTAL_POINTS,
   MAX_STROKES,
   PALETTE,
   PEN_COLORS,
@@ -131,6 +132,21 @@ describe("санитизация штрихов", () => {
     expect(sanitizeStrokes(many)).toHaveLength(MAX_STROKES);
     const long = pen(Array.from({ length: MAX_STROKE_POINTS + 100 }, (_, i) => [i % 500, 1] as Point));
     expect(sanitizeStrokes([long])[0].points).toHaveLength(MAX_STROKE_POINTS);
+  });
+
+  it("лимит общего числа точек: лишние штрихи отбрасываются, раздутые данные не проходят", () => {
+    const per = 4000;
+    const n = Math.ceil(MAX_TOTAL_POINTS / per) + 5;
+    const list = Array.from({ length: n }, () => pen(Array.from({ length: per }, (_, i) => [i % 700, 1] as Point)));
+    const out = sanitizeStrokes(list);
+    const total = out.reduce((acc, s) => acc + s.points.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_TOTAL_POINTS);
+    expect(out.length).toBeLessThan(n);
+  });
+
+  it("точки с лишними элементами и отрицательные координаты в пределах допустимого принимаются", () => {
+    const out = sanitizeStrokes([{ tool: "pen", color: "blue", size: 2, points: [[-3.3, 4, 99], [5, -1]] }]);
+    expect(out[0].points).toEqual([[-3.5, 4], [5, -1]]);
   });
 
   it("не возвращает ссылки на вход", () => {

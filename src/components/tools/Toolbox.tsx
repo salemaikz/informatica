@@ -132,6 +132,8 @@ export function Toolbox() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      // Полноэкранный черновик сам обрабатывает Escape (выход из полного экрана) и держит фокус.
+      if (document.querySelector("[data-scratch-fullscreen]")) return;
       if (e.key === "Escape") {
         // Не даём Escape дойти до урока/игры (пауза, окно выхода): он обработан здесь.
         e.preventDefault();

@@ -7,6 +7,15 @@ import { useT } from "@/i18n/useT";
 
 type PixelsScene = Extract<Scene, { kind: "pixels" }>;
 
+/** Фокус пришёл с клавиатуры (старые браузеры без :focus-visible — считаем, что да). */
+function focusVisible(el: Element): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
+
 /** Максимальный размер клетки, px. */
 const CELL_MAX = 28;
 
@@ -49,13 +58,15 @@ export function PixelsScene({ scene }: { scene: PixelsScene }) {
               type="button"
               aria-label={t("scene.pixels.row", { n: r + 1 })}
               aria-pressed={pinned === r}
-              onPointerEnter={() => setHover(r)}
+              // Наведение — только мышью/пером: на телефоне касание закрепляет строку (onClick), а «залипший»
+              // hover/фокус после касания не давал бы снять подсветку. Фокус подсвечивает только с клавиатуры.
+              onPointerEnter={(e) => e.pointerType !== "touch" && setHover(r)}
               onPointerLeave={() => setHover(null)}
-              onFocus={() => setHover(r)}
+              onFocus={(e) => focusVisible(e.currentTarget) && setHover(r)}
               onBlur={() => setHover(null)}
               onClick={() => setPinned((p) => (p === r ? null : r))}
               className={cn(
-                "rounded-lg border px-2.5 py-1 text-left font-mono text-[13px] font-bold leading-5 tracking-[0.18em] transition-colors duration-200",
+                "min-h-10 rounded-lg border px-2.5 py-1 text-left font-mono text-[13px] font-bold leading-5 tracking-[0.18em] transition-colors duration-200",
                 focusRow === r ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface text-text",
               )}
             >

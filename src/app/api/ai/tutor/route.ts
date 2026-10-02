@@ -143,15 +143,18 @@ async function cachedTutor(
   };
 
   const leaks = (text: string) =>
-    mode === "hint" && !!task.correct && leaksAnswer(text, task.correct, { isOption: !!task.options?.includes(task.correct) });
+    mode === "hint" &&
+    !!task.correct &&
+    leaksAnswer(text, task.correct, { isOption: !!task.options?.includes(task.correct), options: task.options, known: task.prompt });
 
   try {
     const r = await cachedAnswer(key, async () => {
       let text = await generate(false);
       if (leaks(text)) {
         // Подсказка выдала ответ: один повтор с припиской; если снова — статичный текст и без кэша.
+        // Подсказку автора ученик уже видел над кнопкой «Ещё подсказка» — повторять её нет смысла.
         text = await generate(true);
-        if (leaks(text)) throw new SkipCache(a.task.hint || FALLBACK_HINT[ctx.lang]);
+        if (leaks(text)) throw new SkipCache(FALLBACK_HINT[ctx.lang]);
       }
       return text;
     });

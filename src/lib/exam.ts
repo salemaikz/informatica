@@ -148,7 +148,7 @@ export function shuffleEntItem(item: EntItem, seed: number): EntItem {
     case "single": {
       const { options, correct, order } = shuffleOptions(item, rand);
       const out: EntSingle = { ...item, options, correct };
-      if (item.whyWrong) out.whyWrong = permute(item.whyWrong, order);
+      if (item.whyWrong) out.whyWrong = permute(item.whyWrong, order).map((w) => w ?? null);
       return out;
     }
     case "multi": {
@@ -216,7 +216,7 @@ function planFlexible(
   topics: EntTopicId[],
   pool: EntItem[],
   rand: () => number,
-): { plan: { topic: EntTopicId; kind: PlainKind }[]; shortage: Record<PlainKind, number> } {
+): { plan: { topic: EntTopicId; kind: PlainKind }[]; notes: ExamNote[] } {
   const cap = new Map<string, number>();
   const totalAvail: Record<PlainKind, number> = { single: 0, multi: 0, match: 0 };
   for (const it of pool) {
@@ -252,10 +252,18 @@ function planFlexible(
       plan.push({ topic: t, kind });
     }
   }
-  const shortage: Record<PlainKind, number> = { single: 0, multi: 0, match: 0 };
-  // Остаток дефицита записываем на single (общий недобор).
-  shortage.single = deficit;
-  return { plan, shortage };
+  // Не молчим: по каждому виду, которого не хватило, — запись. missing — сколько не нашлось этого вида,
+  // unfilled — сколько так и не заменили другими видами (вариант короче); сумма unfilled = общий недобор.
+  const notes: ExamNote[] = [];
+  let rest = deficit;
+  for (const k of ["match", "multi", "single"] as const) {
+    const missing = target[k] - Math.min(target[k], totalAvail[k]);
+    if (missing <= 0) continue;
+    const unfilled = Math.min(rest, missing);
+    rest -= unfilled;
+    notes.push({ topic: null, kind: k, missing, filledFrom: [], unfilled });
+  }
+  return { plan, notes };
 }
 
 function nearestLevelPick<T extends { level: Level }>(cands: T[], want: Level, rand: () => number): T {
@@ -284,7 +292,9 @@ export function buildExam(opts: BuildExamOpts): ExamPaper {
         ? ALL_TOPICS.filter((t) => pool.some((i) => i.topic === t))
         : ALL_TOPICS;
 
-  const plain = pool.filter((i): i is Exclude<EntItem, EntContext> => i.kind !== "context");
+  // Сортировка по id: вариант по seed не зависит от порядка заданий в банке.
+  const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const plain = pool.filter((i): i is Exclude<EntItem, EntContext> => i.kind !== "context").sort(byId);
   const used = new Set<string>();
 
   // 1. План: какие (тема, вид) нужны.
@@ -295,7 +305,7 @@ export function buildExam(opts: BuildExamOpts): ExamPaper {
     const target = kind === "mini" ? MINI_COUNTS : TOPIC_COUNTS;
     const r = planFlexible(target, topicScope, plain, rand);
     plan = r.plan;
-    if (r.shortage.single > 0) notes.push({ topic: null, kind: "single", missing: r.shortage.single, filledFrom: [], unfilled: r.shortage.single });
+    notes.push(...r.notes);
   }
 
   // 2. Уровни: 50/30/20 по каждому виду отдельно.
@@ -318,42 +328,46 @@ export function buildExam(opts: BuildExamOpts): ExamPaper {
     return n;
   };
   const chosen: Record<PlainKind, EntItem[]> = { single: [], multi: [], match: [] };
-  for (const s of slots) {
-    const own = plain.filter((i) => i.kind === s.kind && i.topic === s.topic && !used.has(i.id));
-    let picked: (typeof plain)[number] | null = own.length ? nearestLevelPick(own, s.level, rand) : null;
-    if (!picked) {
-      const n = noteFor(s.topic, s.kind);
-      n.missing++;
-      for (const t of neighbors(s.topic, topicScope)) {
-        const c = plain.filter((i) => i.kind === s.kind && i.topic === t && !used.has(i.id));
-        if (c.length) {
-          picked = nearestLevelPick(c, s.level, rand);
-          if (!n.filledFrom.includes(t)) n.filledFrom.push(t);
-          break;
-        }
-      }
-      if (!picked) n.unfilled++;
-    }
+  const take = (s: Slot, topic: EntTopicId) => {
+    const c = plain.filter((i) => i.kind === s.kind && i.topic === topic && !used.has(i.id));
+    const picked = c.length ? nearestLevelPick(c, s.level, rand) : null;
     if (picked) {
       used.add(picked.id);
       chosen[s.kind].push(picked);
     }
+    return picked;
+  };
+  // Сначала все слоты — из своих тем, и только потом добор у соседей: иначе добор «съедает»
+  // задания соседней темы, и в notes попадает тема, где заданий на самом деле хватало.
+  const pending = slots.filter((s) => !take(s, s.topic));
+  for (const s of pending) {
+    const n = noteFor(s.topic, s.kind);
+    n.missing++;
+    const from = neighbors(s.topic, topicScope).find((t) => take(s, t));
+    if (from) {
+      if (!n.filledFrom.includes(from)) n.filledFrom.push(from);
+    } else n.unfilled++;
   }
   notes.push(...noteMap.values());
 
   // 4. Контекстное задание (только в полном).
   let context: EntContext | null = null;
   if (kind === "full") {
-    const ctxs = pool.filter((i): i is EntContext => i.kind === "context");
-    const preferred = ctxs.filter((c) => c.topic === CONTEXT_TOPIC);
-    const from = preferred.length ? preferred : ctxs;
+    const ctxs = pool.filter((i): i is EntContext => i.kind === "context" && i.questions.length > 0).sort(byId);
+    const enough = (c: EntContext) => c.questions.length >= CONTEXT_QUESTIONS;
+    const own = (c: EntContext) => c.topic === CONTEXT_TOPIC;
+    // Сначала Python с полными 5 вопросами, затем Python, затем любые полные, затем любые.
+    const tiers = [ctxs.filter((c) => own(c) && enough(c)), ctxs.filter(own), ctxs.filter(enough), ctxs];
+    const from = tiers.find((t) => t.length) ?? [];
     if (from.length) {
-      context = from[Math.floor(rand() * from.length)];
-      if (context.questions.length < CONTEXT_QUESTIONS) {
-        notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: CONTEXT_QUESTIONS - context.questions.length, filledFrom: [], unfilled: CONTEXT_QUESTIONS - context.questions.length });
-      } else if (!preferred.length) {
-        notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: 1, filledFrom: [context.topic], unfilled: 0 });
+      const picked = from[Math.floor(rand() * from.length)];
+      if (!own(picked)) {
+        notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: 1, filledFrom: [picked.topic], unfilled: 0 });
       }
+      const short = CONTEXT_QUESTIONS - picked.questions.length;
+      if (short > 0) notes.push({ topic: picked.topic, kind: "context", missing: short, filledFrom: [], unfilled: short });
+      // Лишние вопросы не берём: в ЕНТ ровно 5 вопросов к контексту.
+      context = { ...picked, questions: picked.questions.slice(0, CONTEXT_QUESTIONS) };
     } else {
       notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: 1, filledFrom: [], unfilled: 1 });
     }
@@ -387,6 +401,13 @@ export interface QuestionScore {
   correct: boolean;
 }
 
+// Ответы могут прийти из localStorage/IndexedDB — недоверенные: берём только корректные индексы.
+const isIdx = (v: unknown, n: number): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < n;
+const idxList = (x: unknown, n: number): number[] =>
+  Array.isArray(x) ? [...new Set(x.filter((v): v is number => isIdx(v, n)))] : [];
+const answerMs = (a: ExamAnswer | undefined) =>
+  a && typeof a.timeMs === "number" && Number.isFinite(a.timeMs) ? Math.max(0, a.timeMs) : 0;
+
 /** Вопрос контекстного задания по `q.sub`. */
 export function contextQuestionOf(q: ExamQuestion) {
   return q.item.kind === "context" && q.sub !== undefined ? q.item.questions[q.sub] : undefined;
@@ -394,14 +415,16 @@ export function contextQuestionOf(q: ExamQuestion) {
 
 export function isAnswered(q: ExamQuestion, a: ExamAnswer | undefined): boolean {
   if (!a) return false;
-  switch (q.item.kind) {
+  const item = q.item;
+  switch (item.kind) {
     case "single":
+      return isIdx(a.choice, item.options.length);
     case "context":
-      return a.choice !== undefined && a.choice !== null;
+      return isIdx(a.choice, contextQuestionOf(q)?.options.length ?? 0);
     case "multi":
-      return !!a.multi && a.multi.length > 0;
+      return idxList(a.multi, item.options.length).length > 0;
     case "match":
-      return !!a.match && a.match.some((x) => x !== null && x !== undefined);
+      return Array.isArray(a.match) && a.match.some((x) => isIdx(x, item.choices.length));
   }
 }
 
@@ -419,10 +442,11 @@ export function scoreQuestion(q: ExamQuestion, a: ExamAnswer | undefined): Quest
         break;
       }
       case "multi":
-        points = multiPoints(item.correct, a.multi ?? []);
+        points = multiPoints(item.correct, idxList(a.multi, item.options.length));
         break;
       case "match": {
-        const right = item.answer.filter((x, i) => a.match?.[i] === x).length;
+        const m = Array.isArray(a.match) ? a.match : [];
+        const right = item.answer.filter((x, i) => m[i] === x).length;
         points = right === item.answer.length ? 2 : right > 0 ? 1 : 0;
         break;
       }
@@ -462,6 +486,8 @@ export function scoreExam(paper: ExamPaper, answers: ExamAnswers): ExamResult {
   let points = 0;
   let unanswered = 0;
   let timeMs = 0;
+  /** Вопросы, на которые ученик потратил время или ответил: по ним — средний темп. */
+  let visited = 0;
   const multi = { extra: 0, missed: 0 };
 
   for (const q of paper.items) {
@@ -476,20 +502,23 @@ export function scoreExam(paper: ExamPaper, answers: ExamAnswers): ExamResult {
     byKind[q.item.kind].max += s.max;
     byLevel[q.item.level].points += s.points;
     byLevel[q.item.level].max += s.max;
-    if (!isAnswered(q, a)) unanswered++;
-    timeMs += Math.max(0, a?.timeMs ?? 0);
-    if (q.item.kind === "multi" && a?.multi?.length && s.points < s.max) {
+    const answered = isAnswered(q, a);
+    if (!answered) unanswered++;
+    const ms = answerMs(a);
+    timeMs += ms;
+    if (answered || ms > 0) visited++;
+    const chosenMulti = q.item.kind === "multi" ? idxList(a?.multi, q.item.options.length) : [];
+    if (q.item.kind === "multi" && chosenMulti.length && s.points < s.max) {
       const right = new Set(q.item.correct);
-      const wrong = [...new Set(a.multi)].filter((i) => !right.has(i)).length;
+      const wrong = chosenMulti.filter((i) => !right.has(i)).length;
       if (wrong > 0) multi.extra++;
       else multi.missed++;
     }
   }
 
-  const n = paper.items.length;
   const timeSec = Math.round(timeMs / 1000);
   const slowest = paper.items
-    .map((q) => ({ key: q.key, ms: answers[q.key]?.timeMs ?? 0 }))
+    .map((q) => ({ key: q.key, ms: answerMs(answers[q.key]) }))
     .filter((x) => x.ms > 0)
     .sort((a, b) => b.ms - a.ms)
     .slice(0, 3)
@@ -503,7 +532,8 @@ export function scoreExam(paper: ExamPaper, answers: ExamAnswers): ExamResult {
     byKind,
     byLevel,
     timeSec,
-    avgSecPerQuestion: n ? Math.round((timeSec / n) * 10) / 10 : 0,
+    // Среднее по вопросам, где ученик был: пропуски в конце (не успел) не «ускоряют» темп.
+    avgSecPerQuestion: visited ? Math.round((timeMs / 1000 / visited) * 10) / 10 : 0,
     slowest,
     unanswered,
     multi,
@@ -516,7 +546,7 @@ export function scoreExam(paper: ExamPaper, answers: ExamAnswers): ExamResult {
 export type AdviceId =
   | "no-doubtful-options" // в «нескольких верных» лишний вариант стоит балла
   | "find-all-correct" // верные есть, но не все — ищи каждый
-  | "check-units" // единицы информации и скорость — слабая тема
+  | "check-units" // t03: единицы информации и скорость передачи — слабая тема
   | "trace-code" // Python/алгоритмы — прогоняй программу по шагам
   | "skip-and-return" // слишком медленно — отложи трудное и вернись
   | "read-carefully" // слишком быстро и много ошибок — перечитывай условие
@@ -548,7 +578,8 @@ export function examAdvice(result: ExamResult): ExamAdvice {
   const tips: AdviceId[] = [];
   if (result.multi.extra > 0) tips.push("no-doubtful-options");
   if (result.multi.missed > 0) tips.push("find-all-correct");
-  const unitsWeak = (["t03", "t04"] as const).some((t) => result.byTopic[t].max >= 2 && ratio(t) < 0.6);
+  // Единицы измерения — тема t03 (системы счисления t04 сюда не относятся).
+  const unitsWeak = result.byTopic.t03.max >= 2 && ratio("t03") < 0.6;
   if (unitsWeak) tips.push("check-units");
   const codeWeak = (["t06", "t07"] as const).some((t) => result.byTopic[t].max >= 2 && ratio(t) < 0.6);
   const ctx = result.byKind.context;

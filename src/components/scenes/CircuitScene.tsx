@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import type { DictKey } from "@/i18n/dict";
-import { useT } from "@/i18n/useT";
-import { CIRCUIT_GEO, GATE_STYLE, evalCircuit, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
+import { translate, useT } from "@/i18n/useT";
+import { CIRCUIT_GEO, GATE_STYLE, evalCircuit, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
 
 const OP_KEY: Record<GateOp, DictKey> = {
   and: "scene.op.and",
@@ -31,7 +31,7 @@ function ValueChip({ x, y, v, below }: { x: number; y: number; v: Bit; below: bo
   );
 }
 
-function GateShape({ node, label, v }: { node: CircuitNode; label: string; v: Bit | undefined }) {
+function GateShape({ node, label, v }: { node: CircuitNode; label: string[]; v: Bit | undefined }) {
   const style = GATE_STYLE[node.op!];
   const left = node.x - node.w / 2;
   const top = node.y - node.h / 2;
@@ -51,7 +51,11 @@ function GateShape({ node, label, v }: { node: CircuitNode; label: string; v: Bi
       </text>
       {style.inverted && <circle cx={left + node.w + CIRCUIT_GEO.bubble} cy={node.y} r={CIRCUIT_GEO.bubble} strokeWidth={2} className={cn("fill-surface", v === 1 ? "stroke-success" : "stroke-muted")} />}
       <text x={node.x} y={top + node.h + 15} textAnchor="middle" fontSize={13} fontWeight={700} className="fill-muted">
-        {label}
+        {label.map((line, i) => (
+          <tspan key={i} x={node.x} dy={i === 0 ? 0 : CIRCUIT_GEO.labelLine}>
+            {line}
+          </tspan>
+        ))}
       </text>
     </g>
   );
@@ -80,8 +84,15 @@ function Terminal({ node, label, v }: { node: CircuitNode; label: string; v: Bit
  * Рисуется SVG с viewBox и масштабируется по ширине.
  */
 export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
-  const { t } = useT();
-  const layout = useMemo(() => layoutCircuit(scene), [scene]);
+  const { t, lang } = useT();
+  // Подписи вентилей на языке ученика; длинные («НЕМЕСЕ-ЕМЕС») — в две строки, под них раскладка даёт место.
+  const labels = useMemo(() => {
+    const out: Partial<Record<GateOp, string[]>> = {};
+    for (const op of Object.keys(OP_KEY) as GateOp[]) out[op] = gateLabelLines(translate(lang, OP_KEY[op]));
+    return out as Record<GateOp, string[]>;
+  }, [lang]);
+  const labelLines = Math.max(1, ...scene.gates.map((g) => labels[g.op].length));
+  const layout = useMemo(() => layoutCircuit(scene, { labelLines }), [scene, labelLines]);
   const hasValues = !!scene.values;
   const vals = useMemo(() => (scene.values ? evalCircuit(scene, scene.values) : null), [scene]);
   const valueOf = (id: string): Bit | undefined => (vals ? vals[id === layout.outId ? scene.output : id] : undefined);
@@ -109,8 +120,8 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
       ))}
 
       {layout.nodes.map((n) => {
-        if (n.kind === "gate") return <GateShape key={n.id} node={n} label={t(OP_KEY[n.op!])} v={valueOf(n.id)} />;
-        return <Terminal key={n.id} node={n} label={n.id} v={valueOf(n.id)} />;
+        if (n.kind === "gate") return <GateShape key={n.id} node={n} label={labels[n.op!]} v={valueOf(n.id)} />;
+        return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} />;
       })}
 
       {/* Значения: по одной плашке на выходе каждого источника (вход или вентиль). */}

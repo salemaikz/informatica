@@ -57,12 +57,55 @@ function foldChars(s: string, soft: boolean): string {
 
 /** Нижний регистр, ё → е, без markdown-символов `*_#>\``, пробелы схлопнуты. Казахские буквы остаются. */
 export function normalize(s: string): string {
-  return foldChars(clean(s), false);
+  return foldChars(clean(String(s ?? "").normalize("NFC")), false);
 }
 
 /** normalize + «мягкое» совпадение казахских букв с русскими (қ → к, і → и …) — для сравнения. */
 export function fold(s: string): string {
-  return foldChars(clean(s), true);
+  return foldChars(clean(String(s ?? "").normalize("NFC")), true);
+}
+
+/** Заглушка на месте `кода` (символ из области частного использования — не буква и не цифра). */
+const CODE_MARK = "\uE000";
+
+/** Строчная разметка вне кода: картинки, ссылки, маркер ==…==, выделение **…**, *…*, _…_, ~~…~~, экранирование. */
+function inlinePlain(s: string): string {
+  return s
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/==(\{[a-z]+\})?/g, "")
+    .replace(/(^|[^\p{L}\p{N}])(\*\*|__|~~)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, "$1$3")
+    .replace(/(^|[^\p{L}\p{N}*])\*(?=\S)(.+?)(?<=\S)\*(?![\p{L}\p{N}*])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])_(?=\S)(.+?)(?<=\S)_(?![\p{L}\p{N}_])/gu, "$1$2")
+    .replace(/\\([\\`*_{}[\]()#+\-.!>~=|])/g, "$1")
+    .replace(/`/g, "");
+}
+
+/**
+ * Markdown → текст для сниппета и индекса. В отличие от normalize, НЕ трогает `*`, `>`, `_`, `#`
+ * в коде и в обычном тексте (`'ab' * 3`, `x > 5`, `is_even` остаются как есть) —
+ * убирается только разметка: ограды кода, заголовки, цитаты, маркеры списков и чек-листов, выделение.
+ */
+function plainText(md: string): string {
+  const lines: string[] = [];
+  let fence = false;
+  for (const raw of String(md ?? "").normalize("NFC").replace(/\uE000/g, "").split("\n")) {
+    if (/^\s*(```|~~~)/.test(raw)) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) {
+      lines.push(raw);
+      continue;
+    }
+    const line = raw.replace(/^\s*(?:#{1,6}\s+|(?:>\s?)+|[-*+]\s+(?:\[[ xX]\]\s*)?)/, "");
+    // Внутри `кода` разметку не трогаем: прячем код за символом-заглушкой, снимаем разметку, возвращаем код.
+    const code: string[] = [];
+    const masked = line.replace(/`([^`]*)`/g, (_, c: string) => (code.push(c), CODE_MARK));
+    let k = 0;
+    lines.push(inlinePlain(masked).replace(/\uE000/g, () => code[k++] ?? ""));
+  }
+  return lines.join(" ").replace(/\s+/g, " ").trim();
 }
 
 const WORD_RE = /[\p{L}\p{N}]+/gu;
@@ -114,9 +157,10 @@ export function buildIndex(docs: SearchDoc[]): SearchIndex {
     p[field] = true;
   };
   docs.forEach((doc, d) => {
-    const display = clean(doc.text);
+    // Данные могут прийти из localStorage (записи ученика) — не доверяем типам.
+    const display = plainText(doc.text);
     const textWords = splitWords(foldChars(display, true));
-    const titleWords = splitWords(fold(doc.title));
+    const titleWords = splitWords(foldChars(plainText(doc.title), true));
     for (const w of titleWords) touch(w.w, d, "title");
     for (const w of textWords) touch(w.w, d, "text");
     indexed.push({ doc, display, textWords, titleLen: titleWords.length });
@@ -143,12 +187,22 @@ const S_TEXT_EXACT = 2;
 const TITLE_MULT = 3;
 
 const MIN_TOKEN = 2;
+/** Защита от вставленного «простыни»-запроса. */
+const MAX_QUERY = 200;
+const MAX_TOKENS = 8;
 const SNIPPET_RADIUS = 60;
 
-/** Токены запроса: после fold, по словам, длиной ≥ 2. */
+/**
+ * Токены запроса: нижний регистр, ё → е, мягкие пары; по словам (буквы и цифры), длиной ≥ 2, без повторов.
+ * Знаки (`_`, `*`, `>` …) — разделители, как и в индексе: «is_even» → «is», «even».
+ */
 export function queryTokens(query: string): string[] {
   const tokens: string[] = [];
-  for (const m of fold(query).matchAll(WORD_RE)) if (m[0].length >= MIN_TOKEN && !tokens.includes(m[0])) tokens.push(m[0]);
+  const q = foldChars(String(query ?? "").slice(0, MAX_QUERY).normalize("NFC"), true);
+  for (const m of q.matchAll(WORD_RE)) {
+    if (m[0].length >= MIN_TOKEN && !tokens.includes(m[0])) tokens.push(m[0]);
+    if (tokens.length >= MAX_TOKENS) break;
+  }
   return tokens;
 }
 
@@ -201,8 +255,12 @@ function makeSnippet(d: IndexedDoc, tokens: string[]): SearchResult["snippet"] {
     if (len) hits.push([w.start, w.start + len]);
   }
   if (!hits.length) {
-    // Совпадение только в заголовке — показываем начало текста.
-    const end = Math.min(display.length, SNIPPET_RADIUS * 2);
+    // Совпадение только в заголовке — показываем начало текста (не режем слово на конце).
+    let end = Math.min(display.length, SNIPPET_RADIUS * 2);
+    if (end < display.length && display[end] !== " ") {
+      const space = display.lastIndexOf(" ", end);
+      if (space > 0) end = space;
+    }
     return { text: display.slice(0, end) + (end < display.length ? "…" : ""), ranges: [] };
   }
   const [first, firstEnd] = hits[0];
@@ -330,12 +388,13 @@ export function topicDocs(topics: { id: EntTopicId; title: L; short: L }[], lang
 
 /** Документы по конспектам ученика (передаются аргументом — они живут в сторе). */
 export function noteDocs(notes: { id: string; title: string; body: string; lessonId?: string }[]): SearchDoc[] {
+  // Записи живут в localStorage — приводим поля к строкам, id экранируем в ссылке.
   return notes.map((n) => ({
     id: `note:${n.id}`,
     kind: "note",
-    title: n.title,
-    text: n.body,
-    href: `/notes/${n.id}`,
-    ...(n.lessonId ? { lessonId: n.lessonId } : {}),
+    title: typeof n.title === "string" ? n.title : "",
+    text: typeof n.body === "string" ? n.body : "",
+    href: `/notes/${encodeURIComponent(n.id)}`,
+    ...(typeof n.lessonId === "string" && n.lessonId ? { lessonId: n.lessonId } : {}),
   }));
 }

@@ -141,6 +141,67 @@ describe("сниппет", () => {
   });
 });
 
+describe("разметка markdown и код", () => {
+  const snip = (text: string, q: string) => search(buildIndex([doc("a", "Тема", text)]), q)[0]?.snippet.text;
+
+  it("операторы Python в коде и в тексте не теряются, разметка снимается", () => {
+    expect(snip("Пример: `'ab' * 3` и `x > 5`, а **жирный** и *курсив*.", "пример")).toBe(
+      "Пример: 'ab' * 3 и x > 5, а жирный и курсив.",
+    );
+    expect(snip("Степень: x**2 + y**2, произведение 2 * 3 * 4.", "степень")).toBe("Степень: x**2 + y**2, произведение 2 * 3 * 4.");
+    expect(snip("Выделенный **`код`** внутри.", "выделенный")).toBe("Выделенный код внутри.");
+  });
+
+  it("ограды кода, заголовки, цитаты, списки, чек-листы и синтаксис записей", () => {
+    const md = "## Цикл\n> Важно\n- пункт\n- [x] сделано\n```python\nfor i in range(3):\n    print(i * 2)  # комментарий\n```\n==маркер== =={g}зелёный== ![](note-img:abc) [ссылка](https://x.kz)";
+    expect(snip(md, "цикл")).toBe("Цикл Важно пункт сделано for i in range(3): print(i * 2) #…");
+    expect(snip(md, "зелен")).toBe("…for i in range(3): print(i * 2) # комментарий маркер зелёный ссылка");
+  });
+
+  it("слова с подчёркиванием ищутся и целиком, и по частям", () => {
+    const idx = buildIndex([doc("a", "Функции", "Функция `is_even(n)` проверяет чётность.")]);
+    expect(search(idx, "is_even").map((r) => r.doc.id)).toEqual(["a"]);
+    expect(search(idx, "even").map((r) => r.doc.id)).toEqual(["a"]);
+    expect(queryTokens("is_even")).toEqual(["is", "even"]);
+  });
+
+  it("составные символы (NFD) в запросе и тексте", () => {
+    const idx = buildIndex([doc("a", "Тема", "Двоичный код.")]);
+    expect(search(idx, "двоичныи\u0306").map((r) => r.doc.id)).toEqual(["a"]);
+    const nfd = buildIndex([doc("b", "Тема", "Двоичныи\u0306 код.")]);
+    expect(search(nfd, "двоичный").map((r) => r.doc.id)).toEqual(["b"]);
+  });
+
+  it("совпадение только в заголовке: длинный текст обрезан по границе слова", () => {
+    const text = "слово ".repeat(30).trim();
+    const [res] = search(buildIndex([doc("a", "Байт", text)]), "байт");
+    expect(res.snippet.text.endsWith("слово…")).toBe(true);
+    expect(res.snippet.text.length).toBeLessThanOrEqual(121);
+  });
+
+  it("длинный запрос обрезается, лишние токены отбрасываются", () => {
+    expect(queryTokens(Array.from({ length: 50 }, (_, i) => `слово${i}`).join(" ")).length).toBeLessThanOrEqual(8);
+    expect(() => search(buildIndex([doc("a", "Тема", "текст")]), "текст ".repeat(10_000))).not.toThrow();
+  });
+});
+
+describe("записи ученика — недоверенные данные", () => {
+  it("битые поля не роняют индекс, id экранируется в ссылке", () => {
+    const broken = [
+      { id: "a/b?c", title: undefined, body: 42, lessonId: 7 },
+      { id: "ok", title: "Заметка", body: "про **регистры**" },
+    ] as unknown as Parameters<typeof noteDocs>[0];
+    const docs = noteDocs(broken);
+    expect(docs[0].href).toBe("/notes/a%2Fb%3Fc");
+    expect(docs[0].title).toBe("");
+    expect(docs[0].text).toBe("");
+    expect(docs[0].lessonId).toBeUndefined();
+    const idx = buildIndex(docs);
+    expect(search(idx, "регистр").map((r) => r.doc.id)).toEqual(["note:ok"]);
+    expect(() => buildIndex([{ id: "x", kind: "note", title: null, text: undefined, href: "/" } as unknown as SearchDoc])).not.toThrow();
+  });
+});
+
 describe("документы курса", () => {
   const lessons = Object.values(LESSONS);
 

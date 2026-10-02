@@ -11,7 +11,8 @@ export interface ForecastExam {
   at: number;
   points: number;
   maxPoints: number;
-  byTopic: Record<EntTopicId, { points: number; max: number }>;
+  /** Partial — как в сохранённых попытках (ExamSummary в store). */
+  byTopic: Partial<Record<EntTopicId, { points: number; max: number }>>;
   /** Если указан — учитываем только full и mini (тест по теме не показывает всю картину). */
   kind?: ExamKind;
 }
@@ -48,7 +49,11 @@ const QUESTIONS_PER_POINT = 0.8;
 
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
 
-const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+const fin = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+/** NaN/мусор из сохранения → 0. */
+const clamp01 = (x: unknown) => (fin(x) ? Math.max(0, Math.min(1, x)) : 0);
+/** Число попыток навыка (данные из localStorage — недоверенные). */
+const attemptsOf = (s: SkillStat | undefined) => (s && fin(s.attempts) && s.attempts > 0 ? Math.floor(s.attempts) : 0);
 
 /** Освоение каждой темы: среднее mastery навыков темы (без попыток — 0). */
 export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopicId, number> {
@@ -56,7 +61,7 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
   for (const t of TOPIC_IDS) {
     const ids = SKILLS.filter((s) => s.ent === t);
     if (!ids.length) continue;
-    const sum = ids.reduce((acc, s) => acc + (skills[s.id]?.attempts ? clamp01(skills[s.id].mastery) : 0), 0);
+    const sum = ids.reduce((acc, s) => acc + (attemptsOf(skills[s.id]) ? clamp01(skills[s.id].mastery) : 0), 0);
     out[t] = sum / ids.length;
   }
   return out;
@@ -64,7 +69,7 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
 
 function skillAnswers(skills: Record<string, SkillStat>): number {
   const known = new Set(SKILLS.map((s) => s.id));
-  return Object.entries(skills).reduce((acc, [id, s]) => acc + (known.has(id) ? Math.max(0, s.attempts) : 0), 0);
+  return Object.entries(skills).reduce((acc, [id, s]) => acc + (known.has(id) ? attemptsOf(s) : 0), 0);
 }
 
 /** Интервал по числу ответов: < 30 — ±8, < 100 — ±5, иначе ±3. */
@@ -79,8 +84,11 @@ export function forecastScore(input: ForecastInput): Forecast {
   const masteryScore = TOPIC_IDS.reduce((s, t) => s + topicWeight(t) * mastery[t], 0) * MAX_SCORE;
 
   // Последние 3 попытки: новее — весомее (3, 2, 1) и ещё затухание по возрасту.
+  // Попытки из сохранения — недоверенные: без даты/баллов не учитываем, баллы обрезаем до 0..max.
   const used = input.exams
-    .filter((e) => e.maxPoints > 0 && (e.kind === undefined || e.kind === "full" || e.kind === "mini"))
+    .filter((e) => e && fin(e.at) && fin(e.points) && fin(e.maxPoints) && e.maxPoints > 0)
+    .filter((e) => e.kind === undefined || e.kind === "full" || e.kind === "mini")
+    .map((e) => ({ ...e, points: Math.max(0, Math.min(e.maxPoints, e.points)) }))
     .sort((a, b) => b.at - a.at)
     .slice(0, EXAMS_USED)
     .map((e, i) => {
@@ -102,8 +110,8 @@ export function forecastScore(input: ForecastInput): Forecast {
     let den = 0;
     for (const x of used) {
       const bt = x.e.byTopic?.[t];
-      if (bt && bt.max > 0) {
-        num += x.w * (bt.points / bt.max);
+      if (bt && fin(bt.max) && bt.max > 0 && fin(bt.points)) {
+        num += x.w * clamp01(bt.points / bt.max);
         den += x.w;
       }
     }

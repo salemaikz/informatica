@@ -58,7 +58,7 @@ export function TableScene({ scene }: { scene: TableScene }) {
         {sheet && (
           <thead>
             <tr>
-              <th className="w-10 min-w-10 bg-surface-2" />
+              <th aria-hidden className="sticky left-0 z-20 w-10 min-w-10 bg-surface-2" />
               {Array.from({ length: width }, (_, c) => (
                 <th
                   key={c}
@@ -81,7 +81,7 @@ export function TableScene({ scene }: { scene: TableScene }) {
                 <th
                   scope="row"
                   className={cn(
-                    "sticky left-0 border-t border-border bg-surface-2 px-2 py-1 text-center font-sans text-[13px] font-semibold text-muted transition-colors duration-200",
+                    "sticky left-0 z-20 border-t border-border bg-surface-2 px-2 py-1 text-center font-sans text-[13px] font-semibold text-muted transition-colors duration-200",
                     hiRows.has(r) && "bg-primary-soft text-primary-strong",
                   )}
                 >

@@ -5,7 +5,6 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type {
   AnswerRecord,
   AvatarConfig,
-  AvatarColor,
   EntTopicId,
   ExplainStyle,
   Goal,
@@ -16,6 +15,7 @@ import type {
   Theme,
 } from "./types";
 import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
+import { sanitizeAvatar } from "./avatar";
 import { masteryLevel, updateSkill, type SkillStat } from "./mastery";
 import { todayKey } from "./text";
 import { gameReward, gameStatKey, type GameReward } from "./games";
@@ -218,7 +218,6 @@ export const AI_DAILY_LIMIT = 60;
 const MAX_MISTAKES = 60;
 const MAX_CHAT = 60;
 const MAX_EXAMS = 50;
-const AVATAR_COLORS: AvatarColor[] = ["primary", "success", "warning", "danger", "ai", "gold", "streak"];
 
 export const defaultProfile: Profile = {
   name: "",
@@ -306,17 +305,6 @@ function nextLessonStat(prev: LessonStat | undefined, via: LessonVia, accuracy: 
   };
 }
 
-function cleanAvatar(raw: unknown): AvatarConfig {
-  const a = raw as Partial<AvatarConfig> | undefined;
-  if (a?.kind === "initial" && AVATAR_COLORS.includes((a as { color: AvatarColor }).color)) return { kind: "initial", color: (a as { color: AvatarColor }).color };
-  if (a?.kind === "preset" && typeof (a as { id?: unknown }).id === "string") return { kind: "preset", id: (a as { id: string }).id.slice(0, 40) };
-  if (a?.kind === "photo") {
-    const data = (a as { data?: unknown }).data;
-    if (typeof data === "string" && data.startsWith("data:image/jpeg;base64,") && data.length <= 80_000) return { kind: "photo", data };
-  }
-  return defaultProfile.avatar;
-}
-
 function cleanProfile(raw: unknown): Profile {
   const p = (raw ?? {}) as Partial<Profile>;
   const reminder = { ...defaultProfile.reminder, ...(p.reminder ?? {}) };
@@ -324,7 +312,7 @@ function cleanProfile(raw: unknown): Profile {
   const targetScore = typeof p.targetScore === "number" && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : defaultProfile.targetScore;
   const weeklyLessons = typeof p.weeklyLessons === "number" && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : defaultProfile.weeklyLessons;
   const examDate = typeof p.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate) ? p.examDate : null;
-  return { ...defaultProfile, ...p, avatar: cleanAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate };
+  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate };
 }
 
 /** Миграции сохранений: v1 (конспекты по ключу урока) → v2 (папки и записи). */

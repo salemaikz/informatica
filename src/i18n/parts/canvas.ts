@@ -20,6 +20,6 @@ export const canvasDict = {
   "canvas.noteTitle": { ru: "Черновик, лист {n}", kk: "Қаралама, {n}-парақ" },
   "canvas.addPage": { ru: "Добавить лист", kk: "Парақ қосу" },
   "canvas.deletePage": { ru: "Удалить лист", kk: "Парақты жою" },
-  "canvas.deleteConfirm": { ru: "Удалить?", kk: "Жою керек пе?" },
+  "canvas.deleteConfirm": { ru: "Удалить?", kk: "Жоямыз ба?" },
   "canvas.pages": { ru: "Листы черновика", kk: "Қаралама парақтары" },
 } satisfies Record<string, L>;

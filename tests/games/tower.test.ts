@@ -103,6 +103,17 @@ describe("башня: отбор заданий", () => {
     expect(pickTask({ skills: ["no.such.skill"], floor: 0, seed: 1, used: [] })).toBeNull();
   });
 
+  it("pickTask: у задания всегда есть навык из пула, навыки чередуются", () => {
+    const seen = new Set<string>();
+    for (let seed = 0; seed < 40; seed++) {
+      const s = pickTask({ skills: DEFAULT_SKILLS, floor: seed % FLOORS, seed, used: [] })!;
+      expect(DEFAULT_SKILLS).toContain(s.skill);
+      seen.add(s.skill!);
+    }
+    expect(seen.size).toBeGreaterThan(1);
+    expect(pickTask({ skills: ["ns.base"], floor: 0, seed: 1, used: [] })!.skill).toBe("ns.base");
+  });
+
   it("повторы разрешаются, когда все задания показаны (маленький банк)", () => {
     const first = pickTask({ skills: ["ns.props"], floor: 0, seed: 1, used: [] })!;
     // Делаем вид, что показаны ключи всех заданий из большой выборки.

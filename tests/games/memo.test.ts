@@ -14,6 +14,8 @@ import {
   columnsFor,
   isFormula,
   levelsForRound,
+  meaningKeys,
+  numericValue,
   pairPoints,
   pickRoundPairs,
   resolveSkills,
@@ -93,6 +95,43 @@ describe("memo: колода пар", () => {
       const texts = pairs.flatMap((p) => [textKey(p.left), textKey(p.right)]);
       expect(new Set(texts).size).toBe(texts.length);
     }
+  });
+
+  it("numericValue: одно число в разных записях даёт одно значение", () => {
+    expect(numericValue("1011₂")).toBe(11);
+    expect(numericValue("B₁₆")).toBe(11);
+    expect(numericValue("11₁₀")).toBe(11);
+    expect(numericValue("11")).toBe(11);
+    expect(numericValue("2³")).toBe(8);
+    expect(numericValue("2¹⁰")).toBe(1024);
+    expect(numericValue("1012₂")).toBeNull(); // нет такой цифры в системе
+    expect(numericValue("Двоичная")).toBeNull();
+    expect(numericValue("0–9, A–F")).toBeNull();
+    expect(meaningKeys({ ru: "Двоичная", kk: "Екілік" })).toEqual(["t:двоичная", "t:екілік"]);
+  });
+
+  it("на поле нет двух разных пар с совпадающим смыслом (B₁₆ и 1011₂ — обе 11)", () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const [minLevel, maxLevel] of [[1, 3], [1, 2], [2, 3]] as const) {
+        const pairs = pickRoundPairs({ pool: DEFAULT_SKILLS, count: PAIRS_PER_ROUND, seed, minLevel, maxLevel });
+        const owner = new Map<string, number>();
+        pairs.forEach((p, i) => {
+          for (const k of [...meaningKeys(p.left), ...meaningKeys(p.right)]) {
+            expect(owner.get(k) ?? i, `${seed}: ${k}`).toBe(i);
+            owner.set(k, i);
+          }
+        });
+      }
+    }
+  });
+
+  it("обычно набирается полное поле из 6 пар", () => {
+    let full = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const pairs = pickRoundPairs({ pool: DEFAULT_SKILLS, count: PAIRS_PER_ROUND, seed, minLevel: 1, maxLevel: 2 });
+      if (pairs.length === PAIRS_PER_ROUND) full++;
+    }
+    expect(full).toBeGreaterThanOrEqual(38);
   });
 
   it("exclude исключает уже сыгранные пары", () => {
@@ -209,6 +248,24 @@ describe("memo: ошибки, очки и attempts", () => {
     expect(again.kind === "miss" && again.extra).toBe(true);
     expect(e.score).toBe(before - EXTRA_PENALTY);
     expect(e.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it("забытая пара: открыта новая карточка, её пару уже видели, а открыта другая — «лишняя» ошибка", () => {
+    const e = new MemoEngine({ mode: "calm", seed: 5 });
+    const pairs = [...indexOfPairs(e).values()];
+    e.flip(pairs[0][1]);
+    e.flip(pairs[1][1]); // разведка: обе новые
+    e.closeMiss();
+    e.flip(pairs[0][0]); // новая, но её пару (pairs[0][1]) уже видели
+    const res = e.flip(pairs[2][0]); // тоже новая
+    expect(res.kind === "miss" && res.extra).toBe(true);
+    e.closeMiss();
+    solveClean(e);
+    const sum = e.finishRound();
+    expect(sum.pairs[0].outcome).toBe("missed");
+    expect(sum.pairs[1].outcome).toBe("clean");
+    expect(sum.pairs[2].outcome).toBe("clean");
+    expect(sum.extraMisses).toBe(1);
   });
 
   it("чистый раунд: все attempts верны, бонус, total = число пар", () => {
@@ -361,6 +418,8 @@ describe("memo: вёрстка и тексты", () => {
     expect(isFormula("25")).toBe(true);
     expect(isFormula("Двоичная")).toBe(false);
     expect(isFormula("Ағымдағы")).toBe(false);
+    expect(isFormula("D₁₆")).toBe(true);
+    expect(isFormula("1A₁₆")).toBe(true);
   });
 
   it("размер шрифта уменьшается с длиной", () => {

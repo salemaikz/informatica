@@ -13,6 +13,7 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { StreakChipAnimated, XpChipAnimated } from "@/components/motion/AnimatedChips";
 import { easeOut } from "@/components/motion/presets";
 import { DailyGoalCard, LevelCard, LevelChip, WeakTopicsCard } from "./Widgets";
+import { Avatar } from "./Avatar";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolbox } from "@/components/tools/useToolbox";
 
@@ -24,16 +25,11 @@ const NAV: { href: string; key: DictKey; icon: typeof BookOpen; ai?: boolean }[]
   { href: "/stats", key: "nav.stats", icon: ChartColumn },
 ];
 
-function Avatar({ size = 36 }: { size?: number }) {
+/** Аватар ученика из профиля (буква, рисованный или фото). */
+function ProfileAvatar({ size = 36 }: { size?: number }) {
   const name = useApp((s) => s.profile.name);
-  return (
-    <span
-      className="flex items-center justify-center rounded-full bg-primary-soft font-extrabold text-primary"
-      style={{ width: size, height: size, fontSize: size * 0.42 }}
-    >
-      {(name.trim()[0] ?? "?").toUpperCase()}
-    </span>
-  );
+  const config = useApp((s) => s.profile.avatar);
+  return <Avatar config={config} name={name} size={size} />;
 }
 
 function Logo() {
@@ -89,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             active("/profile") ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2",
           )}
         >
-          <Avatar size={28} /> {t("nav.profile")}
+          <ProfileAvatar size={28} /> {t("nav.profile")}
         </Link>
       </aside>
 
@@ -103,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <XpChipAnimated />
             <ToolboxButton variant="icon" />
             <Link href="/profile" aria-label={t("nav.profile")}>
-              <Avatar size={32} />
+              <ProfileAvatar size={32} />
             </Link>
           </div>
         </header>

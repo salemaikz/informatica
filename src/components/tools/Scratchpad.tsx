@@ -24,8 +24,8 @@ const SAVE_DELAY = 600;
 /** Сколько секунд после первого нажатия «Очистить»/«Удалить» ждём подтверждения вторым нажатием. */
 const CONFIRM_MS = 3000;
 const CANVAS_HEIGHT = 320;
-/** Высота текстового поля вне полноэкранного режима: холст + панель инструментов. */
-const TEXT_HEIGHT = CANVAS_HEIGHT + 150;
+/** Высота текстового поля вне полноэкранного режима: холст + панель инструментов (2 ряда: 48 + 40 px, отступы, рамка). */
+const TEXT_HEIGHT = CANVAS_HEIGHT + 108;
 
 type Mode = "draw" | "text";
 type Armed = { kind: "clear" | "delete"; id: string } | null;
@@ -64,7 +64,9 @@ export function Scratchpad() {
     let alive = true;
     loadScratch().then((saved) => {
       if (!alive) return;
-      setPages(saved.length ? saved : blankPages());
+      const next = saved.length ? saved : blankPages();
+      setPages(next);
+      setCur((c) => Math.min(c, next.length - 1));
       setLoaded(true);
       setGen((g) => g + 1);
     });
@@ -107,7 +109,8 @@ export function Scratchpad() {
     };
   }, []);
 
-  // Полный экран: Esc выходит.
+  // Полный экран: Esc выходит. Пока панель инструментов перехватывает Esc сама (Toolbox, фаза capture),
+  // Esc закрывает панель целиком, а полный экран сбрасывается вместе с ней (см. проверку toolboxOpen выше).
   useEffect(() => {
     if (!fullscreen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -150,7 +153,9 @@ export function Scratchpad() {
     setArmed(null);
   };
 
+  // До загрузки листы не меняем: иначе автосохранение может записать пустые листы поверх сохранённых.
   const onAddPage = () => {
+    if (!loaded) return;
     const next = addPage(pages);
     if (next === pages) return;
     dirty.current = true;
@@ -171,7 +176,7 @@ export function Scratchpad() {
   };
 
   const deletePage = () => {
-    if (pages.length <= 1) return;
+    if (!loaded || pages.length <= 1) return;
     if (!isArmed("delete")) {
       setArmed({ kind: "delete", id: page.id });
       return;
@@ -231,7 +236,7 @@ export function Scratchpad() {
         <button
           type="button"
           onClick={onAddPage}
-          disabled={pages.length >= MAX_SCRATCH_PAGES}
+          disabled={!loaded || pages.length >= MAX_SCRATCH_PAGES}
           aria-label={t("canvas.addPage")}
           title={t("canvas.addPage")}
           className={cn(iconBtn, "h-10 w-10 shrink-0")}
@@ -336,7 +341,7 @@ export function Scratchpad() {
         <button
           type="button"
           onClick={deletePage}
-          disabled={pages.length <= 1}
+          disabled={!loaded || pages.length <= 1}
           className={cn(
             "flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold transition-colors",
             "disabled:cursor-not-allowed disabled:opacity-50",

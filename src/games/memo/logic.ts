@@ -78,9 +78,51 @@ function pairKey(p: Pair): string {
   return `${textKey(p.left)}→${textKey(p.right)}`;
 }
 
-/** «Формула»: в тексте нет ни одной буквы — набираем моноширинным шрифтом. */
+/** «Формула»: в тексте нет ни одной буквы или это число с основанием (D₁₆, 1A₁₆) — набираем моноширинным шрифтом. */
 export function isFormula(text: string): boolean {
-  return !/\p{L}/u.test(text.replace(/[₀-₉]/g, ""));
+  const s = text.trim();
+  if (/^[0-9A-F]+[₀-₉]+$/.test(s)) return true;
+  return !/\p{L}/u.test(s);
+}
+
+const SUB_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
+const SUP_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+const fromScript = (s: string, set: string) => [...s].map((ch) => set.indexOf(ch)).join("");
+
+/**
+ * Числовое значение надписи: «13», «1011₂», «D₁₆», «11₁₀», «2³». null — не число.
+ * Нужно, чтобы на одном поле не оказались две разные пары с одинаковым значением
+ * (B₁₆ и 1011₂ — обе 11: ученик соединит их и получит «ошибку», будучи прав).
+ */
+export function numericValue(text: string): number | null {
+  const s = text.replace(/\s+/g, "");
+  let mm = /^([0-9A-Za-z]+)([₀-₉]+)$/.exec(s);
+  if (mm) {
+    const base = Number(fromScript(mm[2], SUB_DIGITS));
+    if (base < 2 || base > 36) return null;
+    if (![...mm[1]].every((d) => parseInt(d, 36) < base)) return null;
+    const v = parseInt(mm[1], base);
+    return Number.isSafeInteger(v) ? v : null;
+  }
+  mm = /^(-?\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)$/.exec(s);
+  if (mm) {
+    const v = Number(mm[1]) ** Number(fromScript(mm[2], SUP_DIGITS));
+    return Number.isSafeInteger(v) ? v : null;
+  }
+  if (/^-?\d+$/.test(s)) {
+    const v = Number(s);
+    return Number.isSafeInteger(v) ? v : null;
+  }
+  return null;
+}
+
+/** Ключи «смысла» карточки по каждому языку: число — по значению, текст — без регистра и лишних пробелов. */
+export function meaningKeys(t: Text): string[] {
+  const texts = typeof t === "string" ? [t] : [t.ru, t.kk];
+  return texts.map((x) => {
+    const v = numericValue(x);
+    return v !== null ? `#${v}` : `t:${x.trim().replace(/\s+/g, " ").toLowerCase()}`;
+  });
 }
 
 export interface PickOptions {
@@ -94,7 +136,8 @@ export interface PickOptions {
 }
 
 /**
- * Достаёт из банка до count пар для поля: без повторов и без одинаковых надписей на разных карточках.
+ * Достаёт из банка до count пар для поля: без повторов и без совпадающих по смыслу надписей
+ * (одинаковый текст или одно и то же число в разной записи) у разных пар.
  * Сначала — как просит ТЗ (draw с нарастанием уровня), потом при нехватке — добор из более широкой выборки.
  */
 export function pickRoundPairs(opts: PickOptions): Pair[] {
@@ -106,12 +149,13 @@ export function pickRoundPairs(opts: PickOptions): Pair[] {
   const take = (items: Pair[]) => {
     for (const p of items) {
       if (out.length >= count) return;
-      const l = textKey(p.left);
-      const r = textKey(p.right);
-      if (l === r || usedPairs.has(pairKey(p)) || usedTexts.has(l) || usedTexts.has(r)) continue;
+      if (textKey(p.left) === textKey(p.right) || usedPairs.has(pairKey(p))) continue;
+      // у левой и правой карточки одной пары значение обычно совпадает (1000₂ ↔ 8) — это нормально;
+      // нельзя только пересекаться по смыслу с карточками других пар
+      const keys = [...meaningKeys(p.left), ...meaningKeys(p.right)];
+      if (keys.some((k) => usedTexts.has(k))) continue;
       usedPairs.add(pairKey(p));
-      usedTexts.add(l);
-      usedTexts.add(r);
+      for (const k of keys) usedTexts.add(k);
       out.push(p);
     }
   };
@@ -164,7 +208,7 @@ interface CardState {
 interface PairState {
   pair: Pair;
   found: boolean;
-  /** Ошибки на карточках этой пары (пара открыта неверно, хотя карточка уже была видена). */
+  /** «Лишние» ошибки на карточках этой пары (см. flip). */
   misses: number;
 }
 
@@ -314,12 +358,15 @@ export class MemoEngine {
       return { kind: "match", pairIndex: a.pairIndex, points, roundComplete: this.roundComplete };
     }
 
-    // не пара: ошибка «лишняя», если хоть одну из двух карточек ученик уже видел и мог запомнить
-    const extra = a.seen || b.seen;
-    for (const c of [a, b]) {
-      if (c.seen) this.pairs[c.pairIndex].misses++;
-      c.seen = true;
-    }
+    // не пара. Ошибка «лишняя» (её можно было избежать, если помнить поле), когда:
+    // - первую карточку уже видели (переворот без новой информации),
+    // - вторую уже видели (знали, что там, и всё равно открыли),
+    // - пару к первой карточке уже видели (надо было открыть её).
+    const partnerSeen = this.cards.some((c) => c.pairIndex === a.pairIndex && c !== a && c.seen);
+    const extra = a.seen || b.seen || partnerSeen;
+    if (a.seen || partnerSeen) this.pairs[a.pairIndex].misses++;
+    if (b.seen) this.pairs[b.pairIndex].misses++;
+    a.seen = b.seen = true;
     let penalty = 0;
     if (extra) {
       this.extraMisses++;

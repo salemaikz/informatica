@@ -43,7 +43,7 @@ const LABEL_PAD: Record<Node["shape"], string> = {
   action: "px-1.5",
   box: "px-2",
   io: "px-4",
-  if: "px-6",
+  if: "",
   device: "px-1.5",
 };
 
@@ -68,8 +68,14 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
   const nodeById = new Map(scene.nodes.map((n) => [n.id, n]));
 
   return (
-    <div ref={ref} className="mx-auto w-full max-w-xl">
-      <div role="img" aria-label={t("scene.flow.aria")} className="relative mx-auto" style={{ width: layout.width, height: layout.height }}>
+    // Минимальная ширина ячейки 56 px: на очень узком экране схема из 5 столбцов прокручивается внутри сцены.
+    <div ref={ref} className="mx-auto w-full max-w-xl overflow-x-auto">
+      <div
+        role="img"
+        aria-label={`${t("scene.flow.aria")}: ${scene.nodes.map((n) => l(n.label)).join(", ")}`}
+        className="relative mx-auto"
+        style={{ width: layout.width, height: layout.height }}
+      >
         <svg width={layout.width} height={layout.height} className="absolute inset-0 overflow-visible" aria-hidden>
           {layout.boxes.map((box) => (
             <Shape key={box.id} box={box} active={scene.active === box.id} />
@@ -103,7 +109,14 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
                 node.shape === "device" && "flex-col gap-0.5",
                 LABEL_PAD[node.shape],
               )}
-              style={{ left: box.cx - box.w / 2, top: box.cy - box.h / 2, width: box.w, height: box.h }}
+              style={{
+                left: box.cx - box.w / 2,
+                top: box.cy - box.h / 2,
+                width: box.w,
+                height: box.h,
+                // Текст ромба — во вписанном прямоугольнике: отступ по ширине самого ромба, а не фиксированный.
+                ...(node.shape === "if" ? { paddingInline: Math.max(4, Math.round(box.w * 0.18)) } : null),
+              }}
             >
               {showIcon && <Icon size={22} strokeWidth={2.2} className={cn("shrink-0", scene.active === box.id ? "text-primary" : "text-primary-strong")} />}
               <span className="line-clamp-3 break-words">{l(node.label)}</span>

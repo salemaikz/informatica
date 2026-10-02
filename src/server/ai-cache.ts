@@ -60,12 +60,13 @@ export function cachedAnswer(key: string, produce: () => Promise<string>): Promi
 
   const job = (async (): Promise<CachedAnswer> => {
     let ran = false;
-    const st: { skipped: string | null } = { skipped: null };
+    const st: { skipped: string | null; produced: string | null } = { skipped: null, produced: null };
     const generate = async () => {
       ran = true;
       try {
         const text = await produce();
         if (!text.trim()) throw new Error("empty_answer");
+        st.produced = text;
         return text;
       } catch (e) {
         if (e instanceof SkipCache) st.skipped = e.text;
@@ -78,6 +79,11 @@ export function cachedAnswer(key: string, produce: () => Promise<string>): Promi
       return { text, hit: !ran, cacheable: true };
     } catch (e) {
       if (st.skipped !== null) return { text: st.skipped, hit: false, cacheable: false };
+      // Ответ получен, но Data Cache не смог его сохранить — токены уже потрачены, отдаём ответ.
+      if (st.produced !== null) {
+        memSet(key, st.produced);
+        return { text: st.produced, hit: false, cacheable: true };
+      }
       if (ran) throw e;
       // Хранилище Next недоступно (dev/нестандартный хостинг) — работаем без него, только память.
       console.warn("[ai] data cache unavailable, using memory only");

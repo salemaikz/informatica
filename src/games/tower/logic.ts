@@ -1,6 +1,6 @@
 import type { GameMode } from "@/games/types";
 import { draw, rampLevel, skillsWithShape } from "@/lib/bank";
-import { hashString } from "@/lib/text";
+import { hashString, seeded, shuffle } from "@/lib/text";
 import type { ChoiceStep, InputStep, Level, MatchStep, MultiStep, OrderStep, QuestionStep, SkillId } from "@/lib/types";
 
 // Чистая логика «Башни»: подбор заданий по этажам, подсказка 50 на 50, очки, состояние игры. Без React.
@@ -73,31 +73,37 @@ export interface PickOptions {
 
 /**
  * Подбирает задание для этажа: сначала нужного уровня и ещё не показанное, затем соседних уровней,
- * затем — повтор ранее показанного (если банк мал), но не то же самое подряд. null — подходящих нет.
+ * затем — повтор ранее показанного (если банк мал), но не то же самое подряд; совсем крошечный банк —
+ * хоть то же самое (лучше, чем оборвать игру). null — подходящих нет.
+ * Навыки перебираются по одному (порядок — от seed), чтобы задание всегда знало свой навык (для attempts).
  */
 export function pickTask(opts: PickOptions): TowerStep | null {
   const pool = skillsWithShape(opts.skills, "question");
   if (!pool.length) return null;
+  const order = shuffle(pool, seeded(hashString(`${opts.seed}:${opts.floor}:skills`)));
+  const tries = Math.max(order.length, 4);
   const levels = levelOrder(floorLevel(opts.floor));
   const used = new Set(opts.used);
-  for (const allowRepeat of [false, true]) {
+  for (const pass of ["fresh", "repeat", "any"] as const) {
     for (const level of levels) {
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let k = 0; k < tries; k++) {
+        const skill = order[k % order.length];
         const items = draw("question", {
-          skills: pool,
-          count: 6,
-          seed: hashString(`${opts.seed}:${opts.floor}:${level}:${attempt}`),
+          skills: [skill],
+          count: 4,
+          seed: hashString(`${opts.seed}:${opts.floor}:${level}:${k}`),
           minLevel: level,
           maxLevel: level,
           ramp: false,
         });
         const found = items.find((s) => {
           if (!isSupported(s)) return false;
+          if (pass === "any") return true;
           const key = stepKey(s);
           if (key === opts.lastKey) return false;
-          return allowRepeat || !used.has(key);
+          return pass === "repeat" || !used.has(key);
         });
-        if (found) return found as TowerStep;
+        if (found) return { ...(found as TowerStep), skill: found.skill ?? skill };
       }
     }
   }

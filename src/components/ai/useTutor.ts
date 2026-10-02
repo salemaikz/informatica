@@ -37,9 +37,15 @@ export function useTutor() {
       if (cacheKey) {
         const hit = clientCacheGet(cacheKey);
         if (hit) {
+          // Новый ответ заменяет текущий: прерываем идущий запрос, как и при обычном вызове.
+          abort.current?.abort();
+          abort.current = null;
+          // Отдаём не синхронно: ask вызывают и из эффекта при открытии панели.
+          await Promise.resolve();
+          setStreaming(false);
           setError(null);
           onText(hit);
-          app.unlock("ai_friend");
+          useApp.getState().unlock("ai_friend");
           return hit;
         }
       }

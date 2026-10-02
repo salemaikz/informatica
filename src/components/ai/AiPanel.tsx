@@ -173,7 +173,7 @@ export function AiPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t(turns.length === 0 ? "tutor.askPlaceholder" : "tutor.followUp")}
-          autoFocus={!autoStart}
+          autoFocus={mode === "ask"}
           className="h-11 min-w-0 flex-1 rounded-2xl border-2 border-border bg-surface px-3 font-semibold outline-none focus:border-ai"
         />
         <button
