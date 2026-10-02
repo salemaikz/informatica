@@ -15,10 +15,13 @@ import { PathView } from "@/components/learn/PathView";
 import { EntMap } from "@/components/learn/EntMap";
 import { LessonSheet } from "@/components/learn/LessonSheet";
 import { MasteryLegend } from "@/components/learn/MasteryLegend";
+import { TrackSwitch } from "@/components/school/TrackSwitch";
+import { SchoolMap } from "@/components/school/SchoolMap";
 import { InstallPrompt } from "@/components/app/InstallPrompt";
 import { findLessonRef, useLearnData } from "@/components/learn/useLearn";
 
-// Главная: приветствие, цель, быстрые действия, «продолжить», карта курса («Путь» или «Карта ЕНТ»), мини-ЕНТ.
+// Главная: переключатель трека «ЕНТ | Школа», приветствие, цель, быстрые действия.
+// Трек ЕНТ: «продолжить», карта курса («Путь» или «Карта ЕНТ»), мини-ЕНТ. Трек «Школа»: карта по классам 5–11.
 
 function MiniExamCard() {
   const { t } = useT();
@@ -43,6 +46,7 @@ function MiniExamCard() {
 export default function LearnPage() {
   const { t } = useT();
   const name = useApp((s) => s.profile.name);
+  const track = useApp((s) => s.profile.track);
   const { lessons, now, recommended, due } = useLearnData();
   const [sheet, setSheet] = useState<string | null>(null);
   const [view, setView] = useMapView();
@@ -56,36 +60,45 @@ export default function LearnPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <TrackSwitch />
+
       <MascotSays mood="happy" size={56}>
         <span className="block text-lg font-extrabold leading-tight">{name ? t("learn.greeting", { name }) : t("learn.hello")}</span>
         <span className="text-sm text-muted">{firstTime ? t("learn2.sub.first") : recommended ? t("learn2.sub.go") : due.length ? t("learn2.sub.done") : t("learn2.sub.wait")}</span>
       </MascotSays>
 
       <StreakReminder />
-      <GoalSummaryCard />
+      {/* Цель (дата ЕНТ, балл) — для трека ЕНТ; у школьной программы своя карточка прогресса класса. */}
+      {track !== "school" && <GoalSummaryCard />}
 
-      <QuickActions continueId={recommended?.ref.id} dueCount={due.length} firstTime={firstTime} />
+      <QuickActions continueId={track === "school" ? undefined : recommended?.ref.id} dueCount={due.length} firstTime={firstTime} />
 
-      <ContinueCard
-        target={hero}
-        kind={recommended ? "next" : "due"}
-        unitIndex={heroIndex}
-        firstTime={firstTime}
-        onModes={() => hero && setSheet(hero.ref.id)}
-      />
-
-      <ViewSwitch view={view} onChange={setView} />
-
-      {view === "path" ? (
-        <>
-          <PathView recommendedId={recommended?.ref.id} now={now} onOpen={openLesson} />
-          <MasteryLegend />
-        </>
+      {track === "school" ? (
+        <SchoolMap />
       ) : (
-        <EntMap recommendedId={recommended?.ref.id} now={now} onLesson={openLesson} />
-      )}
+        <>
+          <ContinueCard
+            target={hero}
+            kind={recommended ? "next" : "due"}
+            unitIndex={heroIndex}
+            firstTime={firstTime}
+            onModes={() => hero && setSheet(hero.ref.id)}
+          />
 
-      <MiniExamCard />
+          <ViewSwitch view={view} onChange={setView} />
+
+          {view === "path" ? (
+            <>
+              <PathView recommendedId={recommended?.ref.id} now={now} onOpen={openLesson} />
+              <MasteryLegend />
+            </>
+          ) : (
+            <EntMap recommendedId={recommended?.ref.id} now={now} onLesson={openLesson} />
+          )}
+
+          <MiniExamCard />
+        </>
+      )}
 
       <InstallPrompt />
 

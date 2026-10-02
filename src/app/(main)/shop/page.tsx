@@ -1,0 +1,193 @@
+"use client";
+
+import {
+  ChevronRight,
+  Cpu,
+  Dumbbell,
+  Heart,
+  HeartPlus,
+  Rocket,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { BOOST_PACKS, CHIP_PACKS, formatTenge, shopItem } from "@/lib/economy";
+import { useT } from "@/i18n/useT";
+import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
+import { AiPricing, EarnList, LedgerList } from "@/components/economy/ShopInfo";
+import { ShopBalance } from "@/components/economy/ShopBalance";
+import { ShopPlanBanner } from "@/components/economy/ShopPlanBanner";
+import {
+  ChipItemRow,
+  IconTile,
+  MoneyRow,
+  ShopSection,
+} from "@/components/economy/ShopParts";
+import { useHearts } from "@/components/economy/useEconomy";
+import {
+  formatNum,
+  formatSpan,
+  formatMult,
+} from "@/components/economy/shop-helpers";
+
+/** Магазин: баланс, тариф, сердечки и множитель за чипы, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
+export default function ShopPage() {
+  const { t, lang } = useT();
+  // Что выбрал ученик — показывается в шторке «Оплата скоро» (open отдельно, чтобы текст не пропадал при закрытии).
+  const [soon, setSoon] = useState<{ open: boolean; what?: string }>({
+    open: false,
+  });
+  const hearts = useHearts();
+  const showPractice = !hearts.unlimited && hearts.count < hearts.max;
+  const pick = (what: string) => setSoon({ open: true, what });
+
+  const heart1 = shopItem("heart-1");
+  const full = shopItem("hearts-full");
+  const b15 = shopItem("boost-15");
+  const b60 = shopItem("boost-60");
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-extrabold">{t("shop.title")}</h1>
+        <p className="font-semibold text-muted">{t("shop.subtitle")}</p>
+      </div>
+
+      <ShopBalance />
+      <ShopPlanBanner />
+
+      <ShopSection title={t("shop.hearts.title")} hint={t("shop.hearts.hint")}>
+        <div className="flex flex-col gap-2.5">
+          {heart1 && (
+            <ChipItemRow
+              item={heart1}
+              tone="heart"
+              icon={<HeartPlus size={26} />}
+              nameKey="shop.item.heart-1"
+              descKey="shop.item.heart-1.desc"
+            />
+          )}
+          {full && (
+            <ChipItemRow
+              item={full}
+              tone="heart"
+              icon={<Heart size={26} fill="currentColor" />}
+              nameKey="shop.item.hearts-full"
+              descKey="shop.item.hearts-full.desc"
+            />
+          )}
+          {showPractice && (
+            <Link
+              href="/practice"
+              className="flex items-center gap-3 rounded-3xl border-2 border-dashed border-success/50 bg-success-soft p-3.5 transition-[translate] active:translate-y-0.5"
+            >
+              <IconTile tone="primary">
+                <Dumbbell size={24} />
+              </IconTile>
+              <span className="min-w-0 flex-1 font-extrabold leading-snug text-success-strong">
+                {t("shop.free.practice")}
+              </span>
+              <ChevronRight
+                size={20}
+                className="shrink-0 text-success-strong"
+              />
+            </Link>
+          )}
+        </div>
+      </ShopSection>
+
+      <ShopSection title={t("shop.boost.title")} hint={t("shop.boost.hint")}>
+        <div className="flex flex-col gap-2.5">
+          {b15 && (
+            <ChipItemRow
+              item={b15}
+              tone="gold"
+              icon={<Rocket size={26} />}
+              nameKey="shop.item.boost-15"
+              descKey="shop.item.boost-15.desc"
+            />
+          )}
+          {b60 && (
+            <ChipItemRow
+              item={b60}
+              tone="gold"
+              icon={<Rocket size={26} />}
+              nameKey="shop.item.boost-60"
+              descKey="shop.item.boost-60.desc"
+            />
+          )}
+          {BOOST_PACKS.map((p) => {
+            const title = t("shop.boost.pack", {
+              mult: formatMult(p.mult),
+              span: formatSpan(p.hours, lang),
+            });
+            const price = formatTenge(p.price);
+            return (
+              <MoneyRow
+                key={p.id}
+                icon={<Rocket size={26} />}
+                title={title}
+                desc={t("shop.boost.packDesc")}
+                price={price}
+                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+              />
+            );
+          })}
+        </div>
+      </ShopSection>
+
+      <ShopSection title={t("shop.chips.title")} hint={t("shop.chips.hint")}>
+        <div className="flex flex-col gap-3">
+          {CHIP_PACKS.map((p) => {
+            const title = t("shop.chips.pack", { n: formatNum(p.chips) });
+            const price = formatTenge(p.price);
+            return (
+              <MoneyRow
+                key={p.id}
+                icon={<Cpu size={26} />}
+                title={title}
+                desc={
+                  p.bonus > 0
+                    ? t("shop.chips.bonus", { n: formatNum(p.bonus) })
+                    : t("shop.chips.plain")
+                }
+                price={price}
+                highlight={p.badge === "popular"}
+                badge={
+                  p.badge
+                    ? {
+                        label: t(
+                          p.badge === "popular"
+                            ? "shop.badge.popular"
+                            : "shop.badge.best",
+                        ),
+                        tone: p.badge === "popular" ? "gold" : "success",
+                      }
+                    : undefined
+                }
+                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+              />
+            );
+          })}
+        </div>
+      </ShopSection>
+
+      <ShopSection title={t("shop.earn.title")}>
+        <EarnList />
+      </ShopSection>
+
+      <ShopSection title={t("shop.ai.title")}>
+        <AiPricing />
+      </ShopSection>
+
+      <ShopSection title={t("shop.ledger.title")}>
+        <LedgerList />
+      </ShopSection>
+
+      <ComingSoonSheet
+        open={soon.open}
+        what={soon.what}
+        onClose={() => setSoon((s) => ({ ...s, open: false }))}
+      />
+    </div>
+  );
+}

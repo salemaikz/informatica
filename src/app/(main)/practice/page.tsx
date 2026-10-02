@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
+import { HistoryPracticeCard } from "@/components/history/HistoryCards";
 import { iconFor } from "@/components/scenes/icons";
 import { GAMES } from "@/games/registry";
 
@@ -73,6 +74,9 @@ export default function PracticePage() {
           </span>
         </Link>
       </div>
+
+      {/* История тестов: результаты и ошибки каждого теста. */}
+      <HistoryPracticeCard />
 
       {/* Повторение (разминка): тема «остывает» — повторяем по расписанию. */}
       <Link

@@ -1,6 +1,7 @@
 import "server-only";
 import type { StudentContext, TaskContext } from "@/lib/ai-types";
 import type { Lang } from "@/lib/types";
+import type { WithTrack } from "@/lib/school";
 
 // Всё, что пришло с клиента, — недоверенные данные: обрезаем длины и типы.
 
@@ -38,7 +39,11 @@ export function styleRule(style: string): string {
   return STYLES[style] ?? STYLES.short;
 }
 
-export function sanitizeContext(raw: unknown): StudentContext {
+/** Допустимые классы профиля (5–11 и «другое»); всё остальное — пустая строка. */
+const GRADES = ["5", "6", "7", "8", "9", "10", "11", "other"];
+const grade = (v: unknown): string => (typeof v === "string" && GRADES.includes(v) ? v : "");
+
+export function sanitizeContext(raw: unknown): StudentContext & WithTrack {
   const c = (raw ?? {}) as Record<string, unknown>;
   const mistakes = Array.isArray(c.mistakes)
     ? c.mistakes.slice(0, 6).map((m) => {
@@ -49,7 +54,8 @@ export function sanitizeContext(raw: unknown): StudentContext {
   return {
     name: str(c.name, 40),
     lang: lang(c.lang),
-    grade: str(c.grade, 10),
+    grade: grade(c.grade),
+    track: c.track === "school" ? "school" : "ent",
     goal: str(c.goal, 20),
     style: str(c.style, 20),
     level: num(c.level),
@@ -100,10 +106,21 @@ const STYLES: Record<string, string> = {
   steps: "пошагово, нумерованными шагами, без пропусков переходов",
 };
 
+/** Строка про режим обучения: школьная программа или подготовка к ЕНТ; младшим классам — простой язык. */
+function trackLine(c: StudentContext & Partial<WithTrack>): string {
+  const small = ["5", "6", "7"].includes(c.grade);
+  const base =
+    c.track === "school"
+      ? `Режим: школьная программа информатики Казахстана${c.grade && c.grade !== "other" ? `, ${c.grade} класс` : ""} — объясняй в рамках школьной программы, без упора на формат ЕНТ.`
+      : "Режим: подготовка к ЕНТ по информатике.";
+  return small ? `${base} Ученик младших классов: простые слова, короткие предложения, бытовые примеры.` : base;
+}
+
 /** Блок с данными ученика для системного промпта. */
-export function renderContext(c: StudentContext): string {
+export function renderContext(c: StudentContext & Partial<WithTrack>): string {
   const lines = [
     `Имя: ${c.name || "не указано"}; класс: ${c.grade || "?"}; цель: ${GOALS[c.goal] ?? c.goal}.`,
+    trackLine(c),
     `Предпочитаемый стиль объяснений: ${STYLES[c.style] ?? c.style}.`,
     `Уровень ${c.level}, опыт ${c.xp} XP, серия ${c.streak} дн.`,
   ];

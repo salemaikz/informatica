@@ -10,6 +10,7 @@ import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
 import {
   buildExternSession,
+  buildHistoryRedo,
   buildMistakes,
   buildReview,
   buildSkill,
@@ -35,15 +36,23 @@ interface Built {
   externLessons?: string[];
   /** Разминка без повторов превратилась в умную тренировку. */
   fallback?: boolean;
+  /** Режим history: записи нет в истории (вытеснена, удалена, опечатка в ссылке). */
+  missing?: boolean;
 }
 
 /** Собирает набор заданий для тренировки один раз при открытии экрана. */
-function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic?: string }): Built {
+function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic?: string; entry?: string }): Built {
   const s = useApp.getState();
   const seed = Date.now();
   switch (mode) {
     case "mistakes": {
       const { steps, map } = buildMistakes(s.mistakes, s.skills, seed);
+      return { steps, mistakeMap: map };
+    }
+    case "history": {
+      const entry = s.history.find((e) => e.id === p.entry);
+      if (!entry) return { steps: [], missing: true };
+      const { steps, map } = buildHistoryRedo(entry, s.skills, seed);
       return { steps, mistakeMap: map };
     }
     case "skill":
@@ -68,9 +77,9 @@ function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic
 
 type ExternOutcome = { passed: true; accuracy: number; credited: number } | { passed: false; accuracy: number; lessonId?: string };
 
-export function DrillScreen({ mode, skill, unit, topic }: { mode: DrillMode; skill?: string; unit?: string; topic?: string }) {
+export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMode; skill?: string; unit?: string; topic?: string; entry?: string }) {
   const { t, l } = useT();
-  const [session] = useState(() => buildSession(mode, { skill, unit, topic }));
+  const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry }));
   const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
   const completeLessons = useApp((s) => s.completeLessons);
   const markReviewed = useApp((s) => s.markReviewed);
@@ -97,7 +106,7 @@ export function DrillScreen({ mode, skill, unit, topic }: { mode: DrillMode; ski
   const externUnit = unitById(unit);
   const topicShort = mode === "topic" && topic && ENT_TOPICS.some((x) => x.id === topic) ? l(entTopicById(topic as EntTopicId).short) : "";
   const title =
-    mode === "mistakes"
+    mode === "mistakes" || mode === "history"
       ? t("prac.mistakes")
       : mode === "skill" && skill && skillById(skill)
         ? l(skillById(skill)!.title)
@@ -113,9 +122,17 @@ export function DrillScreen({ mode, skill, unit, topic }: { mode: DrillMode; ski
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-lg font-bold">
-          {mode === "mistakes" ? t("prac.noMistakes") : mode === "extern" ? t("modes.extern.none") : t("modes.empty")}
+          {mode === "mistakes"
+            ? t("prac.noMistakes")
+            : mode === "history"
+              ? session.missing
+                ? t("history.detail.notFound")
+                : t("history.redo.none")
+              : mode === "extern"
+                ? t("modes.extern.none")
+                : t("modes.empty")}
         </p>
-        <ButtonLink href={mode === "extern" ? "/learn" : "/practice"} variant="secondary">
+        <ButtonLink href={mode === "extern" ? "/learn" : mode === "history" ? "/history" : "/practice"} variant="secondary">
           {t("common.back")}
         </ButtonLink>
       </div>
@@ -160,6 +177,7 @@ export function DrillScreen({ mode, skill, unit, topic }: { mode: DrillMode; ski
     <LessonPlayer
       kind="drill"
       title={title}
+      mode={mode}
       steps={session.steps}
       mistakeMap={session.mistakeMap}
       onSessionFinish={onSessionFinish}

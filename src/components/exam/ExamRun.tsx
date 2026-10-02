@@ -23,6 +23,7 @@ import {
   toggleFlag,
   type ExamAttempt,
 } from "@/lib/exam-store";
+import { examWrongItems } from "@/lib/ent-steps";
 import { useApp } from "@/lib/store";
 import type { EntTopicId } from "@/lib/types";
 import { ignoreKey } from "@/lib/keys";
@@ -348,7 +349,9 @@ function Runner({ initial }: { initial: ExamAttempt }) {
       elapsedMs: Math.min(elapsedNow(), limitSec * 1000),
       finishedAt: now,
     };
-    useApp.getState().recordExam(buildSummary(attempt, now), skillScoresOf(paper, attempt.answers));
+    // Ошибки попытки уходят в историю тестов и общую «работу над ошибками» (ссылки ent:…, lib/ent-steps.ts).
+    const app = useApp.getState();
+    app.recordExam(buildSummary(attempt, now), skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
     const { paper: _paper, ...state } = attempt;
     void _paper;
     try {

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MascotSays } from "@/components/mascot/Mascot";
 
-const GRADES: Grade[] = ["8", "9", "10", "11", "other"];
+const GRADES: Grade[] = ["5", "6", "7", "8", "9", "10", "11", "other"];
 const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
   { id: "ent", icon: Target, key: "goal.ent" },
   { id: "school", icon: BookOpen, key: "goal.school" },
@@ -69,8 +69,11 @@ export default function OnboardingPage() {
     if (step === 1) updateProfile({ name: name.trim().slice(0, 30) });
     if (step < total - 1) setStep(step + 1);
     else {
-      completeOnboarding({ name: name.trim().slice(0, 30) });
-      router.replace("/learn");
+      // Цель «школа» — школьный трек, остальные — подготовка к ЕНТ.
+      completeOnboarding({ name: name.trim().slice(0, 30), track: profile.goal === "school" ? "school" : "ent" });
+      // Сразу после онбординга — окно тарифов (один показ учитывается в статистике).
+      useApp.getState().notePaywallShown();
+      router.replace("/plans?from=onboarding");
     }
   };
 
@@ -152,7 +155,7 @@ export default function OnboardingPage() {
             <MascotSays size={88}>{t("onb.goal.title")}</MascotSays>
             <div className="flex flex-col gap-3">
               {GOALS.map((g) => (
-                <Choice key={g.id} selected={profile.goal === g.id} onClick={() => updateProfile({ goal: g.id })}>
+                <Choice key={g.id} selected={profile.goal === g.id} onClick={() => updateProfile({ goal: g.id, track: g.id === "school" ? "school" : "ent" })}>
                   <ChoiceIcon icon={g.icon} selected={profile.goal === g.id} />
                   <span className="text-lg">{t(g.key)}</span>
                 </Choice>

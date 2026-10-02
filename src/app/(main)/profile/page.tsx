@@ -3,7 +3,7 @@
 import { Download, Pencil, RotateCcw, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { ExplainStyle, Goal, Grade, Lang, Theme } from "@/lib/types";
+import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { ACHIEVEMENTS } from "@/lib/gamification";
 import { daysText, daysUntil } from "@/lib/goals";
@@ -22,6 +22,8 @@ import { useMinuteClock } from "@/components/goals/useClock";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
+import { PlanStatusCard } from "@/components/plans/PlanStatusCard";
+import { TrackSettings } from "@/components/school/TrackSettings";
 
 const NAME_MAX = 30;
 /** Больше этого файл копии не читаем: настоящая копия — десятки килобайт, фото аватара — до ~45 КБ. */
@@ -105,9 +107,6 @@ export default function ProfilePage() {
     setImportMsg(ok ? { ok: true, text: t("prof2.import.ok") } : { ok: false, text: t("prof2.import.bad") });
   };
 
-  const grades: { id: Grade; label: string }[] = (["8", "9", "10", "11"] as const).map((g) => ({ id: g, label: g }));
-  grades.push({ id: "other", label: t("onb.grade.other") });
-
   const daysLeft = daysUntil(profile.examDate, today);
 
   return (
@@ -182,6 +181,12 @@ export default function ProfilePage() {
       <LevelCard />
 
       {/* Цели */}
+      {/* Тариф: бесплатный / Лайт / Безлимит (пробный) */}
+      <PlanStatusCard />
+
+      {/* Программа: ЕНТ или школа, класс */}
+      <TrackSettings />
+
       <Card id="goals" className="scroll-mt-20 divide-y-2 divide-border py-1">
         <h2 className="py-3 text-lg font-extrabold">{t("prof2.goals.title")}</h2>
         <Row label={t("prof2.goals.examDate")} hint={
@@ -268,9 +273,6 @@ export default function ProfilePage() {
               { id: "ru", label: "Русский" },
             ]}
           />
-        </Row>
-        <Row label={t("prof.grade")}>
-          <Segmented<Grade> label={t("prof.grade")} value={profile.grade} onChange={(grade) => update({ grade })} options={grades} />
         </Row>
         <Row label={t("prof.goal")}>
           <Segmented<Goal>

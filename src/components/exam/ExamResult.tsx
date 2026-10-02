@@ -17,6 +17,8 @@ import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
 import type { EntTopicId } from "@/lib/types";
 import { Markdown } from "@/components/Markdown";
+import { AiCost } from "@/components/economy/AiCost";
+import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
@@ -32,7 +34,8 @@ const TONE_COLOR: Record<Tone, string> = {
 };
 const KIND_ROWS = ["single", "multi", "match", "context"] as const;
 
-type AiState = { status: "idle" | "loading" | "failed" | "limit" };
+// chips — не хватает чипов на разбор; limit — потолок обращений за день.
+type AiState = { status: "idle" | "loading" | "failed" | "limit" | "chips" };
 
 function Bar({ label, points, max, hint }: { label: string; points: number; max: number; hint?: string }) {
   const ratio = ratioOf(points, max);
@@ -164,7 +167,7 @@ export function ExamResult({ id }: { id: string }) {
     const app = useApp.getState();
     const receipt = app.spendAi("review");
     if (!receipt.ok) {
-      setAi({ status: "limit" });
+      setAi({ status: receipt.reason === "chips" ? "chips" : "limit" });
       return;
     }
     setAi({ status: "loading" });
@@ -382,9 +385,11 @@ export function ExamResult({ id }: { id: string }) {
                 <p className="text-sm font-semibold text-muted">{t("exam.ai.desc")}</p>
                 <Button variant="ai" block disabled={ai.status === "loading"} onClick={askAi} icon={<Sparkles size={18} aria-hidden />}>
                   {ai.status === "loading" ? t("exam.ai.loading") : t("exam.ai.button")}
+                  {ai.status !== "loading" && <AiCost kind="review" variant="solid" />}
                 </Button>
                 {ai.status === "failed" && <p className="text-sm font-bold text-danger">{t("exam.ai.failed")}</p>}
                 {ai.status === "limit" && <p className="text-sm font-bold text-warning-strong">{t("exam.ai.limit")}</p>}
+                {ai.status === "chips" && <NoChipsNotice kind="review" />}
               </div>
             )}
           </section>

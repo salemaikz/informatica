@@ -15,6 +15,7 @@ import { Markdown } from "@/components/Markdown";
 import { WeekChart } from "@/components/app/WeekChart";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { GoalsPanel } from "@/components/goals/GoalsPanel";
+import { HistoryStatsCard } from "@/components/history/HistoryCards";
 
 function Tile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string | number; sub?: string }) {
   return (
@@ -76,6 +77,8 @@ export default function StatsPage() {
           <p className="text-sm font-semibold text-muted">{t("goals.streak.freezeHint")}</p>
         </div>
       </Card>
+
+      <HistoryStatsCard />
 
       <Card>
         <p className="mb-4 font-extrabold">{t("stats.week")}</p>

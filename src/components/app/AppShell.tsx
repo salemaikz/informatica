@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Calculator, ChartColumn, Dumbbell, Library, NotebookPen, Search, Sparkles, Target } from "lucide-react";
+import { BookOpen, Calculator, ChartColumn, Dumbbell, History, Library, NotebookPen, Search, Sparkles, Store, Target } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -15,12 +15,15 @@ import { easeOut } from "@/components/motion/presets";
 import { DailyGoalCard, LevelCard, LevelChip, WeakTopicsCard } from "./Widgets";
 import { Avatar } from "./Avatar";
 import { ToolboxButton } from "@/components/tools/Toolbox";
+import { ChipsChip, HeartsChip } from "@/components/economy/HeaderChips";
 import { useToolbox } from "@/components/tools/useToolbox";
 
 /** Дополнительные разделы в боковом меню компьютера (на телефоне — быстрые действия на главной и поиск в шапке). */
 const NAV_EXTRA: { href: string; key: DictKey; icon: typeof BookOpen }[] = [
   { href: "/theory", key: "theory.title", icon: Library },
   { href: "/exam", key: "exam.title", icon: Target },
+  { href: "/history", key: "history.title", icon: History },
+  { href: "/shop", key: "shop.title", icon: Store },
   { href: "/search", key: "search.title", icon: Search },
 ];
 
@@ -43,8 +46,8 @@ function Logo() {
   return (
     <Link href="/learn" className="flex items-center gap-2">
       <Mascot size={34} />
-      {/* На самых узких телефонах (360 px) название скрываем — остаётся маскот, шапке нужно место. */}
-      <span className="hidden text-lg font-black tracking-tight text-primary min-[400px]:inline lg:inline">Informatica</span>
+      {/* На телефонах название скрываем — остаётся маскот, шапке нужно место (серия, сердечки, чипы). */}
+      <span className="hidden text-lg font-black tracking-tight text-primary min-[600px]:inline lg:inline">Informatica</span>
     </Link>
   );
 }
@@ -113,23 +116,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         {/* Телефон: верхняя панель */}
         <header className="sticky top-0 z-20 border-b-2 border-border bg-bg/90 backdrop-blur lg:hidden">
-          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2.5 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-4 min-[400px]:px-4">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-3 min-[400px]:px-4">
             <Logo />
             <div className="flex-1" />
             <StreakChipAnimated />
-            <XpChipAnimated />
+            {/* Сердечки и чипы ведут в магазин. XP на самых узких телефонах прячем — он есть в «Прогрессе». */}
+            <HeartsChip />
+            <ChipsChip />
+            <span className="hidden min-[520px]:flex">
+              <XpChipAnimated />
+            </span>
             <Link
               href="/search"
               aria-label={t("search.title")}
               className={clsx(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-surface-2",
+                "flex h-10 w-8 shrink-0 items-center justify-center rounded-xl hover:bg-surface-2 min-[400px]:w-10",
                 active("/search") ? "text-primary" : "text-muted",
               )}
             >
               <Search size={22} />
             </Link>
-            <ToolboxButton variant="icon" />
-            <Link href="/profile" aria-label={t("nav.profile")}>
+            <ToolboxButton variant="icon" className="w-8 min-[400px]:w-10" />
+            <Link href="/profile" aria-label={t("nav.profile")} className="shrink-0">
               <ProfileAvatar size={32} />
             </Link>
           </div>
@@ -143,8 +151,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </m.div>
           </main>
           <aside className="sticky top-8 hidden h-fit w-80 shrink-0 flex-col gap-4 xl:flex">
-            <div className="flex items-center justify-end gap-5 px-1">
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-1">
               <StreakChipAnimated />
+              <HeartsChip />
+              <ChipsChip />
               <XpChipAnimated />
               <LevelChip />
             </div>

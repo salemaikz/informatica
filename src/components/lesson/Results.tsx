@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Library, Clock, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
+import { BookOpen, Library, Clock, Cpu, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -84,6 +84,8 @@ export function Results({
   title,
   result,
   bonusXp,
+  chips = 0,
+  heart = false,
   achievements,
   feedback,
   via,
@@ -95,6 +97,10 @@ export function Results({
   title: string;
   result: SessionResult;
   bonusXp: number;
+  /** Чипов заработано за сессию (разница wallet.earned с начала). */
+  chips?: number;
+  /** Тренировка вернула сердечко. */
+  heart?: boolean;
   achievements: string[];
   feedback: FeedbackState;
   /** Режим урока (check — «Проверить себя»). */
@@ -206,6 +212,32 @@ export function Results({
           </m.div>
         ))}
       </div>
+
+      {(chips > 0 || heart) && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {chips > 0 && (
+            <m.span
+              className="inline-flex items-center gap-1.5 rounded-full border-2 border-gold bg-gold-soft px-3.5 py-1.5 font-extrabold text-warning-strong"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ ...springBouncy, delay: 0.55 }}
+            >
+              <Cpu size={18} className="text-gold" aria-hidden /> {t("hearts.res.chips", { n: chips })}
+            </m.span>
+          )}
+          {heart && (
+            <m.span
+              className="inline-flex items-center gap-1.5 rounded-full border-2 border-heart bg-heart-soft px-3.5 py-1.5 font-extrabold text-heart-strong"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ ...springBouncy, delay: 0.7 }}
+              title={t("hearts.res.heartHint")}
+            >
+              <Heart size={18} fill="currentColor" aria-hidden /> {t("hearts.res.heart")}
+            </m.span>
+          )}
+        </div>
+      )}
 
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">

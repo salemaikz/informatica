@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Heart, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -26,6 +26,10 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
+import { AiCost } from "@/components/economy/AiCost";
+import { HeartsBar, readHearts } from "@/components/economy/HeartsBar";
+import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -174,14 +178,25 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
   const [checkError, setCheckError] = useState<DictKey | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
+  // Сердечки (только в уроках): шторка «закончились» перед новым заданием и пометка «−1» в панели ответа.
+  const [outOpen, setOutOpen] = useState(false);
+  const [heartLost, setHeartLost] = useState(false);
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
   // Разбор: сколько шагов уже открыто. Песочница: достигнута ли цель. Сбрасываются при переходе к следующему шагу.
   const [revealed, setRevealed] = useState(1);
   const [goalReached, setGoalReached] = useState(false);
-  const [session, setSession] = useState<{ result: SessionResult; bonusXp: number; achievements: string[] } | null>(null);
+  const [session, setSession] = useState<{
+    result: SessionResult;
+    bonusXp: number;
+    achievements: string[];
+    chips: number;
+    heart: boolean;
+  } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется.
   const [xpFactor] = useState(() => (kind === "lesson" ? lessonXpFactorNow(lessonId) : 1));
+  // Сколько чипов было заработано к началу сессии: в итогах показываем разницу.
+  const [earnedAtStart] = useState(() => useApp.getState().wallet.earned);
   const startedAt = useRef(0);
   const skippedRef = useRef(0);
   const stepStartedAt = useRef(0);
@@ -214,17 +229,28 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
         mode,
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
-      const { bonusXp } = finishSession(result);
+      const { bonusXp, heart } = finishSession(result);
       onSessionFinish?.(result);
       const achievements = useApp.getState().consumeNewAchievements();
+      const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
       giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : "complete");
-      setSession({ result, bonusXp, achievements });
+      setSession({ result, bonusXp, achievements, chips, heart });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, via, mode, title, onSessionFinish],
+    [finishSession, kind, lessonId, via, mode, title, onSessionFinish, earnedAtStart],
   );
 
   const next = useCallback(() => {
+    // Сердечек нет, а впереди новое задание — сначала шторка «Сердечки закончились».
+    // Теория, разборы и повтор ошибок (он сердечек не тратит) не блокируются.
+    const ahead = queue[pos + 1];
+    if (kind === "lesson" && ahead && !ahead.retry && isQuestion(ahead.step)) {
+      const h = readHearts();
+      if (!h.unlimited && h.count <= 0) {
+        setOutOpen(true);
+        return;
+      }
+    }
     const isTheory = step && !isQuestion(step);
     const doneNow = isTheory ? done + 1 : done;
     if (isTheory) setDone(doneNow);
@@ -237,12 +263,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
     setResult(null);
     setCheckError(null);
     setAiNote(null);
+    setHeartLost(false);
     setRevealed(1);
     setGoalReached(false);
     setPhase("answering");
     stepStartedAt.current = Date.now();
     window.scrollTo({ top: 0 });
-  }, [step, done, pos, queue.length, finish, records, xp, maxCombo]);
+  }, [step, done, pos, queue, kind, finish, records, xp, maxCombo]);
 
   // Песочница сообщает о достижении цели; достигнутую цель не «отзываем».
   const onGoalChange = useCallback((reached: boolean) => {
@@ -281,6 +308,14 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       recordAnswer(rec, gained, lessonId);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
+      // Сердечко тратит только ошибка с первой попытки в уроке (тренировка и повтор ошибки — нет).
+      let lostHeart = false;
+      if (kind === "lesson" && !res.correct && !item.retry) {
+        const before = readHearts();
+        lostHeart = !before.unlimited && before.count > 0;
+        if (lostHeart) useApp.getState().loseHeart();
+      }
+      setHeartLost(lostHeart);
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
@@ -303,7 +338,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       else giveFeedback("wrong");
       if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
-    [question, combo, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor],
+    [question, combo, item, lang, kind, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor],
   );
 
   const check = useCallback(
@@ -386,7 +421,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       // Исключение — поле ответа самого задания (внутри main): там Enter, как и раньше, проверяет ответ.
       const taskInput = el instanceof HTMLInputElement && !el.closest("[data-toolbox]") && !!el.closest("main");
       if (ignoreKey(e) && !taskInput) return;
-      if (e.key !== "Enter" || e.repeat || exitOpen || ai || session) return;
+      if (e.key !== "Enter" || e.repeat || exitOpen || outOpen || ai || session) return;
       if (el instanceof HTMLTextAreaElement) return;
       if (el instanceof HTMLInputElement && el.closest("[role=dialog]")) return;
       // Кнопки вне области задания (крестик, нижняя панель) обрабатывают Enter сами — без двойного срабатывания.
@@ -401,7 +436,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, ai, session]);
+  }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, outOpen, ai, session]);
 
   // Разбор выбранного неверного варианта (choice/multi) — показываем бесплатно, до ИИ.
   const whyWrongText = useMemo(
@@ -454,6 +489,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
         title={title}
         result={session.result}
         bonusXp={session.bonusXp}
+        chips={session.chips}
+        heart={session.heart}
         achievements={session.achievements}
         feedback={feedback}
         via={via}
@@ -472,7 +509,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
     <div className="flex min-h-dvh flex-col overflow-x-clip">
       {/* Верхняя панель */}
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-3 px-4">
+        <div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-2 px-4 sm:gap-3">
           <button
             type="button"
             onClick={() => setExitOpen(true)}
@@ -483,6 +520,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
+          {kind === "lesson" && <HeartsBar />}
           <button
             type="button"
             onClick={() => setAi("ask")}
@@ -596,6 +634,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                   className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ai-soft px-3 py-1.5 text-sm font-extrabold text-ai hover:brightness-95"
                 >
                   <Lightbulb size={16} /> {t("lesson.hint")}
+                  {/* Подсказка автора бесплатна; цена — только если ответит ИИ. */}
+                  {!question.hint && <AiCost kind="hint" short />}
                 </button>
               )}
             </div>
@@ -615,7 +655,11 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
               />
             </Shake>
             {phase === "feedback" && result && question.reveal && <RevealCard key={`${item.key}:reveal`} scene={question.reveal} />}
-            {checkError && <p className="rounded-xl bg-danger-soft px-3 py-2 text-center text-sm font-bold text-danger">{t(checkError)}</p>}
+            {checkError === "economy.noChips" ? (
+              <NoChipsNotice kind="photo" />
+            ) : (
+              checkError && <p className="rounded-xl bg-danger-soft px-3 py-2 text-center text-sm font-bold text-danger">{t(checkError)}</p>
+            )}
             {aiNote && <p className="rounded-xl bg-warning-soft px-3 py-2 text-center text-sm font-bold text-warning-strong">{aiNote}</p>}
           </div>
         )}
@@ -678,6 +722,16 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                       +{gain} XP
                     </m.span>
                   )}
+                  {heartLost && (
+                    <m.span
+                      className="ml-2 inline-flex items-center gap-1 rounded-full bg-heart-soft px-2 py-0.5 align-middle text-sm text-heart-strong"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ ...springBouncy, delay: 0.2 }}
+                    >
+                      <Heart size={14} fill="currentColor" aria-hidden /> {t("hearts.lost")}
+                    </m.span>
+                  )}
                 </p>
                 {!result.correct && (
                   <>
@@ -707,6 +761,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
               <Button variant="ai" onClick={() => setAi("explain")} icon={<Sparkles size={18} />} className="shrink-0">
                 <span className="hidden sm:inline">{t("fb.why")}</span>
                 <span className="sm:hidden">{t("fb.ai.short")}</span>
+                {/* Готовый разбор неверного варианта бесплатен — цена только когда ответит ИИ. */}
+                {!whyWrongText && <AiCost kind="explain" variant="solid" short />}
               </Button>
             )}
             {phase === "answering" && question?.type === "solution" && (
@@ -728,7 +784,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
             ) : question ? (
               <Button
                 size="lg"
-                className="w-full sm:w-56"
+                className="w-full sm:w-auto sm:min-w-56"
                 variant={question.type === "solution" && answer?.type === "solution" && answer.image ? "ai" : "success"}
                 disabled={!ready || phase === "checking"}
                 onClick={() => void check()}
@@ -738,6 +794,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                   : question.type === "solution" && answer?.type === "solution" && answer.image
                     ? t("sol.checkAi")
                     : t("common.check")}
+                {phase !== "checking" && question.type === "solution" && answer?.type === "solution" && answer.image && (
+                  <AiCost kind="photo" variant="solid" short className="hidden sm:inline-flex" />
+                )}
               </Button>
             ) : (
               <Button size="lg" className="w-full sm:w-56" disabled={infoBlocked} onClick={advanceInfo}>
@@ -763,6 +822,18 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
           </div>
         </div>
       </Modal>
+
+      {kind === "lesson" && (
+        <OutOfHearts
+          open={outOpen}
+          onClose={() => setOutOpen(false)}
+          onResume={() => {
+            setOutOpen(false);
+            next();
+          }}
+          onExit={() => router.push("/learn")}
+        />
+      )}
 
       {ai && taskCtx && (
         <AiPanel

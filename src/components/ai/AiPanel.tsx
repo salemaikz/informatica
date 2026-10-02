@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
+import { AiCost } from "@/components/economy/AiCost";
+import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { useTutor, type TutorTurn } from "./useTutor";
 
 const TITLE: Record<Exclude<TutorMode, "chat">, DictKey> = {
@@ -116,6 +118,7 @@ export function AiPanel({
         {staticText && turns.length === 0 && (
           <Button variant="ai" block icon={<Sparkles size={18} />} onClick={askMore}>
             {t(mode === "hint" ? "ai.moreHint" : "ai.moreExplain")}
+            <AiCost kind={mode} variant="solid" />
           </Button>
         )}
         {turns.map((m, i) =>
@@ -156,7 +159,11 @@ export function AiPanel({
             ))}
           </div>
         )}
-        {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-semibold text-danger">{t(error)}</p>}
+        {error === "economy.noChips" ? (
+          <NoChipsNotice kind={mode} />
+        ) : (
+          error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-semibold text-danger">{t(error)}</p>
+        )}
         <div ref={bottom} />
       </div>
       <form
@@ -182,6 +189,9 @@ export function AiPanel({
           <Send size={18} />
         </button>
       </form>
+      <p className="mt-1.5 flex items-center justify-end gap-1.5 text-xs font-bold text-muted">
+        {t("aicost.perMessage")} <AiCost kind={mode} />
+      </p>
     </Modal>
   );
 }

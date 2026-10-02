@@ -4,6 +4,8 @@ import { levelFromMastery } from "./ent";
 import { bankFor, hasShape, skillsWithShape } from "./bank";
 import { dueLessons, type LessonStat } from "./review";
 import { isQuestion } from "./evaluate";
+import { entStepFromRef, isEntRef } from "./ent-steps";
+import { MAX_WRONG_PER_ENTRY, openWrong, type HistoryEntry } from "./history";
 import { seeded } from "./text";
 import { LESSONS, UNITS, findStep } from "@/content/course";
 import { SKILLS } from "@/content/skills";
@@ -13,9 +15,10 @@ import { collectWorked } from "@/games/build/logic";
 // Сборка сессий тренировки, «экстерна» и урока игрой. Чистая логика без React (тесты — tests/drill.test.ts).
 // Все задания берутся из банка навыков (lib/bank): он же питает уроки, игры и пробный ЕНТ.
 
-export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic";
+/** history — работа над ошибками одного теста из истории (/drill?mode=history&entry=<id>). */
+export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic" | "history";
 
-const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic"];
+const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history"];
 
 /** Режим из адреса; неизвестный — «умная тренировка». */
 export function parseDrillMode(v: unknown): DrillMode {
@@ -211,7 +214,10 @@ export interface MistakeLike {
   skill?: string;
 }
 
-/** Исходные задания урока (или свежие на тот же навык) для работы над ошибками; map — id задания → id ошибки. */
+/**
+ * Исходные задания для работы над ошибками; map — id задания → id ошибки. По очереди пробуем:
+ * исходный шаг урока, задание ЕНТ по ссылке «ent:…», свежее задание банка на тот же навык.
+ */
 export function buildMistakes(
   mistakes: MistakeLike[],
   stats: Record<string, SkillStat>,
@@ -223,6 +229,7 @@ export function buildMistakes(
   mistakes.slice(0, limit).forEach((m, i) => {
     const original = findStep(m.lessonId, m.stepId);
     let step: QuestionStep | undefined = original && isQuestion(original) && original.type !== "solution" ? original : undefined;
+    if (!step && isEntRef(m.stepId)) step = entStepFromRef(m.stepId);
     if (!step && m.skill && hasBank(m.skill)) {
       const lvl = levelFromMastery(stats[m.skill]?.mastery ?? 0);
       step = bankFor(m.skill)!.question(lvl, seed + i);
@@ -233,6 +240,15 @@ export function buildMistakes(
     }
   });
   return { steps, map };
+}
+
+/** Работа над ошибками одного теста из истории: только ещё не исправленные ошибки записи. */
+export function buildHistoryRedo(
+  entry: HistoryEntry,
+  stats: Record<string, SkillStat>,
+  seed: number,
+): { steps: QuestionStep[]; map: Record<string, string> } {
+  return buildMistakes(openWrong(entry), stats, seed, MAX_WRONG_PER_ENTRY);
 }
 
 // ---------- Повторение (разминка) ----------

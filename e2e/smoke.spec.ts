@@ -11,6 +11,9 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.getByText("Русский").click();
   await page.getByPlaceholder("Твоё имя").fill("Тест");
   for (let i = 0; i < 5; i++) await page.getByRole("button", { name: /Продолжить|Поехали/ }).click();
+  // После онбординга — окно тарифов; закрываем «Продолжить бесплатно».
+  await page.waitForURL("**/plans?from=onboarding");
+  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
   await page.waitForURL("**/learn");
   await expect(page.getByText("Привет, Тест!")).toBeVisible();
 
@@ -32,6 +35,8 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toBeVisible();
   await expect(page.locator("footer")).toContainText("2");
+  // Ошибка с первой попытки стоит сердечко: было 5, стало 4.
+  await expect(page.getByLabel("Сердечки: 4")).toBeVisible();
 
   expect(errors).toEqual([]);
 });

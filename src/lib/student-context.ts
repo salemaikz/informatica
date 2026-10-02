@@ -1,4 +1,5 @@
 import type { StudentContext } from "./ai-types";
+import type { WithTrack } from "./school";
 import type { AppState } from "./store";
 import { liveStreak, levelInfo } from "./gamification";
 import { masteryLevel } from "./mastery";
@@ -8,7 +9,7 @@ import { skillById } from "@/content/skills";
 import { LESSONS } from "@/content/course";
 
 /** Сжатый портрет ученика для ИИ: только то, что помогает персонализации. */
-export function buildStudentContext(s: AppState): StudentContext {
+export function buildStudentContext(s: AppState): StudentContext & WithTrack {
   const lang = s.profile.lang;
   const weak: string[] = [];
   const strong: string[] = [];
@@ -25,6 +26,7 @@ export function buildStudentContext(s: AppState): StudentContext {
     name: s.profile.name,
     lang,
     grade: s.profile.grade,
+    track: s.profile.track,
     goal: s.profile.goal,
     style: s.profile.style,
     level: levelInfo(s.xp).level,

@@ -9,6 +9,8 @@ import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
+import { AiCost } from "@/components/economy/AiCost";
+import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { useTutor } from "@/components/ai/useTutor";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 
@@ -22,6 +24,7 @@ export default function TutorPage() {
   const { ask, stop, streaming, error } = useTutor();
   const [draft, setDraft] = useState("");
   const [image, setImage] = useState<string | undefined>();
+  const [lastKind, setLastKind] = useState<"chat" | "photo">("chat");
   const [pending, setPending] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -36,6 +39,7 @@ export default function TutorPage() {
     const img = image;
     setDraft("");
     setImage(undefined);
+    setLastKind(img ? "photo" : "chat");
     addChat({ role: "user", content: q, hadImage: !!img });
     const history = [...useApp.getState().chat].map((m) => ({ role: m.role, content: m.content }));
     setPending("");
@@ -117,7 +121,11 @@ export default function TutorPage() {
             {pending ? <Markdown>{pending}</Markdown> : <span className="animate-pulse font-semibold text-ai">…</span>}
           </div>
         )}
-        {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-bold text-danger">{t(error)}</p>}
+        {error === "economy.noChips" ? (
+          <NoChipsNotice kind={lastKind} />
+        ) : (
+          error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-bold text-danger">{t(error)}</p>
+        )}
         <div ref={bottom} />
       </div>
 
@@ -180,6 +188,9 @@ export default function TutorPage() {
             </button>
           )}
         </div>
+        <p className="flex items-center justify-end gap-1.5 px-2 pb-0.5 text-xs font-bold text-muted">
+          {t("aicost.perMessage")} <AiCost kind={image ? "photo" : "chat"} />
+        </p>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
       </form>
     </div>

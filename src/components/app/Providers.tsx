@@ -11,6 +11,7 @@ import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
 import { SwRegister } from "@/components/app/SwRegister";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
+import { PaywallAgent } from "@/components/plans/PaywallAgent";
 
 function useHydrated(): boolean {
   return useSyncExternalStore(
@@ -72,6 +73,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <SaveToNotesSheet />
       {/* Напоминания о серии: таймер, пока приложение открыто, и зеркало для сервис-воркера. */}
       <ReminderAgent />
+      {/* Окно тарифов: бесплатным ученикам на главной не чаще раза в 3 дня. */}
+      <PaywallAgent />
     </MotionProvider>
   );
 }

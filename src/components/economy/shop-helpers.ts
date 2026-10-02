@@ -35,6 +35,14 @@ export function formatNum(n: number): string {
     .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+/** Компактно для шапки: до 9 999 — как есть, дальше «12,3K» / «123K» (место в шапке телефона ограничено). */
+export function formatCompact(n: number): string {
+  const v = Math.max(0, Math.round(n));
+  if (v < 10_000) return formatNum(v);
+  const k = v / 1000;
+  return `${(k < 100 ? Math.floor(k * 10) / 10 : Math.floor(k)).toString().replace(".", ",")}K`;
+}
+
 export type ShopAvailability = { ok: true } | { ok: false; reason: BuyFail; missing?: number };
 
 /**
