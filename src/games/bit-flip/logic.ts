@@ -1,4 +1,5 @@
 import type { SkillId } from "@/lib/types";
+import type { GameMode } from "@/games/types";
 import { hashString, seeded, shuffle } from "@/lib/text";
 import { toBinary } from "@/lib/check";
 
@@ -38,19 +39,96 @@ export interface Task {
   /** READ: три варианта (включая верный). */
   options?: number[];
   isRetry: boolean;
-  /** Секунд на задание. */
-  limit: number;
 }
 
 export const PRIMARY_TASKS = 10;
 export const ROUND_SECONDS = 90;
 export const MAX_RETRIES = 3;
+/** Максимум очков за остаток времени в обычном темпе (шкала, не секунды). */
+export const TIME_BONUS_MAX = 20;
 
 export const BITS_BY_TIER: Record<Tier, number> = { 0: 4, 1: 6, 2: 8 };
-const LIMITS: Record<Mode, Record<Tier, number>> = {
+
+type Limits = Record<Mode, Record<Tier, number>>;
+
+/** Блиц — как было: чем сложнее, тем меньше времени. */
+const BLITZ_LIMITS: Limits = {
   build: { 0: 20, 1: 16, 2: 12 },
   property: { 0: 20, 1: 16, 2: 12 },
   read: { 0: 10, 1: 8, 2: 6 },
+};
+/** Обычный темп: время растёт с числом бит (4 → 25 с, 6 → 35 с, 8 → 45 с); условие читать дольше (+10 с). */
+const NORMAL_LIMITS: Limits = {
+  build: { 0: 25, 1: 35, 2: 45 },
+  read: { 0: 25, 1: 35, 2: 45 },
+  property: { 0: 35, 1: 45, 2: 55 },
+};
+
+export interface ModeConfig {
+  /** Секунд на задание по виду и уровню; null — без таймера. */
+  taskSeconds: Limits | null;
+  /** Общие часы раунда, сек; null — нет. */
+  roundSeconds: number | null;
+  /** Основных заданий в раунде. */
+  primaryTasks: number;
+  /** Сколько ошибочных заданий вернётся в конце раунда. */
+  maxRetries: number;
+  /** «Слепые» задания старшего уровня: сумма или веса скрыты. */
+  blind: boolean;
+  /** Очки за остаток времени: нет / секунды как есть / шкала от бюджета задания. */
+  timeBonus: "none" | "seconds" | "scaled";
+  /** Кнопка паузы (доски скрывается). */
+  pausable: boolean;
+  /** Через сколько мс перейти дальше после верного ответа. */
+  correctAdvanceMs: number;
+  /** Через сколько мс перейти дальше после ошибки/таймаута; null — ждать нажатия «Далее». */
+  wrongAdvanceMs: number | null;
+  /** После ошибки показать правильную комбинацию на самих переключателях. */
+  revealOnSwitches: boolean;
+  /** Крупные веса разрядов и бегущая сумма включённых весов. */
+  runningSum: boolean;
+}
+
+export const MODE_CONFIG: Record<GameMode, ModeConfig> = {
+  calm: {
+    taskSeconds: null,
+    roundSeconds: null,
+    primaryTasks: PRIMARY_TASKS,
+    maxRetries: 0,
+    blind: false,
+    timeBonus: "none",
+    pausable: false,
+    correctAdvanceMs: 1300,
+    wrongAdvanceMs: null,
+    revealOnSwitches: true,
+    runningSum: true,
+  },
+  normal: {
+    taskSeconds: NORMAL_LIMITS,
+    roundSeconds: null,
+    primaryTasks: PRIMARY_TASKS,
+    maxRetries: MAX_RETRIES,
+    blind: true,
+    timeBonus: "scaled",
+    pausable: true,
+    correctAdvanceMs: 1100,
+    wrongAdvanceMs: 3500,
+    revealOnSwitches: true,
+    runningSum: false,
+  },
+  blitz: {
+    taskSeconds: BLITZ_LIMITS,
+    roundSeconds: ROUND_SECONDS,
+    primaryTasks: PRIMARY_TASKS,
+    maxRetries: MAX_RETRIES,
+    blind: true,
+    timeBonus: "seconds",
+    pausable: false,
+    correctAdvanceMs: 900,
+    wrongAdvanceMs: 2500,
+    revealOnSwitches: false,
+    runningSum: false,
+  },
 };
 const BASE_WEIGHTS: Record<Mode, number> = { build: 0.45, read: 0.3, property: 0.25 };
 const MODE_SKILL: Record<Mode, SkillId> = { build: "ns.dec2bin", read: "ns.bin2dec", property: "ns.props" };
@@ -63,8 +141,16 @@ export function tierForCorrect(correctCount: number): Tier {
   return correctCount >= 6 ? 2 : correctCount >= 3 ? 1 : 0;
 }
 
-export function taskLimit(mode: Mode, tier: Tier): number {
-  return LIMITS[mode][tier];
+/** Секунд на задание в данном темпе; null — без лимита. */
+export function taskSeconds(gameMode: GameMode, kind: Mode, tier: Tier): number | null {
+  const table = MODE_CONFIG[gameMode].taskSeconds;
+  return table ? table[kind][tier] : null;
+}
+
+/** Время на задание, мс; null — без лимита (спокойный темп). */
+export function taskTimeMs(task: Pick<Task, "mode" | "tier">, gameMode: GameMode): number | null {
+  const sec = taskSeconds(gameMode, task.mode, task.tier);
+  return sec === null ? null : sec * 1000;
 }
 
 export function popcount(n: number): number {
@@ -93,6 +179,12 @@ export function valueOfBits(bits: readonly number[]): number {
 /** Веса разрядов старшим вперёд: [8, 4, 2, 1]. */
 export function weights(bits: number): number[] {
   return Array.from({ length: bits }, (_, i) => 2 ** (bits - 1 - i));
+}
+
+/** Веса включённых битов старшим вперёд: [1,0,1,1] → [8, 2, 1]. */
+export function onWeights(bits: readonly number[]): number[] {
+  const ws = weights(bits.length);
+  return ws.filter((_, i) => bits[i] === 1);
 }
 
 /** «64 + 8 + 4 + 1 = 77». */
@@ -205,6 +297,35 @@ export function taskPoints(secondsLeft: number, perfect: boolean): number {
   return 10 + Math.ceil(Math.max(0, secondsLeft)) + (perfect ? 5 : 0);
 }
 
+/**
+ * Очки за верное задание: 10 + бонус за время + 5 за идеальность.
+ * Блиц — остаток секунд как есть; обычный — шкала до 20 от доли оставшегося бюджета; спокойный — без бонуса.
+ */
+export function pointsFor(gameMode: GameMode, secondsLeft: number, budgetSec: number | null, perfect: boolean): number {
+  const kind = MODE_CONFIG[gameMode].timeBonus;
+  if (kind === "none" || budgetSec === null || budgetSec <= 0) return 10 + (perfect ? 5 : 0);
+  if (kind === "seconds") return taskPoints(secondsLeft, perfect);
+  const frac = Math.min(1, Math.max(0, secondsLeft / budgetSec));
+  return 10 + Math.ceil(TIME_BONUS_MAX * frac) + (perfect ? 5 : 0);
+}
+
+export interface Why {
+  /** Разбор до ответа: «13 = 8 + 4 + 1 →». */
+  lead: string;
+  /** Сам ответ (подсвечивается): «1101₂». */
+  answer: string;
+}
+
+/** Однострочный разбор правильного ответа: BUILD/PROPERTY — число → двоичная запись, READ — двоичная запись → число. */
+export function whyParts(task: Pick<Task, "mode" | "answer" | "bits">): Why {
+  const n = task.answer;
+  const bin = `${bitsOf(n, task.bits).join("")}₂`;
+  const parts = onWeights(bitsOf(n, task.bits));
+  const sumExpr = parts.length > 1 ? `${parts.join(" + ")}` : "";
+  if (task.mode === "read") return { lead: sumExpr ? `${bin} = ${sumExpr} =` : `${bin} =`, answer: String(n) };
+  return { lead: sumExpr ? `${n} = ${sumExpr} →` : `${n} →`, answer: bin };
+}
+
 export function evaluate(task: Task, value: number): Check {
   if (task.mode === "property" && task.goal) return checkGoal(task.goal, value);
   return { ok: value === task.answer };
@@ -287,16 +408,18 @@ export class RoundEngine {
   private used = new Set<string>();
   private history: Mode[] = [];
   private retries: Task[] = [];
+  private cfg: ModeConfig;
   correctCount = 0;
   retriesUsed = 0;
 
-  constructor(seed: number) {
+  constructor(seed: number, gameMode: GameMode = "blitz") {
     this.rand = seeded(seed);
+    this.cfg = MODE_CONFIG[gameMode];
   }
 
   /** Сколько заданий в раунде на данный момент (основные + поставленные на повтор). */
   get total(): number {
-    return PRIMARY_TASKS + this.retriesUsed;
+    return this.cfg.primaryTasks + this.retriesUsed;
   }
 
   get tier(): Tier {
@@ -304,7 +427,7 @@ export class RoundEngine {
   }
 
   next(masteryOf: (skill: SkillId) => number): Task | null {
-    if (this.issued < PRIMARY_TASKS) {
+    if (this.issued < this.cfg.primaryTasks) {
       const idx = this.issued;
       this.issued++;
       const tier: Tier = idx < 2 ? 0 : this.tier;
@@ -321,7 +444,7 @@ export class RoundEngine {
       this.correctCount++;
       return false;
     }
-    if (task.isRetry || this.retriesUsed >= MAX_RETRIES) return false;
+    if (task.isRetry || this.retriesUsed >= this.cfg.maxRetries) return false;
     this.retriesUsed++;
     this.retries.push({ ...task, id: this.nextId++, isRetry: true });
     return true;
@@ -329,7 +452,7 @@ export class RoundEngine {
 
   private make(mode: Mode, tier: Tier): Task {
     const B = BITS_BY_TIER[tier];
-    const base = { id: this.nextId++, mode, skill: MODE_SKILL[mode], tier, bits: B, isRetry: false, limit: taskLimit(mode, tier) };
+    const base = { id: this.nextId++, mode, skill: MODE_SKILL[mode], tier, bits: B, isRetry: false };
     if (mode === "property") {
       const goals = possibleGoals(B, this.rand);
       const fresh = goals.filter((g) => !this.used.has(goalKey(g)));

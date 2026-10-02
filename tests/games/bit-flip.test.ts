@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   BITS_BY_TIER,
   MAX_RETRIES,
+  MODE_CONFIG,
   PRIMARY_TASKS,
+  ROUND_SECONDS,
   RoundEngine,
   bitsOf,
   breakdown,
@@ -11,20 +13,30 @@ import {
   goalExample,
   goalIsUnique,
   isPerfect,
+  onWeights,
   pickMode,
+  pointsFor,
   popcount,
   possibleGoals,
   readOptions,
   superscript,
   taskPoints,
+  taskTimeMs,
   tierForCorrect,
   valueOfBits,
+  whyParts,
   type Goal,
   type Mode,
   type Task,
+  type Tier,
 } from "@/games/bit-flip/logic";
 import { S } from "@/games/bit-flip/strings";
+import type { GameMode } from "@/games/types";
 import { seeded } from "@/lib/text";
+
+const GAME_MODES: GameMode[] = ["calm", "normal", "blitz"];
+const KINDS: Mode[] = ["build", "read", "property"];
+const TIERS: Tier[] = [0, 1, 2];
 
 const m = () => 0.3;
 
@@ -143,8 +155,8 @@ describe("bit-flip: выбор режима", () => {
 });
 
 describe("bit-flip: раунд", () => {
-  function play(seed: number, wrongEvery: number) {
-    const e = new RoundEngine(seed);
+  function play(seed: number, wrongEvery: number, gameMode: GameMode = "blitz") {
+    const e = new RoundEngine(seed, gameMode);
     const tasks: Task[] = [];
     let t = e.next(m);
     let i = 0;
@@ -157,9 +169,10 @@ describe("bit-flip: раунд", () => {
     return { e, tasks };
   }
 
-  it("первые два задания — BUILD нулевого уровня; цели валидны; без повторов", () => {
+  it("первые два задания — BUILD нулевого уровня; цели валидны; без повторов (во всех темпах)", () => {
     for (let seed = 1; seed <= 200; seed++) {
-      const { tasks } = play(seed, seed % 4);
+      const gm = GAME_MODES[seed % 3];
+      const { tasks } = play(seed, seed % 4, gm);
       expect(tasks[0].mode).toBe("build");
       expect(tasks[1].mode).toBe("build");
       expect(tasks[0].tier).toBe(0);
@@ -202,9 +215,153 @@ describe("bit-flip: раунд", () => {
     expect(out.slice(0, PRIMARY_TASKS).every((x) => !x.isRetry)).toBe(true);
     expect(e.total).toBe(PRIMARY_TASKS + MAX_RETRIES);
   });
-  it("лимиты времени по режиму и уровню", () => {
+  it("лимиты времени по режиму и уровню: блиц — как раньше", () => {
     const e = new RoundEngine(2);
     const t = e.next(m)!;
-    expect(t.limit).toBe(20);
+    expect(taskTimeMs(t, "blitz")).toBe(20_000);
+  });
+  it("в любом темпе уровни растут с лёгкого: старт с 4 бит, уровень не убывает при верных ответах", () => {
+    for (const gm of GAME_MODES) {
+      const { tasks } = play(11, 0, gm);
+      expect(tasks).toHaveLength(MODE_CONFIG[gm].primaryTasks);
+      expect(tasks.map((t) => t.tier)).toEqual([0, 0, 0, 1, 1, 1, 2, 2, 2, 2]);
+      expect(tasks[0].bits).toBe(4);
+      expect(tasks[1].bits).toBe(4);
+    }
+  });
+  it("спокойный темп: ровно 10 заданий, ошибки не возвращаются", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const { tasks, e } = play(seed, 1, "calm");
+      expect(tasks).toHaveLength(10);
+      expect(e.retriesUsed).toBe(0);
+      expect(e.total).toBe(10);
+    }
+  });
+  it("обычный темп: 10 основных + до трёх повторов ошибок", () => {
+    const e = new RoundEngine(4, "normal");
+    const out: Task[] = [];
+    let t = e.next(m);
+    while (t) {
+      out.push(t);
+      e.resolve(t, false);
+      t = e.next(m);
+    }
+    expect(out).toHaveLength(PRIMARY_TASKS + MAX_RETRIES);
+    expect(out.slice(PRIMARY_TASKS).every((x) => x.isRetry)).toBe(true);
+  });
+});
+
+describe("bit-flip: темпы (MODE_CONFIG)", () => {
+  it("спокойный: ни таймеров, ни часов раунда, ни авто-перехода после ошибки, без слепых заданий и паузы", () => {
+    const c = MODE_CONFIG.calm;
+    expect(c.taskSeconds).toBeNull();
+    expect(c.roundSeconds).toBeNull();
+    expect(c.wrongAdvanceMs).toBeNull();
+    expect(c.blind).toBe(false);
+    expect(c.pausable).toBe(false);
+    expect(c.runningSum).toBe(true);
+    expect(c.timeBonus).toBe("none");
+    for (const kind of KINDS) for (const tier of TIERS) expect(taskTimeMs({ mode: kind, tier }, "calm")).toBeNull();
+  });
+  it("блиц — сегодняшние константы", () => {
+    const c = MODE_CONFIG.blitz;
+    expect(c.roundSeconds).toBe(ROUND_SECONDS);
+    expect(ROUND_SECONDS).toBe(90);
+    expect(c.taskSeconds).toEqual({
+      build: { 0: 20, 1: 16, 2: 12 },
+      property: { 0: 20, 1: 16, 2: 12 },
+      read: { 0: 10, 1: 8, 2: 6 },
+    });
+    expect(c.wrongAdvanceMs).toBe(2500);
+    expect(c.correctAdvanceMs).toBe(900);
+    expect(c.pausable).toBe(false);
+  });
+  it("обычный: нет общих часов, пауза есть, время на задание — по числу бит", () => {
+    const c = MODE_CONFIG.normal;
+    expect(c.roundSeconds).toBeNull();
+    expect(c.pausable).toBe(true);
+    expect(c.wrongAdvanceMs).toBeGreaterThanOrEqual(2000);
+    expect(taskTimeMs({ mode: "build", tier: 0 }, "normal")).toBe(25_000);
+    expect(taskTimeMs({ mode: "build", tier: 1 }, "normal")).toBe(35_000);
+    expect(taskTimeMs({ mode: "build", tier: 2 }, "normal")).toBe(45_000);
+    expect(taskTimeMs({ mode: "property", tier: 0 }, "normal")).toBe(35_000);
+  });
+  it("обычный: времени больше, чем в блице, у каждого вида и уровня", () => {
+    for (const kind of KINDS) {
+      for (const tier of TIERS) {
+        const n = taskTimeMs({ mode: kind, tier }, "normal")!;
+        const b = taskTimeMs({ mode: kind, tier }, "blitz")!;
+        expect(n).toBeGreaterThanOrEqual(b * 1.25);
+      }
+    }
+  });
+  it("обычный: чем сложнее (больше бит), тем больше времени; условие читать дольше", () => {
+    for (const kind of KINDS) {
+      const [a, b, c] = TIERS.map((tier) => taskTimeMs({ mode: kind, tier }, "normal")!);
+      expect(b).toBeGreaterThan(a);
+      expect(c).toBeGreaterThan(b);
+    }
+    for (const tier of TIERS) {
+      expect(taskTimeMs({ mode: "property", tier }, "normal")!).toBeGreaterThan(taskTimeMs({ mode: "build", tier }, "normal")!);
+    }
+  });
+  it("число основных заданий во всех темпах — 10", () => {
+    for (const gm of GAME_MODES) expect(MODE_CONFIG[gm].primaryTasks).toBe(PRIMARY_TASKS);
+    expect(PRIMARY_TASKS).toBe(10);
+  });
+  it("после ошибки спокойный и обычный показывают правильную комбинацию на переключателях", () => {
+    expect(MODE_CONFIG.calm.revealOnSwitches).toBe(true);
+    expect(MODE_CONFIG.normal.revealOnSwitches).toBe(true);
+    expect(MODE_CONFIG.blitz.revealOnSwitches).toBe(false);
+  });
+});
+
+describe("bit-flip: очки по темпам", () => {
+  it("блиц — как раньше: секунды как есть", () => {
+    expect(pointsFor("blitz", 12.2, 20, false)).toBe(taskPoints(12.2, false));
+    expect(pointsFor("blitz", 0.1, 20, true)).toBe(16);
+  });
+  it("обычный: бонус за время — шкала до 20 от бюджета задания", () => {
+    expect(pointsFor("normal", 25, 25, false)).toBe(30);
+    expect(pointsFor("normal", 12.5, 25, false)).toBe(20);
+    expect(pointsFor("normal", 45, 45, true)).toBe(35);
+    expect(pointsFor("normal", 0, 35, false)).toBe(10);
+    expect(pointsFor("normal", -3, 35, false)).toBe(10);
+    expect(pointsFor("normal", 99, 35, false)).toBe(30);
+  });
+  it("спокойный: 10 за верный ответ, +5 за идеальность, времени нет", () => {
+    expect(pointsFor("calm", 0, null, false)).toBe(10);
+    expect(pointsFor("calm", 0, null, true)).toBe(15);
+  });
+});
+
+describe("bit-flip: разбор ответа", () => {
+  it("веса включённых битов", () => {
+    expect(onWeights([1, 1, 0, 1])).toEqual([8, 4, 1]);
+    expect(onWeights([0, 0, 0, 0])).toEqual([]);
+    expect(onWeights(bitsOf(173, 8))).toEqual([128, 32, 8, 4, 1]);
+  });
+  it("BUILD: «13 = 8 + 4 + 1 → 1101₂»", () => {
+    expect(whyParts({ mode: "build", answer: 13, bits: 4 })).toEqual({ lead: "13 = 8 + 4 + 1 →", answer: "1101₂" });
+  });
+  it("READ: «1101₂ = 8 + 4 + 1 = 13»", () => {
+    expect(whyParts({ mode: "read", answer: 13, bits: 4 })).toEqual({ lead: "1101₂ = 8 + 4 + 1 =", answer: "13" });
+  });
+  it("степень двойки — без лишнего «8 = 8»", () => {
+    expect(whyParts({ mode: "property", answer: 8, bits: 4 })).toEqual({ lead: "8 →", answer: "1000₂" });
+    expect(whyParts({ mode: "read", answer: 8, bits: 4 })).toEqual({ lead: "1000₂ =", answer: "8" });
+  });
+  it("разбор сходится с ответом для всех чисел при любом числе бит", () => {
+    for (const B of [4, 6, 8]) {
+      for (let n = 1; n < 2 ** B; n++) {
+        const w = whyParts({ mode: "build", answer: n, bits: B });
+        expect(w.answer).toBe(`${bitsOf(n, B).join("")}₂`);
+        const terms = onWeights(bitsOf(n, B));
+        expect(terms.reduce((a, b) => a + b, 0)).toBe(n);
+      }
+    }
+  });
+  it("строка-подсказка примера есть в строках", () => {
+    expect(S).toHaveProperty("exampleLead");
   });
 });
