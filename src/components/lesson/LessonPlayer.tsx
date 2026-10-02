@@ -1,11 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Check, Clapperboard, Lightbulb, Minus, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, Eye, Handshake, Hand, Lightbulb, Minus, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AnswerRecord, QuestionStep, SessionResult, Step } from "@/lib/types";
+import type { AnswerRecord, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
@@ -26,6 +26,7 @@ import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { Visual } from "@/components/visuals/Visuals";
+import { SceneView } from "@/components/scenes/SceneView";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { ComboFlame } from "@/components/motion/ComboFlame";
 import { Shake } from "@/components/motion/Shake";
@@ -39,6 +40,10 @@ import { LadderView } from "./steps/LadderView";
 import { MatchView } from "./steps/MatchView";
 import { OrderView } from "./steps/OrderView";
 import { SolutionView } from "./steps/SolutionView";
+import { ClozeView } from "./steps/ClozeView";
+import { ExploreView } from "./steps/ExploreView";
+import { StoryView } from "./steps/StoryView";
+import { WorkedView } from "./steps/WorkedView";
 import type { StepProps } from "./steps/types";
 import { Results, requestLessonFeedback, type FeedbackState } from "./Results";
 
@@ -88,8 +93,41 @@ function QuestionView(props: StepProps<QuestionStep>) {
       return <OrderView {...props} step={step} />;
     case "solution":
       return <SolutionView {...props} step={step} />;
+    case "cloze":
+      return <ClozeView {...props} step={step} />;
   }
 }
+
+/** «Предскажи → проверь»: схема-раскрытие выезжает под заданием после проверки ответа. */
+function RevealCard({ scene }: { scene: Scene }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Нижняя панель обратной связи перекрывает низ экрана — подкручиваем схему в видимую область (scroll-mb у карточки).
+  useEffect(() => {
+    const id = window.setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350);
+    return () => window.clearTimeout(id);
+  }, []);
+  return (
+    <m.div ref={ref} className="scroll-mb-64" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.1 }}>
+      <SceneView scene={scene} />
+    </m.div>
+  );
+}
+
+/** Кнопка «Спросить Бита» под теорией и другими информационными шагами. */
+function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 self-start rounded-xl bg-ai-soft px-3 py-2 text-sm font-extrabold text-ai hover:brightness-95"
+    >
+      <Sparkles size={16} /> {label}
+    </button>
+  );
+}
+
+/** Первые слова текста — заголовок шага для ИИ, когда у шага нет title. */
+const firstWords = (text: string, n = 8) => text.split(" ").slice(0, n).join(" ");
 
 export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: PlayerProps) {
   const router = useRouter();
@@ -116,6 +154,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
+  // Разбор: сколько шагов уже открыто. Песочница: достигнута ли цель. Сбрасываются при переходе к следующему шагу.
+  const [revealed, setRevealed] = useState(1);
+  const [goalReached, setGoalReached] = useState(false);
   const [session, setSession] = useState<{ result: SessionResult; bonusXp: number; achievements: string[] } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   const startedAt = useRef(0);
@@ -170,10 +211,29 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
     setResult(null);
     setCheckError(null);
     setAiNote(null);
+    setRevealed(1);
+    setGoalReached(false);
     setPhase("answering");
     stepStartedAt.current = Date.now();
     window.scrollTo({ top: 0 });
   }, [step, done, pos, queue.length, finish, records, xp, maxCombo]);
+
+  // Песочница сообщает о достижении цели; достигнутую цель не «отзываем».
+  const onGoalChange = useCallback((reached: boolean) => {
+    if (reached) setGoalReached(true);
+  }, []);
+  // «Продолжить» в песочнице с целью закрыто, пока цель не достигнута.
+  const infoBlocked = step.type === "explore" && !!step.goal && !goalReached;
+  // Кнопка/Enter на информационном шаге: в разборе открывает следующий подшаг, иначе — дальше.
+  const advanceInfo = useCallback(() => {
+    if (step.type === "worked" && revealed < step.steps.length) {
+      giveFeedback("tap");
+      setRevealed(revealed + 1);
+      return;
+    }
+    if (infoBlocked) return;
+    next();
+  }, [step, revealed, infoBlocked, next]);
 
   const apply = useCallback(
     (res: StepResult) => {
@@ -305,18 +365,34 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       // Кнопки вне области задания (крестик, нижняя панель) обрабатывают Enter сами — без двойного срабатывания.
       // Внутри задания Enter = «Проверить», а вариант выбирается пробелом или кликом.
       if (el && (el.tagName === "BUTTON" || el.tagName === "A") && !el.closest("main")) return;
+      // Песочница, пока цель не достигнута: Enter не мешает кнопкам схемы (нативное нажатие).
+      if (phase !== "feedback" && infoBlocked) return;
       e.preventDefault();
-      if (phase === "feedback" || (step && !isQuestion(step))) next();
+      if (phase === "feedback") next();
+      else if (step && !isQuestion(step)) advanceInfo();
       else void check();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, step, next, check, exitOpen, ai, session]);
+  }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, ai, session]);
 
   // Контекст для ИИ: задание (с ответом, если ученик уже ответил) или теория текущего шага.
   const taskCtx = useMemo<TaskContext | null>(() => {
     if (step.type === "theory") return { prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
     if (step.type === "video") return { prompt: tx(step.title, lang), theory: tx(step.title, lang) };
+    if (step.type === "story") {
+      const body = plain(tx(step.body, lang));
+      return { prompt: step.title ? tx(step.title, lang) : firstWords(body), theory: body };
+    }
+    if (step.type === "worked") {
+      const parts = step.steps.map((s, i) => `${i + 1}. ${plain(tx(s.text, lang))}`);
+      if (step.result) parts.push(plain(tx(step.result, lang)));
+      return { prompt: tx(step.title, lang), theory: parts.join(" ") };
+    }
+    if (step.type === "explore") {
+      const parts = [step.body ? plain(tx(step.body, lang)) : "", step.goal ? plain(tx(step.goal.text, lang)) : ""];
+      return { prompt: tx(step.title, lang), theory: parts.filter(Boolean).join(" ") };
+    }
     if (!question) return null;
     return {
       prompt: promptText(question, lang),
@@ -411,15 +487,31 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
               {t("lesson.theory")}
             </Pill>
             <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
+            {step.scene && <SceneView scene={step.scene} />}
             {step.visual && <Visual id={step.visual} />}
             <Markdown className="text-[17px]">{l(step.body)}</Markdown>
-            <button
-              type="button"
-              onClick={() => setAi("ask")}
-              className="flex items-center gap-1.5 self-start rounded-xl bg-ai-soft px-3 py-2 text-sm font-extrabold text-ai hover:brightness-95"
-            >
-              <Sparkles size={16} /> {t("tutor.askInline")}
-            </button>
+            <AskInline label={t("tutor.askInline")} onClick={() => setAi("ask")} />
+          </div>
+        )}
+
+        {step.type === "story" && <StoryView step={step} />}
+
+        {step.type === "worked" && (
+          <div className="flex flex-col gap-4">
+            <WorkedView step={step} revealed={revealed} />
+            <AskInline label={t("tutor.askInline")} onClick={() => setAi("ask")} />
+          </div>
+        )}
+
+        {step.type === "explore" && (
+          <div className="flex flex-col gap-4">
+            <Pill tone="primary" className="self-start" icon={<Hand size={14} />}>
+              {t("lesson.explore")}
+            </Pill>
+            <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
+            {step.body && <Markdown className="text-[17px]">{l(step.body)}</Markdown>}
+            <ExploreView step={step} onGoalChange={onGoalChange} />
+            <AskInline label={t("tutor.askInline")} onClick={() => setAi("ask")} />
           </div>
         )}
 
@@ -427,6 +519,16 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
           <div className="flex flex-col gap-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap gap-2">
+                {question.type === "cloze" && (
+                  <Pill tone="primary" icon={<Handshake size={14} />}>
+                    {t("lesson.together")}
+                  </Pill>
+                )}
+                {question.reveal && (
+                  <Pill tone="primary" icon={<Eye size={14} />}>
+                    {t("lesson.predict")}
+                  </Pill>
+                )}
                 {question.ent && (
                   <Pill tone="gold" icon={<Target size={14} />}>
                     {t("lesson.ent")}
@@ -454,6 +556,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                 result={result}
               />
             </Shake>
+            {phase === "feedback" && result && question.reveal && <RevealCard key={`${item.key}:reveal`} scene={question.reveal} />}
             {checkError && <p className="rounded-xl bg-danger-soft px-3 py-2 text-center text-sm font-bold text-danger">{t(checkError)}</p>}
             {aiNote && <p className="rounded-xl bg-warning-soft px-3 py-2 text-center text-sm font-bold text-warning-strong">{aiNote}</p>}
           </div>
@@ -520,7 +623,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                 </p>
                 {!result.correct && (
                   <>
-                    {question.type !== "match" && (
+                    {question.type !== "match" && question.type !== "cloze" && (
                       <p className="mt-1 font-bold">
                         {t("fb.correctAnswer")} <span className="font-mono">{result.expected}</span>
                       </p>
@@ -572,8 +675,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                     : t("common.check")}
               </Button>
             ) : (
-              <Button size="lg" className="w-full sm:w-56" onClick={next}>
-                {t("common.continue")}
+              <Button size="lg" className="w-full sm:w-56" disabled={infoBlocked} onClick={advanceInfo}>
+                {step.type === "worked" && revealed < step.steps.length ? t("lesson.nextStep") : t("common.continue")}
               </Button>
             )}
           </div>
