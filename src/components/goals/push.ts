@@ -31,10 +31,25 @@ async function periodicSyncOf(reg: ServiceWorkerRegistration): Promise<PeriodicS
   return (reg as unknown as { periodicSync?: PeriodicSync }).periodicSync;
 }
 
+/** В разработке воркер только показывает уведомления (?mode=notify) — офлайн-кэш dev-чанков устарел бы сразу. */
+export const WORKER_URL = process.env.NODE_ENV === "production" ? "/sw.js" : "/sw.js?mode=notify";
+
+/** Регистрирует воркер, если его ещё нет (повторно не трогает: SwRegister и уведомления делят одну регистрацию). */
+export async function ensureWorker(): Promise<void> {
+  const existing = await navigator.serviceWorker.getRegistration("/");
+  const script = (existing?.active ?? existing?.waiting ?? existing?.installing)?.scriptURL;
+  if (script) {
+    const u = new URL(script);
+    // Тот же скрипт — не трогаем; другой (dev ↔ production на одном адресе) — регистрация обновит его.
+    if (u.pathname + u.search === WORKER_URL) return;
+  }
+  await navigator.serviceWorker.register(WORKER_URL);
+}
+
 /** Регистрирует сервис-воркер и (где поддерживается: Android, установленное приложение) периодическую проверку раз в 12 часов. */
 export async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
   try {
-    await navigator.serviceWorker.register("/sw.js");
+    await ensureWorker();
     const reg = await navigator.serviceWorker.ready;
     try {
       await (await periodicSyncOf(reg))?.register(PERIODIC_TAG, { minInterval: 12 * 3_600_000 });
@@ -59,7 +74,7 @@ export async function enablePush(): Promise<"ok" | "denied" | "unsupported" | "f
 
 export async function disablePush(): Promise<void> {
   try {
-    const reg = await navigator.serviceWorker?.getRegistration("/sw.js");
+    const reg = await navigator.serviceWorker?.getRegistration("/");
     if (reg) await (await periodicSyncOf(reg))?.unregister(PERIODIC_TAG);
   } catch {
     /* ничего страшного */
@@ -103,7 +118,7 @@ export async function clearReminded(): Promise<void> {
 export async function showNotification(title: string, body: string): Promise<boolean> {
   try {
     if (pushSupport() !== "ok" || Notification.permission !== "granted") return false;
-    const reg = (await navigator.serviceWorker.getRegistration("/sw.js")) ?? (await registerWorker());
+    const reg = (await navigator.serviceWorker.getRegistration("/")) ?? (await registerWorker());
     if (!reg) return false;
     await reg.showNotification(title, { body, icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", tag: PERIODIC_TAG, data: { url: "/learn" } });
     return true;

@@ -57,6 +57,11 @@ export interface GameMeta {
    * (question / statement / pair / short — lib/bank). Для таких игр skills — навыки по умолчанию.
    */
   shape?: "question" | "statement" | "pair" | "short";
+  /**
+   * Источник заданий не из банка: "worked" — пошаговые разборы уроков (игра «Собери решение»).
+   * Такая игра тоже подходит к любому уроку, в котором есть подходящие разборы.
+   */
+  source?: "worked";
   /** Примерная длительность, сек. */
   durationSec: number;
 }

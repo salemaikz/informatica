@@ -9,6 +9,8 @@ import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
 import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
+import { SwRegister } from "@/components/app/SwRegister";
+import { OfflineBanner } from "@/components/app/OfflineBanner";
 
 function useHydrated(): boolean {
   return useSyncExternalStore(
@@ -60,6 +62,9 @@ export function Providers({ children }: { children: ReactNode }) {
   }
   return (
     <MotionProvider>
+      {/* Офлайн: кэш сервис-воркера (только production) и полоса «Нет интернета». */}
+      <SwRegister />
+      <OfflineBanner />
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />

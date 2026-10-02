@@ -14,6 +14,8 @@ import { ViewSwitch, useMapView } from "@/components/learn/ViewSwitch";
 import { PathView } from "@/components/learn/PathView";
 import { EntMap } from "@/components/learn/EntMap";
 import { LessonSheet } from "@/components/learn/LessonSheet";
+import { MasteryLegend } from "@/components/learn/MasteryLegend";
+import { InstallPrompt } from "@/components/app/InstallPrompt";
 import { findLessonRef, useLearnData } from "@/components/learn/useLearn";
 
 // Главная: приветствие, цель, быстрые действия, «продолжить», карта курса («Путь» или «Карта ЕНТ»), мини-ЕНТ.
@@ -75,12 +77,17 @@ export default function LearnPage() {
       <ViewSwitch view={view} onChange={setView} />
 
       {view === "path" ? (
-        <PathView recommendedId={recommended?.ref.id} now={now} onOpen={openLesson} />
+        <>
+          <PathView recommendedId={recommended?.ref.id} now={now} onOpen={openLesson} />
+          <MasteryLegend />
+        </>
       ) : (
         <EntMap recommendedId={recommended?.ref.id} now={now} onLesson={openLesson} />
       )}
 
       <MiniExamCard />
+
+      <InstallPrompt />
 
       <LessonSheet lessonId={sheet} onClose={() => setSheet(null)} />
     </div>

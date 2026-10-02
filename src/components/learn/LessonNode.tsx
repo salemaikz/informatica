@@ -5,9 +5,13 @@ import { Clock, Lock, Play, Star } from "lucide-react";
 import type { LessonRef } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
+import { useApp } from "@/lib/store";
+import { lessonStep } from "@/lib/mastery-steps";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { completionsBadge, type NodeState, type PathNode } from "./map";
+import { useNow } from "./useLearn";
+import { StepMarks } from "./MasteryLegend";
 
 // Узел урока на дороге: круглая «кнопка» с объёмным низом + подпись сбоку (со стороны центра).
 
@@ -43,6 +47,9 @@ export function LessonNode({
 }) {
   const { t, l } = useT();
   const reduce = useReduceMotion();
+  const now = useNow();
+  const stat = useApp((s) => s.lessons[lesson.id]);
+  const step = lessonStep(stat, now);
   const title = l(lesson.title);
   const passed = state === "done" || state === "due";
   const labelRight = node.label === "right";
@@ -74,7 +81,10 @@ export function LessonNode({
           <button
             type="button"
             onClick={onOpen}
-            aria-label={t("learn2.node.aria", { n: number, title, state: t(`learn2.state.${state}`) })}
+            aria-label={
+              t("learn2.node.aria", { n: number, title, state: t(`learn2.state.${state}`) }) +
+              (step === "new" ? "" : `, ${t("mastery.node.aria", { step: t(`mastery.step.${step}`) })}`)
+            }
             className={cn(
               "relative flex h-full w-full items-center justify-center rounded-full border-b-[6px] transition-[translate,border-width] duration-75",
               "focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-primary active:translate-y-[4px] active:border-b-2",
@@ -129,6 +139,8 @@ export function LessonNode({
       >
         <span className="block text-[11px] font-extrabold uppercase tracking-wide text-muted">{t("learn.lesson", { n: number })}</span>
         <span className={cn("line-clamp-2 text-sm font-extrabold leading-snug", state === "soon" ? "text-muted" : "text-text")}>{title}</span>
+        {/* Ступень освоения — под названием: не наезжает на дорогу, значки узла и подсказку «Начать». */}
+        {step !== "new" && <StepMarks step={step} className={cn("mt-1.5", !labelRight && "justify-end")} />}
       </button>
     </>
   );

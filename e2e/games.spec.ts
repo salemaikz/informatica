@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Каждая мини-игра открывается, стартует и рисует игровое поле без ошибок.
-const GAME_IDS = ["bit-rush", "bit-flip", "bit-sort", "bug-hunt", "tower", "truth", "memo"];
+const GAME_IDS = ["bit-rush", "bit-flip", "bit-sort", "bug-hunt", "tower", "truth", "memo", "bingo", "cipher", "bet", "boss", "build"];
 
 for (const id of GAME_IDS) {
   test(`мини-игра ${id} запускается`, async ({ page }) => {

@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import type { OrderStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { feedback } from "@/lib/feedback";
+import { InlineMarkdown } from "@/components/Markdown";
 import { hashString, seeded, shuffle } from "@/lib/text";
 import type { StepProps } from "./types";
 
@@ -52,7 +53,9 @@ export function OrderView({ step, answer, onAnswer, locked }: StepProps<OrderSte
                 className={clsx("flex w-full items-center gap-3 rounded-xl border-2 px-3 py-2.5 text-left font-bold active:scale-[0.98]", tone)}
               >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface text-sm font-extrabold">{pos + 1}</span>
-                {l(step.items[i])}
+                <span className="min-w-0">
+                  <InlineMarkdown>{l(step.items[i])}</InlineMarkdown>
+                </span>
               </button>
             </m.li>
           );
@@ -71,7 +74,7 @@ export function OrderView({ step, answer, onAnswer, locked }: StepProps<OrderSte
               transition={{ type: "spring", stiffness: 600, damping: 24 }}
               className="w-full rounded-xl border-2 border-border bg-surface px-3 py-2.5 text-left font-bold shadow-[0_3px_0_var(--border)] hover:bg-surface-2 active:translate-y-[2px] active:shadow-none"
             >
-              {l(step.items[i])}
+              <InlineMarkdown>{l(step.items[i])}</InlineMarkdown>
             </m.button>
           ))}
       </div>

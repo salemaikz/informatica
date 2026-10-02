@@ -21,7 +21,7 @@ import { useMemo, useState } from "react";
 import { LESSONS, UNITS, getLesson, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
-import { skillsWithShape } from "@/lib/bank";
+import { gameSkillsFor } from "@/lib/drill";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -29,8 +29,10 @@ import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ICONS } from "@/components/scenes/icons";
-import { bestPercent, isDue, lessonTopics, pluralForm, reviewInDays, topicLessons, xpKind } from "./map";
+import { bestPercent, isDue, lessonTopics, pluralForm, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
+import { lessonStep, stepReviewDays } from "@/lib/mastery-steps";
+import { StepMarks } from "./MasteryLegend";
 
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
 // игрой, только теория, конспект). Её открывают карта курса и другие экраны.
@@ -95,7 +97,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const place = findLessonRef(lessonId);
   const lesson = getLesson(lessonId);
   const games = useMemo(
-    () => (lesson ? GAMES.filter((g) => g.shape && skillsWithShape(lesson.skills, g.shape).length > 0) : []),
+    () => (lesson ? GAMES.filter((g) => (g.shape || g.source) && gameSkillsFor(g, lesson.skills).length > 0) : []),
     [lesson],
   );
   if (!place) return null;
@@ -149,9 +151,10 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   }
 
   const due = isDue(stat, now);
-  const inDays = reviewInDays(stat, now);
   const xp = xpKind(stat, now);
   const steps = lesson.steps.length;
+  const step = lessonStep(stat, now);
+  const stepDays = stepReviewDays(stat, now);
 
   return (
     <div className="flex flex-col gap-4" style={unitVars(unit.color)}>
@@ -173,12 +176,22 @@ function SheetBody({ lessonId }: { lessonId: string }) {
             {stat.completions > 1
               ? t("learn2.sheet.done", { n: stat.completions, best: bestPercent(stat.bestAccuracy) })
               : t("learn2.sheet.doneOnce", { best: bestPercent(stat.bestAccuracy) })}
-            {" · "}
-            {due ? t("learn2.sheet.due") : t(`learn2.sheet.in.${pluralForm(inDays ?? 0)}`, { n: inDays ?? 0 })}
+            {/* Срок повторения — в строке ступени ниже. */}
+            {due && ` · ${t("learn2.sheet.due")}`}
           </span>
         </p>
       ) : (
         <p className="text-sm font-extrabold text-primary">{t("learn2.sheet.new")}</p>
+      )}
+      {step !== "new" && (
+        <p className="-mt-2 flex items-start gap-2 text-sm font-bold text-muted">
+          <StepMarks step={step} className="mt-1.5" />
+          <span>
+            {t("mastery.step.label", { step: t(`mastery.step.${step}`) })}
+            {" · "}
+            {stepDays === 0 ? t("mastery.step.next.due") : t(`mastery.step.next.${pluralForm(stepDays ?? 0)}`, { n: stepDays ?? 0 })}
+          </span>
+        </p>
       )}
 
       <div className="flex flex-col gap-2.5">

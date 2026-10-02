@@ -5,6 +5,7 @@ import { liveStreak } from "@/lib/gamification";
 import { msUntilReminder, reminderText, shouldRemind } from "@/lib/reminders";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
+import { badgeCount } from "@/components/app/badge";
 import { pushSupport, readReminded, registerWorker, showNotification, writeMirror, writeReminded } from "@/components/goals/push";
 
 const MAX_TIMEOUT = 2 ** 31 - 1;
@@ -27,6 +28,7 @@ async function fire() {
  * Клиентский агент напоминаний без интерфейса (монтируется в Providers):
  * - зеркалит настройки и серию в IndexedDB — их читает public/sw.js, когда приложение закрыто;
  * - пока приложение открыто — таймер до времени напоминания;
+ * - обновляет значок на иконке (setAppBadge);
  * - регистрирует сервис-воркер и периодическую проверку (Android, установленное приложение).
  */
 export function ReminderAgent() {
@@ -39,6 +41,25 @@ export function ReminderAgent() {
   useEffect(() => {
     void writeMirror({ enabled, push, time, lang, streak, lastActiveDay: lastDay, freezes });
   }, [enabled, push, time, lang, streak, lastDay, freezes]);
+
+  // Значок на иконке установленного приложения: уроки «пора повторить» + серия под угрозой.
+  const lessons = useApp((s) => s.lessons);
+  const streakState = useApp((s) => s.streak);
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    if (!nav.setAppBadge) return;
+    const update = () => {
+      const n = badgeCount(lessons, streakState, todayKey(new Date()), Date.now());
+      void (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
+    };
+    update();
+    // Срок повторения и «серия под угрозой» зависят от времени: пересчитываем, когда приложение снова на экране.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") update();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [lessons, streakState]);
 
   useEffect(() => {
     if (!enabled || !push || pushSupport() !== "ok") return;

@@ -1,5 +1,167 @@
-/* Сервис-воркер Informatica: только напоминания о серии. Страницы не кэшируем (офлайн — позже).
-   Простой JS без сборки. Логика напоминаний дублирует src/lib/reminders.ts — совпадение проверяет tests/reminders.test.ts. */
+/* Сервис-воркер Informatica: напоминания о серии + офлайн-кэш.
+   Простой JS без сборки. Логика напоминаний дублирует src/lib/reminders.ts — совпадение проверяет tests/reminders.test.ts.
+   Выбор стратегии кэша — функция routeFor (tests/sw.test.ts). Запросы /api/* не трогаем никогда. */
+
+var CACHE_VERSION = "v1";
+var CACHE_PREFIX = "informatica-";
+// Два кэша: «ядро» (предзагрузка /offline и его скриптов — не вытесняется) и «рабочий» (всё, что открывалось; ограничен по числу записей).
+var CORE_CACHE = CACHE_PREFIX + "core-" + CACHE_VERSION;
+var RUNTIME_CACHE = CACHE_PREFIX + "rt-" + CACHE_VERSION;
+var RUNTIME_MAX = 400; // старые чанки прошлых сборок вытесняются, кэш не растёт бесконечно
+var OFFLINE_URL = "/offline";
+var PRECACHE = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
+var PAGE_TIMEOUT_MS = 4000;
+// Версия воркера в режиме разработки (?mode=notify) только показывает уведомления: кэш dev-чанков (без хэшей) устарел бы сразу.
+var NOTIFY_ONLY = typeof self.location !== "undefined" && /[?&]mode=notify\b/.test(String(self.location.search || ""));
+
+/** Какая стратегия для запроса: "ignore" | "static" (cache-first) | "page" (network-first → кэш → /offline) | "swr" (stale-while-revalidate). */
+function routeFor(req, origin) {
+  if (!req || req.method !== "GET") return "ignore";
+  var url;
+  try {
+    url = new URL(req.url, origin);
+  } catch {
+    return "ignore";
+  }
+  if (url.origin !== origin) return "ignore";
+  var path = url.pathname;
+  if (path === "/api" || path.indexOf("/api/") === 0) return "ignore";
+  if (path === "/sw.js") return "ignore";
+  var headers = req.headers && typeof req.headers.get === "function" ? req.headers : null;
+  // Запросы с Range (аудио/видео) — мимо: частичные ответы (206) не кэшируются, а полный ответ из кэша ломает перемотку.
+  if (headers && headers.get("Range")) return "ignore";
+  if (path.indexOf("/_next/static/") === 0) return "static";
+  if (req.mode === "navigate") return "page";
+  // Клиентские переходы Next (RSC-данные) идут в сеть как есть: их кэш мог бы подмешать данные в HTML-страницу.
+  if ((headers && headers.get("RSC")) || url.searchParams.has("_rsc")) return "ignore";
+  return "swr";
+}
+
+function cacheable(res) {
+  return !!res && res.status === 200 && res.type === "basic" && !res.redirected;
+}
+
+/** Удаляет самые старые записи рабочего кэша сверх лимита. */
+function trimRuntime(cache) {
+  return cache.keys().then(function (keys) {
+    var extra = keys.length - RUNTIME_MAX;
+    if (extra <= 0) return;
+    return Promise.all(
+      keys.slice(0, extra).map(function (k) {
+        return cache.delete(k);
+      }),
+    );
+  });
+}
+
+function putCache(key, res) {
+  return caches.open(RUNTIME_CACHE).then(function (c) {
+    return c.put(key, res).then(function () {
+      return trimRuntime(c);
+    });
+  });
+}
+
+/**
+ * Сеть + запись в кэш. Запись регистрируется в event.waitUntil СИНХРОННО (до respondWith):
+ * если звать waitUntil позже, когда ответ уже отдан из кэша, браузер бросит InvalidStateError и кэш не обновится.
+ */
+function fetchAndCache(event, key) {
+  var net = fetch(event.request);
+  event.waitUntil(
+    net
+      .then(function (res) {
+        if (cacheable(res)) return putCache(key, res.clone());
+      })
+      .catch(function () {}),
+  );
+  return net;
+}
+
+function cacheFirst(event) {
+  return caches.match(event.request).then(function (hit) {
+    if (hit) return hit;
+    return fetch(event.request).then(function (res) {
+      // Здесь respondWith ещё ждёт ответа — waitUntil вызывать можно.
+      if (cacheable(res)) event.waitUntil(putCache(event.request, res.clone()).catch(function () {}));
+      return res;
+    });
+  });
+}
+
+function pageStrategy(event) {
+  var key = event.request.url;
+  var netSafe = fetchAndCache(event, key).catch(function () {
+    return null;
+  });
+  var timer;
+  var timeout = new Promise(function (resolve) {
+    timer = setTimeout(function () {
+      resolve(null);
+    }, PAGE_TIMEOUT_MS);
+  });
+  return Promise.race([netSafe, timeout]).then(function (res) {
+    clearTimeout(timer);
+    if (res) return res;
+    return caches.match(key).then(function (hit) {
+      if (hit) return hit;
+      // Кэша нет: ждём сеть до конца, а если её нет — страница «Нет интернета» (корень сайта — это /learn).
+      return netSafe.then(function (r) {
+        if (r) return r;
+        var path = new URL(key).pathname;
+        return (path === "/" ? caches.match("/learn") : Promise.resolve(null)).then(function (home) {
+          return home || caches.match(OFFLINE_URL).then(function (off) {
+            return off || Response.error();
+          });
+        });
+      });
+    });
+  });
+}
+
+function staleWhileRevalidate(event) {
+  var fresh = fetchAndCache(event, event.request).catch(function () {
+    return null;
+  });
+  return caches.match(event.request).then(function (hit) {
+    return (
+      hit ||
+      fresh.then(function (r) {
+        return r || Response.error();
+      })
+    );
+  });
+}
+
+/** Кладёт в «ядро» /offline и скрипты, которые эта страница подгружает, — чтобы она открывалась без сети. */
+function precache() {
+  return caches.open(CORE_CACHE).then(function (cache) {
+    var jobs = PRECACHE.filter(function (u) {
+      return u !== OFFLINE_URL;
+    }).map(function (u) {
+      return cache.add(u).catch(function () {});
+    });
+    jobs.push(
+      fetch(OFFLINE_URL)
+        .then(function (res) {
+          if (!cacheable(res)) return;
+          return Promise.all([res.clone().text(), cache.put(OFFLINE_URL, res)]).then(function (r) {
+            var urls = {};
+            (r[0].match(/\/_next\/static\/[^"'\s\\)]+/g) || []).forEach(function (u) {
+              urls[u] = true;
+            });
+            return Promise.all(
+              Object.keys(urls).map(function (u) {
+                return cache.add(u).catch(function () {});
+              }),
+            );
+          });
+        })
+        .catch(function () {}),
+    );
+    return Promise.all(jobs);
+  });
+}
 
 var MIRROR_KEY = "informatica:reminder"; // { enabled, push, time, lang, streak, lastActiveDay, freezes } — пишет ReminderAgent
 var REMINDED_KEY = "informatica:reminded"; // день «ГГГГ-ММ-ДД», когда уже напомнили
@@ -129,12 +291,38 @@ function remind() {
   });
 }
 
-self.addEventListener("install", function () {
+self.addEventListener("install", function (event) {
   self.skipWaiting();
+  if (!NOTIFY_ONLY) event.waitUntil(precache());
 });
 
 self.addEventListener("activate", function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then(function (keys) {
+        return Promise.all(
+          keys
+            .filter(function (k) {
+              return k.indexOf(CACHE_PREFIX) === 0 && k !== CORE_CACHE && k !== RUNTIME_CACHE;
+            })
+            .map(function (k) {
+              return caches.delete(k);
+            }),
+        );
+      })
+      .catch(function () {})
+      .then(function () {
+        return self.clients.claim();
+      }),
+  );
+});
+
+self.addEventListener("fetch", function (event) {
+  if (NOTIFY_ONLY) return;
+  var route = routeFor(event.request, self.location.origin);
+  if (route === "ignore") return;
+  event.respondWith(route === "static" ? cacheFirst(event) : route === "page" ? pageStrategy(event) : staleWhileRevalidate(event));
 });
 
 self.addEventListener("periodicsync", function (event) {

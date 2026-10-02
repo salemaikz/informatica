@@ -8,6 +8,7 @@ import { seeded } from "./text";
 import { LESSONS, UNITS, findStep } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import type { GameMeta } from "@/games/types";
+import { collectWorked } from "@/games/build/logic";
 
 // Сборка сессий тренировки, «экстерна» и урока игрой. Чистая логика без React (тесты — tests/drill.test.ts).
 // Все задания берутся из банка навыков (lib/bank): он же питает уроки, игры и пробный ЕНТ.
@@ -396,11 +397,17 @@ export function resolveGameContext(p: { lesson?: string; skills?: string }): Gam
   return { skills };
 }
 
-type GameLike = Pick<GameMeta, "shape" | "skills">;
+type GameLike = Pick<GameMeta, "shape" | "skills" | "source">;
+
+/** Навыки, по которым в уроках есть пошаговые разборы для игры «Собери решение». */
+export function skillsWithWorked(skills: SkillId[]): SkillId[] {
+  return skills.filter((s) => collectWorked([s]).length > 0);
+}
 
 /** Навыки, которые игра реально возьмёт: универсальная — любые с нужной формой, остальные — только свои. */
 export function gameSkillsFor(meta: GameLike, skills: SkillId[]): SkillId[] {
   if (meta.shape) return skillsWithShape(skills, meta.shape);
+  if (meta.source === "worked") return skillsWithWorked(skills);
   return skills.filter((s) => meta.skills.includes(s) && hasBank(s));
 }
 
@@ -412,6 +419,7 @@ export function gameSupportsSkills(meta: GameLike, skills: SkillId[]): boolean {
 
 /** Игра открыта на странице «Тренировка»: у её навыков (или у навыков пройденных уроков) есть нужная форма. */
 export function gameOpen(meta: GameLike, completedSkills: SkillId[]): boolean {
+  if (meta.source === "worked") return true;
   if (meta.shape) {
     const shape = meta.shape;
     return [...meta.skills, ...completedSkills].some((s) => hasShape(s, shape));

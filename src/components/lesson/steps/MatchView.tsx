@@ -5,7 +5,8 @@ import { m } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import type { MatchStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
-import { hashString, seeded, shuffle } from "@/lib/text";
+import { hashString, plainText, seeded, shuffle } from "@/lib/text";
+import { InlineMarkdown } from "@/components/Markdown";
 import { feedback } from "@/lib/feedback";
 import type { StepProps } from "./types";
 
@@ -52,6 +53,8 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
     const isSel = sel?.side === side && sel.i === i;
     const isBad = bad && bad[side] === i;
     const text = l(side === "left" ? step.pairs[i].left : step.pairs[i].right);
+    // Числа и коды — моноширинным, слова — обычным шрифтом.
+    const mono = /^[0-9₀-₉A-F\s,.+=−-]+$/u.test(plainText(text));
     return (
       <m.button
         key={`${side}-${i}`}
@@ -63,7 +66,8 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
         animate={isMatched ? { scale: [1, 1.07, 1] } : isSel ? { scale: [1, 1.04, 1] } : { scale: 1 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
         className={clsx(
-          "min-h-14 w-full rounded-2xl border-2 px-3 py-2 font-mono text-lg font-bold transition-[translate,background-color,border-color,box-shadow,opacity] duration-150",
+          "min-h-14 w-full rounded-2xl border-2 px-3 py-2 font-bold transition-[translate,background-color,border-color,box-shadow,opacity] duration-150",
+          mono ? "font-mono text-lg" : "text-base",
           isMatched
             ? "border-success bg-success-soft text-success-strong opacity-60"
             : isBad
@@ -73,7 +77,7 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
                 : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2 active:translate-y-[2px]",
         )}
       >
-        {text}
+        <InlineMarkdown>{text}</InlineMarkdown>
       </m.button>
     );
   };

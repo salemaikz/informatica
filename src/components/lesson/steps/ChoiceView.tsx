@@ -7,6 +7,8 @@ import { ignoreKey } from "@/lib/keys";
 import type { ChoiceStep, MultiStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { feedback } from "@/lib/feedback";
+import { plainText } from "@/lib/text";
+import { InlineMarkdown } from "@/components/Markdown";
 import { Option, type OptionState } from "./Option";
 import type { StepProps } from "./types";
 
@@ -24,11 +26,16 @@ function useDigitKeys(count: number, onPick: (i: number) => void, disabled: bool
   }, [count, onPick, disabled]);
 }
 
+/** Вариант — число/выражение из цифр (моноширинный шрифт). */
+function isNumericOption(text: string): boolean {
+  return /^[0-9₀-₉\s,.+=−-]+$/u.test(plainText(text));
+}
+
 export function ChoiceView({ step, answer, onAnswer, locked }: StepProps<ChoiceStep>) {
   const { l } = useT();
   const sel = answer?.type === "choice" ? answer.index : -1;
-  const short = step.options.every((o) => l(o).length <= 14);
-  const numeric = step.options.every((o) => /^[0-9₀-₉\s,.+=−-]+$/u.test(l(o)));
+  const short = step.options.every((o) => plainText(l(o)).length <= 14);
+  const numeric = step.options.every((o) => isNumericOption(l(o)));
   const pick = (i: number) => {
     feedback("tap");
     onAnswer({ type: "choice", index: i });
@@ -42,7 +49,7 @@ export function ChoiceView({ step, answer, onAnswer, locked }: StepProps<ChoiceS
         if (locked) state = i === step.correct ? "correct" : i === sel ? "wrong" : "dim";
         return (
           <Option key={i} index={i} state={state} badge={i + 1} disabled={locked} onClick={() => pick(i)} className={clsx(short && "justify-center text-center", numeric && "font-mono text-xl")}>
-            {l(o)}
+            <InlineMarkdown>{l(o)}</InlineMarkdown>
           </Option>
         );
       })}
@@ -53,6 +60,9 @@ export function ChoiceView({ step, answer, onAnswer, locked }: StepProps<ChoiceS
 export function MultiView({ step, answer, onAnswer, locked }: StepProps<MultiStep>) {
   const { l, t } = useT();
   const sel = answer?.type === "multi" ? answer.indices : [];
+  // Короткие варианты — в две колонки; числа — моноширинным шрифтом (как в ChoiceView).
+  const short = step.options.every((o) => plainText(l(o)).length <= 14);
+  const numeric = step.options.every((o) => isNumericOption(l(o)));
   const toggle = (i: number) => {
     feedback("tap");
     const next = sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i];
@@ -63,24 +73,26 @@ export function MultiView({ step, answer, onAnswer, locked }: StepProps<MultiSte
   return (
     <div>
       <p className="mb-3 text-sm font-bold text-muted">{t("lesson.selectAll")}</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className={clsx("grid gap-3", short ? "grid-cols-2" : "grid-cols-1")}>
         {step.options.map((o, i) => {
           const chosen = sel.includes(i);
           const right = step.correct.includes(i);
           let state: OptionState = chosen ? "selected" : "idle";
           if (locked) state = right ? "correct" : chosen ? "wrong" : "dim";
           return (
-            <Option key={i} index={i} state={state} disabled={locked} onClick={() => toggle(i)} className="justify-center font-mono text-xl">
-              <span className="flex items-center justify-center gap-2">
+            <Option key={i} index={i} state={state} disabled={locked} onClick={() => toggle(i)} className={clsx(short ? "justify-center text-center" : "text-left", numeric && "font-mono text-xl")}>
+              <span className={clsx("flex items-center gap-2", short && "justify-center")}>
                 <span
                   className={clsx(
-                    "flex h-5 w-5 items-center justify-center rounded-md border-2 text-[11px]",
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 text-[11px]",
                     chosen || (locked && right) ? "border-current bg-current" : "border-border",
                   )}
                 >
                   {(chosen || (locked && right)) && <Check size={14} strokeWidth={3.5} className="text-surface" />}
                 </span>
-                {l(o)}
+                <span className="min-w-0">
+                  <InlineMarkdown>{l(o)}</InlineMarkdown>
+                </span>
               </span>
             </Option>
           );

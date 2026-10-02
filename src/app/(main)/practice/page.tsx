@@ -9,8 +9,7 @@ import { getLesson } from "@/content/course";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
 import { dueLessons } from "@/lib/review";
-import { gameOpen, skillsByUnit, skillsOfLessons } from "@/lib/drill";
-import { skillsWithShape } from "@/lib/bank";
+import { gameOpen, gameSkillsFor, skillsByUnit, skillsOfLessons } from "@/lib/drill";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -116,7 +115,7 @@ export default function PracticePage() {
               const open = gameOpen(g, completedSkills);
               const best = games[g.id]?.best;
               // Универсальные игры берут навыки пройденных уроков (если они есть), остальные — свои.
-              const own = g.shape ? skillsWithShape(completedSkills, g.shape).slice(0, 12) : [];
+              const own = g.shape || g.source ? gameSkillsFor(g, completedSkills).slice(0, 12) : [];
               const href = open ? (own.length ? `/game/${g.id}?skills=${own.join(",")}` : `/game/${g.id}`) : "#";
               return (
                 <Link
@@ -134,7 +133,7 @@ export default function PracticePage() {
                   </span>
                   <span className="font-extrabold leading-tight">{l(g.title)}</span>
                   <span className="line-clamp-2 text-xs font-semibold text-muted">{l(g.description)}</span>
-                  {g.shape && <span className="text-xs font-extrabold text-primary">{t("modes.prac.anyTopic")}</span>}
+                  {(g.shape || g.source) && <span className="text-xs font-extrabold text-primary">{t("modes.prac.anyTopic")}</span>}
                   <span className="mt-auto flex items-center gap-1 text-xs font-extrabold text-warning-strong">
                     {open ? (
                       <>

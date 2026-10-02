@@ -1,4 +1,27 @@
 import type { L } from "@/lib/types";
 
 // Ступени освоения уроков (ru + kk). Казахский — литературный, термины по глоссарию НЦТ.
-export const masteryDict = {} satisfies Record<string, L>;
+export const masteryDict = {
+  "mastery.step.started": { ru: "Начато", kk: "Басталды" },
+  "mastery.step.familiar": { ru: "Знакомо", kk: "Таныс" },
+  "mastery.step.skilled": { ru: "Умею", kk: "Меңгерілді" },
+  "mastery.step.mastered": { ru: "Закреплено", kk: "Бекітілді" },
+  "mastery.step.label": { ru: "Ступень: {step}", kk: "Саты: {step}" },
+  "mastery.step.next.due": { ru: "пора повторить", kk: "қайталау уақыты келді" },
+  "mastery.step.next.one": { ru: "следующее повторение через {n} день", kk: "келесі қайталау {n} күннен кейін" },
+  "mastery.step.next.few": { ru: "следующее повторение через {n} дня", kk: "келесі қайталау {n} күннен кейін" },
+  "mastery.step.next.many": { ru: "следующее повторение через {n} дней", kk: "келесі қайталау {n} күннен кейін" },
+  "mastery.node.aria": { ru: "ступень: {step}", kk: "саты: {step}" },
+  "mastery.legend.title": { ru: "Ступени освоения урока", kk: "Сабақты меңгеру сатылары" },
+  "mastery.legend.hint": {
+    ru: "Чем чаще и точнее повторяешь урок, тем выше ступень.",
+    kk: "Сабақты неғұрлым жиі әрі дәл қайталасаң, саты соғұрлым жоғары болады.",
+  },
+  "mastery.legend.started": {
+    ru: "засчитан игрой, экстерном или проверкой себя, либо точность ниже 60%",
+    kk: "ойын, экстерн не өзіңді тексеру арқылы есептелген немесе дәлдігі 60%-дан төмен",
+  },
+  "mastery.legend.familiar": { ru: "пройден, впереди повторения по расписанию", kk: "өтілген, алда кесте бойынша қайталау" },
+  "mastery.legend.skilled": { ru: "повторён не раз, точность от\u00a080%", kk: "бірнеше рет қайталанған, дәлдігі 80%-дан кем емес" },
+  "mastery.legend.mastered": { ru: "повторён через 14 дней и больше", kk: "14 күн және одан артық уақыттан кейін қайталанған" },
+} satisfies Record<string, L>;
