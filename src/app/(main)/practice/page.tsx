@@ -121,6 +121,7 @@ export default function PracticePage() {
                   key={g.id}
                   href={href}
                   aria-disabled={!open}
+                  tabIndex={open ? undefined : -1}
                   className={clsx(
                     "flex flex-col gap-2 rounded-3xl border-2 bg-surface p-3.5 transition-transform active:translate-y-0.5",
                     open ? "border-border hover:bg-surface-2" : "pointer-events-none border-dashed border-border opacity-60",
@@ -170,7 +171,7 @@ export default function PracticePage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-extrabold leading-tight">{l(unit.title)}</span>
-                    <span className="block text-xs font-bold text-muted">{t("modes.prac.groupCount", { n: trainable })}</span>
+                    <span className="block text-xs font-bold text-muted">{t("modes.prac.groupCount", { k: trainable, n: unitSkills.length })}</span>
                   </span>
                   <ChevronDown size={20} className={clsx("shrink-0 text-muted transition-transform", expanded && "rotate-180")} />
                 </button>
