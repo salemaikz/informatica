@@ -1,6 +1,7 @@
 import type { Lang, QuestionStep, Step } from "./types";
 import type { CheckSolutionResponse } from "./ai-types";
-import { checkInput, divisionLadder, sameSet, toBinary } from "./check";
+import { checkInput, divisionLadder, toBinary } from "./check";
+import { multiPoints } from "./ent";
 import { plain, tx } from "./text";
 
 // Ответы ученика по типам шагов и их проверка. Чистые функции — покрыты тестами.
@@ -22,6 +23,8 @@ export interface StepResult {
   given: string;
   expected: string;
   details?: CheckSolutionResponse;
+  /** Засчитано частично (как в ЕНТ: 1 балл из 2) — показываем янтарным. */
+  partial?: boolean;
   /** Проверено без ИИ (ИИ недоступен). */
   offline?: boolean;
 }
@@ -91,7 +94,11 @@ export function evaluate(step: QuestionStep, a: Answer, lang: Lang): StepResult 
   }
   if (step.type === "multi" && a.type === "multi") {
     const given = a.indices.map((i) => tx(step.options[i], lang)).join(", ");
-    return sameSet(a.indices, step.correct) ? ok(given) : fail(given);
+    // Оценка как на ЕНТ: 2 балла — всё верно, 1 — частично, 0 — неверно.
+    const points = multiPoints(step.correct, a.indices);
+    if (points === 2) return ok(given);
+    if (points === 1) return { correct: false, score: 0.5, given, expected, partial: true };
+    return fail(given);
   }
   if (step.type === "input" && a.type === "input") {
     return checkInput(a.value, step.answers, step.mode) ? ok(a.value.trim()) : fail(a.value.trim());

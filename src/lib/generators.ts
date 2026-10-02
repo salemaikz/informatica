@@ -1,19 +1,22 @@
-import type { ChoiceStep, InputStep, L, QuestionStep, SkillId, Text } from "./types";
+import type { ChoiceStep, InputStep, L, Level, QuestionStep, SkillId, Text } from "./types";
 import { toBinary } from "./check";
 import { seeded, shuffle } from "./text";
 import type { SkillStat } from "./mastery";
+import { levelFromMastery } from "./ent";
 
 // Процедурная генерация заданий: бесконечная тренировка без затрат на ИИ.
-// Сложность растёт вместе с освоением навыка (mastery).
+// У каждого задания уровень A/B/C (1/2/3), как в ЕНТ. Уровень выбирается по освоению навыка,
+// а в тренировке задания идут от лёгкого к сложному.
 
 type Rand = () => number;
 
 const int = (rand: Rand, min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 const pick = <T,>(rand: Rand, arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
 
-function rangeFor(mastery: number): [number, number] {
-  if (mastery < 0.5) return [5, 15];
-  if (mastery < 0.8) return [16, 63];
+/** Диапазон чисел по уровню: A — до 15, B — до 63, C — до 255. */
+export function rangeForLevel(level: Level): [number, number] {
+  if (level === 1) return [5, 15];
+  if (level === 2) return [16, 63];
   return [64, 255];
 }
 
@@ -32,11 +35,12 @@ const sub2 = (bin: string) => `${bin}₂`;
 
 // ---------- 2 → 10 ----------
 
-function genBin2Dec(rand: Rand, mastery: number, seed: number): QuestionStep {
-  const [lo, hi] = rangeFor(mastery);
+function genBin2Dec(rand: Rand, level: Level, seed: number): QuestionStep {
+  const [lo, hi] = rangeForLevel(level);
   const n = int(rand, lo, hi);
   const bin = toBinary(n);
-  const kind = pick(rand, ["input", "input", "bits", "choice"] as const);
+  // A — выбор и лампочки, B — всё, C — только ввод.
+  const kind = pick(rand, level === 1 ? (["choice", "bits", "input"] as const) : level === 2 ? (["input", "input", "bits", "choice"] as const) : (["input"] as const));
   const id = `g:ns.bin2dec:${kind}:${n}:${seed}`;
   const explanation: L = {
     ru: `Складываем веса разрядов, где стоит 1: ${weightsSum(bin)} = ${n}.`,
@@ -87,11 +91,12 @@ export function weightsSum(bin: string): string {
 
 // ---------- 10 → 2 ----------
 
-function genDec2Bin(rand: Rand, mastery: number, seed: number): QuestionStep {
-  const [lo, hi] = rangeFor(mastery);
-  const n = int(rand, lo, Math.min(hi, 127));
+function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
+  const [lo, hi] = rangeForLevel(level);
+  const n = int(rand, lo, level === 3 ? hi : Math.min(hi, 127));
   const bin = toBinary(n);
-  const kind = pick(rand, ["input", "ladder", "choice"] as const);
+  // A — выбор и лесенка с подсказкой, B — лесенка и ввод, C — ввод.
+  const kind = pick(rand, level === 1 ? (["choice", "ladder"] as const) : level === 2 ? (["ladder", "input"] as const) : (["input", "input", "ladder"] as const));
   const id = `g:ns.dec2bin:${kind}:${n}:${seed}`;
   const explanation: L = {
     ru: `Делим ${n} на 2 и читаем остатки снизу вверх: ${sub2(bin)}. Проверка: ${weightsSum(bin)} = ${n}.`,
@@ -138,8 +143,8 @@ function genDec2Bin(rand: Rand, mastery: number, seed: number): QuestionStep {
 
 // ---------- Основание и цифры ----------
 
-function genBase(rand: Rand, _m: number, seed: number): QuestionStep {
-  const kind = pick(rand, ["digits", "invalid"] as const);
+function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
+  const kind = level === 1 ? "digits" : level === 2 ? pick(rand, ["digits", "invalid"] as const) : "invalid";
   if (kind === "digits") {
     const base = pick(rand, [2, 8, 10, 16, 5, 3]);
     const o = options(rand, String(base), [String(base - 1), String(base + 1), "10", "2", "9"]);
@@ -155,6 +160,30 @@ function genBase(rand: Rand, _m: number, seed: number): QuestionStep {
       explanation: {
         ru: `Количество цифр равно основанию: от 0 до ${base - 1}, то есть ${base} цифр.`,
         kk: `Цифрлар саны негізге тең: 0-ден ${base - 1}-ге дейін, яғни ${base} цифр.`,
+      },
+    };
+  }
+  // C — восьмеричная система (ловушка: цифры 8 и 9), иначе — двоичная (ловушка: цифра 2).
+  if (level === 3 && rand() < 0.5) {
+    const validSet = new Set<string>();
+    while (validSet.size < 3) validSet.add(int(rand, 10, 500).toString(8));
+    const raw = int(rand, 10, 500).toString(8);
+    const pos = int(rand, 0, raw.length - 1);
+    const badDigit = pick(rand, ["8", "9"]);
+    const fixedBad = `${raw.slice(0, pos)}${badDigit}${raw.slice(pos + 1)}`;
+    const o = options(rand, fixedBad, [...validSet]);
+    return {
+      id: `g:ns.base:invalid8:${fixedBad}:${seed}`,
+      type: "choice",
+      skill: "ns.base",
+      prompt: {
+        ru: "Какая запись НЕ может быть числом в восьмеричной системе?",
+        kk: "Қай жазба сегіздік жүйедегі сан бола АЛМАЙДЫ?",
+      },
+      ...o,
+      explanation: {
+        ru: `В восьмеричной системе цифры от 0 до 7. В записи ${fixedBad} есть цифра ${badDigit}.`,
+        kk: `Сегіздік жүйеде 0-ден 7-ге дейінгі цифрлар бар. ${fixedBad} жазбасында ${badDigit} цифры бар.`,
       },
     };
   }
@@ -183,9 +212,9 @@ function genBase(rand: Rand, _m: number, seed: number): QuestionStep {
 
 // ---------- Свойства ----------
 
-function genProps(rand: Rand, mastery: number, seed: number): QuestionStep {
-  const kind = pick(rand, ["parity", "length", "ones", "pow"] as const);
-  const [lo, hi] = rangeFor(mastery);
+function genProps(rand: Rand, level: Level, seed: number): QuestionStep {
+  const kind = pick(rand, level === 1 ? (["parity", "pow"] as const) : level === 2 ? (["length", "ones", "pow", "parity"] as const) : (["ones", "length"] as const));
+  const [lo, hi] = rangeForLevel(level);
   const n = int(rand, lo, hi);
   const bin = toBinary(n);
   if (kind === "parity") {
@@ -244,7 +273,7 @@ function genProps(rand: Rand, mastery: number, seed: number): QuestionStep {
       },
     };
   }
-  const k = int(rand, 3, 8);
+  const k = level === 1 ? int(rand, 3, 5) : int(rand, 5, 8);
   const pow = 2 ** k;
   const correct = sub2(`1${"0".repeat(k)}`);
   const o = options(rand, correct, [sub2(`1${"0".repeat(k - 1)}`), sub2("1".repeat(k)), sub2(`1${"0".repeat(k + 1)}`)]);
@@ -261,7 +290,9 @@ function genProps(rand: Rand, mastery: number, seed: number): QuestionStep {
   };
 }
 
-const GENERATORS: Record<string, (rand: Rand, mastery: number, seed: number) => QuestionStep> = {
+type Generator = (rand: Rand, level: Level, seed: number) => QuestionStep;
+
+const GENERATORS: Record<string, Generator> = {
   "ns.base": genBase,
   "ns.bin2dec": genBin2Dec,
   "ns.dec2bin": genDec2Bin,
@@ -272,15 +303,22 @@ export function canGenerate(skill: SkillId): boolean {
   return skill in GENERATORS;
 }
 
-export function generateStep(skill: SkillId, mastery: number, seed: number): QuestionStep {
+/** Задание нужного уровня (A/B/C). */
+export function generateLeveled(skill: SkillId, level: Level, seed: number): QuestionStep {
   const gen = GENERATORS[skill];
   if (!gen) throw new Error(`Нет генератора для навыка ${skill}`);
-  return gen(seeded(seed), mastery, seed);
+  return { ...gen(seeded(seed), level, seed), level };
+}
+
+/** Задание по освоению навыка (уровень подбирается сам). */
+export function generateStep(skill: SkillId, mastery: number, seed: number): QuestionStep {
+  return generateLeveled(skill, levelFromMastery(mastery), seed);
 }
 
 /**
  * Тренировка: count заданий, навыки выбираются с весом «чем слабее — тем чаще».
  * focus — тренировать только эти навыки.
+ * Порядок — от лёгкого к сложному: последняя треть на уровень выше, затем сортировка по уровню.
  */
 export function buildDrill(
   available: SkillId[],
@@ -303,11 +341,14 @@ export function buildDrill(
     let idx = 0;
     while (r > weights[idx] && idx < weights.length - 1) r -= weights[idx++];
     const skill = pool[idx];
-    const step = generateStep(skill, stats[skill]?.mastery ?? 0, Math.floor(rand() * 1e9));
+    const base = levelFromMastery(stats[skill]?.mastery ?? 0);
+    const level = Math.min(3, base + (steps.length >= Math.ceil((count * 2) / 3) ? 1 : 0)) as Level;
+    const step = generateLeveled(skill, level, Math.floor(rand() * 1e9));
     const key = step.id.split(":").slice(0, 4).join(":");
     if (seen.has(key)) continue;
     seen.add(key);
     steps.push(step);
   }
-  return steps;
+  // Стабильная сортировка по уровню: сначала A, потом B, потом C.
+  return steps.map((s, i) => ({ s, i })).sort((a, b) => (a.s.level ?? 1) - (b.s.level ?? 1) || a.i - b.i).map((x) => x.s);
 }
