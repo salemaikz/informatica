@@ -2,9 +2,11 @@
 
 import clsx from "clsx";
 import { Delete } from "lucide-react";
+import { m } from "motion/react";
 import { useEffect, useRef } from "react";
 import type { InputStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
+import { feedback } from "@/lib/feedback";
 import type { StepProps } from "./types";
 
 /** «₁₀» → «10»: подстрочные цифры в моноширинном шрифте могут отсутствовать. */
@@ -43,22 +45,32 @@ export function InputView({ step, answer, onAnswer, locked, result }: StepProps<
       {step.mode === "binary" && !locked && (
         <div className="flex gap-3" aria-hidden>
           {["0", "1"].map((d) => (
-            <button
+            <m.button
               key={d}
               type="button"
-              onClick={() => set(value + d)}
+              onClick={() => {
+                feedback("tap");
+                set(value + d);
+              }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 600, damping: 22 }}
               className="h-14 w-16 rounded-2xl border-2 border-border bg-surface font-mono text-2xl font-bold shadow-[0_3px_0_var(--border)] active:translate-y-[2px] active:shadow-none"
             >
               {d}
-            </button>
+            </m.button>
           ))}
-          <button
+          <m.button
             type="button"
-            onClick={() => set(value.slice(0, -1))}
+            onClick={() => {
+              feedback("tap");
+              set(value.slice(0, -1));
+            }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 600, damping: 22 }}
             className="flex h-14 w-16 items-center justify-center rounded-2xl border-2 border-border bg-surface text-muted shadow-[0_3px_0_var(--border)] active:translate-y-[2px] active:shadow-none"
           >
             <Delete size={22} />
-          </button>
+          </m.button>
         </div>
       )}
     </div>

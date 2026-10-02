@@ -157,6 +157,8 @@
   --animate-slide-up: slide-up 0.25s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-rise-in: rise-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  --animate-ring-out: ring-out 0.5s ease-out forwards;
 }
 
 @keyframes pop {
@@ -185,6 +187,17 @@
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
+/* Появление снизу с лесенкой (animation-delay задаёт компонент). Через opacity + translate — не конфликтует с transform у motion. */
+@keyframes rise-in {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+/* Кольцо-«вспышка» вокруг верного варианта. */
+@keyframes ring-out {
+  0% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.09); }
+}
+
 html,
 body {
   background: var(--bg);
@@ -205,6 +218,15 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* «Меньше анимаций» в профиле: гасим CSS-анимации так же, как системная настройка (JS-анимации — через MotionConfig). */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 /* Типографика для markdown (теория, конспекты, ответы ИИ) */
@@ -296,4 +318,22 @@ body {
   transform-box: fill-box;
   transform-origin: center;
   animation: blink 4.5s infinite;
+}
+
+/* Маскот: лёгкое «дыхание» тела и покачивание антенны. transform-box — чтобы вращение шло вокруг самого элемента. */
+@keyframes mascot-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes mascot-antenna {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(5deg); }
+  70% { transform: rotate(-5deg); }
+}
+.mascot-body {
+  animation: mascot-float 3.8s ease-in-out infinite;
+}
+.mascot-antenna {
+  transform-origin: 60px 27px;
+  animation: mascot-antenna 4.6s ease-in-out infinite;
 }

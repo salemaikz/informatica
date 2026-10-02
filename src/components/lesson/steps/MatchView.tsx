@@ -1,12 +1,12 @@
 "use client";
 
 import clsx from "clsx";
+import { m } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import type { MatchStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { hashString, seeded, shuffle } from "@/lib/text";
-import { playSound } from "@/lib/sound";
-import { useApp } from "@/lib/store";
+import { feedback } from "@/lib/feedback";
 import type { StepProps } from "./types";
 
 type Side = "left" | "right";
@@ -14,7 +14,6 @@ type Side = "left" | "right";
 /** Соедини пары. Проверяется само: когда все пары найдены — шаг завершён. */
 export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
   const { t, l } = useT();
-  const sound = useApp((s) => s.profile.sound);
   const rand = useMemo(() => seeded(hashString(step.id)), [step.id]);
   const left = useMemo(() => shuffle(step.pairs.map((_, i) => i), rand), [step.pairs, rand]);
   const right = useMemo(() => shuffle(step.pairs.map((_, i) => i), rand), [step.pairs, rand]);
@@ -27,13 +26,14 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
   const tap = (side: Side, i: number) => {
     if (locked || matched.includes(i)) return;
     if (!sel || sel.side === side) {
+      feedback("tap");
       setSel({ side, i });
       return;
     }
     const pair = side === "left" ? { left: i, right: sel.i } : { left: sel.i, right: i };
     setSel(null);
     if (pair.left === pair.right) {
-      if (sound) playSound("tap");
+      feedback("pop");
       const next = [...matched, i];
       setMatched(next);
       if (next.length === step.pairs.length) {
@@ -41,6 +41,7 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
       }
     } else {
       wrong.current += 1;
+      feedback("wrong");
       setBad(pair);
       setTimeout(() => setBad(null), 550);
     }
@@ -52,13 +53,17 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
     const isBad = bad && bad[side] === i;
     const text = l(side === "left" ? step.pairs[i].left : step.pairs[i].right);
     return (
-      <button
+      <m.button
         key={`${side}-${i}`}
         type="button"
         disabled={isMatched || locked}
         onClick={() => tap(side, i)}
+        whileTap={isMatched || locked ? undefined : { scale: 0.96 }}
+        initial={false}
+        animate={isMatched ? { scale: [1, 1.07, 1] } : isSel ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
         className={clsx(
-          "min-h-14 w-full rounded-2xl border-2 px-3 py-2 font-mono text-lg font-bold transition-all duration-150",
+          "min-h-14 w-full rounded-2xl border-2 px-3 py-2 font-mono text-lg font-bold transition-[translate,background-color,border-color,box-shadow,opacity] duration-150",
           isMatched
             ? "border-success bg-success-soft text-success-strong opacity-60"
             : isBad
@@ -69,7 +74,7 @@ export function MatchView({ step, onAnswer, locked }: StepProps<MatchStep>) {
         )}
       >
         {text}
-      </button>
+      </m.button>
     );
   };
 

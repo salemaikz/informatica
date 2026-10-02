@@ -1,15 +1,18 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Clapperboard, Flame, Lightbulb, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, Lightbulb, Minus, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnswerRecord, QuestionStep, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
-import { xpForAnswer } from "@/lib/gamification";
+import { levelInfo, xpForAnswer } from "@/lib/gamification";
 import { useApp } from "@/lib/store";
-import { playSound } from "@/lib/sound";
+// В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
+import { feedback as giveFeedback } from "@/lib/feedback";
+import { ignoreKey } from "@/lib/keys";
 import { checkSolution } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { plain, tx } from "@/lib/text";
@@ -23,6 +26,11 @@ import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { Visual } from "@/components/visuals/Visuals";
+import { ToolboxButton } from "@/components/tools/Toolbox";
+import { ComboFlame } from "@/components/motion/ComboFlame";
+import { Shake } from "@/components/motion/Shake";
+import { XpBurst } from "@/components/motion/XpBurst";
+import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
 import { LessonVideo } from "@/videos/LessonVideo";
 import { ChoiceView, MultiView } from "./steps/ChoiceView";
 import { InputView } from "./steps/InputView";
@@ -51,6 +59,16 @@ export interface PlayerProps {
 
 const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];
 
+/** Цвета панели ответа (токены, работают и в тёмной теме). */
+const TONE_PANEL = {
+  success: "border-success/30 bg-success-soft",
+  danger: "border-danger/30 bg-danger-soft",
+  warning: "border-warning/30 bg-warning-soft",
+} as const;
+const TONE_ICON = { success: "bg-success", danger: "bg-danger", warning: "bg-warning" } as const;
+/** Типы заданий, у которых нет собственной подсветки ошибки: встряхиваем всю область ответа. */
+const SHAKE_AREA = new Set<QuestionStep["type"]>(["bits", "ladder", "order"]);
+
 function QuestionView(props: StepProps<QuestionStep>) {
   const { step } = props;
   switch (step.type) {
@@ -76,7 +94,6 @@ function QuestionView(props: StepProps<QuestionStep>) {
 export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
-  const sound = useApp((s) => s.profile.sound);
   const recordAnswer = useApp((s) => s.recordAnswer);
   const noteCombo = useApp((s) => s.noteCombo);
   const finishSession = useApp((s) => s.finishSession);
@@ -130,13 +147,14 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         accuracy,
         skipped: skippedRef.current,
       };
+      const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp } = finishSession(result);
       const achievements = useApp.getState().consumeNewAchievements();
-      if (sound) playSound("complete");
+      giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : "complete");
       setSession({ result, bonusXp, achievements });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, sound, title],
+    [finishSession, kind, lessonId, title],
   );
 
   const next = useCallback(() => {
@@ -173,7 +191,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         retry: item.retry,
         timeMs: Date.now() - stepStartedAt.current,
       };
+      const levelBefore = levelInfo(useApp.getState().xp).level;
       recordAnswer(rec, gained, lessonId);
+      const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);
@@ -191,9 +211,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       } else if (!res.correct && question.type === "solution") {
         setDone((d) => d + 1);
       }
-      if (sound) playSound(res.correct ? "correct" : "wrong");
+      // Отклик: звук + вибрация. Комбо с 3-го ответа, новый уровень — фанфара; «монетка» XP чуть позже.
+      if (leveledUp) giveFeedback("levelUp");
+      else if (res.correct) giveFeedback(newCombo >= 3 ? "combo" : "correct", { combo: newCombo });
+      else giveFeedback("wrong");
+      if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
-    [question, combo, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, sound],
+    [question, combo, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo],
   );
 
   const check = useCallback(
@@ -270,8 +294,12 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   // Enter — проверить / продолжить.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || e.repeat || exitOpen || ai || session) return;
       const el = e.target as HTMLElement | null;
+      // Поля ввода и инструменты (калькулятор, черновик в [data-toolbox]) не запускают быстрые клавиши урока.
+      // Исключение — поле ответа самого задания (внутри main): там Enter, как и раньше, проверяет ответ.
+      const taskInput = el instanceof HTMLInputElement && !el.closest("[data-toolbox]") && !!el.closest("main");
+      if (ignoreKey(e) && !taskInput) return;
+      if (e.key !== "Enter" || e.repeat || exitOpen || ai || session) return;
       if (el instanceof HTMLTextAreaElement) return;
       if (el instanceof HTMLInputElement && el.closest("[role=dialog]")) return;
       // Кнопки вне области задания (крестик, нижняя панель) обрабатывают Enter сами — без двойного срабатывания.
@@ -316,7 +344,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const tone = result ? (result.correct ? "success" : result.score > 0 ? "warning" : "danger") : null;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col overflow-x-clip">
       {/* Верхняя панель */}
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-3 px-4">
@@ -329,21 +357,20 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
             <X size={24} />
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
-          <div
-            className={clsx(
-              "flex min-w-14 items-center justify-end gap-1 font-extrabold transition-all",
-              combo >= 2 ? "text-streak" : "text-muted",
-            )}
-            title={t("res.combo")}
-          >
-            <Flame size={20} className={combo >= 3 ? "animate-pulse" : ""} fill={combo >= 2 ? "currentColor" : "none"} />
-            {combo}
-          </div>
+          <ComboFlame combo={combo} />
+          <ToolboxButton variant="icon" />
         </div>
       </header>
 
       {/* Контент шага */}
-      <main key={item.key} className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2 animate-fade-in">
+      {/* Новый шаг выезжает справа и проявляется (≈250 мс); старый не ждём — ученика не тормозим. */}
+      <m.main
+        key={item.key}
+        className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2"
+        initial={{ opacity: 0, x: 24 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.25, ease: easeOut }}
+      >
         {item.retry && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl bg-warning-soft px-3 py-2 text-sm font-bold text-warning-strong">
             <RotateCcw size={16} className="shrink-0" /> {t("lesson.review")} · {t("lesson.reviewHint")}
@@ -392,33 +419,47 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
               )}
             </div>
             <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">{l(question.prompt)}</h1>
-            <QuestionView
-              key={item.key}
-              step={question}
-              answer={answer}
-              onAnswer={onAnswer}
-              locked={phase !== "answering"}
-              result={result}
-            />
+            <Shake active={phase === "feedback" && !!result && !result.correct && SHAKE_AREA.has(question.type)} strength={6}>
+              <QuestionView
+                key={item.key}
+                step={question}
+                answer={answer}
+                onAnswer={onAnswer}
+                locked={phase !== "answering"}
+                result={result}
+              />
+            </Shake>
             {checkError && <p className="rounded-xl bg-danger-soft px-3 py-2 text-center text-sm font-bold text-danger">{t(checkError)}</p>}
             {aiNote && <p className="rounded-xl bg-warning-soft px-3 py-2 text-center text-sm font-bold text-warning-strong">{aiNote}</p>}
           </div>
         )}
-      </main>
+      </m.main>
 
-      {/* Нижняя панель: кнопка проверки или карточка обратной связи */}
-      <footer
-        className={clsx(
-          "fixed inset-x-0 bottom-0 z-30 border-t-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4",
-          tone === "success" && "border-success/30 bg-success-soft animate-slide-up",
-          tone === "danger" && "border-danger/30 bg-danger-soft animate-slide-up",
-          tone === "warning" && "border-warning/30 bg-warning-soft animate-slide-up",
-          !tone && "border-border bg-bg",
-        )}
-      >
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4">
+      {/* Нижняя панель: кнопка проверки или карточка обратной связи.
+          Цветной фон выезжает пружиной отдельным слоем (transform), содержимое проявляется следом. */}
+      <footer className="fixed inset-x-0 bottom-0 z-30 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+        <div aria-hidden className="absolute inset-x-0 -bottom-6 top-0 border-t-2 border-border bg-bg" />
+        <AnimatePresence initial={false}>
+          {tone && (
+            <m.div
+              key={tone}
+              aria-hidden
+              className={clsx("pointer-events-none absolute inset-x-0 -bottom-6 top-0 border-t-2", TONE_PANEL[tone])}
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%", transition: { duration: 0.18, ease: "easeIn" } }}
+              transition={{ type: "spring", stiffness: 420, damping: 32 }}
+            />
+          )}
+        </AnimatePresence>
+        <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-3 px-4">
           {phase === "feedback" && result && question && (
-            <div className="flex items-start gap-3 animate-fade-in">
+            <m.div
+              className="flex items-start gap-3"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...springSoft, delay: 0.04 }}
+            >
               <Mascot mood={result.correct ? "happy" : result.score > 0 ? "thinking" : "sad"} size={52} className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <p
@@ -429,8 +470,28 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                     tone === "warning" && "text-warning-strong",
                   )}
                 >
+                  {tone && (
+                    <m.span
+                      aria-hidden
+                      className={clsx("mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full align-middle text-white", TONE_ICON[tone])}
+                      initial={{ scale: 0, rotate: -40 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ ...springBouncy, delay: 0.06 }}
+                    >
+                      {result.correct ? <Check size={18} strokeWidth={3.5} /> : result.score > 0 ? <Minus size={18} strokeWidth={3.5} /> : <X size={18} strokeWidth={3.5} />}
+                    </m.span>
+                  )}
                   {result.correct ? t(praise) : result.score > 0 ? t("fb.partial") : t("fb.wrong")}
-                  {gain > 0 && <span className="ml-2 text-base text-warning-strong">+{gain} XP</span>}
+                  {gain > 0 && (
+                    <m.span
+                      className="ml-2 inline-block text-base text-warning-strong"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ ...springBouncy, delay: 0.14 }}
+                    >
+                      +{gain} XP
+                    </m.span>
+                  )}
                 </p>
                 {!result.correct && (
                   <>
@@ -443,10 +504,12 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                   </>
                 )}
               </div>
-            </div>
+            </m.div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
+            {/* «+N» всплывает над кнопкой при каждом начисленном XP (id = номер ответа). */}
+            <XpBurst id={gain > 0 ? records.length : 0} amount={gain} className="-top-3 right-6" />
             {phase === "feedback" && result && !result.correct && (
               <Button variant="ai" onClick={() => setAi("explain")} icon={<Sparkles size={18} />} className="shrink-0">
                 <span className="hidden sm:inline">{t("fb.why")}</span>

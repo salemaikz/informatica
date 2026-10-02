@@ -13,6 +13,8 @@ import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
+import { ToolboxButton } from "@/components/tools/Toolbox";
+import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 
 type Phase = { name: "intro" } | { name: "playing"; round: number } | { name: "result"; result: GameResult; reward: GameReward };
@@ -38,6 +40,8 @@ export function GameShell({ id }: { id: string }) {
   const [round, setRound] = useState(0);
   const Game = GAME_COMPONENTS[id];
   const Icon = meta.icon;
+  // Инструменты во время игры: «Спокойно» — все, «Обычный» — как на ЕНТ, «Блиц» — никаких.
+  useToolboxLevel(phase.name !== "playing" ? "full" : mode === "calm" ? "full" : mode === "normal" ? "ent" : "off");
 
   const start = () => {
     const next = round + 1;
@@ -71,6 +75,7 @@ export function GameShell({ id }: { id: string }) {
           <span className="flex flex-1 items-center gap-2 truncate text-lg font-extrabold">
             <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
           </span>
+          {phase.name === "playing" && <ToolboxButton variant="icon" />}
           {statKey && (
             <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
               <Trophy size={16} className="text-gold" /> {stat?.best ?? 0}
@@ -84,8 +89,8 @@ export function GameShell({ id }: { id: string }) {
         {phase.name === "intro" && (
           <div className="flex flex-1 flex-col gap-5 pt-4 animate-fade-in">
             <div className="flex flex-col items-center gap-3 text-center">
-              <span className="flex h-24 w-24 items-center justify-center rounded-[2rem] shadow-lg" style={{ background: meta.color, color: meta.ink }}>
-                <Icon size={48} strokeWidth={2.2} />
+              <span className="flex h-20 w-20 items-center justify-center rounded-[1.75rem] shadow-lg" style={{ background: meta.color, color: meta.ink }}>
+                <Icon size={40} strokeWidth={2.2} />
               </span>
               <h1 className="text-2xl font-extrabold">{l(meta.title)}</h1>
               <p className="font-semibold text-muted">{l(meta.description)}</p>
@@ -133,9 +138,12 @@ export function GameShell({ id }: { id: string }) {
               )}
             </div>
             <div className="flex-1" />
-            <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
-              {t("game.play")}
-            </Button>
+            {/* Кнопка всегда видна внизу экрана, даже если правила и выбор темпа не помещаются. */}
+            <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-bg from-70% to-transparent px-4 pb-4 pt-6">
+              <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
+                {t("game.play")}
+              </Button>
+            </div>
           </div>
         )}
 

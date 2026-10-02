@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { useEffect } from "react";
 import type { ChoiceStep, MultiStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
+import { feedback } from "@/lib/feedback";
 import { Option, type OptionState } from "./Option";
 import type { StepProps } from "./types";
 
@@ -26,7 +27,10 @@ export function ChoiceView({ step, answer, onAnswer, locked }: StepProps<ChoiceS
   const sel = answer?.type === "choice" ? answer.index : -1;
   const short = step.options.every((o) => l(o).length <= 14);
   const numeric = step.options.every((o) => /^[0-9₀-₉\s,.+=−-]+$/u.test(l(o)));
-  const pick = (i: number) => onAnswer({ type: "choice", index: i });
+  const pick = (i: number) => {
+    feedback("tap");
+    onAnswer({ type: "choice", index: i });
+  };
   useDigitKeys(step.options.length, pick, locked);
 
   return (
@@ -35,7 +39,7 @@ export function ChoiceView({ step, answer, onAnswer, locked }: StepProps<ChoiceS
         let state: OptionState = i === sel ? "selected" : "idle";
         if (locked) state = i === step.correct ? "correct" : i === sel ? "wrong" : "dim";
         return (
-          <Option key={i} state={state} badge={i + 1} disabled={locked} onClick={() => pick(i)} className={clsx(short && "justify-center text-center", numeric && "font-mono text-xl")}>
+          <Option key={i} index={i} state={state} badge={i + 1} disabled={locked} onClick={() => pick(i)} className={clsx(short && "justify-center text-center", numeric && "font-mono text-xl")}>
             {l(o)}
           </Option>
         );
@@ -48,6 +52,7 @@ export function MultiView({ step, answer, onAnswer, locked }: StepProps<MultiSte
   const { l, t } = useT();
   const sel = answer?.type === "multi" ? answer.indices : [];
   const toggle = (i: number) => {
+    feedback("tap");
     const next = sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i];
     onAnswer({ type: "multi", indices: next });
   };
@@ -63,7 +68,7 @@ export function MultiView({ step, answer, onAnswer, locked }: StepProps<MultiSte
           let state: OptionState = chosen ? "selected" : "idle";
           if (locked) state = right ? "correct" : chosen ? "wrong" : "dim";
           return (
-            <Option key={i} state={state} disabled={locked} onClick={() => toggle(i)} className="justify-center font-mono text-xl">
+            <Option key={i} index={i} state={state} disabled={locked} onClick={() => toggle(i)} className="justify-center font-mono text-xl">
               <span className="flex items-center justify-center gap-2">
                 <span
                   className={clsx(

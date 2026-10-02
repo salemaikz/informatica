@@ -36,10 +36,13 @@ function Segmented<T extends string | number>({ value, options, onChange }: { va
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <span className="font-extrabold">{label}</span>
+      <div>
+        <span className="font-extrabold">{label}</span>
+        {hint && <p className="text-sm font-semibold text-muted">{hint}</p>}
+      </div>
       {children}
     </div>
   );
@@ -151,6 +154,26 @@ export default function ProfilePage() {
           <Segmented<string>
             value={profile.sound ? "on" : "off"}
             onChange={(v) => update({ sound: v === "on" })}
+            options={[
+              { id: "on", label: t("common.on") },
+              { id: "off", label: t("common.off") },
+            ]}
+          />
+        </Row>
+        <Row label={t("prof.vibration")}>
+          <Segmented<string>
+            value={profile.vibration ? "on" : "off"}
+            onChange={(v) => update({ vibration: v === "on" })}
+            options={[
+              { id: "on", label: t("common.on") },
+              { id: "off", label: t("common.off") },
+            ]}
+          />
+        </Row>
+        <Row label={t("prof.reduceMotion")} hint={t("prof.reduceMotion.desc")}>
+          <Segmented<string>
+            value={profile.reduceMotion ? "on" : "off"}
+            onChange={(v) => update({ reduceMotion: v === "on" })}
             options={[
               { id: "on", label: t("common.on") },
               { id: "off", label: t("common.off") },

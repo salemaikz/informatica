@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
+import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import { useEffect, useState } from "react";
 import type { SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
+import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
@@ -20,6 +22,9 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
+import { CountUp } from "@/components/motion/CountUp";
+import { Reveal } from "@/components/motion/Reveal";
+import { springBouncy } from "@/components/motion/presets";
 
 export const MASTERY_COLOR = {
   new: "var(--border)",
@@ -101,9 +106,29 @@ export function Results({
   }, []);
 
   useEffect(() => {
+    // «Меньше анимаций» (настройка или система) — без конфетти.
+    if (useApp.getState().profile.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const colors = ["#1a91d6", "#21b26f", "#f0b400", "#7656f5"];
+    let timer: ReturnType<typeof setTimeout> | undefined;
     void import("canvas-confetti").then(({ default: confetti }) => {
-      confetti({ particleCount: 90, spread: 70, origin: { y: 0.35 }, colors: ["#1a91d6", "#21b26f", "#f0b400", "#7656f5"] });
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.35 }, colors });
+      // Идеальный результат — ещё два «залпа» с боков.
+      if (accuracy === 100) {
+        timer = setTimeout(() => {
+          confetti({ particleCount: 40, angle: 60, spread: 55, origin: { x: 0, y: 0.6 }, colors });
+          confetti({ particleCount: 40, angle: 120, spread: 55, origin: { x: 1, y: 0.6 }, colors });
+        }, 350);
+      }
     });
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- конфетти запускаем один раз при показе итогов
+  }, []);
+
+  // Достижения «выскакивают» по одному — каждое со своим звуком.
+  useEffect(() => {
+    const timers = achievements.map((_, i) => setTimeout(() => giveFeedback("pop"), 900 + i * 280));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- список достижений фиксирован на время показа
   }, []);
 
   const staticFeedback = accuracy >= 90 ? t("res.static.great") : accuracy >= 60 ? t("res.static.good") : t("res.static.ok");
@@ -111,46 +136,66 @@ export function Results({
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 px-4 pb-32 pt-8">
-      <div className="flex flex-col items-center gap-2 text-center animate-pop">
+      <m.div
+        className="flex flex-col items-center gap-2 text-center"
+        initial={{ opacity: 0, scale: 0.6, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={springBouncy}
+      >
         <Mascot mood="celebrate" size={112} />
         <h1 className="text-3xl font-extrabold">{kind === "lesson" ? t("res.lesson") : t("res.drill")}</h1>
         <p className="font-semibold text-muted">{title}</p>
-      </div>
+      </m.div>
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { icon: <Zap size={18} />, label: t("res.xp"), value: `+${totalXp}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
-          { icon: <Target size={18} />, label: t("res.accuracy"), value: `${accuracy}%`, cls: clsx("border-success", accTone), bg: "bg-success" },
-          { icon: <Clock size={18} />, label: t("res.time"), value: formatTime(result.durationSec), cls: "border-primary text-primary", bg: "bg-primary" },
+          { icon: <Zap size={18} />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
+          { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: clsx("border-success", accTone), bg: "bg-success" },
+          { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-primary" },
         ].map((s, i) => (
-          <div key={i} style={{ animationDelay: `${150 + i * 120}ms`, animationFillMode: "both" }} className={clsx("overflow-hidden rounded-2xl border-2 animate-pop", s.cls)}>
+          // Плитки въезжают лесенкой, числа «накручиваются» следом за своей плиткой.
+          <m.div
+            key={i}
+            className={clsx("overflow-hidden rounded-2xl border-2", s.cls)}
+            initial={{ opacity: 0, y: 28, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ ...springBouncy, delay: 0.15 + i * 0.12 }}
+          >
             <div className={clsx("flex items-center justify-center gap-1 py-1 text-xs font-extrabold text-white", s.bg)}>
               {s.icon} {s.label}
             </div>
-            <div className="bg-surface py-3 text-center text-2xl font-extrabold">{s.value}</div>
-          </div>
+            <div className="bg-surface py-3 text-center text-2xl font-extrabold">
+              <CountUp value={s.value} format={s.format} delay={0.25 + i * 0.12} />
+            </div>
+          </m.div>
         ))}
       </div>
 
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">
-          {achievements.map((id) => {
+          {achievements.map((id, i) => {
             const a = achievementById(id);
             if (!a) return null;
             return (
-              <div key={id} className="flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold-soft px-4 py-3 animate-pop">
+              <m.div
+                key={id}
+                className="flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold-soft px-4 py-3"
+                initial={{ opacity: 0, scale: 0.6, rotate: -3 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                transition={{ ...springBouncy, delay: 0.9 + i * 0.28 }}
+              >
                 <AchievementBadge icon={a.icon} size={44} />
                 <div>
                   <p className="text-xs font-extrabold uppercase text-warning-strong">{t("res.achievement")}</p>
                   <p className="font-extrabold">{l(a.title)}</p>
                 </div>
-              </div>
+              </m.div>
             );
           })}
         </div>
       )}
 
-      <div className="rounded-3xl border-2 border-ai/30 bg-ai-soft p-4 sm:p-5">
+      <Reveal delay={0.5} className="rounded-3xl border-2 border-ai/30 bg-ai-soft p-4 sm:p-5">
         <p className="mb-2 flex items-center gap-1.5 font-extrabold text-ai">
           <Sparkles size={18} /> {t("res.ai")}
         </p>
@@ -175,10 +220,10 @@ export function Results({
           </div>
         )}
         {feedback.status === "failed" && <p className="font-semibold">{staticFeedback}</p>}
-      </div>
+      </Reveal>
 
       {sessionSkills.length > 0 && (
-        <Card>
+        <Card appear>
           <p className="mb-3 font-extrabold">{t("res.skills")}</p>
           <div className="flex flex-col gap-3">
             {sessionSkills.map((id) => {
@@ -207,7 +252,7 @@ export function Results({
       )}
 
       {mistakes.length > 0 && (
-        <Card>
+        <Card appear>
           <p className="mb-2 font-extrabold">{t("stats.mistakes")}</p>
           <ul className="flex flex-col gap-2">
             {mistakes.map((m, i) => (

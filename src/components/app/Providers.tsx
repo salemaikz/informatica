@@ -4,6 +4,8 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
 import { Mascot } from "@/components/mascot/Mascot";
+import { MotionProvider } from "@/components/motion/MotionProvider";
+import { Toolbox } from "@/components/tools/Toolbox";
 
 function useHydrated(): boolean {
   return useSyncExternalStore(
@@ -22,6 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const onboarded = useApp((s) => s.onboarded);
   const theme = useApp((s) => s.profile.theme);
   const lang = useApp((s) => s.profile.lang);
+  const reduceMotion = useApp((s) => s.profile.reduceMotion);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -34,16 +37,29 @@ export function Providers({ children }: { children: ReactNode }) {
     el.lang = lang === "kk" ? "kk" : "ru";
   }, [theme, lang]);
 
+  // «Меньше анимаций»: CSS-анимации гасим правилом в globals.css, JS-анимации — через MotionProvider.
+  useEffect(() => {
+    document.documentElement.dataset.reduceMotion = reduceMotion ? "true" : "false";
+  }, [reduceMotion]);
+
   useEffect(() => {
     if (needsOnboarding) router.replace("/onboarding");
   }, [needsOnboarding, router]);
 
   if (!hydrated || needsOnboarding) {
     return (
-      <div className="flex min-h-dvh items-center justify-center">
-        <Mascot size={88} className="animate-pulse" />
-      </div>
+      <MotionProvider>
+        <div className="flex min-h-dvh items-center justify-center">
+          <Mascot size={88} className="animate-pulse" />
+        </div>
+      </MotionProvider>
     );
   }
-  return <>{children}</>;
+  return (
+    <MotionProvider>
+      {children}
+      {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
+      <Toolbox />
+    </MotionProvider>
+  );
 }

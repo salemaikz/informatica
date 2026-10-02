@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { create } from "zustand";
 
 export type ToolTab = "calc" | "base" | "units" | "powers" | "scratch";
@@ -38,3 +39,11 @@ export const useToolbox = create<ToolboxState>()((set) => ({
     })),
   setTab: (tab) => set((s) => (tabsFor(s.level).includes(tab) ? { tab } : {})),
 }));
+
+/** Экран задаёт, какие инструменты доступны, пока он открыт; при уходе — снова все. */
+export function useToolboxLevel(level: ToolLevel) {
+  useEffect(() => {
+    useToolbox.getState().setLevel(level);
+    return () => useToolbox.getState().setLevel("full");
+  }, [level]);
+}

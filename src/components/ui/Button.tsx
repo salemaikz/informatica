@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/cn";
+import { m } from "motion/react";
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 
@@ -22,7 +25,7 @@ const SIZES: Record<Size, string> = {
 
 export function buttonClass({ variant = "primary", size = "md", block, disabled }: { variant?: Variant; size?: Size; block?: boolean; disabled?: boolean } = {}) {
   return cn(
-    "inline-flex select-none items-center justify-center gap-2 font-extrabold tracking-wide transition-[transform,box-shadow,filter] duration-75",
+    "inline-flex select-none items-center justify-center gap-2 font-extrabold tracking-wide transition-[translate,box-shadow,filter] duration-75",
     "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
     "active:translate-y-[3px] active:shadow-none",
     SIZES[size],
@@ -33,19 +36,39 @@ export function buttonClass({ variant = "primary", size = "md", block, disabled 
   );
 }
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+// Обработчики, у которых тип в motion отличается от DOM, — в кнопку не передаём.
+type DomButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart" | "style">;
+
+export interface ButtonProps extends DomButtonProps {
   variant?: Variant;
   size?: Size;
   block?: boolean;
   icon?: ReactNode;
 }
 
+const PRESS = { scale: 0.97 };
+const PRESS_SPRING = { type: "spring", stiffness: 700, damping: 22 } as const;
+
+/**
+ * Кнопка в стиле Duolingo (толстая нижняя «грань»). Поверх CSS-нажатия — пружинка:
+ * при нажатии слегка сжимается, а когда кнопка становится доступной (disabled → active) — один раз «подпрыгивает».
+ */
 export function Button({ variant, size, block, icon, className, children, disabled, type = "button", ...rest }: ButtonProps) {
   return (
-    <button {...rest} type={type} disabled={disabled} className={cn(buttonClass({ variant, size, block, disabled }), className)}>
+    <m.button
+      {...rest}
+      type={type}
+      disabled={disabled}
+      className={cn(buttonClass({ variant, size, block, disabled }), className)}
+      initial={false}
+      animate={disabled ? "off" : "on"}
+      variants={{ off: { scale: 1 }, on: { scale: [1, 1.05, 1], transition: { duration: 0.28, ease: "easeOut" } } }}
+      whileTap={disabled ? undefined : PRESS}
+      transition={PRESS_SPRING}
+    >
       {icon}
       {children}
-    </button>
+    </m.button>
   );
 }
 
