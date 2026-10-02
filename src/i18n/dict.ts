@@ -1,9 +1,21 @@
 import type { L } from "@/lib/types";
+import { learnDict } from "./parts/learn";
+import { lessonModesDict } from "./parts/lesson-modes";
+import { theoryDict } from "./parts/theory";
+import { notesDict } from "./parts/notes";
+import { examDict } from "./parts/exam";
+import { profileDict } from "./parts/profile";
+import { goalsDict } from "./parts/goals";
+import { remindersDict } from "./parts/reminders";
+import { canvasDict } from "./parts/canvas";
+import { videoDict } from "./parts/video";
+import { aiDict } from "./parts/ai";
+import { gamesDict } from "./parts/games";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
 
-export const dict = {
+const core = {
   "app.name": { ru: "Informatica", kk: "Informatica" },
   "app.tagline": {
     ru: "Информатика к ЕНТ — коротко, понятно, с ИИ-помощником",
@@ -417,6 +429,24 @@ export const dict = {
   "theme.system": { ru: "Как в системе", kk: "Жүйедегідей" },
   "theme.light": { ru: "Светлая", kk: "Ашық" },
   "theme.dark": { ru: "Тёмная", kk: "Қараңғы" },
+} satisfies Record<string, L>;
+
+// Строки новых разделов живут в отдельных файлах src/i18n/parts/*.ts (тот же формат { ru, kk }),
+// чтобы разделы разрабатывались параллельно. Ключи не должны повторяться (проверяет tests/i18n.test.ts).
+export const dict = {
+  ...core,
+  ...learnDict,
+  ...lessonModesDict,
+  ...theoryDict,
+  ...notesDict,
+  ...examDict,
+  ...profileDict,
+  ...goalsDict,
+  ...remindersDict,
+  ...canvasDict,
+  ...videoDict,
+  ...aiDict,
+  ...gamesDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

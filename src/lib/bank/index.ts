@@ -29,7 +29,8 @@ type ShapeItem = { question: QuestionStep; statement: Statement; pair: Pair; sho
 function dedupeKey(shape: Shape, item: ShapeItem[Shape]): string {
   switch (shape) {
     case "question":
-      return (item as QuestionStep).id.split(":").slice(0, 4).join(":");
+      // «#…» — хвост уникальности у заданий из статичных пулов (bank/pool.ts).
+      return (item as QuestionStep).id.split("#")[0].split(":").slice(0, 4).join(":");
     case "statement":
       return (item as Statement).text.ru;
     case "pair": {

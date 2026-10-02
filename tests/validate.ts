@@ -1,4 +1,4 @@
-import type { L, Scene, Step, Text } from "@/lib/types";
+import type { EntItem, L, Scene, Step, Text } from "@/lib/types";
 import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
 
@@ -31,6 +31,111 @@ export function validateScene(scene: Scene): string[] {
     case "quest":
       need(!scene.caption || filledText(scene.caption), "пустая подпись");
       break;
+    case "table": {
+      const width = scene.columns?.length ?? scene.rows[0]?.length ?? 0;
+      need(scene.rows.length > 0 && width > 0, "нет строк");
+      need(scene.rows.every((r) => r.length === width), "строки разной длины (или не совпадают с columns)");
+      need(scene.rows.flat().every((c) => typeof c === "string" || filledL(c)), "ячейка ru/kk");
+      need(!scene.columns || scene.columns.every((c) => typeof c === "string" || filledL(c)), "заголовок ru/kk");
+      need((scene.highlightRows ?? []).every((i) => i >= 0 && i < scene.rows.length), "highlightRows вне диапазона");
+      need((scene.highlightCols ?? []).every((i) => i >= 0 && i < width), "highlightCols вне диапазона");
+      need((scene.highlightCells ?? []).every(([r, c]) => r >= 0 && r < scene.rows.length && c >= 0 && c < width), "highlightCells вне диапазона");
+      need(width <= 8 && scene.rows.length <= 16, "не больше 8 столбцов и 16 строк (экран телефона)");
+      break;
+    }
+    case "code":
+      need(scene.lines.length > 0 && scene.lines.length <= 24, "1–24 строки кода");
+      need(scene.active === undefined || (scene.active >= 0 && scene.active < scene.lines.length), "active вне диапазона");
+      need((scene.marks ?? []).every((i) => i >= 0 && i < scene.lines.length), "marks вне диапазона");
+      need(scene.lines.every((l) => l.length <= 60), "строка длиннее 60 символов (экран телефона)");
+      need(scene.lines.every((l) => !l.includes("\t")), "табуляция в коде — используй 4 пробела");
+      break;
+    case "circuit": {
+      const ids = new Set<string>(scene.inputs);
+      need(scene.inputs.length >= 1 && scene.inputs.length <= 4, "1–4 входа");
+      need(scene.gates.length >= 1 && scene.gates.length <= 6, "1–6 вентилей");
+      for (const g of scene.gates) {
+        need(g.in.every((x) => ids.has(x)), `вентиль ${g.id}: вход до объявления (порядок gates — от входов к выходу)`);
+        need(g.op === "not" ? g.in.length === 1 : g.in.length === 2, `вентиль ${g.id}: у not 1 вход, у остальных 2`);
+        need(!ids.has(g.id), `вентиль ${g.id}: повтор id`);
+        ids.add(g.id);
+      }
+      need(scene.gates.some((g) => g.id === scene.output), "output — id вентиля");
+      need(Object.keys(scene.values ?? {}).every((k) => scene.inputs.includes(k)), "values — только для входов");
+      break;
+    }
+    case "flow": {
+      const ids = new Set(scene.nodes.map((n) => n.id));
+      need(ids.size === scene.nodes.length, "повтор id блока");
+      need(scene.nodes.every((n) => n.x >= 0 && n.x <= 4 && n.y >= 0 && n.y <= 9 && Number.isInteger(n.x) && Number.isInteger(n.y)), "x 0..4, y 0..9, целые");
+      need(new Set(scene.nodes.map((n) => `${n.x}:${n.y}`)).size === scene.nodes.length, "два блока в одной клетке");
+      need(scene.nodes.every((n) => filledText(n.label)), "подпись блока ru/kk");
+      need(scene.edges.every((e) => ids.has(e.from) && ids.has(e.to)), "стрелка к несуществующему блоку");
+      need(scene.edges.every((e) => !e.label || filledText(e.label)), "подпись стрелки ru/kk");
+      need(!scene.active || ids.has(scene.active), "active — id блока");
+      break;
+    }
+    case "cards":
+      need(scene.items.length >= 1 && scene.items.length <= 9, "1–9 карточек");
+      need(scene.items.every((i) => filledText(i.title) && (!i.text || filledText(i.text))), "текст карточки ru/kk");
+      break;
+    case "pixels": {
+      const w = scene.rows[0]?.length ?? 0;
+      need(scene.rows.length >= 1 && scene.rows.length <= 16 && w >= 1 && w <= 16, "от 1×1 до 16×16");
+      need(scene.rows.every((r) => r.length === w), "строки разной длины");
+      need(scene.rows.join("").split("").every((ch) => ch in scene.palette), "символ не из палитры");
+      break;
+    }
+    case "web":
+      need(scene.html.trim().length > 0, "пустой html");
+      need(!/<script|on\w+\s*=|javascript:/i.test(scene.html + (scene.css ?? "")), "скрипты и обработчики запрещены");
+      break;
+  }
+  if ("caption" in scene && scene.caption !== undefined) need(filledText(scene.caption), "пустая подпись");
+  return errors;
+}
+
+/** Проблемы задания ЕНТ (пустой список — задание корректно). */
+export function validateEnt(item: EntItem): string[] {
+  const errors: string[] = [];
+  const need = (cond: boolean, msg: string) => !cond && errors.push(`${item.id}: ${msg}`);
+  const uniq = (arr: Text[]) => new Set(arr.map((o) => JSON.stringify(o))).size === arr.length;
+  need(/^[a-z0-9-]+:[a-z0-9-]+$/.test(item.id), "id вида <урок>:<имя> (латиница, цифры, дефис)");
+  need([1, 2, 3].includes(item.level), "level 1|2|3");
+  if (item.scene) errors.push(...validateScene(item.scene).map((e) => `${item.id}: ${e}`));
+  if (item.kind === "context") {
+    need(filledL(item.text), "text ru/kk");
+    need(item.questions.length === 5, "ровно 5 вопросов");
+    for (const q of item.questions) {
+      need(filledL(q.prompt) && filledL(q.explanation), `${q.id}: prompt/explanation ru/kk`);
+      need(q.options.length === 4 && q.options.every(filledText) && uniq(q.options), `${q.id}: 4 разных варианта`);
+      need(q.correct >= 0 && q.correct < 4, `${q.id}: correct 0..3`);
+    }
+    need(new Set(item.questions.map((q) => q.id)).size === 5, "id вопросов уникальны");
+    return errors;
+  }
+  need(filledL(item.prompt), "prompt ru/kk");
+  need(filledL(item.explanation), "explanation ru/kk");
+  switch (item.kind) {
+    case "single":
+      need(item.options.length === 4, "ровно 4 варианта");
+      need(item.options.every(filledText) && uniq(item.options), "варианты непустые и разные");
+      need(item.correct >= 0 && item.correct < 4, "correct 0..3");
+      need(!item.whyWrong || (item.whyWrong.length === 4 && item.whyWrong[item.correct] === null), "whyWrong: 4 элемента, у верного null");
+      need((item.whyWrong ?? []).every((w) => w === null || filledL(w)), "whyWrong ru/kk");
+      break;
+    case "multi":
+      need(item.options.length === 6, "ровно 6 вариантов");
+      need(item.options.every(filledText) && uniq(item.options), "варианты непустые и разные");
+      need(item.correct.length >= 2 && item.correct.length <= 3, "2–3 верных");
+      need(new Set(item.correct).size === item.correct.length && item.correct.every((i) => i >= 0 && i < 6), "correct 0..5 без повторов");
+      break;
+    case "match":
+      need(item.items.length === 2, "ровно 2 пункта (A, B)");
+      need(item.choices.length === 4, "ровно 4 описания");
+      need(item.items.every(filledText) && item.choices.every(filledText) && uniq(item.choices), "тексты непустые, описания разные");
+      need(item.answer.length === 2 && item.answer.every((a) => a >= 0 && a < 4) && item.answer[0] !== item.answer[1], "answer: 2 разных индекса 0..3");
+      break;
   }
   return errors;
 }
@@ -40,8 +145,7 @@ export function validateStep(step: Step): string[] {
   const errors: string[] = [];
   const need = (cond: boolean, msg: string) => !cond && errors.push(`${step.id}: ${msg}`);
   // Схемы шага: сцена теории/ситуации/разбора/решаем-вместе и «раскрытие» после ответа.
-  const scenes: (Scene | undefined)[] = [step.reveal];
-  if (step.type === "theory" || step.type === "story" || step.type === "cloze") scenes.push(step.scene);
+  const scenes: (Scene | undefined)[] = [step.reveal, step.scene];
   if (step.type === "worked") scenes.push(...step.steps.map((x) => x.scene));
   for (const sc of scenes) if (sc) errors.push(...validateScene(sc).map((e) => `${step.id}: ${e}`));
   if (step.reveal) need(step.type !== "video" && step.type !== "theory" && step.type !== "story" && step.type !== "worked" && step.type !== "explore", "reveal только у заданий");
@@ -65,6 +169,14 @@ export function validateStep(step: Step): string[] {
 
   need(filledL(step.prompt), "prompt ru/kk");
   need(filledL(step.explanation), "explanation ru/kk");
+  need(!step.hint || filledL(step.hint), "hint ru/kk");
+  if ((step.type === "choice" || step.type === "multi") && step.whyWrong) {
+    const ww = step.whyWrong;
+    const right = step.type === "choice" ? [step.correct] : step.correct;
+    need(ww.length === step.options.length, "whyWrong: столько же элементов, сколько вариантов");
+    need(right.every((i) => ww[i] === null), "whyWrong: у верных вариантов null");
+    need(ww.every((w) => w === null || filledL(w)), "whyWrong ru/kk");
+  }
   switch (step.type) {
     case "choice":
       need(step.options.length >= 2, "минимум 2 варианта");
