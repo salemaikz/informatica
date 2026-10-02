@@ -121,6 +121,16 @@ function ask(rand: Rand, base: Base, right: string, wrongs: Wrong[], mode: "numb
 
 /** Подпись «0, 1, 2» для объяснений. */
 const listText = (xs: number[]) => xs.join(", ");
+/** Русское склонение после числа: 1 круг, 2 круга, 5 кругов. */
+const plural = (n: number, one: string, few: string, many: string) => {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+};
+const times = (n: number) => `${n} ${plural(n, "раз", "раза", "раз")}`;
 
 // ======================================================================
 // Уровень A: применить правило по образцу
@@ -200,7 +210,7 @@ function genCountPrints(rand: Rand, level: Level, seed: number): Built {
   if (st > 1) {
     wrongs.push({
       text: String(b - a),
-      why: { ru: `Это разность b − a. Но i растёт с шагом ${st}, поэтому чисел меньше.`, kk: `Бұл b − a айырмасы. Бірақ i ${st} қадаммен өседі, сондықтан сандар аз.` },
+      why: { ru: `Это разность ${b} − ${a}. Но i растёт с шагом ${st}, поэтому чисел меньше.`, kk: `Бұл ${b} − ${a} айырмасы. Бірақ i ${st} қадаммен өседі, сондықтан сандар аз.` },
     });
   }
   const base: Base = {
@@ -213,7 +223,7 @@ function genCountPrints(rand: Rand, level: Level, seed: number): Built {
       kk: "Барлық i мәндерін жаз: бірінші саннан бастап қадамды қоса бер, соңына жеткенше (соңғы санның өзін алмаймыз).",
     },
     explanation: {
-      ru: `i принимает значения ${listText(is)} — это ${n} чисел. На каждом круге печатается одна строка, значит, строк ${n}.`,
+      ru: `i принимает значения ${listText(is)} — это ${n} ${plural(n, "число", "числа", "чисел")}. На каждом круге печатается одна строка, значит, строк ${n}.`,
       kk: `i мына мәндерді қабылдайды: ${listText(is)} — бұл ${n} сан. Әр айналымда бір жол басылады, демек жол саны: ${n}.`,
     },
   };
@@ -236,7 +246,7 @@ function genSwap(rand: Rand, level: Level, seed: number): Built {
     ans = `${q} ${p}`;
     wrongs = [
       { text: `${p} ${q}`, why: { ru: "Значения не остались на местах: после c = a, a = b, b = c переменные обменялись.", kk: "Мәндер орнында қалмайды: c = a, a = b, b = c жолдарынан кейін айнымалылар алмасады." } },
-      { text: `${q} ${q}`, why: { ru: "Старое значение a потеряно: оно сохранено в c, и в последней строке b получает его из c.", kk: "a-ның ескі мәні жоғалған: ол c-ға сақталған, ал соңғы жолда b оны c-дан алады." } },
+      { text: `${q} ${q}`, why: { ru: "Старое значение a потеряно: оно сохранено в c, и в последней строке b получает его из c.", kk: "a-ның ескі мәні жоғалған: ол c айнымалысында сақталған, ал соңғы жолда b оны c айнымалысынан алады." } },
       { text: `${p} ${p}`, why: { ru: "Строка a = b меняет a, значит, a уже не равно прежнему значению.", kk: "a = b жолы a мәнін өзгертеді, демек, a бұрынғы мәнде қалмайды." } },
     ];
     explanation = {
@@ -253,7 +263,7 @@ function genSwap(rand: Rand, level: Level, seed: number): Built {
     ];
     explanation = {
       ru: `a = ${p} + ${q} = ${p + q}. Затем b = ${p + q} − ${q} = ${p}. Выводится ${p + q} ${p}: в b теперь старое a.`,
-      kk: `a = ${p} + ${q} = ${p + q}. Содан кейін b = ${p + q} − ${q} = ${p}. ${p + q} ${p} шығады: b-да енді a-ның ескі мәні.`,
+      kk: `a = ${p} + ${q} = ${p + q}. Содан кейін b = ${p + q} − ${q} = ${p}. ${p + q} ${p} шығады: b айнымалысында енді a-ның ескі мәні.`,
     };
   }
   const base: Base = {
@@ -334,7 +344,7 @@ function genProduct(rand: Rand, level: Level, seed: number): Built {
     scene: codeScene(lines),
     hint: {
       ru: "Начальное значение p равно 1. Выпиши i (конец range не входит) и умножай p на каждое из них по очереди.",
-      kk: "p-ның бастапқы мәні 1. i мәндерін жаз (range соңы кірмейді) да, p-ны оларға кезекпен көбейт.",
+      kk: "p-нің бастапқы мәні 1. i мәндерін жаз (range соңы кірмейді) да, p-ні оларға кезекпен көбейт.",
     },
     explanation: {
       ru: `range(1, ${n}) даёт i = ${listText(range(1, n))}. p = ${["1", ...range(1, n).map(String)].join(" · ")} = ${ans}.`,
@@ -363,7 +373,7 @@ function genStrBuild(rand: Rand, level: Level, seed: number): Built {
     scene: codeScene(lines),
     hint: {
       ru: "Строка s растёт: на каждом круге к ней дописывается символ — цифра i. Выпиши, что получается после каждого круга.",
-      kk: "s жолы өседі: әр айналымда оған i цифры қосып жазылады. Әр айналымнан кейін не шығатынын жаз.",
+      kk: "s жолы өседі: әр айналымда оның соңына i цифры тіркеледі. Әр айналымнан кейін не шығатынын жаз.",
     },
     explanation: {
       ru: `range(${a}) даёт i = ${listText(range(0, a))}. Строка s по кругам: ${range(0, a).map((_, k) => `«${digits(range(0, k + 1))}»`).join(" → ")}. Выводится ${ans}.`,
@@ -448,7 +458,7 @@ function genContinueSum(rand: Rand, level: Level, seed: number): Built {
     },
     explanation: {
       ru: `i = ${listText(is)}. Числа, кратные ${m}, пропускаются через continue. Складываем остальные: ${kept.join(" + ")} = ${ans}.`,
-      kk: `i = ${listText(is)}. ${m} санына еселі сандар continue арқылы өткізіледі. Қалғандарын қосамыз: ${kept.join(" + ")} = ${ans}.`,
+      kk: `i = ${listText(is)}. ${m} санына еселі сандар continue арқылы өткізіліп жіберіледі. Қалғандарын қосамыз: ${kept.join(" + ")} = ${ans}.`,
     },
   };
   return { step: ask(rand, base, String(ans), wrongs, "number"), checks: [{ lines, stdout: String(ans), answer: String(ans) }] };
@@ -547,7 +557,7 @@ function genReverse(rand: Rand, level: Level, seed: number): Built {
     },
     explanation: {
       ru: `Цифры берутся с конца и дописываются в m: ${chain.join(" → ")}. Программа переворачивает число ${n}: выводится ${rev}.`,
-      kk: `Цифрлар соңынан алынып, m-ге жазылады: ${chain.join(" → ")}. Программа ${n} санын төңкереді: ${rev} шығады.`,
+      kk: `Цифрлар соңынан алынып, m-ге жазылады: ${chain.join(" → ")}. Программа ${n} санының цифрларын кері ретпен жазады: ${rev} шығады.`,
     },
   };
   return { step: ask(rand, base, String(rev), wrongs, "number"), checks: [{ lines, stdout: String(rev), answer: String(rev) }] };
@@ -577,7 +587,7 @@ function genMaxPos(rand: Rand, level: Level, seed: number): Built {
     },
     { text: String(mx), why: { ru: "Это само наибольшее число, а print(pos) выводит его номер (нумерация с 0).", kk: "Бұл ең үлкен санның өзі, ал print(pos) оның нөмірін шығарады (нөмірлеу 0-ден басталады)." } },
     { text: String(len - 1), why: { ru: "Это номер последнего элемента, а не места максимума.", kk: "Бұл соңғы элементтің нөмірі, максимум орны емес." } },
-    { text: "0", why: { ru: "pos меняется, когда встречается число больше (или равное) текущего лучшего.", kk: "Ағымдағы ең жақсыдан үлкен (немесе тең) сан кездескенде pos өзгереді." } },
+    { text: "0", why: { ru: "pos меняется, когда встречается число больше a[pos] (или равное ему).", kk: "a[pos] мәнінен үлкен (немесе оған тең) сан кездескенде pos өзгереді." } },
   ];
   const base: Base = {
     id: `g:${SKILL}:maxpos:${a.join("")}-${op === ">" ? "gt" : "ge"}:${seed}`,
@@ -622,7 +632,7 @@ function genCountCond(rand: Rand, level: Level, seed: number): Built {
     },
     explanation: {
       ru: `Среди i = ${a}…${b - 1} подходят числа, кратные ${p} или ${q}: ${is.filter((i) => i % p === 0 || i % q === 0).join(", ")}. Их ${count}.`,
-      kk: `i = ${a}…${b - 1} ішінен ${p} немесе ${q} санына еселі сандар қолайлы: ${is.filter((i) => i % p === 0 || i % q === 0).join(", ")}. Олар ${count}.`,
+      kk: `i = ${a}…${b - 1} ішінен ${p} немесе ${q} санына еселі сандар қолайлы: ${is.filter((i) => i % p === 0 || i % q === 0).join(", ")}. Барлығы: ${count}.`,
     },
   };
   return { step: ask(rand, base, String(count), wrongs, "number"), checks: [{ lines, stdout: String(count), answer: String(count) }] };
@@ -735,8 +745,8 @@ function genFib(rand: Rand, level: Level, seed: number): Built {
   }
   const lines = ["a = 0", "b = 1", `for i in range(${n}):`, "    a, b = b, a + b", "print(a)"];
   const wrongs: Wrong[] = [
-    { text: String(sa), why: { ru: "Так получится, если читать присваивания по очереди. Но в записи a, b = b, a + b правая часть вычисляется целиком до записи.", kk: "Тапсырмаларды кезекпен оқысаң, осылай шығады. Бірақ a, b = b, a + b жазбасында оң жағы жазуға дейін толық есептеледі." } },
-    { text: String(b), why: { ru: "Это значение b, а выводится a: на круг позже.", kk: "Бұл b мәні, ал a шығады: ол бір айналым кешірек." } },
+    { text: String(sa), why: { ru: "Так получится, если читать присваивания по очереди. Но в записи a, b = b, a + b правая часть вычисляется целиком до записи.", kk: "Меншіктеулерді кезекпен орындасаң, осылай шығады. Бірақ a, b = b, a + b жазбасында алдымен оң жағы толық есептеліп, содан кейін ғана жазылады." } },
+    { text: String(b), why: { ru: "Это значение b — оно на круг впереди a. А выводится a.", kk: "Бұл b мәні — ол a-дан бір айналым алда. Ал a шығады." } },
     { text: String(seq[n - 1]), why: { ru: "Потерян последний круг: range считает все круги от 0 до конца.", kk: "Соңғы айналым жоғалған: range барлық айналымды санайды." } },
   ];
   const base: Base = {
@@ -805,7 +815,7 @@ function genBreakCount(rand: Rand, level: Level, seed: number): Built {
   if (askCount) {
     const wrongs: Wrong[] = [
       { text: String(count - 1), why: { ru: `На круге, где s стало больше ${lim}, строка s += i уже выполнилась — её тоже нужно посчитать.`, kk: `s ${lim} мәнінен асқан айналымда s += i жолы орындалып үлгерген — оны да санау керек.` } },
-      { text: String(count + 1), why: { ru: "break выходит из цикла сразу, до строки i += step: ещё одного круга нет.", kk: "break циклден бірден шығады, i += step жолына дейін: тағы бір айналым болмайды." } },
+      { text: String(count + 1), why: { ru: `break выходит из цикла сразу, до строки i += ${step}: ещё одного круга нет.`, kk: `break циклден бірден, i += ${step} жолына жетпей шығады: тағы бір айналым болмайды.` } },
     ];
     const base: Base = {
       id: `g:${SKILL}:breakcount:${i0}-${step}-${lim}-c:${seed}`,
@@ -813,18 +823,18 @@ function genBreakCount(rand: Rand, level: Level, seed: number): Built {
       prompt: { ru: "Сколько раз выполнится строка 4 (s += i)?", kk: "4-жол (s += i) неше рет орындалады?" },
       scene: codeScene(lines, [3]),
       hint: {
-        ru: "Веди таблицу i и s. Остановись, когда s станет больше границы: на этом круге s += i ещё выполняется, а i += step — уже нет.",
-        kk: "i және s кестесін жүргіз. s шектен асқанда тоқта: сол айналымда s += i әлі орындалады, ал i += step — енді жоқ.",
+        ru: `Веди таблицу i и s. Остановись, когда s станет больше границы: на этом круге s += i ещё выполняется, а i += ${step} — уже нет.`,
+        kk: `i және s кестесін жүргіз. s шектен асқанда тоқта: сол айналымда s += i әлі орындалады, ал i += ${step} — енді жоқ.`,
       },
       explanation: {
-        ru: `${table.ru} Условие s > ${lim} впервые верно на ${count}-м круге, там срабатывает break. Строка s += i выполнилась ${count} раз.`,
-        kk: `${table.kk} s > ${lim} шарты алғаш рет ${count}-ші айналымда ақиқат болады, сонда break орындалады. s += i жолы ${count} рет орындалды.`,
+        ru: `${table.ru} Условие s > ${lim} впервые верно на ${count}-м круге, там срабатывает break. Строка s += i выполнилась ${times(count)}.`,
+        kk: `${table.kk} s > ${lim} шарты алғаш рет айналым нөмірі ${count} болғанда ақиқат болады, сонда break орындалады. s += i жолы ${count} рет орындалды.`,
       },
     };
     return { step: ask(rand, base, String(count), wrongs, "number", 0.35), checks: [{ lines: counted, stdout: String(count), answer: String(count) }] };
   }
   const wrongs: Wrong[] = [
-    { text: String(i + step), why: { ru: "break срабатывает до строки i += step, поэтому на последнем круге i не увеличивается.", kk: "break i += step жолына дейін орындалады, сондықтан соңғы айналымда i өспейді." } },
+    { text: String(i + step), why: { ru: `break срабатывает до строки i += ${step}, поэтому на последнем круге i не увеличивается.`, kk: `break i += ${step} жолына дейін орындалады, сондықтан соңғы айналымда i өспейді.` } },
     { text: String(i - step), why: { ru: `Это значение i на предыдущем круге. А s > ${lim} стало верно на следующем.`, kk: `Бұл алдыңғы айналымдағы i мәні. Ал s > ${lim} келесі айналымда ақиқат болды.` } },
     { text: String(s), why: { ru: "Это s, а выводится i.", kk: "Бұл s, ал i шығады." } },
   ];
@@ -834,8 +844,8 @@ function genBreakCount(rand: Rand, level: Level, seed: number): Built {
     prompt: PRINT_Q,
     scene: codeScene(lines),
     hint: {
-      ru: "Веди таблицу i и s. Остановись, когда s станет больше границы: break выходит из цикла до строки i += step.",
-      kk: "i және s кестесін жүргіз. s шектен асқанда тоқта: break циклден i += step жолына дейін шығады.",
+      ru: `Веди таблицу i и s. Остановись, когда s станет больше границы: break выходит из цикла до строки i += ${step}.`,
+      kk: `i және s кестесін жүргіз. s шектен асқанда тоқта: break i += ${step} жолына жетпей циклден шығады.`,
     },
     explanation: {
       ru: `${table.ru} Условие s > ${lim} впервые верно при i = ${i}: break выходит из цикла, не увеличив i. Выводится ${i}.`,
@@ -865,11 +875,11 @@ function genNested(rand: Rand, level: Level, seed: number): Built {
     };
     explanation = {
       ru: `При i = ${listText(terms)} внутренний цикл range(i) делает ${listText(terms)} кругов. Всего k = ${terms.join(" + ")} = ${k}.`,
-      kk: `i = ${listText(terms)} болғанда ішкі range(i) цикл ${listText(terms)} айналым жасайды. Барлығы k = ${terms.join(" + ")} = ${k}.`,
+      kk: `i = ${listText(terms)} болғанда range(i) ішкі циклі ${listText(terms)} айналым жасайды. Барлығы k = ${terms.join(" + ")} = ${k}.`,
     };
     wrongsList = [
       { text: String((a - 1) * (a - 1)), why: { ru: "Так считается, если внутренний цикл всегда делает столько же кругов, сколько внешний. Но range(i) растёт вместе с i.", kk: "Ішкі цикл әрқашан сыртқы цикл сияқты айналым жасаса, осылай саналады. Бірақ range(i) i-мен бірге өседі." } },
-      { text: String(((a - 1) * a) / 2 + a), why: { ru: `Лишний круг: внешний цикл range(1, ${a}) не доходит до ${a}.`, kk: `Артық айналым: сыртқы range(1, ${a}) цикл ${a} санына жетпейді.` } },
+      { text: String(((a - 1) * a) / 2 + a), why: { ru: `Лишний круг: внешний цикл range(1, ${a}) не доходит до ${a}.`, kk: `Артық айналым: range(1, ${a}) сыртқы циклі ${a} санына жетпейді.` } },
     ];
   } else if (variant === 1) {
     lines = ["k = 0", `for i in range(${a}):`, `    for j in range(i, ${a}):`, "        k += 1", "print(k)"];
@@ -884,8 +894,8 @@ function genNested(rand: Rand, level: Level, seed: number): Built {
       kk: `i = 0…${a - 1} үшін ішкі цикл ${terms.join(", ")} айналым жасайды. Барлығы k = ${terms.join(" + ")} = ${k}.`,
     };
     wrongsList = [
-      { text: String(a * a), why: { ru: "Так считается, если внутренний цикл всегда делает a кругов. Но он начинается с j = i и укорачивается.", kk: "Ішкі цикл әрқашан a айналым жасаса, осылай саналады. Бірақ ол j = i мәнінен басталып, қысқара береді." } },
-      { text: String(((a - 1) * a) / 2), why: { ru: "Не хватает кругов: при каждом i значение j = i тоже входит в range(i, a).", kk: "Айналымдар жеткіліксіз: әр i кезінде j = i мәні де range(i, a) ішіне кіреді." } },
+      { text: String(a * a), why: { ru: `Так считается, если внутренний цикл всегда делает ${a} кругов. Но он начинается с j = i и укорачивается.`, kk: `Ішкі цикл әрқашан ${a} айналым жасаса, осылай саналады. Бірақ ол j = i мәнінен басталып, қысқара береді.` } },
+      { text: String(((a - 1) * a) / 2), why: { ru: `Не хватает кругов: при каждом i значение j = i тоже входит в range(i, ${a}).`, kk: `Айналымдар жеткіліксіз: әр i кезінде j = i мәні де range(i, ${a}) ішіне кіреді.` } },
     ];
   } else {
     lines = ["k = 0", `for i in range(1, ${a}):`, `    for j in range(1, ${a}):`, "        if i < j:", "            k += 1", "print(k)"];
@@ -986,14 +996,14 @@ function genModifyLine(rand: Rand, level: Level, seed: number): Built {
         scene: codeScene(baseLines),
         hint: {
           ru: "Для каждого варианта пересчитай, какие i попадут в сумму и что прибавится. Сравни результат с нужным числом.",
-          kk: "Әр нұсқа үшін қандай i сомаға түсетінін және не қосылатынын қайта есепте. Нәтижені керек санмен салыстыр.",
+          kk: "Әр нұсқа үшін қандай i қосындыға кіретінін және не қосылатынын қайта есепте. Нәтижені керек санмен салыстыр.",
         },
         explanation: {
           ru: `Сейчас в сумму попадают i = ${seqOf(m, r, e).join(", ") || "—"}: итог ${baseOut}. Нужное изменение даёт ${right.out}. Остальные варианты: ${chosen
             .slice(1)
             .map((c) => c.out)
             .join(", ")}.`,
-          kk: `Қазір сомаға i = ${seqOf(m, r, e).join(", ") || "—"} түседі: нәтиже ${baseOut}. Керекті өзгеріс ${right.out} береді. Қалған нұсқалар: ${chosen
+          kk: `Қазір қосындыға i = ${seqOf(m, r, e).join(", ") || "—"} кіреді: нәтиже ${baseOut}. Керекті өзгеріс ${right.out} береді. Қалған нұсқалар: ${chosen
             .slice(1)
             .map((c) => c.out)
             .join(", ")}.`,
@@ -1015,6 +1025,8 @@ function genModifyLine(rand: Rand, level: Level, seed: number): Built {
 
 interface InProg {
   key: string;
+  /** Наибольший допустимый вывод у любого варианта — чтобы вручную считалось быстро. */
+  maxOut?: number;
   lines: string[];
   run: (n: number) => number;
   correct: (rand: Rand) => number;
@@ -1031,7 +1043,7 @@ const IN_PROGS: InProg[] = [
     correct: (rand) => int(rand, 8, 100),
     near: (c, rand) => [c * 2, Math.floor(c / 2), c + int(rand, 1, 6), c * 2 + 1, Math.max(1, c - int(rand, 1, 6))],
     explain: (c, t) => ({
-      ru: `Цикл делит n на 2, пока n не станет 0, и считает круги: k — число двоичных цифр n. Выведет ${t} то n, в двоичной записи которого ${t} цифр: ${c} = ${c.toString(2)}₂.`,
+      ru: `Цикл делит n на 2, пока n не станет 0, и считает круги: k — число двоичных цифр n. Выведет ${t} то n, в двоичной записи которого ${t} ${plural(t, "цифра", "цифры", "цифр")}: ${c} = ${c.toString(2)}₂.`,
       kk: `Цикл n-ді n 0 болғанша 2-ге бөліп, айналымдарды санайды: k — n санының екілік цифрлар саны. ${t} шығару үшін n-нің екілік жазбасында ${t} цифр болуы керек: ${c} = ${c.toString(2)}₂.`,
     }),
     hint: {
@@ -1056,6 +1068,7 @@ const IN_PROGS: InProg[] = [
   },
   {
     key: "steps",
+    maxOut: 12,
     lines: ["n = int(input())", "k = 0", "while n != 1:", "    if n % 2 == 0:", "        n = n // 2", "    else:", "        n = 3 * n + 1", "    k += 1", "print(k)"],
     run: (n) => {
       let k = 0;
@@ -1066,10 +1079,10 @@ const IN_PROGS: InProg[] = [
       }
       return k;
     },
-    correct: (rand) => int(rand, 3, 27),
+    correct: (rand) => pick(rand, [3, 5, 6, 8, 10, 12, 13, 16, 17, 20, 24]),
     near: (c, rand) => [c + 1, c - 1, c * 2, c + 2, c + int(rand, 3, 8)].filter((v) => v >= 2),
     explain: (c, t) => ({
-      ru: `Цикл повторяется, пока n не станет 1: чётное n делится на 2, нечётное заменяется на 3n + 1; k считает шаги. При n = ${c} получается ровно ${t} шагов, у остальных вариантов — другое число шагов.`,
+      ru: `Цикл повторяется, пока n не станет 1: чётное n делится на 2, нечётное заменяется на 3n + 1; k считает шаги. При n = ${c} получается ровно ${t} ${plural(t, "шаг", "шага", "шагов")}, у остальных вариантов — другое число шагов.`,
       kk: `Цикл n 1 болғанша қайталанады: жұп n 2-ге бөлінеді, тақ n 3n + 1 өрнегімен ауыстырылады; k қадамдарды санайды. n = ${c} болғанда дәл ${t} қадам шығады, қалған нұсқаларда қадам саны басқа.`,
     }),
     hint: {
@@ -1084,7 +1097,9 @@ function genFindInput(rand: Rand, level: Level, seed: number): Built {
   for (let attempt = 0; attempt < 60; attempt++) {
     const c = prog.correct(rand);
     const t = prog.run(c);
-    const cands = [...new Set(prog.near(c, rand))].filter((v) => v > 0 && v !== c && prog.run(v) !== t);
+    const cap = prog.maxOut ?? Infinity;
+    if (t > cap) continue;
+    const cands = [...new Set(prog.near(c, rand))].filter((v) => v > 0 && v !== c && prog.run(v) !== t && prog.run(v) <= cap);
     if (cands.length < 3) continue;
     const wrong = shuffle(cands, rand).slice(0, 3);
     const step = choiceStep(
@@ -1155,8 +1170,8 @@ function genDivisor(rand: Rand, level: Level, seed: number): Built {
           kk: `d = 2, 3, … ${n} қалдықсыз бөлінетін бірінші d — ${d}. Онда break орындалып, ${d} шығады.`,
         }
       : {
-          ru: `Делителей до корня нет, break не срабатывает. Цикл идёт, пока d * d <= ${n}, и заканчивается при d = ${d}: ${d} * ${d} = ${d * d} > ${n}. Выводится ${d}.`,
-          kk: `Түбірге дейін бөлгіштер жоқ, break орындалмайды. Цикл d * d <= ${n} болғанша жүреді және d = ${d} болғанда аяқталады: ${d} * ${d} = ${d * d} > ${n}. ${d} шығады.`,
+          ru: `Делителей среди d с d * d <= ${n} нет, break не срабатывает. Цикл идёт, пока d * d <= ${n}, и заканчивается при d = ${d}: ${d} * ${d} = ${d * d} > ${n}. Выводится ${d}.`,
+          kk: `d * d <= ${n} болатын d ішінде бөлгіш жоқ, break орындалмайды. Цикл d * d <= ${n} болғанша жүреді және d = ${d} болғанда аяқталады: ${d} * ${d} = ${d * d} > ${n}. ${d} шығады.`,
         },
   };
   return { step: ask(rand, base, String(d), wrongs, "number"), checks: [{ lines, stdout: String(d), answer: String(d) }] };
@@ -1179,7 +1194,7 @@ function genBreakContinue(rand: Rand, level: Level, seed: number): Built {
   const wrongs: Wrong[] = [
     { text: String(sum(allOdd)), why: { ru: `Так считается, если забыть про break: он останавливает цикл при первом нечётном i > ${m}.`, kk: `break туралы ұмытсаң, осылай саналады: ол ${m} санынан үлкен бірінші тақ i кезінде циклді тоқтатады.` } },
     { text: String(sum(range(1, e).filter((i) => i % 2 === 0 && i <= m))), why: { ru: "Это сумма чётных чисел, а continue как раз пропускает чётные.", kk: "Бұл жұп сандардың қосындысы, ал continue дәл жұптарды өткізіп жібереді." } },
-    { text: String(sum(range(1, Math.min(e, m + 2)))), why: { ru: "Это сумма всех чисел подряд: continue пропускает чётные i, их складывать нельзя.", kk: "Бұл бәрін қатар қосқандағы қосынды: continue жұп i мәндерін өткізіп жібереді, оларды қосуға болмайды." } },
+    { text: String(sum(range(1, m + 1))), why: { ru: "Это сумма всех чисел подряд: continue пропускает чётные i, их складывать нельзя.", kk: "Бұл бәрін қатар қосқандағы қосынды: continue жұп i мәндерін өткізіп жібереді, оларды қосуға болмайды." } },
   ];
   const base: Base = {
     id: `g:${SKILL}:breakcont:${e}-${m}:${seed}`,
@@ -1192,7 +1207,7 @@ function genBreakContinue(rand: Rand, level: Level, seed: number): Built {
     },
     explanation: {
       ru: `Нечётные i складываются, пока i не больше ${m}. Первое нечётное i > ${m} вызывает break. Складываем ${kept.join(" + ")} = ${s}.`,
-      kk: `Тақ i мәндері i саны ${m} санынан аспағанша қосылады. ${m} санынан үлкен бірінші тақ i break шақырады. ${kept.join(" + ")} = ${s} қосамыз.`,
+      kk: `Тақ i мәндері i саны ${m} санынан аспағанша қосылады. ${m} санынан үлкен бірінші тақ i кезінде break орындалады. Қосамыз: ${kept.join(" + ")} = ${s}.`,
     },
   };
   return { step: ask(rand, base, String(s), wrongs, "number"), checks: [{ lines, stdout: String(s), answer: String(s) }] };
@@ -1280,7 +1295,7 @@ const FACTS: Fact[] = [
     level: 1,
     id: "range-end",
     ru: "В range(1, 6) число 6 входит в перебор",
-    kk: "range(1, 6) ішінде 6 саны да аралаудан өтеді",
+    kk: "range(1, 6) беретін сандардың ішінде 6 саны да бар",
     value: false,
     exp: { ru: "Конец range не входит: range(1, 6) — это 1, 2, 3, 4, 5.", kk: "range соңы кірмейді: range(1, 6) — бұл 1, 2, 3, 4, 5.", },
     checks: [{ lines: ["print(list(range(1, 6)))"], stdout: "[1, 2, 3, 4, 5]" }],
@@ -1291,7 +1306,7 @@ const FACTS: Fact[] = [
     ru: "print с отступом внутри цикла выполняется на каждом круге",
     kk: "Цикл ішіндегі шегінісі бар print әр айналымда орындалады",
     value: true,
-    exp: { ru: "Всё, что с отступом, — тело цикла: оно повторяется на каждом круге.", kk: "Шегінісі барлығы — цикл денесі: ол әр айналымда қайталанады." },
+    exp: { ru: "Всё, что с отступом, — тело цикла: оно повторяется на каждом круге.", kk: "Шегініспен жазылғанның бәрі — цикл денесі: ол әр айналымда қайталанады." },
   },
   {
     level: 1,
@@ -1399,7 +1414,7 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
       const useMod = rand() < 0.5;
       const truth = useMod ? r : q;
       const value = rand() < 0.5;
-      const claim = value ? truth : Math.max(0, truth + pick(rand, [-1, 1, useMod ? q : r]));
+      const claim = value ? truth : Math.max(0, pick(rand, [truth - 1, truth + 1, useMod ? q : r]));
       const op = useMod ? "%" : "//";
       return {
         item: {
@@ -1425,10 +1440,10 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
           id: `s:${SKILL}:loopcount:${a}:${b}:${claim}`,
           skill: SKILL,
           level,
-          text: { ru: `Цикл for i in range(${a}, ${b}) выполнится ${claim} раз`, kk: `for i in range(${a}, ${b}) циклі ${claim} рет орындалады` },
+          text: { ru: `Цикл for i in range(${a}, ${b}) выполнится ${times(claim)}`, kk: `for i in range(${a}, ${b}) циклі ${claim} рет орындалады` },
           value: claim === n,
           explanation: {
-            ru: `range(${a}, ${b}) — это ${listText(range(a, b))}: ${n} чисел, конец не входит.`,
+            ru: `range(${a}, ${b}) — это ${listText(range(a, b))}: ${n} ${plural(n, "число", "числа", "чисел")}, конец не входит.`,
             kk: `range(${a}, ${b}) — бұл ${listText(range(a, b))}: ${n} сан, соңы кірмейді.`,
           },
           hint: { ru: "Выпиши числа, которые даёт range, и посчитай их. Конец не входит.", kk: "range беретін сандарды жазып, санап шық. Соңы кірмейді." },
@@ -1509,7 +1524,7 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
         skill: SKILL,
         level,
         text: {
-          ru: `При x = ${n} цикл while x >= ${d}: x = x - ${d} выполнится ${claim} раз`,
+          ru: `При x = ${n} цикл while x >= ${d}: x = x - ${d} выполнится ${times(claim)}`,
           kk: `x = ${n} болғанда while x >= ${d}: x = x - ${d} циклі ${claim} рет орындалады`,
         },
         value: claim === k,
@@ -1534,7 +1549,7 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
         skill: SKILL,
         level,
         text: {
-          ru: `При n = ${n} цикл while n > 0: n //= 10 выполнится ${claim} раз`,
+          ru: `При n = ${n} цикл while n > 0: n //= 10 выполнится ${times(claim)}`,
           kk: `n = ${n} болғанда while n > 0: n //= 10 циклі ${claim} рет орындалады`,
         },
         value: claim === truth,
@@ -1553,6 +1568,7 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
     let i = 1;
     for (; i < e; i++) if (i * i > lim) break;
     const truth = Math.min(i, e - 1);
+    const broke = i < e;
     const value = rand() < 0.5;
     const claim = value ? truth : truth + pick(rand, [-1, 1]);
     return {
@@ -1565,10 +1581,15 @@ function genStatement(rand: Rand, level: Level): StatementBuilt {
           kk: `if i * i > ${lim}: break командасы бар for i in range(1, ${e}) циклінен кейін i мәні: ${claim}`,
         },
         value: claim === truth,
-        explanation: {
-          ru: `Цикл останавливается на первом i, где i * i > ${lim}, и i остаётся на этом значении: ${truth} * ${truth} = ${truth * truth}. Если такого i нет, цикл доходит до последнего значения ${e - 1}.`,
-          kk: `Цикл i * i > ${lim} болатын бірінші i кезінде тоқтайды да, i сол мәнде қалады: ${truth} * ${truth} = ${truth * truth}. Мұндай i болмаса, цикл соңғы ${e - 1} мәніне дейін жетеді.`,
-        },
+        explanation: broke
+          ? {
+              ru: `Цикл останавливается на первом i, где i * i > ${lim}, и i остаётся на этом значении: ${truth} * ${truth} = ${truth * truth} > ${lim}. Значит, i = ${truth}.`,
+              kk: `Цикл i * i > ${lim} болатын бірінші i кезінде тоқтайды да, i сол мәнде қалады: ${truth} * ${truth} = ${truth * truth} > ${lim}. Демек, i = ${truth}.`,
+            }
+          : {
+              ru: `Даже при последнем i = ${e - 1}: ${e - 1} * ${e - 1} = ${(e - 1) * (e - 1)} ≤ ${lim}, break не срабатывает. После цикла i хранит последнее значение: ${e - 1}.`,
+              kk: `Соңғы i = ${e - 1} кезінде де ${e - 1} * ${e - 1} = ${(e - 1) * (e - 1)} ≤ ${lim}, break орындалмайды. Циклден кейін i соңғы мәнін сақтайды: ${e - 1}.`,
+            },
         hint: { ru: "Найди первое i, при котором i * i становится больше границы. break останавливает цикл на нём.", kk: "i * i шектен асатын бірінші i-ді тап. break циклді сол кезде тоқтатады." },
       },
       checks: [{ lines: [`for i in range(1, ${e}):`, `    if i * i > ${lim}:`, "        break", "print(i)"], stdout: String(truth) }],

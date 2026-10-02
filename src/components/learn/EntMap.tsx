@@ -231,7 +231,7 @@ export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string
                   ))}
                 </span>
               </div>
-              <span lang={lang} className={cn("hyphens-auto font-extrabold leading-tight [overflow-wrap:anywhere]", tp.examCount >= 4 ? "text-base" : "text-[15px]", tall ? "line-clamp-4" : "line-clamp-3")}>{l(tp.title)}</span>
+              <span lang={lang} className={cn("hyphens-auto font-extrabold leading-tight [overflow-wrap:anywhere]", tp.examCount >= 4 ? "text-base" : "text-[15px]", tall ? "line-clamp-5" : "line-clamp-4")}>{l(tp.title)}</span>
               <div className="mt-auto flex flex-col gap-1.5">
                 {tall || tp.examCount >= 5 ? <span className={cn("text-3xl font-black leading-none", TONE[level].ink)}>{pct}%</span> : null}
                 <ProgressBar value={value} color={TONE[level].bar} height={6} />

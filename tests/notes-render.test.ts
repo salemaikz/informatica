@@ -5,7 +5,7 @@ import { Markdown } from "@/components/Markdown";
 import { bodyWithoutTitleLine, noteDate } from "@/lib/note-markdown";
 
 // Настоящий компонент Markdown (конспекты и ответы ИИ): безопасность и чек-листы.
-const html = (md: string, onToggleTask?: (o: number) => void) => renderToStaticMarkup(createElement(Markdown, { onToggleTask, children: md }));
+const html = (md: string, onToggleTask?: (o: number) => void) => renderToStaticMarkup(createElement(Markdown, { onToggleTask }, md));
 
 describe("Markdown: недоверенный текст", () => {
   it("чужие картинки не загружаются — вместо них ссылка", () => {

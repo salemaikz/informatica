@@ -16,8 +16,9 @@ const PATH_NEW = "C:\\Users\\Ali\\Music\\report.docx";
 // ---------- Дерево папок: до перемещения, после перемещения, после копирования ----------
 type TreeKind = "before" | "moved" | "copied";
 
-const dir = (id: string, label: string, x: number, y: number) => ({ id, shape: "box" as const, label, x, y });
-const file = (id: string, label: string, x: number, y: number) => ({ id, shape: "action" as const, label, x, y });
+type FlowNode = Extract<Scene, { kind: "flow" }>["nodes"][number];
+const dir = (id: string, label: string, x: number, y: number): FlowNode => ({ id, shape: "box", label, x, y });
+const file = (id: string, label: string, x: number, y: number): FlowNode => ({ id, shape: "action", label, x, y });
 
 function tree(kind: TreeKind, active?: string): Scene {
   // Две колонки: блоки получаются широкими, и имя report.docx помещается в одну строку на телефоне.

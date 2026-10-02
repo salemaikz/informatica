@@ -375,7 +375,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
   return (
     <div className="min-h-dvh bg-bg">
       <header className="sticky top-0 z-30 border-b-2 border-border bg-bg/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-3 pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-2">
           <button
             type="button"
             onClick={() => setSheet("exit")}
@@ -390,7 +390,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
             aria-label={t("exam.nav.open")}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-surface-2 px-2.5 text-sm font-extrabold lg:pointer-events-none"
           >
-            <LayoutGrid size={16} className="text-muted lg:hidden" aria-hidden />
+            <LayoutGrid size={16} className="text-muted max-[379px]:hidden lg:hidden" aria-hidden />
             {current + 1} / {total}
           </button>
           <div className="flex-1" />
