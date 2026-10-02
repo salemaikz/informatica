@@ -1,4 +1,4 @@
-import type { Lang, QuestionStep, Step } from "./types";
+import type { ClozeBlank, ClozeStep, ClozeToken, Lang, QuestionStep, Step } from "./types";
 import type { CheckSolutionResponse } from "./ai-types";
 import { checkInput, divisionLadder, toBinary } from "./check";
 import { multiPoints } from "./ent";
@@ -14,7 +14,9 @@ export type Answer =
   | { type: "ladder"; remainders: (number | null)[] }
   | { type: "match"; done: boolean; wrong: number }
   | { type: "order"; order: number[] }
-  | { type: "solution"; image?: string; typed: string };
+  | { type: "solution"; image?: string; typed: string }
+  /** Значения полей «решаем вместе» по порядку следования пропусков. */
+  | { type: "cloze"; values: string[] };
 
 export interface StepResult {
   correct: boolean;
@@ -29,8 +31,17 @@ export interface StepResult {
   offline?: boolean;
 }
 
+const INFO_TYPES = new Set<Step["type"]>(["video", "theory", "story", "worked", "explore"]);
+
 export function isQuestion(step: Step): step is QuestionStep {
-  return step.type !== "video" && step.type !== "theory";
+  return !INFO_TYPES.has(step.type);
+}
+
+export const isBlank = (t: ClozeToken): t is ClozeBlank => typeof t === "object" && "blank" in t;
+
+/** Пропуски «решаем вместе» по порядку (строка за строкой). */
+export function clozeBlanks(step: ClozeStep): ClozeBlank[] {
+  return step.lines.flat().filter(isBlank);
 }
 
 /** Готов ли ответ к проверке (активна кнопка «Проверить»). */
@@ -53,6 +64,8 @@ export function isReady(step: QuestionStep, a: Answer | null): boolean {
       return step.type === "order" && a.order.length === step.items.length;
     case "solution":
       return !!a.image || a.typed.trim() !== "";
+    case "cloze":
+      return step.type === "cloze" && a.values.length === clozeBlanks(step).length && a.values.every((v) => v.trim() !== "");
   }
 }
 
@@ -75,6 +88,10 @@ export function expectedText(step: QuestionStep, lang: Lang): string {
       return step.items.map((i) => tx(i, lang)).join(" → ");
     case "solution":
       return `${step.answer}${step.answerMode === "binary" ? "₂" : ""}`;
+    case "cloze":
+      return step.lines
+        .map((line) => line.map((t) => (isBlank(t) ? t.blank[0] : tx(t, lang))).join(" "))
+        .join("\n");
   }
 }
 
@@ -126,6 +143,13 @@ export function evaluate(step: QuestionStep, a: Answer, lang: Lang): StepResult 
     const given = a.typed.trim();
     const correct = checkInput(given, [step.answer], step.answerMode);
     return { correct, score: correct ? 1 : 0, given, expected, offline: true };
+  }
+  if (step.type === "cloze" && a.type === "cloze") {
+    // Балл — доля верно заполненных пропусков; засчитано, если верны все.
+    const blanks = clozeBlanks(step);
+    const right = blanks.filter((b, i) => checkInput(a.values[i] ?? "", b.blank, b.mode)).length;
+    const given = a.values.join(", ");
+    return { correct: right === blanks.length, score: blanks.length ? right / blanks.length : 0, given, expected, partial: right > 0 && right < blanks.length };
   }
   return fail("");
 }

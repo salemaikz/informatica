@@ -13,7 +13,17 @@ export function validateStep(step: Step): string[] {
     need(filledL(step.title), "title");
     need(filledL(step.body), "body");
   }
-  if (step.type === "video" || step.type === "theory") return errors;
+  if (step.type === "story") need(filledL(step.body), "body");
+  if (step.type === "worked") {
+    need(filledL(step.title), "title");
+    need(step.steps.length >= 2 && step.steps.every((x) => filledL(x.text)), "минимум 2 шага ru/kk");
+  }
+  if (step.type === "explore") {
+    need(filledL(step.title), "title");
+    need(step.size >= 1 && step.size <= 8, "size 1..8");
+    if (step.goal) need(step.goal.target >= 0 && filledL(step.goal.text), "goal");
+  }
+  if (step.type === "video" || step.type === "theory" || step.type === "story" || step.type === "worked" || step.type === "explore") return errors;
 
   need(filledL(step.prompt), "prompt ru/kk");
   need(filledL(step.explanation), "explanation ru/kk");
@@ -50,6 +60,13 @@ export function validateStep(step: Step): string[] {
       need(filledL(step.reference), "reference");
       need(checkInput(step.answer, [step.answer], step.answerMode), "answer");
       break;
+    case "cloze": {
+      const blanks = step.lines.flat().filter((t): t is { blank: string[]; mode: "number" | "binary" | "text" } => typeof t === "object" && "blank" in t);
+      need(blanks.length >= 1, "нет пропусков");
+      need(blanks.every((b) => b.blank.length > 0 && b.blank.every((v) => checkInput(v, b.blank, b.mode))), "ответ пропуска не проходит свою проверку");
+      need(step.lines.flat().every((t) => (typeof t === "object" && !("blank" in t) ? filledL(t) : true)), "текст ru/kk");
+      break;
+    }
   }
   return errors;
 }

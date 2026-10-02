@@ -19,6 +19,41 @@ export interface Skill {
   topic: L;
 }
 
+// ---------- Наглядные сцены ----------
+
+/**
+ * Параметризованная схема (рисуется компонентом SceneView). Одна и та же сцена используется
+ * в теории, ситуациях, пошаговых разборах и как «раскрытие» после ответа.
+ */
+export type Scene =
+  /** Двоичная запись: цифры, под ними веса (справа налево), нули зачёркнуты, сумма. */
+  | {
+      kind: "binary";
+      bits: string;
+      /** Показать веса под цифрами. */
+      weights?: boolean;
+      /** Зачеркнуть веса под нулями. */
+      cross?: boolean;
+      /** Показать строку суммы «32 + 8 + 4 + 1 = 45». */
+      sum?: boolean;
+      /** Ошибка-ловушка: веса подписаны слева направо (красным). */
+      wrongDirection?: boolean;
+      /** Подсветить разряды (индексы слева направо). */
+      highlight?: number[];
+    }
+  /** Деление на основание с остатками («лесенка»). rows — сколько строк уже показано. */
+  | { kind: "ladder"; number: number; base?: number; rows?: number; readUp?: boolean }
+  /** Лампочки: состояния «1011», опционально веса и сумма. */
+  | { kind: "lamps"; states: string; weights?: boolean; sum?: boolean }
+  /** Монеты-веса (1, 2, 4, 8…): какие взяты, сколько набрано. */
+  | { kind: "coins"; values: number[]; picked?: number[]; target?: number }
+  /** Обычное десятичное число с весами разрядов ×100 ×10 ×1. */
+  | { kind: "decimal"; number: string }
+  /** Иллюстрация сюжета «квест-комната». */
+  | { kind: "quest"; art: QuestArt; code?: string; caption?: Text };
+
+export type QuestArt = "door" | "door-open" | "locker" | "locker-open" | "window-lamps" | "room";
+
 // ---------- Шаги урока ----------
 
 interface StepBase {
@@ -29,6 +64,8 @@ interface StepBase {
   ent?: boolean;
   /** Сложность A/B/C. В уроке и тренировке задания идут от лёгкого к сложному. */
   level?: Level;
+  /** «Предскажи → проверь»: схема, которая показывается после ответа на вопрос. */
+  reveal?: Scene;
 }
 
 export interface VideoStep extends StepBase {
@@ -44,6 +81,37 @@ export interface TheoryStep extends StepBase {
   body: L;
   /** Встроенная иллюстрация (React-компонент из components/visuals). */
   visual?: VisualId;
+  /** Параметризованная сцена (предпочтительнее visual в новых уроках). */
+  scene?: Scene;
+}
+
+/** Ситуация из жизни/сюжета: сцена-картинка + короткий текст (реплика Бита или рассказчика). */
+export interface StoryStep extends StepBase {
+  type: "story";
+  title?: L;
+  body: L;
+  scene: Scene;
+  speaker?: "bit" | "narrator";
+}
+
+/** Пошаговый разбор («смотри, как решаю»): шаги открываются по нажатию, схема меняется вместе с шагом. */
+export interface WorkedStep extends StepBase {
+  type: "worked";
+  title: L;
+  steps: { text: L; scene?: Scene }[];
+  /** Итог после последнего шага (подсвечивается зелёным). */
+  result?: L;
+}
+
+/** Песочница: интерактивная схема. Если есть goal — «Продолжить» откроется, когда цель достигнута. */
+export interface ExploreStep extends StepBase {
+  type: "explore";
+  title: L;
+  body?: L;
+  tool: "lamps" | "weights" | "coins";
+  /** Количество ламп/разрядов/монет. */
+  size: number;
+  goal?: { target: number; text: L };
 }
 
 export interface ChoiceStep extends StepBase {
@@ -117,6 +185,24 @@ export interface SolutionStep extends StepBase {
   explanation: L;
 }
 
+/** Поле-пропуск в «решаем вместе»: допустимые ответы и режим нормализации. */
+export interface ClozeBlank {
+  blank: string[];
+  mode: "number" | "binary" | "text";
+  /** Ширина поля в символах (по умолчанию по длине ответа). */
+  width?: number;
+}
+export type ClozeToken = string | L | ClozeBlank;
+
+/** Решаем вместе: пример с пропусками — строки из текста и полей для ввода. */
+export interface ClozeStep extends StepBase {
+  type: "cloze";
+  prompt: L;
+  scene?: Scene;
+  lines: ClozeToken[][];
+  explanation: L;
+}
+
 export type QuestionStep =
   | ChoiceStep
   | MultiStep
@@ -125,9 +211,13 @@ export type QuestionStep =
   | LadderStep
   | MatchStep
   | OrderStep
-  | SolutionStep;
+  | SolutionStep
+  | ClozeStep;
 
-export type Step = VideoStep | TheoryStep | QuestionStep;
+export type Step = VideoStep | TheoryStep | StoryStep | WorkedStep | ExploreStep | QuestionStep;
+
+/** Шаги без проверки ответа. */
+export type InfoStep = VideoStep | TheoryStep | StoryStep | WorkedStep | ExploreStep;
 
 export type StepType = Step["type"];
 
