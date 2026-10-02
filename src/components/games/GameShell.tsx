@@ -27,6 +27,7 @@ export function GameShell({ id }: { id: string }) {
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [round, setRound] = useState(0);
   const Game = GAME_COMPONENTS[id];
+  const Icon = meta.icon;
 
   const start = () => {
     const next = round + 1;
@@ -57,8 +58,8 @@ export function GameShell({ id }: { id: string }) {
           >
             <X size={24} />
           </button>
-          <span className="flex-1 truncate text-lg font-extrabold">
-            {meta.icon} {l(meta.title)}
+          <span className="flex flex-1 items-center gap-2 truncate text-lg font-extrabold">
+            <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
           </span>
           <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
             <Trophy size={16} className="text-gold" /> {stat?.best ?? 0}
@@ -71,8 +72,8 @@ export function GameShell({ id }: { id: string }) {
         {phase.name === "intro" && (
           <div className="flex flex-1 flex-col gap-5 pt-4 animate-fade-in">
             <div className="flex flex-col items-center gap-3 text-center">
-              <span className="flex h-24 w-24 items-center justify-center rounded-[2rem] text-5xl text-white shadow-lg" style={{ background: meta.color }}>
-                {meta.icon}
+              <span className="flex h-24 w-24 items-center justify-center rounded-[2rem] shadow-lg" style={{ background: meta.color, color: meta.ink }}>
+                <Icon size={48} strokeWidth={2.2} />
               </span>
               <h1 className="text-2xl font-extrabold">{l(meta.title)}</h1>
               <p className="font-semibold text-muted">{l(meta.description)}</p>

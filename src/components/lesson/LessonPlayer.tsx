@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Flame, Lightbulb, Sparkles, X } from "lucide-react";
+import { BookOpen, Clapperboard, Flame, Lightbulb, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnswerRecord, QuestionStep, SessionResult, Step } from "@/lib/types";
@@ -231,7 +231,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
           apply({
             correct: details.verdict === "correct",
             score: details.verdict === "correct" ? 1 : details.verdict === "partial" ? 0.5 : 0,
-            given: a.typed.trim() || "📷",
+            given: a.typed.trim() || t("sol.photoGiven"),
             expected: expectedText(question, lang),
             details,
           });
@@ -346,13 +346,15 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       <main key={item.key} className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2 animate-fade-in">
         {item.retry && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl bg-warning-soft px-3 py-2 text-sm font-bold text-warning-strong">
-            🔁 {t("lesson.review")} · {t("lesson.reviewHint")}
+            <RotateCcw size={16} className="shrink-0" /> {t("lesson.review")} · {t("lesson.reviewHint")}
           </div>
         )}
 
         {step.type === "video" && (
           <div className="flex flex-col gap-4">
-            <Pill tone="primary" className="self-start">🎬 {t("lesson.video")}</Pill>
+            <Pill tone="primary" className="self-start" icon={<Clapperboard size={14} />}>
+              {t("lesson.video")}
+            </Pill>
             <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
             <LessonVideo videoId={step.videoId} lang={lang} title={l(step.title)} />
           </div>
@@ -360,7 +362,9 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
 
         {step.type === "theory" && (
           <div className="flex flex-col gap-4">
-            <Pill tone="primary" className="self-start">📘 {t("lesson.theory")}</Pill>
+            <Pill tone="primary" className="self-start" icon={<BookOpen size={14} />}>
+              {t("lesson.theory")}
+            </Pill>
             <h1 className="text-2xl font-extrabold">{l(step.title)}</h1>
             {step.visual && <Visual id={step.visual} />}
             <Markdown className="text-[17px]">{l(step.body)}</Markdown>
@@ -371,7 +375,11 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
           <div className="flex flex-col gap-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap gap-2">
-                {question.ent && <Pill tone="gold">🎯 {t("lesson.ent")}</Pill>}
+                {question.ent && (
+                  <Pill tone="gold" icon={<Target size={14} />}>
+                    {t("lesson.ent")}
+                  </Pill>
+                )}
               </div>
               {phase === "answering" && (
                 <button

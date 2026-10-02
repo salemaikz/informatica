@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/cn";
-import { Camera, CircleCheck, CircleX, ImagePlus, PenLine, Sparkles } from "lucide-react";
+import { Camera, CircleCheck, CircleX, ImagePlus, Lightbulb, PenLine, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SolutionStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
@@ -146,7 +146,11 @@ export function SolutionView({ answer, onAnswer, locked, result }: StepProps<Sol
               ))}
             </ul>
           )}
-          {details.tip && <p className="mt-3 text-sm font-semibold text-muted">💡 {details.tip}</p>}
+          {details.tip && (
+            <p className="mt-3 flex gap-1.5 text-sm font-semibold text-muted">
+              <Lightbulb size={16} className="mt-0.5 shrink-0 text-warning-strong" /> {details.tip}
+            </p>
+          )}
         </div>
       )}
       {locked && result?.offline && <p className="text-center text-sm font-semibold text-warning-strong">{t("sol.offline")}</p>}

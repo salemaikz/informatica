@@ -72,9 +72,12 @@ export function liveStreak(s: Streak, today: string): number {
 
 // ---------- Достижения ----------
 
+/** Имя рисованной иконки (компонент — components/app/AchievementBadge.tsx). */
+export type AchievementIcon = "graduation" | "gem" | "flame" | "calendar" | "trophy" | "star" | "sparkles" | "camera" | "dumbbell" | "gamepad" | "brain";
+
 export interface AchievementDef {
   id: string;
-  icon: string;
+  icon: AchievementIcon;
   title: L;
   description: L;
 }
@@ -82,67 +85,67 @@ export interface AchievementDef {
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "first_lesson",
-    icon: "🎓",
+    icon: "graduation",
     title: { ru: "Первый шаг", kk: "Алғашқы қадам" },
     description: { ru: "Пройди первый урок", kk: "Алғашқы сабақты өт" },
   },
   {
     id: "perfect",
-    icon: "💎",
+    icon: "gem",
     title: { ru: "Без ошибок", kk: "Қатесіз" },
     description: { ru: "Пройди урок без единой ошибки", kk: "Сабақты бірде-бір қатесіз өт" },
   },
   {
     id: "combo_7",
-    icon: "🔥",
+    icon: "flame",
     title: { ru: "В ударе", kk: "Қызған шақ" },
     description: { ru: "7 верных ответов подряд", kk: "Қатарынан 7 дұрыс жауап" },
   },
   {
     id: "streak_3",
-    icon: "📅",
+    icon: "calendar",
     title: { ru: "Три дня подряд", kk: "Үш күн қатарынан" },
     description: { ru: "Занимайся 3 дня подряд", kk: "3 күн қатарынан оқы" },
   },
   {
     id: "streak_7",
-    icon: "🏆",
+    icon: "trophy",
     title: { ru: "Неделя силы", kk: "Күш аптасы" },
     description: { ru: "Занимайся 7 дней подряд", kk: "7 күн қатарынан оқы" },
   },
   {
     id: "xp_500",
-    icon: "⭐",
+    icon: "star",
     title: { ru: "500 XP", kk: "500 XP" },
     description: { ru: "Набери 500 очков опыта", kk: "500 тәжірибе ұпайын жина" },
   },
   {
     id: "ai_friend",
-    icon: "🤖",
+    icon: "sparkles",
     title: { ru: "Любопытный", kk: "Білуге құмар" },
     description: { ru: "Задай вопрос ИИ-помощнику", kk: "ЖИ-көмекшіге сұрақ қой" },
   },
   {
     id: "solver",
-    icon: "📸",
+    icon: "camera",
     title: { ru: "Решатель", kk: "Шешуші" },
     description: { ru: "Отправь решение на проверку ИИ", kk: "Шешіміңді ЖИ тексеруіне жібер" },
   },
   {
     id: "drill",
-    icon: "💪",
+    icon: "dumbbell",
     title: { ru: "Тренер сам себе", kk: "Өз-өзіңе жаттықтырушы" },
     description: { ru: "Пройди тренировку слабых тем", kk: "Әлсіз тақырыптар жаттығуын өт" },
   },
   {
     id: "gamer",
-    icon: "🎮",
+    icon: "gamepad",
     title: { ru: "Игрок", kk: "Ойыншы" },
     description: { ru: "Сыграй в мини-игру", kk: "Шағын ойын ойна" },
   },
   {
     id: "binary_master",
-    icon: "🧠",
+    icon: "brain",
     title: { ru: "Повелитель битов", kk: "Биттер әміршісі" },
     description: {
       ru: "Освой оба перевода 2→10 и 10→2 (от 10 ответов каждый)",

@@ -75,8 +75,8 @@ export default function PracticePage() {
                     open ? "border-border hover:bg-surface-2" : "pointer-events-none border-dashed border-border opacity-60",
                   )}
                 >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl" style={{ background: g.color }}>
-                    {g.icon}
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: g.color, color: g.ink }}>
+                    <g.icon size={26} strokeWidth={2.3} />
                   </span>
                   <span className="font-extrabold leading-tight">{l(g.title)}</span>
                   <span className="line-clamp-2 text-xs font-semibold text-muted">{l(g.description)}</span>

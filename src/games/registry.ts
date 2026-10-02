@@ -1,3 +1,4 @@
+import { Bug, Inbox, ToggleRight, Zap } from "lucide-react";
 import type { GameMeta } from "./types";
 
 // Реестр мини-игр (метаданные). Компоненты — в components.ts (лениво).
@@ -5,8 +6,9 @@ import type { GameMeta } from "./types";
 export const GAMES: GameMeta[] = [
   {
     id: "bit-rush",
-    icon: "⚡",
+    icon: Zap,
     color: "#fff3dc",
+    ink: "#d97706",
     skills: ["ns.base", "ns.bin2dec", "ns.dec2bin", "ns.props"],
     durationSec: 60,
     title: { ru: "Бит-спринт", kk: "Бит-спринт" },
@@ -21,8 +23,9 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: "bit-flip",
-    icon: "🎛️",
+    icon: ToggleRight,
     color: "#e4f3fc",
+    ink: "#1a91d6",
     skills: ["ns.dec2bin", "ns.bin2dec", "ns.props"],
     durationSec: 90,
     title: { ru: "Битовый тумблер", kk: "Бит қосқыштары" },
@@ -37,8 +40,9 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: "bit-sort",
-    icon: "🗂️",
+    icon: Inbox,
     color: "#e3f7ec",
+    ink: "#16a34a",
     skills: ["ns.props", "ns.base", "ns.bin2dec"],
     durationSec: 75,
     title: { ru: "Сортировщик", kk: "Сұрыптағыш" },
@@ -53,8 +57,9 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: "bug-hunt",
-    icon: "🔍",
+    icon: Bug,
     color: "#ffe9e0",
+    ink: "#e5532d",
     skills: ["ns.dec2bin", "ns.bin2dec", "ns.props", "ns.base"],
     durationSec: 90,
     title: { ru: "Найди ошибку", kk: "Қатені тап" },

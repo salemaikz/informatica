@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { L, Lang, SkillId } from "@/lib/types";
 
@@ -30,9 +31,12 @@ export interface GameMeta {
   description: L;
   /** Короткие правила для экрана перед игрой (markdown не нужен). */
   rules: L;
-  icon: string;
-  /** CSS-цвет акцента карточки. */
+  /** Рисованная иконка (lucide), не эмодзи. */
+  icon: LucideIcon;
+  /** CSS-цвет фона плитки игры. */
   color: string;
+  /** CSS-цвет иконки на плитке. */
+  ink: string;
   skills: SkillId[];
   /** Примерная длительность, сек. */
   durationSec: number;

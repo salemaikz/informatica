@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft } from "lucide-react";
+import { BookOpen, ChevronLeft, Lightbulb, ListOrdered, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExplainStyle, Goal, Grade, Lang } from "@/lib/types";
@@ -13,16 +13,24 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MascotSays } from "@/components/mascot/Mascot";
 
 const GRADES: Grade[] = ["8", "9", "10", "11", "other"];
-const GOALS: { id: Goal; icon: string; key: DictKey }[] = [
-  { id: "ent", icon: "🎯", key: "goal.ent" },
-  { id: "school", icon: "📚", key: "goal.school" },
-  { id: "interest", icon: "✨", key: "goal.interest" },
+const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
+  { id: "ent", icon: Target, key: "goal.ent" },
+  { id: "school", icon: BookOpen, key: "goal.school" },
+  { id: "interest", icon: Lightbulb, key: "goal.interest" },
 ];
-const STYLES: { id: ExplainStyle; icon: string; key: DictKey; desc: DictKey }[] = [
-  { id: "short", icon: "⚡", key: "style.short", desc: "style.short.desc" },
-  { id: "examples", icon: "🧩", key: "style.examples", desc: "style.examples.desc" },
-  { id: "steps", icon: "🪜", key: "style.steps", desc: "style.steps.desc" },
+const STYLES: { id: ExplainStyle; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
+  { id: "short", icon: Zap, key: "style.short", desc: "style.short.desc" },
+  { id: "examples", icon: Puzzle, key: "style.examples", desc: "style.examples.desc" },
+  { id: "steps", icon: ListOrdered, key: "style.steps", desc: "style.steps.desc" },
 ];
+
+function ChoiceIcon({ icon: Icon, selected }: { icon: LucideIcon; selected: boolean }) {
+  return (
+    <span className={clsx("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", selected ? "bg-primary text-white" : "bg-primary-soft text-primary")}>
+      <Icon size={22} strokeWidth={2.4} />
+    </span>
+  );
+}
 const DAILY: { xp: number; key: DictKey; min: number }[] = [
   { xp: 20, key: "daily.20", min: 5 },
   { xp: 50, key: "daily.50", min: 10 },
@@ -89,7 +97,7 @@ export default function OnboardingPage() {
         {step === 0 && (
           <>
             <MascotSays mood="happy" size={88}>
-              <span className="block">Привет! Сәлем! 👋</span>
+              <span className="block">Привет! Сәлем!</span>
               <span className="text-muted">Выбери язык · Тілді таңда</span>
             </MascotSays>
             <div className="flex flex-col gap-3">
@@ -145,7 +153,7 @@ export default function OnboardingPage() {
             <div className="flex flex-col gap-3">
               {GOALS.map((g) => (
                 <Choice key={g.id} selected={profile.goal === g.id} onClick={() => updateProfile({ goal: g.id })}>
-                  <span className="text-2xl">{g.icon}</span>
+                  <ChoiceIcon icon={g.icon} selected={profile.goal === g.id} />
                   <span className="text-lg">{t(g.key)}</span>
                 </Choice>
               ))}
@@ -161,7 +169,7 @@ export default function OnboardingPage() {
             <div className="flex flex-col gap-3">
               {STYLES.map((s) => (
                 <Choice key={s.id} selected={profile.style === s.id} onClick={() => updateProfile({ style: s.id })}>
-                  <span className="text-2xl">{s.icon}</span>
+                  <ChoiceIcon icon={s.icon} selected={profile.style === s.id} />
                   <span>
                     <span className="block text-lg">{t(s.key)}</span>
                     <span className="block text-sm font-semibold text-muted">{t(s.desc)}</span>

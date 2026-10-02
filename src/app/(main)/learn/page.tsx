@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, Clock, Lock, Play, Star } from "lucide-react";
+import { Camera, Check, Clapperboard, Clock, Hammer, Lock, Play, Sparkles, Star } from "lucide-react";
 import { useState } from "react";
 import type { LessonRef, Unit } from "@/lib/types";
 import { UNITS, getLesson, lessonNumber } from "@/content/course";
@@ -34,7 +34,7 @@ export default function LearnPage() {
   return (
     <div className="flex flex-col gap-5">
       <MascotSays mood="happy">
-        <span className="block text-lg font-extrabold">{t("learn.greeting", { name: name || "👋" })}</span>
+        <span className="block text-lg font-extrabold">{name ? t("learn.greeting", { name }) : t("learn.hello")}</span>
         <span className="text-muted">
           {Object.keys(lessons).length === 0 ? t("learn.startFirst") : upcoming ? t("learn.continue") : t("learn.allDone")}
         </span>
@@ -62,7 +62,15 @@ export default function LearnPage() {
                 <Clock size={16} /> {t("common.minutes", { n: heroLesson.durationMin })}
               </span>
               <span>· {t("learn.steps", { n: heroLesson.steps.length })}</span>
-              <span>· 🎬 + 📸 + 🤖</span>
+              <span className="flex items-center gap-1">
+                · <Clapperboard size={16} /> {t("lesson.video")}
+              </span>
+              <span className="flex items-center gap-1">
+                · <Camera size={16} /> {t("learn.photoCheck")}
+              </span>
+              <span className="flex items-center gap-1 text-ai">
+                · <Sparkles size={16} /> {t("fb.ai.short")}
+              </span>
             </div>
             <ButtonLink href={`/lesson/${hero.id}`} className="mt-1" size="lg" block icon={<Play size={20} fill="currentColor" />}>
               {lessons[hero.id] ? t("learn.repeat") : t("common.start")}
@@ -125,7 +133,9 @@ export default function LearnPage() {
             <h3 className="text-2xl font-extrabold">{l(picked.lesson.title)}</h3>
             {picked.lesson.status === "soon" ? (
               <>
-                <p className="font-semibold text-muted">{t("learn.soon")} 🛠️</p>
+                <p className="flex items-center gap-2 font-semibold text-muted">
+                  <Hammer size={18} /> {t("learn.soon")}
+                </p>
                 <Button variant="secondary" block onClick={() => setPicked(null)}>
                   {t("common.close")}
                 </Button>

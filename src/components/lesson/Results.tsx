@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
+import { AchievementBadge } from "@/components/app/AchievementBadge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -138,7 +139,7 @@ export function Results({
             if (!a) return null;
             return (
               <div key={id} className="flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold-soft px-4 py-3 animate-pop">
-                <span className="text-3xl">{a.icon}</span>
+                <AchievementBadge icon={a.icon} size={44} />
                 <div>
                   <p className="text-xs font-extrabold uppercase text-warning-strong">{t("res.achievement")}</p>
                   <p className="font-extrabold">{l(a.title)}</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookmarkPlus, Check, ImagePlus, Send, Sparkles, Square, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Camera, Check, ImagePlus, Send, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/lib/store";
 import { compressImage } from "@/lib/image";
@@ -94,7 +94,7 @@ export default function TutorPage() {
         {chat.map((m) =>
           m.role === "user" ? (
             <div key={m.id} className="max-w-[85%] self-end rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-semibold text-white">
-              {m.hadImage && <span className="mr-1">📷</span>}
+              {m.hadImage && <Camera size={16} className="mr-1.5 inline -mt-0.5" />}
               {m.content}
             </div>
           ) : (

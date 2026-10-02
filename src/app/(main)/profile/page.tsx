@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { Download, RotateCcw } from "lucide-react";
+import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import type { ExplainStyle, Goal, Grade, Lang, Theme } from "@/lib/types";
@@ -92,10 +93,10 @@ export default function ProfilePage() {
             return (
               <div
                 key={a.id}
-                className={clsx("flex flex-col items-center gap-1 rounded-2xl border-2 p-3 text-center", got ? "border-gold bg-gold-soft" : "border-border opacity-60 grayscale")}
+                className={clsx("flex flex-col items-center gap-1 rounded-2xl border-2 p-3 text-center", got ? "border-gold bg-gold-soft" : "border-border opacity-70")}
                 title={l(a.description)}
               >
-                <span className="text-3xl">{a.icon}</span>
+                <AchievementBadge icon={a.icon} got={got} size={44} />
                 <span className="text-sm font-extrabold">{l(a.title)}</span>
                 <span className="text-xs font-semibold text-muted">{l(a.description)}</span>
               </div>

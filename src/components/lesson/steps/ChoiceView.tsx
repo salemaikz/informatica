@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { Check } from "lucide-react";
 import { useEffect } from "react";
 import type { ChoiceStep, MultiStep } from "@/lib/types";
 import { useT } from "@/i18n/useT";
@@ -70,7 +71,7 @@ export function MultiView({ step, answer, onAnswer, locked }: StepProps<MultiSte
                     chosen || (locked && right) ? "border-current bg-current" : "border-border",
                   )}
                 >
-                  {(chosen || (locked && right)) && <span className="text-surface">✓</span>}
+                  {(chosen || (locked && right)) && <Check size={14} strokeWidth={3.5} className="text-surface" />}
                 </span>
                 {l(o)}
               </span>
