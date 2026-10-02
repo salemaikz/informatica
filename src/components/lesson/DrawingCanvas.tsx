@@ -12,14 +12,47 @@ export interface DrawingHandle {
   isEmpty: () => boolean;
   /** Рисунок на белом фоне (без сетки) — для отправки ИИ. */
   exportCanvas: () => HTMLCanvasElement | null;
+  /**
+   * Рисунок на прозрачном фоне (PNG dataURL, чернила #111) — для сохранения и восстановления через `initialImage`.
+   * "" — рисунок пуст; null — холст пока недоступен (нулевой размер), сохранять нечего.
+   */
+  exportImage: () => string | null;
+}
+
+interface BaseImage {
+  img: HTMLImageElement;
+  /** Копия, перекрашенная в цвет чернил текущей темы. */
+  tinted: HTMLCanvasElement | null;
+  tint: string;
+}
+
+function tintImage(img: HTMLImageElement, color: string): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext("2d")!;
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = "source-in";
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+interface DrawingCanvasProps {
+  onChange?: (empty: boolean) => void;
+  disabled?: boolean;
+  /** Сохранённый рисунок (из exportImage) — читается один раз при монтировании; рисуется под новыми штрихами. */
+  initialImage?: string;
+  /** Фиксированная высота холста в px (по умолчанию зависит от ширины). */
+  height?: number;
 }
 
 const PEN = 3;
 const ERASER = 22;
 
 /** Холст «в клеточку» для решения задач пальцем/стилусом/мышью. */
-export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: boolean) => void; disabled?: boolean }>(
-  function DrawingCanvas({ onChange, disabled }, ref) {
+export const DrawingCanvas = forwardRef<DrawingHandle, DrawingCanvasProps>(
+  function DrawingCanvas({ onChange, disabled, initialImage, height: fixedHeight }, ref) {
     const { t } = useT();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -27,6 +60,9 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
     const current = useRef<Stroke | null>(null);
     const [tool, setTool] = useState<"pen" | "eraser">("pen");
     const [count, setCount] = useState(0);
+    const base = useRef<BaseImage | null>(null);
+    const initialRef = useRef(initialImage);
+    const [hasBase, setHasBase] = useState(false);
 
     const draw = useCallback((ctx: CanvasRenderingContext2D, list: Stroke[], color: string) => {
       for (const s of list) {
@@ -54,8 +90,35 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
       const ink = getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#1b2333";
+      const b = base.current;
+      if (b) {
+        if (!b.tinted || b.tint !== ink) {
+          b.tinted = tintImage(b.img, ink);
+          b.tint = ink;
+        }
+        // Сохранённый рисунок — под штрихами, поэтому ластик стирает и его.
+        ctx.drawImage(b.tinted, 0, 0, b.tinted.width / dpr, b.tinted.height / dpr);
+      }
       draw(ctx, strokes.current, ink);
     }, [draw]);
+
+    // Восстановление сохранённого рисунка (один раз).
+    useEffect(() => {
+      const src = initialRef.current;
+      if (!src) return;
+      let alive = true;
+      const img = new Image();
+      img.onload = () => {
+        if (!alive) return;
+        base.current = { img, tinted: null, tint: "" };
+        setHasBase(true);
+        redraw();
+      };
+      img.src = src;
+      return () => {
+        alive = false;
+      };
+    }, [redraw]);
 
     useEffect(() => {
       const resize = () => {
@@ -64,7 +127,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
         if (!c || !w) return;
         const dpr = window.devicePixelRatio || 1;
         const width = w.clientWidth;
-        const height = Math.max(260, Math.min(420, Math.round(width * 0.75)));
+        const height = fixedHeight ?? Math.max(260, Math.min(420, Math.round(width * 0.75)));
         c.style.width = `${width}px`;
         c.style.height = `${height}px`;
         c.width = Math.round(width * dpr);
@@ -75,15 +138,15 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
       const ro = new ResizeObserver(resize);
       if (wrapRef.current) ro.observe(wrapRef.current);
       return () => ro.disconnect();
-    }, [redraw]);
+    }, [redraw, fixedHeight]);
 
     const changed = () => {
       setCount(strokes.current.length);
-      onChange?.(strokes.current.filter((s) => s.tool === "pen").length === 0);
+      onChange?.(strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current);
     };
 
     useImperativeHandle(ref, () => ({
-      isEmpty: () => strokes.current.filter((s) => s.tool === "pen").length === 0,
+      isEmpty: () => strokes.current.filter((s) => s.tool === "pen").length === 0 && !base.current,
       exportCanvas: () => {
         const c = canvasRef.current;
         if (!c) return null;
@@ -103,6 +166,23 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
         ctx.fillRect(0, 0, out.width, out.height);
         ctx.drawImage(layer, 0, 0);
         return out;
+      },
+      exportImage: () => {
+        const c = canvasRef.current;
+        if (!c || c.width === 0 || c.height === 0) return null;
+        if (!base.current && strokes.current.every((s) => s.tool === "eraser")) return "";
+        const dpr = window.devicePixelRatio || 1;
+        const layer = document.createElement("canvas");
+        layer.width = c.width;
+        layer.height = c.height;
+        const lctx = layer.getContext("2d")!;
+        lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (base.current) {
+          const { img } = base.current;
+          lctx.drawImage(img, 0, 0, img.naturalWidth / dpr, img.naturalHeight / dpr);
+        }
+        draw(lctx, strokes.current, "#111111");
+        return layer.toDataURL("image/png");
       },
     }));
 
@@ -138,6 +218,8 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
     };
     const clear = () => {
       strokes.current = [];
+      base.current = null;
+      setHasBase(false);
       redraw();
       changed();
     };
@@ -161,7 +243,7 @@ export const DrawingCanvas = forwardRef<DrawingHandle, { onChange?: (empty: bool
           <button type="button" className={toolBtn(false)} onClick={undo} disabled={!count} aria-label={t("sol.undo")}>
             <Undo2 size={16} />
           </button>
-          <button type="button" className={toolBtn(false)} onClick={clear} disabled={!count} aria-label={t("sol.clear")}>
+          <button type="button" className={toolBtn(false)} onClick={clear} disabled={!count && !hasBase} aria-label={t("sol.clear")}>
             <Trash2 size={16} />
           </button>
         </div>
