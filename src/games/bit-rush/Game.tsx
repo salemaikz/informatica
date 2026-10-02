@@ -1,35 +1,40 @@
 "use client";
 
-import { Check, Delete, X } from "lucide-react";
+import { Check, Delete, Pause, Play, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { Button } from "@/components/ui/Button";
 import type { GameProps } from "@/games/types";
+import { useT } from "@/i18n/useT";
 import { checkInput } from "@/lib/check";
 import { cn } from "@/lib/cn";
+import { ignoreKey } from "@/lib/keys";
 import { playSound } from "@/lib/sound";
 import { useApp } from "@/lib/store";
 import { fmt, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
   appendKey,
+  bonusMs,
   clockAfter,
   createStream,
   eraseKey,
   isFinished,
+  isRoundOver,
+  MODE_CONFIG,
   multiplier,
   nextQuestion,
-  points,
   recordAnswer,
-  ROUND_MS,
+  remainingFraction,
+  scoreFor,
   SKILLS,
-  speedFrac,
-  speedWindow,
+  taskTimeMs,
   type Question,
   type RoundStep,
 } from "./logic";
 import { S } from "./strings";
 
-type Judge = { chosen: number | null; correct: boolean };
+type Judge = { chosen: number | null; correct: boolean; timedOut: boolean };
 type Mood = "neutral" | "happy" | "sad" | "celebrate";
 interface Float {
   id: number;
@@ -38,8 +43,6 @@ interface Float {
   good: boolean;
 }
 
-const NEXT_DELAY = 350;
-const REVEAL_AUTO = 3000;
 const END_DELAY = 700;
 const TAP_GUARD = 250;
 
@@ -142,20 +145,25 @@ function Keypad({
   );
 }
 
-export default function Game({ lang, sound, onFinish }: GameProps) {
+export default function Game({ lang, sound, mode, onFinish }: GameProps) {
+  const { t } = useT();
+  const cfg = MODE_CONFIG[mode];
   const [init] = useState(() => {
     const skills = useApp.getState().skills;
     const masteries: Record<string, number | undefined> = {};
     for (const s of SKILLS) masteries[s] = skills[s]?.mastery;
-    return nextQuestion(createStream((Date.now() ^ Math.floor(Math.random() * 2 ** 32)) >>> 0, masteries));
+    return nextQuestion(createStream((Date.now() ^ Math.floor(Math.random() * 2 ** 32)) >>> 0, masteries, mode));
   });
 
   const streamRef = useRef(init.stream);
   const qRef = useRef<Question>(init.question);
-  const remainRef = useRef(ROUND_MS);
+  const remainRef = useRef(cfg.clockMs ?? 0);
   const activeRef = useRef(0);
   const qElRef = useRef(0);
+  /** Пауза на время разбора ошибки (часы блица и таймер вопроса стоят). */
   const pausedRef = useRef(false);
+  /** Пауза по кнопке (обычный темп). */
+  const userPausedRef = useRef(false);
   const lockedRef = useRef(false);
   const finishedRef = useRef(false);
   const revealRef = useRef(false);
@@ -167,11 +175,13 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
   const attemptsRef = useRef<{ skill: string; correct: boolean }[]>([]);
   const correctRef = useRef(0);
   const timersRef = useRef<Set<number>>(new Set());
-  const apiRef = useRef<{ end: () => void; advance: (fromTap: boolean) => void; onKey: (e: KeyboardEvent) => void } | null>(null);
+  const apiRef = useRef<{ end: () => void; timeout: () => void; advance: (fromTap: boolean) => void; onKey: (e: KeyboardEvent) => void } | null>(null);
 
   const [q, setQ] = useState<Question>(init.question);
   const [qKey, setQKey] = useState(0);
-  const [tick, setTick] = useState({ remain: ROUND_MS, qEl: 0 });
+  const [tick, setTick] = useState({ remain: cfg.clockMs ?? 0, qEl: 0 });
+  const [answered, setAnswered] = useState(0);
+  const [paused, setPaused] = useState(false);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [typed, setTyped] = useState("");
@@ -221,6 +231,10 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
 
   const showNext = () => {
     if (finishedRef.current) return;
+    if (isRoundOver(mode, attemptsRef.current.length, remainRef.current, activeRef.current)) {
+      end();
+      return;
+    }
     const { stream, question } = nextQuestion(streamRef.current);
     streamRef.current = stream;
     qRef.current = question;
@@ -229,6 +243,7 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
     pausedRef.current = false;
     qElRef.current = 0;
     lockedRef.current = false;
+    setTick((x) => ({ ...x, qEl: 0 }));
     setQ(question);
     setQKey((k) => k + 1);
     setTyped("");
@@ -248,43 +263,46 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
     showNext();
   };
 
-  const judgeAnswer = (correct: boolean, chosen: number | null) => {
+  const judgeAnswer = (correct: boolean, chosen: number | null, timedOut = false) => {
     if (lockedRef.current || finishedRef.current) return;
     lockedRef.current = true;
     const cur = qRef.current;
-    const seconds = qElRef.current / 1000;
+    const elapsedMs = qElRef.current;
     const prev = streamRef.current;
     const next = recordAnswer(prev, cur, correct);
     streamRef.current = next;
     attemptsRef.current.push({ skill: cur.step.skill ?? "", correct });
-    remainRef.current = clockAfter(remainRef.current, correct);
-    setTick((t) => ({ ...t, remain: Math.max(0, remainRef.current) }));
-    setJudge({ chosen, correct });
+    setAnswered(attemptsRef.current.length);
+    if (cfg.clockMs !== null) {
+      remainRef.current = clockAfter(remainRef.current, correct, cur.tier);
+      setTick((x) => ({ ...x, remain: Math.max(0, remainRef.current) }));
+    }
+    setJudge({ chosen, correct, timedOut });
     setStreak(next.streak);
 
     if (correct) {
       correctRef.current += 1;
-      const pts = points(cur.step, next.streak, seconds, cur.tier);
+      const pts = scoreFor(mode, cur.step, next.streak, elapsedMs, cur.tier);
       scoreRef.current += pts;
       setScore(scoreRef.current);
       addFloat(`+${pts}`, "pts", true);
-      addFloat(tx(S.clockPlus, lang), "clock", true);
-      if (speedFrac(seconds, speedWindow(cur.step, cur.tier)) > 0.6) {
+      if (cfg.clockMs !== null) addFloat(fmt(tx(S.clockPlus, lang), { n: String(bonusMs(cur.tier) / 1000).replace(".", ",") }), "clock", true);
+      if (mode === "blitz" && remainingFraction(cur.step, cur.tier, mode, elapsedMs) > 0.6) {
         setFast(true);
         later(() => setFast(false), 900);
       }
       flashMood(multiplier(next.streak) === 5 && multiplier(prev.streak) < 5 ? "celebrate" : "happy");
       setAnnounce(tx(S.announceRight, lang));
       if (sound) playSound("correct");
-      later(showNext, NEXT_DELAY);
+      later(showNext, cfg.nextDelayMs);
       return;
     }
 
-    addFloat(tx(S.clockMinus, lang), "clock", false);
+    if (cfg.clockMs !== null) addFloat(tx(S.clockMinus, lang), "clock", false);
     flashMood("sad");
-    setAnnounce(fmt(tx(S.announceWrong, lang), { a: answerText(cur.step, lang) }));
+    setAnnounce(fmt(tx(timedOut ? S.announceTimeout : S.announceWrong, lang), { a: answerText(cur.step, lang) }));
     if (sound) playSound("wrong");
-    if (isFinished(remainRef.current, activeRef.current)) {
+    if (cfg.clockMs !== null && isFinished(remainRef.current, activeRef.current)) {
       end();
       return;
     }
@@ -292,10 +310,28 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
     revealRef.current = true;
     revealAtRef.current = performance.now();
     setRevealing(true);
-    revealTimerRef.current = later(() => {
-      revealTimerRef.current = null;
-      advance(false);
-    }, REVEAL_AUTO);
+    // Спокойный темп: ждём «Далее», само не уходит.
+    if (cfg.revealAutoMs !== null) {
+      revealTimerRef.current = later(() => {
+        revealTimerRef.current = null;
+        advance(false);
+      }, cfg.revealAutoMs);
+    }
+  };
+
+  /** Время на вопрос вышло (обычный темп) — это ошибка, показываем верный ответ. */
+  const timeout = () => judgeAnswer(false, null, true);
+
+  const pause = () => {
+    if (!cfg.questionTimeout || lockedRef.current || finishedRef.current || userPausedRef.current) return;
+    userPausedRef.current = true;
+    setPaused(true);
+  };
+
+  const resume = () => {
+    if (!userPausedRef.current) return;
+    userPausedRef.current = false;
+    setPaused(false);
   };
 
   const pickOption = (i: number) => {
@@ -327,7 +363,12 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
   };
 
   const onKey = (e: KeyboardEvent) => {
+    if (ignoreKey(e)) return;
     if (finishedRef.current || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (userPausedRef.current) {
+      if (e.key === "Escape") resume();
+      return;
+    }
     if (revealRef.current) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -353,37 +394,52 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
 
   // Свежие обработчики для rAF-цикла и клавиатуры (ref обновляется в эффекте, не во время рендера).
   useEffect(() => {
-    apiRef.current = { end, advance, onKey };
+    apiRef.current = { end, timeout, advance, onKey };
   });
 
   useEffect(() => {
+    const c = MODE_CONFIG[mode];
+    const timers = timersRef.current;
+    // В спокойном темпе таймеров нет совсем — цикл не нужен.
+    if (c.clockMs === null && !c.questionTimeout) {
+      return () => {
+        timers.forEach((id) => window.clearTimeout(id));
+        timers.clear();
+      };
+    }
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
       const dt = Math.min(now - last, 100);
       last = now;
       if (!finishedRef.current) {
-        if (!pausedRef.current && document.visibilityState !== "hidden") {
-          remainRef.current -= dt;
-          activeRef.current += dt;
+        const running = !pausedRef.current && !userPausedRef.current && document.visibilityState !== "hidden";
+        if (running) {
+          if (c.clockMs !== null) {
+            remainRef.current -= dt;
+            activeRef.current += dt;
+          }
           if (!lockedRef.current) qElRef.current += dt;
         }
         setTick({ remain: Math.max(0, remainRef.current), qEl: qElRef.current });
-        if (isFinished(remainRef.current, activeRef.current)) {
+        if (c.clockMs !== null && isFinished(remainRef.current, activeRef.current)) {
           apiRef.current?.end();
           return;
+        }
+        if (c.questionTimeout && running && !lockedRef.current) {
+          const budget = taskTimeMs(qRef.current.step, qRef.current.tier, mode);
+          if (budget !== null && qElRef.current >= budget) apiRef.current?.timeout();
         }
       }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    const timers = timersRef.current;
     return () => {
       cancelAnimationFrame(raf);
       timers.forEach((id) => window.clearTimeout(id));
       timers.clear();
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => apiRef.current?.onKey(e);
@@ -394,16 +450,48 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
   // ---------- рендер ----------
   const step = q.step;
   const mult = multiplier(streak);
-  const locked = judge !== null || timeUp;
-  const remainSec = Math.ceil(tick.remain / 1000);
-  const barColor = tick.remain < 5000 ? "bg-danger" : tick.remain < 15000 ? "bg-warning" : "bg-primary";
-  const ringFrac = Math.max(0, 1 - tick.qEl / 1000 / speedWindow(step, q.tier));
-  const bgOpacity = mult >= 5 ? 1 : mult === 4 ? 0.6 : 0;
+  const locked = judge !== null || timeUp || paused;
   const wrongJudged = judge !== null && !judge.correct;
+  /** В спокойном и обычном темпе ошибку разбираем подробно: карточка с ответом и «Почему так». */
+  const richReveal = mode !== "blitz";
+  const total = cfg.questions;
+  const current = total === null ? 0 : Math.min(total, judge ? answered : answered + 1);
+
+  // Блиц: общие часы и кольцо скорости. Обычный: полоса времени на вопрос. Спокойный: полоса прогресса.
+  const remainSec = Math.ceil(tick.remain / 1000);
+  const budgetMs = taskTimeMs(step, q.tier, mode);
+  const qFrac = judge?.timedOut ? 0 : budgetMs === null ? 0 : Math.max(0, 1 - tick.qEl / budgetMs);
+  const ringFrac = judge ? 0 : qFrac;
+  let barColor = "bg-primary";
+  let barWidth = 100;
+  if (mode === "blitz") {
+    barColor = tick.remain < 5000 ? "bg-danger" : tick.remain < 15000 ? "bg-warning" : "bg-primary";
+    barWidth = (tick.remain / (cfg.clockMs ?? 1)) * 100;
+  } else if (mode === "normal") {
+    barColor = qFrac < 0.3 ? "bg-warning" : "bg-primary";
+    barWidth = qFrac * 100;
+  } else {
+    barWidth = total ? (answered / total) * 100 : 0;
+  }
+  const bgOpacity = mult >= 5 ? 1 : mult === 4 ? 0.6 : 0;
+
+  const nextButton = (
+    <button
+      type="button"
+      onClick={() => apiRef.current?.advance(false)}
+      className={cn(
+        "w-full rounded-xl bg-primary px-4 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        richReveal ? "min-h-14 shrink-0" : "mt-1 min-h-12",
+      )}
+    >
+      {t("common.next")}
+      {cfg.revealAutoMs !== null && <span className="ml-1 text-sm font-medium opacity-80">· {tx(S.tapToContinue, lang)}</span>}
+    </button>
+  );
 
   return (
     <div
-      onClick={() => apiRef.current?.advance(true)}
+      onClick={cfg.revealAutoMs === null ? undefined : () => apiRef.current?.advance(true)}
       className="relative isolate mx-auto flex h-[calc(100dvh-56px)] w-full max-w-[640px] touch-manipulation select-none flex-col px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2"
     >
       <div
@@ -441,14 +529,31 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
           )}
         </div>
         <div className="relative flex items-center gap-2">
-          <span
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              tick.remain < 5000 ? "text-danger-strong motion-safe:animate-pulse" : tick.remain < 15000 ? "text-warning-strong" : "text-text",
-            )}
-          >
-            {fmt(tx(S.seconds, lang), { n: remainSec })}
-          </span>
+          {mode === "blitz" ? (
+            <span
+              className={cn(
+                "text-lg font-bold tabular-nums",
+                tick.remain < 5000 ? "text-danger-strong motion-safe:animate-pulse" : tick.remain < 15000 ? "text-warning-strong" : "text-text",
+              )}
+            >
+              {fmt(tx(S.seconds, lang), { n: remainSec })}
+            </span>
+          ) : (
+            <span className="text-lg font-bold tabular-nums" aria-label={fmt(tx(S.progress, lang), { n: current, total: total ?? 0 })}>
+              {current}/{total}
+            </span>
+          )}
+          {mode === "normal" && (
+            <button
+              type="button"
+              onClick={pause}
+              disabled={judge !== null || timeUp}
+              aria-label={t("game.pause")}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
+            >
+              <Pause size={22} aria-hidden />
+            </button>
+          )}
           <Mascot mood={mood} size={36} />
           {floats
             .filter((f) => f.kind === "clock")
@@ -466,8 +571,8 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
         </div>
       </div>
 
-      <div className="h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-surface-2" aria-hidden>
-        <div className={cn("h-full rounded-full", barColor)} style={{ width: `${(tick.remain / ROUND_MS) * 100}%` }} />
+      <div className={cn("w-full shrink-0 overflow-hidden rounded-full bg-surface-2", mode === "normal" ? "h-2" : "h-1.5")} aria-hidden>
+        <div className={cn("h-full rounded-full", barColor, mode === "calm" && "motion-safe:transition-[width] motion-safe:duration-300")} style={{ width: `${barWidth}%` }} />
       </div>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
@@ -478,7 +583,7 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
             wrongJudged && "motion-safe:animate-shake",
           )}
         >
-          <Ring frac={judge ? 0 : ringFrac} />
+          {mode === "blitz" && <Ring frac={ringFrac} />}
           {q.retry && <span className="absolute left-3 top-3 rounded-full bg-surface-2 px-2.5 py-0.5 text-sm font-bold text-muted">{tx(S.retryTag, lang)}</span>}
           <div className="my-auto">
             <p className="text-xl font-semibold sm:text-2xl">
@@ -487,9 +592,22 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
           </div>
         </div>
 
-        <div className="min-h-12 shrink-0 text-center">
+        <div className={cn("shrink-0 text-center", !richReveal && "min-h-12")}>
           {judge?.correct && <p className="py-2 text-lg font-extrabold text-success-strong motion-safe:animate-pop">{tx(S.correct, lang)}</p>}
-          {wrongJudged && (
+          {wrongJudged && richReveal && (
+            <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface-2 p-3 text-left motion-safe:animate-fade-in">
+              <p className="text-base font-extrabold text-danger-strong">{judge.timedOut ? t("game.timeUp") : tx(S.wrong, lang)}</p>
+              <p className="flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2 text-base font-bold text-success-strong">
+                <Check size={18} className="shrink-0" aria-hidden />
+                <span className="font-mono">{fmt(tx(S.answerWas, lang), { a: answerText(step, lang) })}</span>
+              </p>
+              <p className="text-sm text-text">
+                <span className="font-bold">{t("game.why")}: </span>
+                {tx(step.explanation, lang)}
+              </p>
+            </div>
+          )}
+          {wrongJudged && !richReveal && (
             <div className="flex flex-col items-center gap-1 motion-safe:animate-fade-in">
               <p className="text-lg font-extrabold text-danger-strong">
                 {tx(S.wrong, lang)}
@@ -501,15 +619,7 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
                 )}
               </p>
               <p className="text-sm text-muted">{tx(step.explanation, lang)}</p>
-              {revealing && (
-                <button
-                  type="button"
-                  onClick={() => apiRef.current?.advance(false)}
-                  className="mt-1 min-h-12 w-full rounded-xl bg-primary px-4 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {tx(S.next, lang)} <span className="ml-1 text-sm font-medium opacity-80">· {tx(S.tapToContinue, lang)}</span>
-                </button>
-              )}
+              {revealing && nextButton}
             </div>
           )}
         </div>
@@ -565,9 +675,14 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
                 <span className="font-sans text-base font-medium text-muted">{tx(S.typeAnswer, lang)}</span>
               )}
             </div>
-            <Keypad mode={step.mode === "binary" ? "binary" : "number"} locked={locked} canSubmit={typed.length > 0} onKey={typeKey} onErase={erase} onOk={submit} lang={lang} />
+            {/* При разборе ошибки клавиатуру убираем: место нужно под объяснение и кнопку. */}
+            {!(richReveal && wrongJudged) && (
+              <Keypad mode={step.mode === "binary" ? "binary" : "number"} locked={locked} canSubmit={typed.length > 0} onKey={typeKey} onErase={erase} onOk={submit} lang={lang} />
+            )}
           </div>
         )}
+
+        {richReveal && wrongJudged && revealing && nextButton}
       </div>
 
       <div className="sr-only" aria-live="polite">
@@ -575,8 +690,18 @@ export default function Game({ lang, sound, onFinish }: GameProps) {
       </div>
 
       {timeUp && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg/80">
-          <p className="text-4xl font-black text-primary-strong motion-safe:animate-pop">{tx(S.timeUp, lang)}</p>
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg/80 px-4">
+          <p className="text-center text-4xl font-black text-primary-strong motion-safe:animate-pop">{mode === "blitz" ? tx(S.timeUp, lang) : t("game.over")}</p>
+        </div>
+      )}
+
+      {paused && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-bg px-4">
+          <Mascot mood="neutral" size={96} />
+          <p className="text-2xl font-extrabold">{t("game.paused")}</p>
+          <Button size="lg" onClick={resume} icon={<Play size={20} fill="currentColor" />} autoFocus>
+            {t("common.continue")}
+          </Button>
         </div>
       )}
     </div>
