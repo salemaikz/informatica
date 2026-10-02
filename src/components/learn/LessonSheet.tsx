@@ -238,7 +238,8 @@ export function LessonSheet({ lessonId, onClose }: { lessonId: string | null; on
   if (lessonId && lessonId !== shown) setShown(lessonId);
   const title = shown ? findLessonRef(shown)?.ref.title : undefined;
   return (
-    <Modal open={!!lessonId} onClose={onClose} label={title ? l(title) : ""}>
+    // Урока нет на карте (старый id из сохранения, чужая ссылка) — не открываем пустую шторку.
+    <Modal open={!!lessonId && !!findLessonRef(lessonId)} onClose={onClose} label={title ? l(title) : ""}>
       {shown && <SheetBody key={shown} lessonId={shown} />}
     </Modal>
   );
