@@ -88,6 +88,7 @@ export const learnDict = {
 
   // ---------- Шторка темы ЕНТ ----------
   "learn2.topic.mastery": { ru: "Освоение темы: {n}%", kk: "Тақырыпты меңгеру: {n}%" },
+  "learn2.topic.masteryNone": { ru: "Освоение темы: —", kk: "Тақырыпты меңгеру: —" },
   "learn2.topic.skills": { ru: "Навыки темы", kk: "Тақырып дағдылары" },
   "learn2.topic.lessons": { ru: "Уроки темы", kk: "Тақырып сабақтары" },
   "learn2.topic.test": { ru: "Тест по теме", kk: "Тақырып бойынша тест" },

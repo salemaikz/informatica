@@ -696,7 +696,7 @@ function totalPct(rand: Rand, totals: number[], pcts: number[]): [number, number
 const RET_HINT = l("Удержание = вернувшиеся / все · 100%. Что в числителе, а что в знаменателе?", "Ұстап қалу = оралғандар / барлығы · 100%. Алымында не, бөлімінде не тұр?");
 
 /** Удержание в процентах: даны установки и вернувшиеся. */
-const retPct: InputGen = (rand, level, seed) => {
+const retPct: InputGen = (rand, level) => {
   const [total, pct] = totalPct(rand, TOTALS, level === 1 ? [10, 20, 25, 50] : PCTS);
   const back = (total * pct) / 100;
   return input({
@@ -853,7 +853,7 @@ const funnel: InputGen = (rand, level) => {
 };
 
 /** Сравнение двух приложений по удержанию (ловушка: у «проигравшего» вернулось больше человек). */
-const compare: Gen = (rand, level, seed) => {
+const compare: Gen = (rand, level) => {
   const pairs: [number, number, number, number][] = [];
   for (const nHi of [100, 200, 250, 400]) for (const pHi of [30, 40, 50, 60]) for (const nLo of [500, 800, 1000]) for (const pLo of [10, 20, 25]) {
     const bHi = (nHi * pHi) / 100;

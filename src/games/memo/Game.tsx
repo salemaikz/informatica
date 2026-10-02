@@ -3,13 +3,14 @@
 import { m } from "motion/react";
 import { ArrowLeftRight, ArrowRight, Check, Layers, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import type { GameProps } from "@/games/types";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
-import { fmt, tx } from "@/lib/text";
+import { fmt, plainText, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
   BLITZ_WALL_CAP_MS,
@@ -196,7 +197,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       if (r.kind === "match") {
         feedback(r.roundComplete ? "combo" : "correct", { combo: engine.foundCount });
         const pair = cards.filter((c) => c.pairIndex === r.pairIndex);
-        const [a, b] = pair.map((c) => tx(c.text, lg));
+        const [a, b] = pair.map((c) => plainText(tx(c.text, lg)));
         if (r.roundComplete) m0.pauseLeft = PAUSE_MS;
         commit({
           cards,
@@ -211,7 +212,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       // не пара
       feedback("wrong");
       m0.missLeft = MISS_CLOSE_MS;
-      const [a, b] = cards.filter((c) => c.status === "miss").map((c) => tx(c.text, lg));
+      const [a, b] = cards.filter((c) => c.status === "miss").map((c) => plainText(tx(c.text, lg)));
       commit({
         cards,
         score: engine.score,
@@ -449,10 +450,12 @@ function MemoCard({
   onFlip: () => void;
 }) {
   const text = tx(card.text, lang);
+  // text — с разметкой (показ через InlineMarkdown); для озвучки, длины и «формулы» — без неё
+  const plain = plainText(text);
   const up = card.status !== "down";
   const right = card.side === "right";
-  const mono = isFormula(text);
-  const base = fmt(tx(card.side === "left" ? S.termCard : S.valueCard, lang), { text });
+  const mono = isFormula(plain);
+  const base = fmt(tx(card.side === "left" ? S.termCard : S.valueCard, lang), { text: plain });
   const label =
     card.status === "down"
       ? fmt(tx(S.closedCard, lang), { n: index + 1 })
@@ -504,9 +507,9 @@ function MemoCard({
             )}
             <span
               lang={lang}
-              className={cn("leading-tight", mono ? "font-mono break-all" : "hyphens-auto break-words", cardTextClass(text, mono))}
+              className={cn("leading-tight", mono ? "font-mono break-all" : "hyphens-auto break-words", cardTextClass(plain, mono))}
             >
-              {text}
+              <InlineMarkdown>{text}</InlineMarkdown>
             </span>
           </div>
         </m.div>
@@ -544,9 +547,13 @@ function Review({ summary, lang, pop }: { summary: RoundSummary; lang: Lang; pop
           const { Icon, cls, label } = OUTCOME_ICON[outcome];
           return (
             <li key={i} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl bg-surface-2 px-2.5 py-2">
-              <span className={cn("text-sm leading-tight font-bold text-text", isFormula(l) && "font-mono")}>{l}</span>
+              <span className={cn("text-sm leading-tight font-bold text-text", isFormula(plainText(l)) && "font-mono")}>
+                <InlineMarkdown>{l}</InlineMarkdown>
+              </span>
               <ArrowLeftRight size={14} className="text-muted" aria-hidden />
-              <span className={cn("text-sm leading-tight font-bold text-text", isFormula(r) && "font-mono")}>{r}</span>
+              <span className={cn("text-sm leading-tight font-bold text-text", isFormula(plainText(r)) && "font-mono")}>
+                <InlineMarkdown>{r}</InlineMarkdown>
+              </span>
               <span
                 title={tx(label, lang)}
                 className={cn("flex h-7 w-7 items-center justify-center rounded-full", cls)}

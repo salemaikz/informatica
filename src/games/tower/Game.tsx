@@ -3,6 +3,7 @@
 import { Flame, Trophy } from "lucide-react";
 import { m } from "motion/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot, type Mood } from "@/components/mascot/Mascot";
 import { ChoiceView, MultiView } from "@/components/lesson/steps/ChoiceView";
 import { InputView } from "@/components/lesson/steps/InputView";
@@ -74,7 +75,7 @@ const TaskArea = memo(function TaskArea({ step, ...rest }: StepProps<TowerStep>)
   const { l } = useT();
   return (
     <>
-      <h2 className="text-lg font-extrabold leading-snug sm:text-xl">{l(step.prompt)}</h2>
+      <h2 className="text-lg font-extrabold leading-snug sm:text-xl"><InlineMarkdown>{l(step.prompt)}</InlineMarkdown></h2>
       {step.scene && <SceneView scene={step.scene} />}
       <TaskStepView step={step} {...rest} />
     </>
@@ -402,7 +403,7 @@ function TowerGame({ lang, mode, onFinish, first, skills, seed }: TowerProps) {
               <>
                 <p className="text-sm">
                   <span className="font-bold">{t("game.why")}: </span>
-                  {l(shown.explanation)}
+                  <InlineMarkdown>{l(shown.explanation)}</InlineMarkdown>
                 </p>
                 <p className="text-sm text-muted">{tx(S.sameFloor, lang)}</p>
               </>

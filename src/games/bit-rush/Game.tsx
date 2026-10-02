@@ -2,6 +2,7 @@
 
 import { Check, Delete, Pause, Play, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Button } from "@/components/ui/Button";
 import type { GameProps } from "@/games/types";
@@ -11,7 +12,7 @@ import { cn } from "@/lib/cn";
 import { ignoreKey } from "@/lib/keys";
 import { playSound } from "@/lib/sound";
 import { useApp } from "@/lib/store";
-import { fmt, tx } from "@/lib/text";
+import { fmt, plainText, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
   appendKey,
@@ -46,8 +47,12 @@ interface Float {
 const END_DELAY = 700;
 const TAP_GUARD = 400;
 
-/** Числа и двоичные литералы в подсказке — моноширинным шрифтом. */
+/**
+ * Условие. Если в тексте есть markdown (`код`, **жирный**, ==маркер==) — показываем его как разметку;
+ * иначе числа и двоичные литералы выделяем моноширинным шрифтом.
+ */
 function Prompt({ text }: { text: string }) {
+  if (plainText(text) !== text) return <InlineMarkdown>{text}</InlineMarkdown>;
   return (
     <>
       {text.split(/([0-9]+[₀-₉]*)/u).map((part, i) =>
@@ -603,7 +608,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
               </p>
               <p className="text-sm text-text">
                 <span className="font-bold">{t("game.why")}: </span>
-                {tx(step.explanation, lang)}
+                <InlineMarkdown>{tx(step.explanation, lang)}</InlineMarkdown>
               </p>
             </div>
           )}
@@ -618,7 +623,9 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                   </>
                 )}
               </p>
-              <p className="text-sm text-muted">{tx(step.explanation, lang)}</p>
+              <p className="text-sm text-muted">
+                <InlineMarkdown>{tx(step.explanation, lang)}</InlineMarkdown>
+              </p>
               {revealing && nextButton}
             </div>
           )}

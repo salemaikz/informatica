@@ -1,6 +1,6 @@
 import type { GameAttempt, GameMode, GameResult } from "@/games/types";
 import { draw, skillsWithShape, type Pair } from "@/lib/bank";
-import { hashString, shuffle, seeded } from "@/lib/text";
+import { hashString, plainText, shuffle, seeded } from "@/lib/text";
 import type { Level, SkillId, Text } from "@/lib/types";
 
 // Чистая логика «Мемо-пар»: раунды по 6 пар из банка, переворот карточек, очки. Без React.
@@ -95,7 +95,7 @@ const fromScript = (s: string, set: string) => [...s].map((ch) => set.indexOf(ch
  * (B₁₆ и 1011₂ — обе 11: ученик соединит их и получит «ошибку», будучи прав).
  */
 export function numericValue(text: string): number | null {
-  const s = text.replace(/\s+/g, "");
+  const s = plainText(text).replace(/\s+/g, "");
   let mm = /^([0-9A-Za-z]+)([₀-₉]+)$/.exec(s);
   if (mm) {
     const base = Number(fromScript(mm[2], SUB_DIGITS));

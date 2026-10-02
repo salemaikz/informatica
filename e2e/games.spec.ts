@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Каждая мини-игра открывается, стартует и рисует игровое поле без ошибок.
-const GAME_IDS = ["bit-rush", "bit-flip", "bit-sort", "bug-hunt"];
+const GAME_IDS = ["bit-rush", "bit-flip", "bit-sort", "bug-hunt", "tower", "truth", "memo"];
 
 for (const id of GAME_IDS) {
   test(`мини-игра ${id} запускается`, async ({ page }) => {
@@ -22,8 +22,8 @@ for (const id of GAME_IDS) {
       ),
     );
     await page.goto("/practice");
-    await page.locator(`a[href="/game/${id}"]`).click();
-    await page.waitForURL(`**/game/${id}`);
+    await page.locator(`a[href^="/game/${id}"]`).click();
+    await page.waitForURL(new RegExp(`/game/${id}(\\?|$)`));
     await page.getByRole("button", { name: "Играть" }).click();
     // Игровое поле: появились интерактивные элементы, правила скрылись
     await expect(page.getByText("Правила")).toHaveCount(0);

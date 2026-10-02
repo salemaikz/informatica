@@ -356,7 +356,7 @@ function randShift(rand: Rand): number[] {
 }
 
 /** L2: сдвиг вершины. */
-function moveGen(rand: Rand, level: Level, seed: number): ChoiceStep {
+function moveGen(rand: Rand, level: Level): ChoiceStep {
   const p = randPoint(rand);
   const d = randShift(rand);
   const res = p.map((x, i) => x + d[i]);
@@ -378,7 +378,7 @@ function moveGen(rand: Rand, level: Level, seed: number): ChoiceStep {
 }
 
 /** L2: масштаб от начала координат. */
-function scaleGen(rand: Rand, level: Level, seed: number): ChoiceStep {
+function scaleGen(rand: Rand, level: Level): ChoiceStep {
   const p = randPoint(rand).map((v) => (v === 0 ? 1 : v));
   const k = int(rand, 2, 4);
   const res = p.map((x) => x * k);
@@ -406,7 +406,7 @@ function scaleGen(rand: Rand, level: Level, seed: number): ChoiceStep {
 }
 
 /** L3: сначала сдвиг, потом масштаб. */
-function comboGen(rand: Rand, level: Level, seed: number): ChoiceStep {
+function comboGen(rand: Rand, level: Level): ChoiceStep {
   const p = randPoint(rand);
   const d = randShift(rand);
   const k = int(rand, 2, 3);
@@ -501,7 +501,7 @@ function scaleReverse(rand: Rand, level: Level, seed: number): InputStep {
 
 // ---------- Генераторы: слои 3D-печати ----------
 
-function layers(rand: Rand, level: Level, seed: number): InputStep {
+function layers(rand: Rand, level: Level): InputStep {
   if (level === 1) {
     const t10 = pick(rand, [10, 5, 2]);
     const H = int(rand, 4, 30);

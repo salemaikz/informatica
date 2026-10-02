@@ -21,6 +21,28 @@ export function plain(md: string): string {
     .trim();
 }
 
+/**
+ * Убирает строчную markdown-разметку (`код`, **жирный**, *курсив*, ==маркер== и =={g}маркер==) —
+ * для aria-label, объявлений скринридеру, замеров длины и проверок «формула ли это».
+ * Консервативно: `a*b*c`, `2**10`, `a == b`, `my_var_name` остаются как есть (маркеры — только парные, у границ слов).
+ */
+export function plainText(md: string): string {
+  // Код прячем за заглушки: внутри него разметку не трогаем (там бывают `a == b`, `2**3`).
+  const codes: string[] = [];
+  let s = md.replace(/`([^`\n]+)`/g, (_, code: string) => {
+    codes.push(code);
+    return `\uE000${codes.length - 1}\uE001`;
+  });
+  // Границы слов — Юникод (\w не знает кириллицу): [^L N _] слева, (?![L N _]) справа.
+  s = s
+    .replace(/(?<!=)==(?:\{[a-z]\})?(?=\S)(.+?)(?<=\S)==(?!=)/gu, "$1")
+    .replace(/~~(?=\S)(.+?)(?<=\S)~~/gu, "$1")
+    .replace(/(^|[^\p{L}\p{N}*_])(\*\*|__)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, "$1$3")
+    .replace(/(^|[^\p{L}\p{N}*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?![\p{L}\p{N}*])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])_(?=[^\s_])([^_\n]*?[^\s_])_(?![\p{L}\p{N}_])/gu, "$1$2");
+  return s.replace(/\uE000(\d+)\uE001/g, (_, i: string) => codes[Number(i)]).replace(/`/g, "");
+}
+
 export function todayKey(d = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");

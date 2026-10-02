@@ -3,6 +3,7 @@
 import { animate, m, useMotionValue, useTransform } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, Flame, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import type { GameProps } from "@/games/types";
@@ -10,7 +11,7 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
 import { ignoreKey } from "@/lib/keys";
-import { fmt, tx } from "@/lib/text";
+import { fmt, plainText, tx } from "@/lib/text";
 import type { Statement } from "@/lib/bank";
 import { STREAK_FOR_DOUBLE, TruthEngine, isFormula, multiplierFor, newSeed, swipeDecision, type Verdict } from "./logic";
 import { S } from "./strings";
@@ -152,7 +153,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
       const quick = cfg.skipRevealOnCorrect && v.correct;
       m0.revealLeft = quick ? QUICK_MS : cfg.revealMs;
       m0.revealTotal = m0.revealLeft ?? 0;
-      const why = tx(v.statement.explanation, lg);
+      const why = plainText(tx(v.statement.explanation, lg));
       commit({
         phase: "reveal",
         verdict: v,
@@ -253,7 +254,9 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
   const v = ui.verdict;
   const st = ui.st;
   const text = st ? tx(st.text, lang) : "";
-  const formula = isFormula(text);
+  // text — с разметкой (для показа через InlineMarkdown); для озвучки, длины и «формулы» — без неё
+  const textPlain = plainText(text);
+  const formula = isFormula(textPlain);
   const mood = ui.lastOk === false ? "sad" : ui.streak >= 5 ? "celebrate" : ui.lastOk ? "happy" : "neutral";
   const urgent = clock && ui.secs <= 10;
   const asking = ui.phase === "ask";
@@ -309,7 +312,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
           <m.div
             key={ui.cardKey}
             role="group"
-            aria-label={text}
+            aria-label={textPlain}
             drag={asking ? "x" : false}
             dragMomentum={false}
             onDragEnd={(_, info) => {
@@ -353,10 +356,10 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
               <p
                 className={cn(
                   "leading-snug font-bold [overflow-wrap:anywhere] text-text",
-                  formula ? "font-mono text-3xl" : text.length > 90 ? "text-lg" : "text-xl",
+                  formula ? "font-mono text-3xl" : textPlain.length > 90 ? "text-lg" : "text-xl",
                 )}
               >
-                {text}
+                <InlineMarkdown>{text}</InlineMarkdown>
               </p>
             </div>
           </m.div>
@@ -398,14 +401,18 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
               )}
             </div>
             <div className="rounded-2xl bg-surface-2 px-3 py-2.5">
-              <p className={cn("leading-snug font-semibold text-text", formula && "font-mono text-lg")}>{text}</p>
+              <p className={cn("leading-snug font-semibold text-text", formula && "font-mono text-lg")}>
+                <InlineMarkdown>{text}</InlineMarkdown>
+              </p>
               <p className={cn("mt-1 text-sm font-extrabold", v.statement.value ? "text-success-strong" : "text-danger-strong")}>
                 {tx(v.statement.value ? S.claimTrue : S.claimFalse, lang)}
               </p>
             </div>
             <p className="leading-snug text-text">
               <span className="text-xs font-bold text-muted">{t("game.why")}: </span>
-              <span className="font-semibold">{tx(v.statement.explanation, lang)}</span>
+              <span className="font-semibold">
+                <InlineMarkdown>{tx(v.statement.explanation, lang)}</InlineMarkdown>
+              </span>
             </p>
           </div>
         )}

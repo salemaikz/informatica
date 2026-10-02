@@ -106,7 +106,7 @@ function TopicSheet({
 
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-sm font-extrabold">
-                  <span>{t("learn2.topic.mastery", { n: Math.round(value * 100) })}</span>
+                  <span>{level === "none" ? t("learn2.topic.masteryNone") : t("learn2.topic.mastery", { n: Math.round(value * 100) })}</span>
                   <span className={TONE[level].ink}>{t(`learn2.legend.${level}`)}</span>
                 </div>
                 <ProgressBar value={value} color={TONE[level].bar} height={10} />
