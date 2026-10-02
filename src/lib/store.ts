@@ -13,6 +13,7 @@ import type {
   LessonVia,
   SessionResult,
   Theme,
+  Track,
 } from "./types";
 import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
 import { sanitizeAvatar } from "./avatar";
@@ -36,8 +37,51 @@ import {
   type NoteSource,
 } from "./notebook";
 import type { GameMode, GameResult } from "@/games/types";
+import {
+  addHearts,
+  applyAiUsage,
+  buyItem,
+  CHIP_BONUS,
+  chipMultiplier,
+  chipsForXp,
+  earnAmount,
+  effectiveTier,
+  FREE_PLAN,
+  heartsView,
+  loseHeart as loseHeartPure,
+  practiceEarnsHeart,
+  PRACTICE_HEART_DAILY,
+  pushLedger,
+  quoteAi,
+  refundAiUsage,
+  sanitizeAiUsage,
+  sanitizeBoost,
+  sanitizeHearts,
+  sanitizePaywall,
+  sanitizePlan,
+  sanitizeWallet,
+  START_HEARTS,
+  START_WALLET,
+  startTrial as startTrialPure,
+  type AiKind,
+  type AiReceipt,
+  type AiUsage,
+  type Boost,
+  type BuyFail,
+  type ChipReason,
+  type Hearts,
+  type HeartsView,
+  type LedgerEntry,
+  type PaywallState,
+  type Plan,
+  type ShopItemId,
+  type Wallet,
+} from "./economy";
+import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
 
 export type { LessonStat } from "./review";
+export type { HistoryEntry, WrongItem } from "./history";
+export type { AiReceipt, HeartsView, Plan, Wallet } from "./economy";
 export type { Note, NoteFolder, Notebook, FolderColor, NoteSource } from "./notebook";
 
 // Локальное хранилище прогресса (MVP). Всё лежит в localStorage устройства.
@@ -77,6 +121,8 @@ export interface Profile {
   targetScore: number;
   /** Цель: уроков в неделю. */
   weeklyLessons: number;
+  /** Что проходим: ЕНТ или школьная программа (карта на главной). */
+  track: Track;
 }
 
 export interface DayStat {
@@ -147,13 +193,41 @@ export interface AppState {
   /** Заметки ИИ об ученике: как объяснять, что западает. Видны ученику в статистике. */
   memory: string;
   chat: ChatMessage[];
-  aiUsage: { day: string; count: number };
+  /** Обращения к ИИ за день: всего и бесплатных по тарифу (lib/economy.ts). */
+  aiUsage: AiUsage;
   maxCombo: number;
   /** Рекорды мини-игр. */
   games: Record<string, GameStat>;
   /** Попытки пробного ЕНТ — новые первыми. */
   exams: ExamSummary[];
+
+  // ---- экономика (lib/economy.ts) ----
+  /** Тариф. Оплата пока не подключена: платный тариф появляется только пробным периодом. */
+  plan: Plan;
+  hearts: Hearts;
+  /** Чипы — внутренняя валюта. */
+  wallet: Wallet;
+  /** История чипов — новые первыми. */
+  ledger: LedgerEntry[];
+  /** Активный множитель чипов. */
+  boost: Boost | null;
+  /** Сколько тренировок сегодня уже вернули сердечко. */
+  practiceHearts: { day: string; count: number };
+  /** Когда показывали окно тарифов. */
+  paywall: PaywallState;
+
+  /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
+  history: HistoryEntry[];
 }
+
+/** Итог урока/тренировки для экрана результатов. */
+export interface FinishOutcome {
+  bonusXp: number;
+  /** Тренировка вернула сердечко. */
+  heart: boolean;
+}
+
+export type BuyResult = { ok: true } | { ok: false; reason: BuyFail };
 
 export interface NoteInput {
   folderId?: string;
@@ -172,7 +246,7 @@ export interface AppActions {
    * Итог урока/тренировки: бонус XP (у повтора урока — меньше, см. lib/review.ts), статистика урока,
    * расписание повторения, серия, достижения.
    */
-  finishSession: (result: SessionResult) => { bonusXp: number };
+  finishSession: (result: SessionResult) => FinishOutcome;
   /** Засчитать урок без прохождения в плеере: игрой или экстерном (тест по разделу). Без бонуса XP. */
   completeLessons: (lessonIds: string[], via: Extract<LessonVia, "game" | "extern">, accuracy: number) => void;
   /** Повторение (разминка): навыки уроков повторены с точностью accuracy — сдвинуть расписание повторения. */
@@ -196,25 +270,37 @@ export interface AppActions {
   /** Совместимость: ответ ИИ в конспект (key — id урока или "general"). */
   saveToNotes: (key: string, text: string) => string;
 
-  /** Учитывает обращение к ИИ; false — дневной лимит исчерпан. */
-  spendAi: () => boolean;
-  /** Вернуть обращение, если запрос к ИИ не удался или ответ взят из кэша. */
-  refundAi: () => void;
-  /** Закрыть ошибку(и) по id задания. */
+  /**
+   * Обращение к ИИ: бесплатно по тарифу или за чипы (lib/economy.ts → quoteAi).
+   * Квитанция ok: false — не хватает чипов (reason "chips") или дневной потолок ("cap"); ничего не списано.
+   */
+  spendAi: (kind: AiKind) => AiReceipt;
+  /** Вернуть обращение по квитанции, если запрос к ИИ не удался или ответ взят из кэша. */
+  refundAi: (receipt: AiReceipt) => void;
+  /** Закрыть ошибку по id задания (и отметить исправленной в истории тестов). */
   dismissMistake: (stepId: string) => void;
+
+  // ---- экономика ----
+  /** Ошибка в уроке: минус сердечко. Возвращает запас после. */
+  loseHeart: () => HeartsView;
+  /** Покупка за чипы: сердечко, полный запас, бустер. */
+  buy: (id: ShopItemId) => BuyResult;
+  /** Пробный период «Безлимита» (один раз). false — уже был или тариф платный. */
+  startTrial: () => boolean;
+  /** Окно тарифов показано. */
+  notePaywallShown: () => void;
   /** Итог мини-игры: XP, рекорд, освоение навыков, серия. */
   recordGame: (gameId: string, result: GameResult, mode?: GameMode) => GameReward;
   /**
    * Итог пробного ЕНТ: история попыток, освоение навыков (по доле баллов за задания навыка), серия и время.
    * XP за пробник не начисляется — это проверка, а не тренировка.
    */
-  recordExam: (summary: ExamSummary, skillScores: Record<string, number[]>) => void;
+  recordExam: (summary: ExamSummary, skillScores: Record<string, number[]>, wrong?: WrongItem[]) => void;
   /** Заменить весь прогресс (импорт резервной копии). Данные проверяются как недоверенные. */
   importProgress: (raw: unknown) => boolean;
   resetProgress: () => void;
 }
 
-export const AI_DAILY_LIMIT = 60;
 const MAX_MISTAKES = 60;
 const MAX_CHAT = 60;
 const MAX_EXAMS = 50;
@@ -237,6 +323,7 @@ export const defaultProfile: Profile = {
   examDate: null,
   targetScore: 35,
   weeklyLessons: 4,
+  track: "ent",
 };
 
 const initialState: AppState = {
@@ -253,15 +340,58 @@ const initialState: AppState = {
   notebook: emptyNotebook(),
   memory: "",
   chat: [],
-  aiUsage: { day: "", count: 0 },
+  aiUsage: { day: "", count: 0, free: 0 },
   maxCombo: 0,
   games: {},
   exams: [],
+  plan: FREE_PLAN,
+  hearts: START_HEARTS,
+  wallet: START_WALLET,
+  ledger: [],
+  boost: null,
+  practiceHearts: { day: "", count: 0 },
+  paywall: { lastShownAt: 0, views: 0 },
+  history: [],
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 const emptyDay = (): DayStat => ({ xp: 0, answers: 0, correct: 0, seconds: 0, lessons: 0 });
+
+/** Действующий тариф прямо сейчас. */
+const tierOf = (s: Pick<AppState, "plan">, now = Date.now()) => effectiveTier(s.plan, now);
+
+/**
+ * Чипы за то, что изменилось между prev и next: опыт (5 XP = 1 чип), дневная цель, новые достижения
+ * и бонусы extra. Всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
+ */
+function settleChips(prev: AppState, next: AppState, extra: { base: number; reason: ChipReason }[] = [], now = Date.now()): AppState {
+  const mult = chipMultiplier(tierOf(next, now), next.boost, now);
+  const today = todayKey();
+  const goal = next.profile.dailyGoalXp;
+  const gains: { amount: number; reason: ChipReason }[] = [];
+  const xpDelta = next.xp - prev.xp;
+  if (xpDelta > 0) gains.push({ amount: chipsForXp(xpDelta, mult), reason: "xp" });
+  const dayBefore = prev.days[today]?.xp ?? 0;
+  const dayAfter = next.days[today]?.xp ?? 0;
+  if (goal > 0 && dayBefore < goal && dayAfter >= goal) gains.push({ amount: earnAmount(CHIP_BONUS.dailyGoal, mult), reason: "dailyGoal" });
+  const newAch = Object.keys(next.achievements).length - Object.keys(prev.achievements).length;
+  if (newAch > 0) gains.push({ amount: earnAmount(CHIP_BONUS.achievement * newAch, mult), reason: "achievement" });
+  for (const e of extra) gains.push({ amount: earnAmount(e.base, mult), reason: e.reason });
+  let wallet = next.wallet;
+  let ledger = next.ledger;
+  for (const g of gains) {
+    if (g.amount <= 0) continue;
+    wallet = { ...wallet, chips: wallet.chips + g.amount, earned: wallet.earned + g.amount };
+    ledger = pushLedger(ledger, { id: uid(), at: now, amount: g.amount, reason: g.reason });
+  }
+  return wallet === next.wallet ? next : { ...next, wallet, ledger };
+}
+
+/** Закрыть ошибку: убрать из списка ошибок и отметить исправленной в истории тестов. */
+function closeMistake(s: AppState, stepId: string): Pick<AppState, "mistakes" | "history"> {
+  return { mistakes: s.mistakes.filter((m) => m.stepId !== stepId), history: markFixed(s.history, [stepId]) };
+}
 
 function withAchievement(state: AppState, id: string): Partial<AppState> {
   if (state.achievements[id]) return {};
@@ -305,14 +435,18 @@ function nextLessonStat(prev: LessonStat | undefined, via: LessonVia, accuracy: 
   };
 }
 
+const GRADES: Grade[] = ["5", "6", "7", "8", "9", "10", "11", "other"];
+
 function cleanProfile(raw: unknown): Profile {
   const p = (raw ?? {}) as Partial<Profile>;
+  const grade = GRADES.includes(p.grade as Grade) ? (p.grade as Grade) : defaultProfile.grade;
+  const track: Track = p.track === "school" || p.track === "ent" ? p.track : p.goal === "school" ? "school" : "ent";
   const reminder = { ...defaultProfile.reminder, ...(p.reminder ?? {}) };
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(reminder.time)) reminder.time = defaultProfile.reminder.time;
   const targetScore = typeof p.targetScore === "number" && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : defaultProfile.targetScore;
   const weeklyLessons = typeof p.weeklyLessons === "number" && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : defaultProfile.weeklyLessons;
   const examDate = typeof p.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate) ? p.examDate : null;
-  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate };
+  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate, grade, track };
 }
 
 /** Миграции сохранений: v1 (конспекты по ключу урока) → v2 (папки и записи). */
@@ -341,6 +475,18 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     streak: { ...current.streak, ...(p.streak ?? {}) },
     notebook: repairNotebook(p.notebook ?? current.notebook),
     exams: Array.isArray(p.exams) ? p.exams.slice(0, MAX_EXAMS) : [],
+    aiUsage: sanitizeAiUsage(p.aiUsage),
+    plan: sanitizePlan(p.plan),
+    hearts: sanitizeHearts(p.hearts),
+    wallet: sanitizeWallet(p.wallet),
+    ledger: Array.isArray(p.ledger) ? p.ledger.filter((e) => !!e && typeof e.amount === "number").slice(0, 50) : [],
+    boost: sanitizeBoost(p.boost),
+    practiceHearts:
+      p.practiceHearts && typeof p.practiceHearts.day === "string" && typeof p.practiceHearts.count === "number"
+        ? p.practiceHearts
+        : { day: "", count: 0 },
+    paywall: sanitizePaywall(p.paywall),
+    history: sanitizeHistory(p.history),
   };
 }
 
@@ -380,11 +526,14 @@ export const useApp = create<AppState & AppActions>()(
           } else if (rec.correct && existing) {
             mistakes = s.mistakes.filter((m) => m.stepId !== rec.stepId);
           }
+          // Верный ответ на задание, где раньше была ошибка, отмечает его исправленным в истории тестов.
+          const history = rec.correct ? markFixed(s.history, [rec.stepId]) : s.history;
           const next: AppState = {
             ...s,
             xp: s.xp + xp,
             skills,
             mistakes,
+            history,
             streak: bumpStreak(s.streak, today),
             days: {
               ...s.days,
@@ -396,7 +545,7 @@ export const useApp = create<AppState & AppActions>()(
               },
             },
           };
-          return { ...next, ...evaluate(next) };
+          return settleChips(s, { ...next, ...evaluate(next) });
         }),
 
       finishSession: (result) => {
@@ -440,8 +589,31 @@ export const useApp = create<AppState & AppActions>()(
         }
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
         next = { ...next, ...evaluate(next) };
+
+        // История тестов.
+        const entry = entryFromSession(result, uid(), now, result.mode);
+        if (entry) next = { ...next, history: pushHistory(next.history, entry) };
+
+        // Тренировка возвращает сердечко (не больше PRACTICE_HEART_DAILY раз в день).
+        let heart = false;
+        const tier = tierOf(next, now);
+        if (result.kind === "drill" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
+          const ph = next.practiceHearts.day === today ? next.practiceHearts : { day: today, count: 0 };
+          const view = heartsView(next.hearts, tier, now, today);
+          if (!view.unlimited && view.count < view.max && ph.count < PRACTICE_HEART_DAILY) {
+            next = { ...next, hearts: addHearts(next.hearts, 1, tier, now, today), practiceHearts: { day: today, count: ph.count + 1 } };
+            heart = true;
+          }
+        }
+
+        const extra: { base: number; reason: ChipReason }[] = [];
+        if (isLesson) {
+          extra.push({ base: CHIP_BONUS.lesson, reason: "lesson" });
+          if (perfect && !prev) extra.push({ base: CHIP_BONUS.perfect, reason: "perfect" });
+        }
+        next = settleChips(s, next, extra, now);
         set(next);
-        return { bonusXp };
+        return { bonusXp, heart };
       },
 
       completeLessons: (lessonIds, via, accuracy) =>
@@ -457,7 +629,7 @@ export const useApp = create<AppState & AppActions>()(
             days: { ...s.days, [today]: { ...day, lessons: (day.lessons ?? 0) + lessonIds.length } },
           };
           if (lessonIds.length) next = { ...next, ...withAchievement(next, "first_lesson") };
-          return { ...next, ...evaluate(next) };
+          return settleChips(s, { ...next, ...evaluate(next) });
         }),
 
       markReviewed: (lessonIds, accuracy) =>
@@ -477,10 +649,10 @@ export const useApp = create<AppState & AppActions>()(
         set((s) => {
           if (combo <= s.maxCombo) return {};
           const next = { ...s, maxCombo: combo };
-          return { maxCombo: combo, ...evaluate(next) };
+          return settleChips(s, { ...next, ...evaluate(next) });
         }),
 
-      unlock: (id) => set((s) => withAchievement(s, id)),
+      unlock: (id) => set((s) => settleChips(s, { ...s, ...withAchievement(s, id) })),
 
       consumeNewAchievements: () => {
         const ids = get().newAchievements;
@@ -556,7 +728,7 @@ export const useApp = create<AppState & AppActions>()(
             if (victim) notes = notes.filter((n) => n.id !== victim.id);
           }
           const next: AppState = { ...s, notebook: { ...s.notebook, notes } };
-          return { notebook: next.notebook, ...evaluate(next) };
+          return settleChips(s, { ...next, ...evaluate(next) });
         });
         return id;
       },
@@ -593,19 +765,67 @@ export const useApp = create<AppState & AppActions>()(
       saveToNotes: (key, text) =>
         get().createNote({ source: "ai", body: text, lessonId: key === "general" ? undefined : key }),
 
-      refundAi: () =>
-        set((s) => (s.aiUsage.day === todayKey() && s.aiUsage.count > 0 ? { aiUsage: { ...s.aiUsage, count: s.aiUsage.count - 1 } } : {})),
+      spendAi: (kind) => {
+        const s = get();
+        const now = Date.now();
+        const receipt = quoteAi(kind, tierOf(s, now), s.aiUsage, s.wallet.chips, todayKey());
+        if (!receipt.ok) return receipt;
+        const patch: Partial<AppState> = { aiUsage: applyAiUsage(s.aiUsage, receipt) };
+        if (receipt.cost > 0) {
+          patch.wallet = { ...s.wallet, chips: s.wallet.chips - receipt.cost, spent: s.wallet.spent + receipt.cost };
+          patch.ledger = pushLedger(s.ledger, { id: uid(), at: now, amount: -receipt.cost, reason: "ai", note: kind });
+        }
+        set(patch);
+        return receipt;
+      },
 
-      spendAi: () => {
+      refundAi: (receipt) =>
+        set((s) => {
+          if (!receipt.ok) return {};
+          const patch: Partial<AppState> = { aiUsage: refundAiUsage(s.aiUsage, receipt) };
+          if (receipt.cost > 0) {
+            patch.wallet = { ...s.wallet, chips: s.wallet.chips + receipt.cost, spent: Math.max(0, s.wallet.spent - receipt.cost) };
+            patch.ledger = pushLedger(s.ledger, { id: uid(), at: Date.now(), amount: receipt.cost, reason: "refund", note: receipt.kind });
+          }
+          return patch;
+        }),
+
+      dismissMistake: (stepId) => set((s) => closeMistake(s, stepId)),
+
+      loseHeart: () => {
+        const s = get();
+        const now = Date.now();
         const today = todayKey();
-        const u = get().aiUsage;
-        const count = u.day === today ? u.count : 0;
-        if (count >= AI_DAILY_LIMIT) return false;
-        set({ aiUsage: { day: today, count: count + 1 } });
+        const tier = tierOf(s, now);
+        const hearts = loseHeartPure(s.hearts, tier, now, today);
+        if (hearts !== s.hearts) set({ hearts });
+        return heartsView(hearts, tier, now, today);
+      },
+
+      buy: (id) => {
+        const s = get();
+        const now = Date.now();
+        const res = buyItem({ wallet: s.wallet, hearts: s.hearts, boost: s.boost }, id, tierOf(s, now), now, todayKey());
+        if (!res.ok) return res;
+        const price = s.wallet.chips - res.wallet.chips;
+        set({
+          wallet: res.wallet,
+          hearts: res.hearts,
+          boost: res.boost,
+          ledger: pushLedger(s.ledger, { id: uid(), at: now, amount: -price, reason: "buy", note: id }),
+        });
+        return { ok: true };
+      },
+
+      startTrial: () => {
+        const s = get();
+        const plan = startTrialPure(s.plan, Date.now());
+        if (plan === s.plan) return false;
+        set({ plan });
         return true;
       },
 
-      dismissMistake: (stepId) => set((s) => ({ mistakes: s.mistakes.filter((m) => m.stepId !== stepId) })),
+      notePaywallShown: () => set((s) => ({ paywall: { lastShownAt: Date.now(), views: s.paywall.views + 1 } })),
 
       recordGame: (gameId, result, mode = "normal") => {
         const s = get();
@@ -633,11 +853,11 @@ export const useApp = create<AppState & AppActions>()(
         };
         next = { ...next, ...withAchievement(next, "gamer") };
         next = { ...next, ...evaluate(next) };
-        set(next);
+        set(settleChips(s, next));
         return reward;
       },
 
-      recordExam: (summary, skillScores) =>
+      recordExam: (summary, skillScores, wrong = []) =>
         set((s) => {
           const today = todayKey();
           const day = s.days[today] ?? emptyDay();
@@ -647,9 +867,39 @@ export const useApp = create<AppState & AppActions>()(
           }
           const answered = Object.values(skillScores).reduce((a, x) => a + x.length, 0);
           const correct = Object.values(skillScores).reduce((a, x) => a + x.filter((v) => v >= 0.99).length, 0);
+          // Ошибки пробного ЕНТ попадают в общую работу над ошибками (id вида «ent:…», см. lib/ent-steps.ts).
+          let mistakes = s.mistakes;
+          for (const w of [...wrong].reverse()) {
+            const existing = mistakes.find((m) => m.stepId === w.stepId);
+            mistakes = [
+              { id: existing?.id ?? uid(), stepId: w.stepId, lessonId: w.lessonId, skill: w.skill, prompt: w.prompt, given: w.given, expected: w.expected, at: summary.at },
+              ...mistakes.filter((m) => m.stepId !== w.stepId),
+            ];
+          }
+          mistakes = mistakes.slice(0, MAX_MISTAKES);
+          const total = summary.maxPoints > 0 ? answered : 0;
+          const entry: HistoryEntry = {
+            id: `exam-${summary.id}`,
+            at: summary.at,
+            kind: "exam",
+            mode: summary.kind,
+            title: "",
+            examId: summary.id,
+            correct,
+            total,
+            points: summary.points,
+            maxPoints: summary.maxPoints,
+            durationSec: summary.durationSec,
+            xp: 0,
+            wrong: wrong.slice(0, 25),
+            fixed: [],
+          };
+          const isNew = !s.exams.some((e) => e.id === summary.id);
           const next: AppState = {
             ...s,
             skills,
+            mistakes,
+            history: pushHistory(s.history, entry),
             exams: [summary, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
             streak: answered > 0 ? bumpStreak(s.streak, today) : s.streak,
             days: {
@@ -662,7 +912,7 @@ export const useApp = create<AppState & AppActions>()(
               },
             },
           };
-          return { ...next, ...evaluate(next) };
+          return settleChips(s, { ...next, ...evaluate(next) }, isNew && answered > 0 ? [{ base: CHIP_BONUS.exam, reason: "exam" }] : []);
         }),
 
       importProgress: (raw) => {
@@ -671,11 +921,13 @@ export const useApp = create<AppState & AppActions>()(
         // Минимальная проверка, что это наш экспорт.
         if (typeof data.xp !== "number" || !data.profile || typeof data.profile !== "object") return false;
         const migrated = migrateState(data, typeof data.version === "number" ? data.version : data.notebook ? 2 : 1);
-        set((s) => mergeState({ ...initialState, ...migrated, onboarded: true }, s));
+        // Тариф из файла не берём: он привязан к устройству (позже — к аккаунту).
+        set((s) => ({ ...mergeState({ ...initialState, ...migrated, onboarded: true }, s), plan: s.plan }));
         return true;
       },
 
-      resetProgress: () => set({ ...initialState, notebook: emptyNotebook(Date.now()) }),
+      // Тариф и пробный период сброс прогресса не трогает.
+      resetProgress: () => set((s) => ({ ...initialState, notebook: emptyNotebook(Date.now()), plan: s.plan })),
     }),
     {
       name: "informatica-v1",

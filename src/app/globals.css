@@ -9,6 +9,8 @@
   - gold    (золотой)  — XP, награды, достижения
   - streak  (оранжевый)— серия дней
   - ai      (фиолетовый)— всё, что делает ИИ
+  - heart   (розово-красный) — сердечки (жизни в уроках)
+  Чипы (валюта) и тарифы — золотой gold (награды).
 */
 :root {
   --bg: #f6f7fb;
@@ -42,6 +44,11 @@
   --ai: #7656f5;
   --ai-strong: #5d3fe0;
   --ai-soft: #efebff;
+
+  /* Сердечки (жизни в уроках) — свой розово-красный, чтобы не путать с «неверно» (danger). */
+  --heart: #f2416b;
+  --heart-strong: #c92a50;
+  --heart-soft: #ffe8ee;
 
   color-scheme: light;
 }
@@ -80,6 +87,10 @@
   --ai-strong: #7656f5;
   --ai-soft: #251f45;
 
+  --heart: #ff5f84;
+  --heart-strong: #d63c62;
+  --heart-soft: #3d1a26;
+
   color-scheme: dark;
 }
 
@@ -117,6 +128,10 @@
     --ai-strong: #7656f5;
     --ai-soft: #251f45;
 
+    --heart: #ff5f84;
+    --heart-strong: #d63c62;
+    --heart-soft: #3d1a26;
+
     color-scheme: dark;
   }
 }
@@ -148,6 +163,9 @@
   --color-ai: var(--ai);
   --color-ai-strong: var(--ai-strong);
   --color-ai-soft: var(--ai-soft);
+  --color-heart: var(--heart);
+  --color-heart-strong: var(--heart-strong);
+  --color-heart-soft: var(--heart-soft);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;

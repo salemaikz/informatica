@@ -459,9 +459,15 @@ export interface SessionResult {
   accuracy: number;
   /** Сколько заданий пропущено. */
   skipped?: number;
+  /** Режим тренировки (DrillMode) — для истории тестов. */
+  mode?: string;
 }
 
-export type Grade = "8" | "9" | "10" | "11" | "other";
+/** Класс ученика. 5–7 — для школьной программы (решение #33). */
+export type Grade = "5" | "6" | "7" | "8" | "9" | "10" | "11" | "other";
+
+/** Что проходим: подготовка к ЕНТ или школьная программа по классам. */
+export type Track = "ent" | "school";
 
 /** Цвет аватара-инициала (токены темы, см. components/app/Avatar.tsx). */
 export type AvatarColor = "primary" | "success" | "warning" | "danger" | "ai" | "gold" | "streak";

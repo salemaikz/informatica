@@ -162,7 +162,8 @@ export function ExamResult({ id }: { id: string }) {
   const askAi = async () => {
     if (!attempt || !result || ai.status === "loading" || attempt.review) return;
     const app = useApp.getState();
-    if (!app.spendAi()) {
+    const receipt = app.spendAi("review");
+    if (!receipt.ok) {
       setAi({ status: "limit" });
       return;
     }
@@ -197,7 +198,7 @@ export function ExamResult({ id }: { id: string }) {
       setLoaded({ done: true, attempt: { ...attempt, review } });
       setAi({ status: "idle" });
     } catch {
-      useApp.getState().refundAi();
+      useApp.getState().refundAi(receipt);
       setAi({ status: "failed" });
     }
   };

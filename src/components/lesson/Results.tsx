@@ -51,7 +51,9 @@ export type FeedbackState = { status: "loading" } | { status: "done"; data: Less
  */
 export function requestLessonFeedback(result: SessionResult, onState: (s: FeedbackState) => void) {
   const app = useApp.getState();
-  if (!app.spendAi()) {
+  // Отзыв после урока бесплатный (дешёвая модель), но учитывается в дневном потолке.
+  const receipt = app.spendAi("feedback");
+  if (!receipt.ok) {
     onState({ status: "failed" });
     return;
   }
@@ -71,7 +73,7 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
       onState({ status: "done", data });
     })
     .catch(() => {
-      useApp.getState().refundAi();
+      useApp.getState().refundAi(receipt);
       onState({ status: "failed" });
     });
 }

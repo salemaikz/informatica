@@ -64,6 +64,8 @@ export interface PlayerProps {
   mistakeMap?: Record<string, string>;
   /** Режим урока: check — «Проверить себя» (пометка сверху, итог с via: "check"). По умолчанию learn. */
   via?: LessonVia;
+  /** Режим тренировки (DrillMode) — попадает в историю тестов. */
+  mode?: string;
   /** Вызывается один раз по завершении, после finishSession (тренировка: сдвиг повторения, зачёт экстерна). */
   onSessionFinish?: (result: SessionResult) => void;
   /** Блок на экране итогов (например, «Раздел засчитан»). */
@@ -148,7 +150,7 @@ function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
 /** Первые слова текста — заголовок шага для ИИ, когда у шага нет title. */
 const firstWords = (text: string, n = 8) => text.split(" ").slice(0, n).join(" ");
 
-export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, onSessionFinish, resultsExtra }: PlayerProps) {
+export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mode, onSessionFinish, resultsExtra }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
   const recordAnswer = useApp((s) => s.recordAnswer);
@@ -209,6 +211,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
         durationSec: Math.round((Date.now() - startedAt.current) / 1000),
         accuracy,
         skipped: skippedRef.current,
+        mode,
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp } = finishSession(result);
@@ -218,7 +221,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
       setSession({ result, bonusXp, achievements });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, via, title, onSessionFinish],
+    [finishSession, kind, lessonId, via, mode, title, onSessionFinish],
   );
 
   const next = useCallback(() => {
@@ -311,12 +314,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
         setCheckError(null);
         setAiNote(null);
         const app = useApp.getState();
-        if (!app.spendAi()) {
-          // Лимит исчерпан: проверяем хотя бы введённый ответ, иначе просим ввести его.
+        const receipt = app.spendAi("photo");
+        if (!receipt.ok) {
+          // Нет чипов или лимит: проверяем хотя бы введённый ответ, иначе просим ввести его.
           if (a.typed.trim()) apply(evaluate(question, a, lang));
           else {
             setPhase("answering");
-            setCheckError("tutor.limit");
+            setCheckError(receipt.reason === "chips" ? "economy.noChips" : "tutor.limit");
           }
           return;
         }
@@ -343,7 +347,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, on
             details,
           });
         } catch {
-          useApp.getState().refundAi();
+          useApp.getState().refundAi(receipt);
           if (a.typed.trim()) {
             apply(evaluate(question, a, lang));
           } else {

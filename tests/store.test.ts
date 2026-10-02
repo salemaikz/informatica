@@ -54,11 +54,13 @@ describe("стор: работа над ошибками", () => {
     expect(useApp.getState().finishSession({ ...base, lessonId: "ns-2-read", skipped: 1 }).bonusXp).toBe(20);
   });
 
-  it("refundAi возвращает обращение", () => {
+  it("refundAi возвращает обращение по квитанции", () => {
     const s = useApp.getState();
-    s.spendAi();
-    s.spendAi();
-    useApp.getState().refundAi();
+    s.spendAi("hint");
+    const r = s.spendAi("hint");
+    expect(r.ok).toBe(true);
+    useApp.getState().refundAi(r);
     expect(useApp.getState().aiUsage.count).toBe(1);
+    expect(useApp.getState().aiUsage.free).toBe(1);
   });
 });

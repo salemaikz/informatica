@@ -49,8 +49,10 @@ export function useTutor() {
           return hit;
         }
       }
-      if (!app.spendAi()) {
-        setError("tutor.limit");
+      // Чат с фото стоит как проверка фото; остальные режимы — по своему виду (lib/economy.ts → AI_COST).
+      const receipt = app.spendAi(args.image ? "photo" : args.mode);
+      if (!receipt.ok) {
+        setError(receipt.reason === "chips" ? "economy.noChips" : "tutor.limit");
         return null;
       }
       let refunded = false;
@@ -69,7 +71,7 @@ export function useTutor() {
             meta.status = st;
             // Ответ взят из серверного кэша — модель не вызывалась, возвращаем потраченное обращение.
             if (st === "hit") {
-              useApp.getState().refundAi();
+              useApp.getState().refundAi(receipt);
               refunded = true;
             }
           },
@@ -80,7 +82,7 @@ export function useTutor() {
         return text;
       } catch (e) {
         if (ctrl.signal.aborted) return null;
-        if (!refunded) useApp.getState().refundAi();
+        if (!refunded) useApp.getState().refundAi(receipt);
         setError(e instanceof AiError && e.code === "rate_limited" ? "tutor.limit" : "tutor.error");
         return null;
       } finally {

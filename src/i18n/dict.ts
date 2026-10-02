@@ -20,6 +20,10 @@ import { onboardDict } from "./parts/onboard";
 import { offlineDict } from "./parts/offline";
 import { masteryDict } from "./parts/mastery";
 import { chatsDict } from "./parts/chats";
+import { economyDict } from "./parts/economy";
+import { plansDict } from "./parts/plans";
+import { historyDict } from "./parts/history";
+import { schoolDict } from "./parts/school";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -465,6 +469,10 @@ export const dict = {
   ...offlineDict,
   ...masteryDict,
   ...chatsDict,
+  ...economyDict,
+  ...plansDict,
+  ...historyDict,
+  ...schoolDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;
