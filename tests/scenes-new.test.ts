@@ -6,6 +6,8 @@ import {
   circuitColumns,
   evalCircuit,
   gateLabelLines,
+  gateLabelBaseline,
+  gateLabelRect,
   layoutCircuit,
   inPort,
   outPort,
@@ -13,7 +15,27 @@ import {
   OUT_LABEL,
   type CircuitScene,
 } from "@/components/scenes/circuit";
-import { arrowHead, countCrossings, flowCellWidth, flowGrid, layoutFlow, type FlowScene } from "@/components/scenes/flow";
+import {
+  arrowHead,
+  countCrossings,
+  flowCellWidth,
+  flowFit,
+  flowGrid,
+  flowRequiredCell,
+  FLOW_FONTS,
+  labelWords,
+  layoutFlow,
+  MAX_LABEL_LINES,
+  minLabelWidth,
+  placeEdgeLabel,
+  wrapLabel,
+  type FlowScene,
+} from "@/components/scenes/flow";
+import { estimateTextWidth } from "@/components/scenes/text-width";
+import { LESSONS } from "@/content/course";
+import { GENERATED_ENT } from "@/content/ent/generated";
+import { GENERATED_BANKS } from "@/lib/bank/generated";
+import type { Lang } from "@/lib/types";
 import { TOKEN_CLASS, tokenizeLine, type CodeLang, type Token } from "@/components/scenes/highlight";
 import { ICONS } from "@/components/scenes/icons";
 import { binaryColumns, colLetter, tableData, type TableScene } from "@/components/scenes/table";
@@ -244,6 +266,281 @@ describe("flow", () => {
     expect(l2[1]).toBeLessThan(20);
     const [tipL] = arrowHead([[50, 5], [10, 5]]);
     expect(tipL).toEqual([10, 5]);
+  });
+});
+
+describe("layoutCircuit: подписи вентилей не пересекаются проводами", () => {
+  // F = (A ∧ B) ∨ (¬B ∧ C): провод от C проходит под вентилем НЕ
+  const sc = circuit(
+    ["A", "B", "C"],
+    [gate("g1", "and", ["A", "B"]), gate("g2", "not", ["B"]), gate("g3", "and", ["g2", "C"]), gate("g4", "or", ["g1", "g3"])],
+    "g4",
+  );
+  const labels = { and: ["И"], or: ["ИЛИ"], not: ["НЕ"] };
+
+  it("без подписей в опциях раскладка прежняя (все подписи снизу)", () => {
+    expect(layoutCircuit(sc).nodes.some((n) => n.labelAbove)).toBe(false);
+  });
+
+  it("подпись НЕ, под которой идёт провод, переносится над рамкой; итоговые подписи ни с чем не пересекаются", () => {
+    const lay = layoutCircuit(sc, { labelLines: 1, labels });
+    const not = lay.nodes.find((n) => n.id === "g2")!;
+    expect(not.labelAbove).toBe(true);
+    // базовая линия подписи над рамкой — выше верха рамки
+    expect(gateLabelBaseline(not, 1)).toBeLessThan(not.y - not.h / 2);
+    const lines = (op: string) => labels[op as keyof typeof labels];
+    for (const n of lay.nodes.filter((x) => x.kind === "gate")) {
+      const r = gateLabelRect(n, lines(n.op!), !!n.labelAbove);
+      expect(r.y0).toBeGreaterThanOrEqual(0);
+      for (const w of lay.wires) {
+        for (let i = 0; i + 1 < w.points.length; i++) {
+          const [a, b] = [w.points[i], w.points[i + 1]];
+          const hit = Math.max(a[0], b[0]) > r.x0 && Math.min(a[0], b[0]) < r.x1 && Math.max(a[1], b[1]) > r.y0 && Math.min(a[1], b[1]) < r.y1;
+          expect(hit, `${n.id} × ${w.from}>${w.to}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("свободная схема: подписи остаются под рамкой", () => {
+    const one = circuit(["A", "B"], [gate("g1", "and", ["A", "B"])], "g1");
+    expect(layoutCircuit(one, { labelLines: 1, labels }).nodes.some((n) => n.labelAbove)).toBe(false);
+  });
+});
+
+describe("flow: подписи не рвутся, кегль и ширина подбираются по тексту", () => {
+  const node = (id: string, shape: FlowScene["nodes"][number]["shape"], label: FlowScene["nodes"][number]["label"], x: number, y: number) => ({ id, shape, label, x, y });
+
+  it("estimateTextWidth: растёт с кеглем и длиной, узкие знаки уже широких", () => {
+    expect(estimateTextWidth("", 13)).toBe(0);
+    expect(estimateTextWidth("iiiii", 13)).toBeLessThan(estimateTextWidth("WWWWW", 13));
+    expect(estimateTextWidth("l.l", 13)).toBeLessThan(estimateTextWidth("abc", 13));
+    expect(estimateTextWidth("Магистраль", 13)).toBeGreaterThan(estimateTextWidth("Магистраль", 11));
+    expect(estimateTextWidth("ab cd", 13)).toBeCloseTo(estimateTextWidth("ab", 13) + estimateTextWidth(" ", 13) + estimateTextWidth("cd", 13), 6);
+    // казахские буквы есть в таблице (не «неизвестный символ»)
+    expect(estimateTextWidth("ә", 100)).toBeLessThan(estimateTextWidth("Ә", 100));
+  });
+
+  it("estimateTextWidth: близко к замеру Nunito 700 в Chromium (13 px) — не меньше замера −2% и не больше +6%", () => {
+    // Замер: canvas/span в Chromium на woff2 из @fontsource-variable/nunito.
+    const real: [string, number][] = [
+      ["Магистраль", 75.06],
+      ["маршрутизатор", 99.81],
+      ["Students", 54.45],
+      ["192.168.1.10", 79.88],
+      ["Тапсырыстар", 84.44],
+      ["Wi-Fi", 35.22],
+      ["WWW", 43.42],
+      ["ЖЖЖЖ", 52.73],
+      ["Шешіп, жауап беремін", 144.11],
+      ["n = n - 1", 50.55],
+    ];
+    for (const [text, px] of real) {
+      const est = estimateTextWidth(text, 13);
+      expect(est / px, text).toBeGreaterThan(0.98);
+      expect(est / px, text).toBeLessThan(1.06);
+    }
+  });
+
+  it("wrapLabel: перенос только между словами; слово шире колонки — overflow", () => {
+    expect(labelWords("  Ввод   данных ")).toEqual(["Ввод", "данных"]);
+    const one = wrapLabel("Ввод данных", 13, 1000);
+    expect(one.lines).toBe(1);
+    expect(one.overflow).toBe(false);
+    const narrow = wrapLabel("Ввод данных", 13, estimateTextWidth("данных", 13) + 1);
+    expect(narrow.lines).toBe(2);
+    expect(narrow.overflow).toBe(false);
+    const tooNarrow = wrapLabel("Магистраль", 13, 40);
+    expect(tooNarrow.overflow).toBe(true);
+    expect(tooNarrow.longest).toBeCloseTo(estimateTextWidth("Магистраль", 13), 6);
+  });
+
+  it("minLabelWidth: не меньше самого длинного слова и укладывает подпись в 3 строки", () => {
+    const text = "Сайт: сертификат + открытый ключ";
+    const w = minLabelWidth(text, 13);
+    expect(w).toBeGreaterThanOrEqual(Math.floor(wrapLabel(text, 13, Infinity).longest));
+    const r = wrapLabel(text, 13, w);
+    expect(r.overflow).toBe(false);
+    expect(r.lines).toBeLessThanOrEqual(MAX_LABEL_LINES);
+    // на 2 px уже — не помещается (ширина минимальна)
+    const narrower = wrapLabel(text, 13, w - 2);
+    expect(narrower.overflow || narrower.lines > MAX_LABEL_LINES).toBe(true);
+    expect(minLabelWidth("Начало", 13)).toBe(Math.ceil(estimateTextWidth("Начало", 13)));
+  });
+
+  const long: FlowScene = {
+    kind: "flow",
+    nodes: [node("a", "box", "Магистраль данных", 0, 0), node("b", "box", "Процессор", 1, 0), node("c", "box", "Память", 2, 0)],
+    edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }],
+  };
+
+  it("flowFit: короткие подписи — 13 px; длинное слово в 3 столбцах на 326 px — меньший кегль; влезть невозможно — fits=false", () => {
+    const short: FlowScene["nodes"] = [node("a", "box", "Один", 0, 0), node("b", "box", "Два", 1, 0), node("c", "box", "Три", 2, 0)];
+    expect(flowFit(short, 326).fontPx).toBe(13);
+    expect(flowFit(short, 326).fits).toBe(true);
+    const f = flowFit(long.nodes, 326);
+    expect(f.fits).toBe(true);
+    expect(f.fontPx).toBeLessThan(13);
+    expect(FLOW_FONTS).toContain(f.fontPx);
+    // потребность растёт с кеглем; на 11 px — наименьшая
+    expect(flowRequiredCell(long.nodes, 13)).toBeGreaterThan(flowRequiredCell(long.nodes, 11));
+    const impossible = flowFit([node("a", "box", "Маршрутизатор", 0, 0), node("b", "box", "Коммутатор", 1, 0), node("c", "box", "Компьютер", 2, 0)], 326);
+    expect(impossible.fits).toBe(false);
+    expect(impossible.fontPx).toBe(11);
+  });
+
+  it("layoutFlow: подписи без разрыва слов, схема не шире экрана; на широком экране кегль 13 и ячейка ≤ 150", () => {
+    const lay = layoutFlow(long, 326);
+    expect(lay.fontPx).toBeLessThan(13);
+    expect(lay.scrolls).toBe(false);
+    expect(lay.clipped).toBe(false);
+    expect(lay.width).toBeLessThanOrEqual(326);
+    for (const b of lay.boxes) {
+      expect(b.textW).toBeLessThanOrEqual(b.w);
+      expect(b.lines).toBeLessThanOrEqual(MAX_LABEL_LINES);
+    }
+    const wide = layoutFlow(long, 800);
+    expect(wide.fontPx).toBe(13);
+    expect(wide.cellW).toBe(150);
+    expect(wide.boxes.every((b) => b.lines <= 2)).toBe(true);
+  });
+
+  it("layoutFlow: слово, которое нигде не влезает — схема шире экрана (прокрутка) на 11 px, а не обрезка", () => {
+    const hard: FlowScene = {
+      kind: "flow",
+      nodes: [node("a", "device", "Маршрутизатор", 0, 0), node("b", "device", "Коммутатор", 1, 0), node("c", "device", "Компьютер", 2, 0)],
+      edges: [],
+    };
+    const lay = layoutFlow(hard, 326);
+    expect(lay.fontPx).toBe(11);
+    expect(lay.scrolls).toBe(true);
+    expect(lay.clipped).toBe(false);
+    expect(lay.width).toBeGreaterThan(326);
+  });
+
+  it("layoutFlow: блок с 3 строками выше типового, иконка устройства учтена в высоте", () => {
+    const three: FlowScene = { kind: "flow", nodes: [node("a", "action", "Сайт: сертификат + открытый ключ", 0, 0)], edges: [] };
+    const lay = layoutFlow(three, 150);
+    const b = lay.boxes[0];
+    expect(b.lines).toBe(3);
+    expect(b.h).toBeGreaterThan(48);
+    const one = layoutFlow({ kind: "flow", nodes: [node("a", "action", "Ввод", 0, 0)], edges: [] }, 336).boxes[0];
+    expect(one.h).toBe(48);
+    const dev = layoutFlow(
+      { kind: "flow", nodes: [{ id: "d", shape: "device", label: "Сайт: сертификат + открытый ключ", icon: "server", x: 0, y: 0 }], edges: [] },
+      150,
+    ).boxes[0];
+    expect(dev.h).toBeGreaterThan(b.h);
+  });
+
+  it("layoutFlow: простая блок-схема не меняется — кегль 13, ячейка как раньше, высоты по форме", () => {
+    const simple: FlowScene = {
+      kind: "flow",
+      nodes: [
+        node("s", "start", "Начало", 1, 0),
+        node("a", "action", "n = 5", 1, 1),
+        node("c", "if", "n > 0?", 1, 2),
+        node("b", "action", "n = n - 1", 2, 3),
+        node("e", "end", "Конец", 1, 4),
+      ],
+      edges: [{ from: "s", to: "a" }, { from: "a", to: "c" }, { from: "c", to: "b", label: "да" }, { from: "b", to: "c" }, { from: "c", to: "e", label: "нет" }],
+    };
+    for (const w of [326, 336, 390]) {
+      const lay = layoutFlow(simple, w);
+      expect(lay.fontPx).toBe(13);
+      expect(lay.cellW).toBe(flowCellWidth(w, 2));
+      expect(lay.boxes.map((b) => b.h)).toEqual([40, 48, 76, 48, 40]);
+      expect(lay.boxes.every((b) => b.lines === 1)).toBe(true);
+    }
+  });
+
+  it("ромб: текст во вписанном прямоугольнике (чем больше строк, тем уже колонка), число строк подбирается", () => {
+    const sc = (label: string): FlowScene => ({ kind: "flow", nodes: [node("q", "if", label, 0, 0)], edges: [] });
+    const a = layoutFlow(sc("n > 0?"), 150).boxes[0];
+    expect(a.lines).toBe(1);
+    const b = layoutFlow(sc("Есть ещё элементы в списке?"), 150).boxes[0];
+    expect(b.lines).toBeGreaterThan(1);
+    expect(b.textW).toBeLessThan(a.textW);
+    expect(b.textW).toBeLessThan(b.w * 0.6);
+  });
+
+  it("язык влияет на раскладку: казахская подпись длиннее — другой кегль/строки", () => {
+    const sc: FlowScene = { kind: "flow", nodes: [node("a", "box", { ru: "Идёт дождь", kk: "Жаңбыр жауып тұр" }, 0, 0), node("b", "box", "x", 1, 0), node("c", "box", "y", 2, 0)], edges: [] };
+    const ru = layoutFlow(sc, 326, "ru");
+    const kk = layoutFlow(sc, 326, "kk");
+    expect(kk.boxes[0].lines).toBeGreaterThanOrEqual(ru.boxes[0].lines);
+  });
+
+  it("placeEdgeLabel: у начала; в тесном просвете — по центру; у правого края вертикали — слева от линии; не за край сцены", () => {
+    expect(placeEdgeLabel([10, 50], [100, 50], 20, 300)).toEqual({ at: [16, 43], anchor: "start" });
+    expect(placeEdgeLabel([100, 50], [10, 50], 20, 300)).toEqual({ at: [94, 43], anchor: "end" });
+    // просвет 40 px, подпись 36: от начала вылезла бы на блок — по центру просвета
+    expect(placeEdgeLabel([0, 50], [40, 50], 36, 300)).toEqual({ at: [20, 43], anchor: "middle" });
+    expect(placeEdgeLabel([100, 10], [100, 60], 50, 300)).toEqual({ at: [106, 26], anchor: "start" });
+    expect(placeEdgeLabel([280, 10], [280, 60], 50, 300)).toEqual({ at: [274, 26], anchor: "end" });
+    // горизонталь у самого края: прижимаем внутрь
+    const edge = placeEdgeLabel([290, 50], [330, 50], 60, 300);
+    expect(edge.at[0] + 60).toBeLessThanOrEqual(298);
+  });
+
+  it("двусторонняя связь a↔b идёт по одному маршруту в обе стороны (без обхода вокруг схемы)", () => {
+    const star: FlowScene = {
+      kind: "flow",
+      nodes: [node("core", "box", "Центр", 1, 0), node("l", "box", "Левый", 0, 1), node("m", "box", "Средний", 1, 1), node("r", "box", "Правый", 2, 1)],
+      edges: [
+        { from: "l", to: "core" },
+        { from: "core", to: "l" },
+        { from: "r", to: "core" },
+        { from: "core", to: "r" },
+      ],
+    };
+    const lay = layoutFlow(star, 326);
+    for (const [a, b] of [["l", "core"], ["r", "core"]]) {
+      const fwd = lay.edges.find((e) => e.from === a && e.to === b)!;
+      const back = lay.edges.find((e) => e.from === b && e.to === a)!;
+      expect(fwd.crossings).toBe(0);
+      expect(fwd.points).toEqual([...back.points].reverse());
+      expect(fwd.points.length).toBeLessThanOrEqual(3);
+    }
+  });
+});
+
+// Охранный тест: на телефоне (контейнер ≈ 326 px при экране 390) ни одна схема урока не прокручивается и не обрезает подписи — ни на русском, ни на казахском.
+describe("flow: все схемы курса помещаются на телефоне", () => {
+  const found: { where: string; scene: FlowScene }[] = [];
+  const walk = (v: unknown, where: string, depth = 0): void => {
+    if (depth > 14 || v === null || typeof v !== "object") return;
+    if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${where}[${i}]`, depth + 1));
+    const o = v as Record<string, unknown>;
+    if (o.kind === "flow" && Array.isArray(o.nodes)) found.push({ where, scene: o as unknown as FlowScene });
+    for (const [k, x] of Object.entries(o)) walk(x, `${where}.${k}`, depth + 1);
+  };
+  for (const [id, lesson] of Object.entries(LESSONS)) walk(lesson.steps, `lesson:${id}`);
+  for (const b of GENERATED_BANKS) walk(b, `bank:${b.skill}`);
+  for (const it of GENERATED_ENT) walk(it, `ent:${it.id}`);
+
+  it("схемы найдены", () => {
+    expect(found.length).toBeGreaterThan(100);
+  });
+
+  it("на 326 px: без горизонтальной прокрутки и без обрезки подписей (ru и kk)", () => {
+    const bad: string[] = [];
+    for (const { where, scene } of found) {
+      for (const lang of ["ru", "kk"] as Lang[]) {
+        const lay = layoutFlow(scene, 326, lang);
+        if (lay.scrolls || lay.clipped) bad.push(`${where} [${lang}] f${lay.fontPx} width=${lay.width}${lay.clipped ? " clipped" : ""}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("стрелки схем курса не задевают чужие блоки", () => {
+    const bad: string[] = [];
+    for (const { where, scene } of found) {
+      const lay = layoutFlow(scene, 326, "ru");
+      for (const e of lay.edges) if (e.crossings > 0) bad.push(`${where}: ${e.from}>${e.to}`);
+    }
+    expect(bad).toEqual([]);
   });
 });
 

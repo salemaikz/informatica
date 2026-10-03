@@ -1,6 +1,7 @@
 // Логическая схема: вычисление значений на проводах и автоматическая раскладка (чистая логика, без React).
 
 import type { Scene } from "@/lib/types";
+import { estimateTextWidth } from "./text-width";
 
 export type CircuitScene = Extract<Scene, { kind: "circuit" }>;
 export type GateOp = CircuitScene["gates"][number]["op"];
@@ -91,6 +92,8 @@ export interface CircuitNode {
   y: number;
   w: number;
   h: number;
+  /** Подпись вентиля — над рамкой (по умолчанию под ней): снизу её пересёк бы провод или соседняя подпись. */
+  labelAbove?: boolean;
 }
 
 export interface CircuitWire {
@@ -146,12 +149,51 @@ export function inPort(n: CircuitNode, port: number, count: number): Pt {
   return [n.x - n.w / 2, n.y + dy];
 }
 
+/** Размер шрифта подписи вентиля (как в CircuitScene). */
+const LABEL_FONT = 13;
+
+/** Базовая линия первой строки подписи вентиля: под рамкой (по умолчанию) или над ней. */
+export function gateLabelBaseline(n: CircuitNode, lineCount: number): number {
+  const G = CIRCUIT_GEO;
+  return n.labelAbove ? n.y - n.h / 2 - 6 - (lineCount - 1) * G.labelLine : n.y + n.h / 2 + 15;
+}
+
+interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Прямоугольник подписи вентиля (по оценке ширины текста) — для проверки пересечений. */
+export function gateLabelRect(n: CircuitNode, lines: string[], above: boolean): Rect {
+  const wd = Math.max(0, ...lines.map((l) => estimateTextWidth(l, LABEL_FONT)));
+  const base = gateLabelBaseline({ ...n, labelAbove: above }, lines.length);
+  return { x0: n.x - wd / 2 - 1.5, x1: n.x + wd / 2 + 1.5, y0: base - 11, y1: base + (lines.length - 1) * CIRCUIT_GEO.labelLine + 3 };
+}
+
+const rectsHit = (a: Rect, b: Rect) => a.x1 > b.x0 && a.x0 < b.x1 && a.y1 > b.y0 && a.y0 < b.y1;
+
+/** Задевает ли провод (ломаная с запасом на толщину линии) прямоугольник. */
+const wireHits = (pts: Pt[], r: Rect): boolean => {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const seg: Rect = {
+      x0: Math.min(pts[i][0], pts[i + 1][0]) - 1.5,
+      x1: Math.max(pts[i][0], pts[i + 1][0]) + 1.5,
+      y0: Math.min(pts[i][1], pts[i + 1][1]) - 1.5,
+      y1: Math.max(pts[i][1], pts[i + 1][1]) + 1.5,
+    };
+    if (rectsHit(seg, r)) return true;
+  }
+  return false;
+};
+
 /**
  * Автоматическая раскладка: вентиль стоит в столбце 1 + max(столбцов входов), по вертикали — напротив
  * среднего положения своих входов; внутри столбца вентили не ближе одного шага (порядок сохраняется).
  * Провода — ломаные: горизонталь от источника, вертикаль перед приёмником, горизонталь в клемму.
  */
-export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number } = {}): CircuitLayout {
+export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; labels?: Partial<Record<GateOp, string[]>> } = {}): CircuitLayout {
   const G = CIRCUIT_GEO;
   // Подписи вентилей в две строки — ряды и нижний отступ больше на строку.
   const extra = Math.max(0, (opts.labelLines ?? 1) - 1) * G.labelLine;
@@ -207,6 +249,37 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number }
     });
   }
   if (outGate) route(outGate, outNode, 0, 1);
+
+  // Подписи вентилей: по умолчанию под рамкой. Если там провод, рамка соседа или чужая подпись — часть подписей переносим над рамкой.
+  // Вентилей не больше шести — перебираем все варианты и берём с наименьшим числом наложений (при нуле наложений снизу ничего не меняется).
+  if (opts.labels) {
+    const labels = opts.labels;
+    const gates = [...nodes.values()].filter((n) => n.kind === "gate" && (labels[n.op!] ?? []).length > 0);
+    const boxes = [...nodes.values()].map((n) => ({ n, r: { x0: n.x - n.w / 2, x1: n.x + n.w / 2, y0: n.y - n.h / 2, y1: n.y + n.h / 2 } as Rect }));
+    if (gates.length > 0 && gates.length <= 8) {
+      let bestMask = 0;
+      let bestCost = Infinity;
+      for (let mask = 0; mask < 1 << gates.length; mask++) {
+        const rects = gates.map((g, i) => gateLabelRect(g, labels[g.op!]!, (mask >> i & 1) === 1));
+        let cost = 0;
+        rects.forEach((r, i) => {
+          if (r.y0 < 2) cost += 100;
+          cost += 10 * wires.filter((w) => wireHits(w.points, r)).length;
+          cost += 10 * boxes.filter((b) => b.n !== gates[i] && rectsHit(b.r, r)).length;
+          cost += 10 * rects.filter((o, j) => j > i && rectsHit(o, r)).length;
+          if (mask >> i & 1) cost += 1;
+        });
+        if (cost < bestCost) {
+          bestCost = cost;
+          bestMask = mask;
+        }
+        if (cost === 0) break;
+      }
+      gates.forEach((g, i) => {
+        if (bestMask >> i & 1) g.labelAbove = true;
+      });
+    }
+  }
 
   const all = [...nodes.values()];
   const maxY = Math.max(...all.map((n) => n.y));

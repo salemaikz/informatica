@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import type { DictKey } from "@/i18n/dict";
 import { translate, useT } from "@/i18n/useT";
-import { CIRCUIT_GEO, GATE_STYLE, evalCircuit, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
+import { CIRCUIT_GEO, GATE_STYLE, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
 
 const OP_KEY: Record<GateOp, DictKey> = {
   and: "scene.op.and",
@@ -50,7 +50,7 @@ function GateShape({ node, label, v }: { node: CircuitNode; label: string[]; v: 
         {style.symbol}
       </text>
       {style.inverted && <circle cx={left + node.w + CIRCUIT_GEO.bubble} cy={node.y} r={CIRCUIT_GEO.bubble} strokeWidth={2} className={cn("fill-surface", v === 1 ? "stroke-success" : "stroke-muted")} />}
-      <text x={node.x} y={top + node.h + 15} textAnchor="middle" fontSize={13} fontWeight={700} className="fill-muted">
+      <text x={node.x} y={gateLabelBaseline(node, label.length)} textAnchor="middle" fontSize={13} fontWeight={700} className="fill-muted">
         {label.map((line, i) => (
           <tspan key={i} x={node.x} dy={i === 0 ? 0 : CIRCUIT_GEO.labelLine}>
             {line}
@@ -92,7 +92,7 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
     return out as Record<GateOp, string[]>;
   }, [lang]);
   const labelLines = Math.max(1, ...scene.gates.map((g) => labels[g.op].length));
-  const layout = useMemo(() => layoutCircuit(scene, { labelLines }), [scene, labelLines]);
+  const layout = useMemo(() => layoutCircuit(scene, { labelLines, labels }), [scene, labelLines, labels]);
   const hasValues = !!scene.values;
   const vals = useMemo(() => (scene.values ? evalCircuit(scene, scene.values) : null), [scene]);
   const valueOf = (id: string): Bit | undefined => (vals ? vals[id === layout.outId ? scene.output : id] : undefined);
