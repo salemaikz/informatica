@@ -28,7 +28,7 @@ export const MAX_LABEL_LINES = 3;
 /** Ромб уже ячейки на столько px (у остальных блоков — GAP_X). */
 const DIAMOND_GAP = 6;
 /** Запас текста от края ромба (по вертикали — к высоте блока текста, по горизонтали — к ширине). */
-const DIAMOND_PAD_Y = 6;
+const DIAMOND_PAD_Y = 2;
 const DIAMOND_PAD_X = 6;
 /** Иконка устройства над подписью: 22 px + просвет 2 px. */
 const ICON_H = 24;
