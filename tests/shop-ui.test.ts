@@ -31,9 +31,9 @@ describe("форматы", () => {
     expect(formatNum(40)).toBe("40");
   });
   it("длительность бустера и пропуска сердечек", () => {
-    expect(formatSpan(24, "ru")).toBe("24 ч");
-    expect(formatSpan(168, "ru")).toBe("7 дней");
-    expect(formatSpan(168, "kk")).toBe("7 күн");
+    expect(formatSpan(24, "ru")).toBe("24\u00a0ч");
+    expect(formatSpan(168, "ru")).toBe("7\u00a0дней");
+    expect(formatSpan(168, "kk")).toBe("7\u00a0күн");
   });
   it("курс чипов для подписей: 5 XP = 2 чипа", () => {
     expect(chipRate()).toEqual({ xp: 5, n: 2 });

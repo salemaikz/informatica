@@ -17,10 +17,10 @@ export function formatRemaining(ms: number, lang: Lang): string {
   return mins ? `${hours} ${h} ${mins} ${min}` : `${hours} ${h}`;
 }
 
-/** Длительность бустера из набора за деньги: «24 ч», «7 дней». */
+/** Длительность бустера из набора за деньги: «24 ч», «7 дней» (неразрывный пробел — число не отрывается от единицы). */
 export function formatSpan(hours: number, lang: Lang): string {
-  if (hours >= 48 && hours % 24 === 0) return daysText(hours / 24, lang);
-  return `${hours} ${lang === "kk" ? "сағ" : "ч"}`;
+  const text = hours >= 48 && hours % 24 === 0 ? daysText(hours / 24, lang) : `${hours} ${lang === "kk" ? "сағ" : "ч"}`;
+  return text.replace(/ /g, "\u00a0");
 }
 
 /** Курс чипов для подписей: «5 XP = 2 чипа» — наименьшее целое число XP, дающее целое число чипов (из CHIPS_PER_XP). */

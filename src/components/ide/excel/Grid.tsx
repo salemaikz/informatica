@@ -132,7 +132,7 @@ export function Grid({ cols, rows, cells, values, selected, showFormulas, relate
                       onMouseDown={onCellMouseDown}
                       onClick={() => onSelect(addr)}
                       className={cn(
-                        "block h-9 w-full min-w-[4.75rem] max-w-[9rem] truncate px-2 outline-none",
+                        "block h-9 w-full min-w-[3.875rem] max-w-[9rem] truncate px-1.5 outline-none sm:min-w-[4.75rem] sm:px-2",
                         kind === "number" && "text-right tabular-nums",
                         kind === "center" && "text-center",
                         kind === "text" && "text-left",
