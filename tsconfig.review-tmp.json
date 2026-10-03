@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.json", "include": ["next-env.d.ts", "src/components/exam/**/*", "src/components/learn/**/*", "src/app/exam/**/*", "src/app/(main)/exam/**/*", "src/lib/exam.ts", "src/lib/exam-store.ts", "src/lib/store.ts", "tests/exam-unit.test.ts", "tests/exam*.test.ts", "tests/history*.test.ts", ".next/types/**/*.ts"] }

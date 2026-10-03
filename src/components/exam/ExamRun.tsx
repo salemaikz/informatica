@@ -3,10 +3,8 @@
 import { ChevronLeft, ChevronRight, Flag, LayoutGrid, Play, TimerOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
-import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { buildExam, EXAM_TIME_LIMIT_SEC, type ExamKind, type ExamPaper } from "@/lib/exam";
