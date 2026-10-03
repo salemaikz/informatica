@@ -10,6 +10,8 @@ export const MODELS = {
   vision: process.env.OPENAI_MODEL_VISION || "gpt-5.4-mini",
   /** Дешёвые задачи: отзыв после урока, обновление памяти. */
   fast: process.env.OPENAI_MODEL_FAST || "gpt-5.4-nano",
+  /** Расшифровка голоса (ИИ-чат 2.0). */
+  stt: process.env.OPENAI_MODEL_STT || "gpt-4o-mini-transcribe",
 };
 
 let client: OpenAI | null = null;

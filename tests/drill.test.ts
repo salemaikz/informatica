@@ -59,7 +59,7 @@ const levels = (steps: QuestionStep[]) => steps.map((s) => s.level ?? 1);
 const isSorted = (a: number[]) => a.every((x, i) => i === 0 || a[i - 1] <= x);
 
 /** Готовый урок раздела u1 (системы счисления) — стабильная опора тестов. */
-const u1 = UNITS[0];
+const u1 = UNITS.find((u) => u.id === "u1")!;
 const u1Lessons = readyLessons(u1);
 const u1Banked = u1Lessons.filter((l) => l.skills.length > 0 && l.skills.every(hasBank));
 
@@ -98,7 +98,9 @@ describe("свободный режим: навыки без замков", () =
   it("smart без пройденных уроков берёт навыки первого раздела", () => {
     const sk = smartSkills({});
     expect(sk.length).toBeGreaterThan(0);
-    const firstUnitSkills = new Set(u1Lessons.flatMap((l) => l.skills));
+    // Первый раздел, где есть готовые уроки (сейчас — «Старт: компьютер с нуля»).
+    const first = UNITS.find((u) => readyLessons(u).length > 0)!;
+    const firstUnitSkills = new Set(readyLessons(first).flatMap((l) => l.skills));
     expect(sk.every((s) => firstUnitSkills.has(s))).toBe(true);
   });
   it("smart по пройденным урокам берёт их навыки", () => {

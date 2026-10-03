@@ -1,0 +1,34 @@
+# ТЗ: ИИ-чат 2.0 (v0.7, этап 7 плана)
+
+> Запрос пользователя: «и чат 2.0 тоже надо». План этапа 7 (`docs/PLAN.md`): список чатов (новый, переименовать, закрепить, удалить, поиск), режимы «Объясни тему», «Дай задачи» с оценкой, «Проверь решение» по фото, «Готовимся к ЕНТ», голосовые вопросы, ответ голосом, «Сохранить в конспект → папка». Решение #37.
+
+## 0. Что уже сделано (контракт, главная модель)
+- `src/lib/chats.ts` — `ChatMode` (`free | explain | tasks | check | ent`), `ChatMeta`, `ChatMsg` (+ `voice`, `quiz: QuizSummary`), `sortChats`, `searchChats`, `autoTitle`, `previewOf`, `quizGrade`, лимиты `MAX_CHATS = 50`, `MAX_MESSAGES = 120`.
+- `src/lib/chat-store.ts` — сообщения в IndexedDB: `loadMessages(id)`, `saveMessages(id, msgs)`, `deleteMessages(id)` (асинхронно, из обработчиков).
+- Стор: `chats: ChatMeta[]`, действия `createChat(mode, title?, topic?) → id`, `renameChat`, `pinChat`, `deleteChat`, `touchChat(id, {preview, count, title?})`. Старый `chat: ChatMessage[]` и `addChat/clearChat` пока остаются — **перенести его в первый чат** («Мой чат», режим `free`) при первом открытии `/tutor` и очистить `clearChat()`.
+- ИИ: `useTutor().ask({ mode: "chat", messages, image?, chatMode, topic })` — режим чата и тема (id темы ЕНТ `t01…t13`) уходят на сервер, промпт режима — в `src/server/prompts.ts` (`CHAT_MODE_RULE`, уже написан). Оплата — как раньше: `chat` 7 чипов, `photo` 10, `voice` 2 (расшифровка), бесплатные обращения по тарифу.
+- Модель расшифровки — `MODELS.stt` (`OPENAI_MODEL_STT`, по умолчанию `gpt-4o-mini-transcribe`) в `src/server/openai.ts`.
+- Заглушки с итоговыми пропсами: `src/components/chat/quiz/ChatQuiz.tsx`, `src/components/chat/voice/VoiceButton.tsx`, `src/components/chat/voice/SpeakButton.tsx`.
+
+## 1. C1 — список чатов, экран чата, режимы
+**Файлы:** `src/app/(main)/tutor/page.tsx`, `src/app/(main)/tutor/[id]/page.tsx`, `src/components/chat/*` (кроме `quiz/` и `voice/`), `src/i18n/parts/chat2.ts` (префикс `chat2.`), `tests/chats.test.ts` (чистая логика `lib/chats.ts` и свои помощники).
+- **`/tutor` — список чатов**: поиск (по названию и последнему сообщению), закреплённые сверху, у строки — иконка режима (фиолетовая гамма `ai`), название, превью, время; меню «⋯» (переименовать — в шторке с полем, закрепить/открепить, удалить — с подтверждением, удаляет и сообщения `deleteMessages`). Пустой список — маскот и кнопки режимов. Кнопка **«Новый чат»** → шторка выбора режима (5 карточек с иконкой, названием и одной строкой «что умеет»): «Свободный», «Объясни тему», «Дай задачи», «Проверь решение», «Готовимся к ЕНТ». «Объясни тему» и «Дай задачи» сначала просят выбрать тему (`TopicPicker`: 13 тем ЕНТ из `ENT_TOPICS` + «Любая тема» для задач).
+- **`/tutor/[id]` — чат**: шапка (назад к списку, название — нажатие переименовывает, плашка режима и темы, меню «⋯»), лента сообщений (Markdown; у ответа Бита — «В конспект» (`useSaveToNotes.getState().open({ source: "ai", text })` — там выбор папки) и «Озвучить» (`SpeakButton`)), поле ввода (фото, голос `VoiceButton`, отправка/стоп, строка цены `AiCost`), ошибки — `NoChipsNotice` при `economy.noChips`. На компьютере (≥ lg) слева — колонка со списком чатов.
+- Сообщения: загрузка `loadMessages` при открытии; после каждого сообщения — `saveMessages` и `touchChat` (превью, счётчик; название по первому вопросу `autoTitle`, если пустое). История в ИИ — последние 12 сообщений (сервер так и обрезает), сообщения-карточки `quiz` отправляются как текстовое описание итога.
+- **Режимы (пустой чат):**
+  - «Свободный» — подсказки-вопросы (как сейчас).
+  - «Объясни тему» — после выбора темы сразу кнопка «Объясни тему “…” с нуля» и 3 быстрых вопроса по теме; ответ ИИ — по плану из промпта.
+  - «Дай задачи» — `ChatQuiz` (тема, 5 или 10 заданий) прямо в ленте; по завершении — карточка итога (оценка 2–5, «7 из 10», ошибки) как сообщение `quiz`, кнопки «Ещё задачи» и «Разобрать ошибки с Битом» (отправляет ИИ сообщение с ошибками — обычное платное сообщение).
+  - «Проверь решение» — крупная кнопка «Сфотографировать решение» (камера/галерея), подсказка «можно и текстом».
+  - «Готовимся к ЕНТ» — быстрые вопросы: «Составь план на неделю», «Какие темы подтянуть в первую очередь?», «Как не терять баллы на заданиях с несколькими ответами?», «Сколько времени тратить на задание?».
+- Ссылка в меню и на главной не меняется: `/tutor`.
+
+## 2. C2 — «Дай задачи», голос, озвучка
+**Файлы:** `src/components/chat/quiz/*`, `src/components/chat/voice/*`, `src/lib/voice.ts`, `src/lib/chat-quiz.ts`, `src/app/api/ai/transcribe/route.ts`, `src/i18n/parts/voice.ts` (префиксы `voice.`, `quiz.`), `tests/chat-quiz.test.ts`, `tests/voice.test.ts`.
+- **`ChatQuiz`** (пропсы — в заглушке): выбор числа заданий (5 / 10), задания из банка (`src/lib/drill.ts`: `buildTopic(topic, stats, seed)` для темы, иначе `buildSmart`), от лёгкого к сложному; каждое задание — карточка прямо в ленте с уже существующими видами заданий (`src/components/lesson/steps/*View.tsx` по `StepProps`; проверка — `evaluate()` из `src/lib/evaluate.ts`), «Проверить» → верно/неверно + объяснение задания (статическое, без ИИ), «Дальше». Ответы пишутся в прогресс (`recordAnswer`, XP — `xpForAnswer`), в конце — `finishSession({ kind: "drill", mode: "chat", … })` (история тестов, чипы, сердечко за тренировку) и `onDone(summary)` с оценкой `quizGrade`. Чистая логика (выбор заданий, подсчёт) — `src/lib/chat-quiz.ts` с тестами.
+- **`VoiceButton`**: нажать — запись (MediaRecorder, `audio/webm`, на iPhone — `audio/mp4`), повторное нажатие или 60 с — стоп; индикатор записи и таймер; перед отправкой `spendAi("voice")` (нет чипов → `onError("economy.noChips")`), отправка `POST /api/ai/transcribe` (multipart: `audio`, `lang`), текст → `onText`; ошибка — возврат `refundAi(receipt)` и `onError`. Нет микрофона/доступа — понятная ошибка. Клиентская функция — `src/lib/voice.ts` (`transcribe(blob, lang)`; выбор `mimeType`).
+- **`/api/ai/transcribe`**: как другие маршруты ИИ — `sameOrigin`, `rateLimit("stt:" + ip, 20, 10 мин)`, `getOpenAI()`; `audio` ≤ 2 МБ, тип audio/*; `client.audio.transcriptions.create({ file: await toFile(buf, "voice.webm", { type }), model: MODELS.stt, language: lang })`; ответ `{ text }` (обрезать до 2000 символов); лог `[ai] route=transcribe model=… bytes=…`; ошибки — `jsonError`.
+- **`SpeakButton`**: озвучка ответа бесплатно — `speechSynthesis` браузера, язык профиля (`ru-RU` / `kk-KZ`); без подходящего голоса для казахского — кнопку не показывать; разметку markdown убрать; повторное нажатие — стоп.
+
+## 3. Проверки исполнителей
+`npx tsc --noEmit` (свои файлы), `npx eslint <свои файлы>`, `npx vitest run <свои тесты>`. Не запускать `build`, dev-сервер, git. Отчёт: файлы, что сделано, ключи словаря, нерешённое. Ключ OpenAI в облаке нет — живые запросы не проверить; маршрут транскрибации проверить тестом на валидацию входа (без вызова OpenAI).

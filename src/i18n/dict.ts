@@ -25,6 +25,14 @@ import { plansDict } from "./parts/plans";
 import { historyDict } from "./parts/history";
 import { schoolDict } from "./parts/school";
 import { heartsDict } from "./parts/hearts";
+import { ideDict } from "./parts/ide";
+import { idePythonDict } from "./parts/ide-python";
+import { ideSqlDict } from "./parts/ide-sql";
+import { ideWebDict } from "./parts/ide-web";
+import { ideExcelDict } from "./parts/ide-excel";
+import { basicsDict } from "./parts/basics";
+import { chat2Dict } from "./parts/chat2";
+import { voiceDict } from "./parts/voice";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -475,6 +483,14 @@ export const dict = {
   ...historyDict,
   ...schoolDict,
   ...heartsDict,
+  ...ideDict,
+  ...idePythonDict,
+  ...ideSqlDict,
+  ...ideWebDict,
+  ...ideExcelDict,
+  ...basicsDict,
+  ...chat2Dict,
+  ...voiceDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

@@ -48,6 +48,9 @@ export interface TutorRequest {
   task?: TaskContext;
   /** dataURL изображения для последнего сообщения. */
   image?: string;
+  /** ИИ-чат 2.0: режим чата (только для mode "chat") и тема ЕНТ (t01–t13). */
+  chatMode?: "free" | "explain" | "tasks" | "check" | "ent";
+  topic?: string;
 }
 
 export interface CheckSolutionRequest {

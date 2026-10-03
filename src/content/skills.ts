@@ -13,8 +13,19 @@ const NET: L = { ru: "Сети и безопасность", kk: "Желілер
 const OFFICE: L = { ru: "Таблицы и веб", kk: "Кестелер және веб" };
 const IT: L = { ru: "Современные IT", kk: "Заманауи IT" };
 const ENT: L = { ru: "Как решать ЕНТ", kk: "ҰБТ-ны қалай шешу керек" };
+const BASICS: L = { ru: "Компьютер с нуля", kk: "Компьютер нөлден" };
 
 export const SKILLS: Skill[] = [
+  // ---------- Раздел 0: старт — компьютер с нуля (решение #36) ----------
+  { id: "base.computer", ent: "t01", topic: BASICS, title: { ru: "Что такое компьютер", kk: "Компьютер деген не" } },
+  { id: "base.inside", ent: "t01", topic: BASICS, title: { ru: "Что внутри компьютера", kk: "Компьютердің ішінде не бар" } },
+  { id: "base.devices", ent: "t01", topic: BASICS, title: { ru: "Устройства ввода и вывода", kk: "Енгізу және шығару құрылғылары" } },
+  { id: "base.media", ent: "t01", topic: BASICS, title: { ru: "Носители информации", kk: "Ақпарат тасығыштар" } },
+  { id: "base.cpu", ent: "t01", topic: BASICS, title: { ru: "Как работают процессор и память", kk: "Процессор мен жад қалай жұмыс істейді" } },
+  { id: "base.os", ent: "t08", topic: BASICS, title: { ru: "Операционная система и файлы", kk: "Операциялық жүйе және файлдар" } },
+  { id: "base.keys", ent: "t08", topic: BASICS, title: { ru: "Клавиатура и горячие клавиши", kk: "Пернетақта және жылдам пернелер" } },
+  { id: "base.info", ent: "t03", topic: BASICS, title: { ru: "Информация и её объём", kk: "Ақпарат және оның көлемі" } },
+
   // ---------- Раздел 1: информация и системы счисления ----------
   { id: "ns.base", ent: "t04", topic: NUMBER_SYSTEMS, title: { ru: "Основание и цифры систем", kk: "Жүйе негізі мен цифрлары" } },
   { id: "ns.bin2dec", ent: "t04", topic: NUMBER_SYSTEMS, title: { ru: "Перевод 2 → 10", kk: "2 → 10 аудару" } },

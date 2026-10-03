@@ -10,9 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { BOOST_PACKS, CHIP_PACKS, formatTenge, shopItem } from "@/lib/economy";
+import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
+import { formatHours } from "@/components/plans/plans-helpers";
 import { AiPricing, EarnList, LedgerList } from "@/components/economy/ShopInfo";
 import { ShopBalance } from "@/components/economy/ShopBalance";
 import { ShopPlanBanner } from "@/components/economy/ShopPlanBanner";
@@ -22,7 +23,7 @@ import {
   MoneyRow,
   ShopSection,
 } from "@/components/economy/ShopParts";
-import { useHearts } from "@/components/economy/useEconomy";
+import { useHearts, usePlanTier } from "@/components/economy/useEconomy";
 import {
   formatNum,
   formatSpan,
@@ -37,10 +38,12 @@ export default function ShopPage() {
     open: false,
   });
   const hearts = useHearts();
+  const tier = usePlanTier();
   const showPractice = !hearts.unlimited && hearts.count < hearts.max;
   const pick = (what: string) => setSoon({ open: true, what });
 
   const heart1 = shopItem("heart-1");
+  const heart3 = shopItem("hearts-3");
   const full = shopItem("hearts-full");
   const b15 = shopItem("boost-15");
   const b60 = shopItem("boost-60");
@@ -55,7 +58,14 @@ export default function ShopPage() {
       <ShopBalance />
       <ShopPlanBanner />
 
-      <ShopSection title={t("shop.hearts.title")} hint={t("shop.hearts.hint")}>
+      <ShopSection
+        title={t("shop.hearts.title")}
+        hint={
+          hearts.unlimited
+            ? t("shop.hearts.hintUnlimited")
+            : t("shop.hearts.hint", { time: formatHours(PLAN_FEATURES[tier].regenMs, lang) })
+        }
+      >
         <div className="flex flex-col gap-2.5">
           {heart1 && (
             <ChipItemRow
@@ -64,6 +74,15 @@ export default function ShopPage() {
               icon={<HeartPlus size={26} />}
               nameKey="shop.item.heart-1"
               descKey="shop.item.heart-1.desc"
+            />
+          )}
+          {heart3 && (
+            <ChipItemRow
+              item={heart3}
+              tone="heart"
+              icon={<HeartPlus size={26} />}
+              nameKey="shop.item.hearts-3"
+              descKey="shop.item.hearts-3.desc"
             />
           )}
           {full && (
@@ -92,6 +111,26 @@ export default function ShopPage() {
               />
             </Link>
           )}
+        </div>
+      </ShopSection>
+
+      <ShopSection title={t("shop.passes.title")} hint={t("shop.passes.hint")}>
+        <div className="flex flex-col gap-2.5">
+          {HEART_PASSES.map((p) => {
+            const title = t("shop.pass.title", { span: formatSpan(p.hours, lang) });
+            const price = formatTenge(p.price);
+            return (
+              <MoneyRow
+                key={p.id}
+                tone="heart"
+                icon={<Heart size={26} fill="currentColor" />}
+                title={title}
+                desc={t("shop.pass.desc")}
+                price={price}
+                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+              />
+            );
+          })}
         </div>
       </ShopSection>
 
@@ -140,16 +179,13 @@ export default function ShopPage() {
           {CHIP_PACKS.map((p) => {
             const title = t("shop.chips.pack", { n: formatNum(p.chips) });
             const price = formatTenge(p.price);
+            const saving = packSaving(p);
             return (
               <MoneyRow
                 key={p.id}
                 icon={<Cpu size={26} />}
                 title={title}
-                desc={
-                  p.bonus > 0
-                    ? t("shop.chips.bonus", { n: formatNum(p.bonus) })
-                    : t("shop.chips.plain")
-                }
+                desc={saving > 0 ? t("shop.chips.saving", { n: saving }) : t("shop.chips.base")}
                 price={price}
                 highlight={p.badge === "popular"}
                 badge={

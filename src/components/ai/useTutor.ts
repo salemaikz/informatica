@@ -7,6 +7,7 @@ import { cacheableRequest, cacheKeyPayload, clientCacheGet, clientCacheKey, clie
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
 import type { DictKey } from "@/i18n/dict";
+import type { ChatMode } from "@/lib/chats";
 
 export interface TutorTurn {
   role: "user" | "assistant";
@@ -23,7 +24,7 @@ export function useTutor() {
 
   const ask = useCallback(
     async (
-      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string },
+      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string; chatMode?: ChatMode; topic?: string },
       onText: (text: string) => void,
     ): Promise<string | null> => {
       const app = useApp.getState();

@@ -90,6 +90,34 @@ export function validateScene(scene: Scene): string[] {
       need(scene.html.trim().length > 0, "пустой html");
       need(!/<script|on\w+\s*=|javascript:/i.test(scene.html + (scene.css ?? "")), "скрипты и обработчики запрещены");
       break;
+    case "hardware":
+      need(scene.items.length >= 1 && scene.items.length <= 9, "hardware: 1–9 рисунков");
+      need(new Set(scene.items).size === scene.items.length, "hardware: повтор рисунка");
+      need((scene.highlight ?? []).every((h) => scene.items.includes(h)), "hardware: подсветка не из items");
+      break;
+    case "pc-inside":
+      break;
+    case "cpu-cycle":
+      need(scene.instr === undefined || scene.instr.length <= 24, "cpu-cycle: команда длиннее 24 символов");
+      break;
+    case "keyboard":
+      need(scene.keys.length >= 1 && scene.keys.length <= 4, "keyboard: 1–4 клавиши");
+      break;
+    case "sizes":
+      need(scene.items.length >= 2 && scene.items.length <= 7, "sizes: 2–7 полос");
+      need(scene.items.every((i) => Number.isFinite(i.bytes) && i.bytes > 0 && filledText(i.label)), "sizes: размер > 0 и подпись");
+      break;
+    case "files": {
+      const count = (nodes: { name: string; children?: unknown[] }[]): number =>
+        nodes.reduce((a, n) => a + 1 + (Array.isArray(n.children) ? count(n.children as { name: string; children?: unknown[] }[]) : 0), 0);
+      need(scene.tree.length >= 1 && count(scene.tree) <= 14, "files: 1–14 узлов");
+      break;
+    }
+    case "layers":
+      need(scene.items.length >= 2 && scene.items.length <= 6, "layers: 2–6 слоёв");
+      need(scene.highlight === undefined || (scene.highlight >= 0 && scene.highlight < scene.items.length), "layers: highlight вне диапазона");
+      need(scene.items.every((i) => filledText(i.title)), "layers: пустой заголовок");
+      break;
   }
   if ("caption" in scene && scene.caption !== undefined) need(filledText(scene.caption), "пустая подпись");
   return errors;

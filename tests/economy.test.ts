@@ -3,8 +3,10 @@ import {
   AI_COST,
   AI_DAILY_CAP,
   BOOST_PACKS,
+  CHIPS_PER_XP,
   CHIP_PACKS,
   DAY,
+  HEART_PASSES,
   HOUR,
   LEDGER_MERGE_MS,
   MAX_LEDGER,
@@ -16,6 +18,7 @@ import {
   START_HEARTS,
   START_WALLET,
   TRIAL_DAYS,
+  WELCOME_CHIPS,
   addHearts,
   aiFreeLeft,
   applyAiUsage,
@@ -32,6 +35,7 @@ import {
   heartsNow,
   heartsView,
   loseHeart,
+  packSaving,
   perMonthOfYear,
   planDaysLeft,
   practiceEarnsHeart,
@@ -63,8 +67,8 @@ const TODAY = "2027-01-15";
 
 describe("тарифы и цены", () => {
   it("PLAN_FEATURES: запас, восстановление, ИИ, множитель", () => {
-    expect(PLAN_FEATURES.free).toEqual({ maxHearts: 5, regenMs: 4 * HOUR, aiFree: 3, chipMultiplier: 1 });
-    expect(PLAN_FEATURES.lite).toEqual({ maxHearts: 10, regenMs: 2 * HOUR, aiFree: 30, chipMultiplier: 1.5 });
+    expect(PLAN_FEATURES.free).toEqual({ maxHearts: 5, regenMs: 5 * HOUR, aiFree: 3, chipMultiplier: 1 });
+    expect(PLAN_FEATURES.lite).toEqual({ maxHearts: 10, regenMs: 150 * MINUTE, aiFree: 30, chipMultiplier: 1.5 });
     expect(PLAN_FEATURES.unlimited.maxHearts).toBe(Infinity);
     expect(PLAN_FEATURES.unlimited.aiFree).toBe(Infinity);
     expect(PLAN_FEATURES.unlimited.chipMultiplier).toBe(2);
@@ -159,20 +163,41 @@ describe("пробный период", () => {
 describe("сердечки: heartsNow", () => {
   const h = (count: number, updatedAt: number, day = TODAY): Hearts => ({ count, updatedAt, day });
 
-  it("новый день — полный запас", () => {
-    expect(heartsNow(h(1, T0, "2027-01-14"), "free", T0, TODAY)).toEqual({ count: 5, updatedAt: T0, day: TODAY });
-    expect(heartsNow(START_HEARTS, "lite", T0, TODAY)).toEqual({ count: 10, updatedAt: T0, day: TODAY });
+  it("суточного пополнения нет: новый день запас не восстанавливает", () => {
+    // вчерашние сердечки остаются как есть, пока не пройдёт regenMs
+    const y = h(1, T0, "2027-01-14");
+    expect(heartsNow(y, "free", T0, TODAY)).toBe(y);
+    expect(heartsNow(y, "free", T0 + HOUR, TODAY).count).toBe(1);
+    expect(heartsNow(h(0, T0, "2027-01-14"), "lite", T0 + 2 * HOUR, TODAY).count).toBe(0);
   });
 
-  it("восстановление по одному за regenMs", () => {
-    expect(heartsNow(h(2, T0), "free", T0 + 4 * HOUR - 1, TODAY).count).toBe(2);
-    const r = heartsNow(h(2, T0), "free", T0 + 9 * HOUR, TODAY);
+  it("восстановление идёт через границу суток: одно сердечко за regenMs", () => {
+    // 23:00 вчера → 04:00 сегодня = ровно 5 ч, «день» в расчёте не участвует
+    const evening = new Date("2027-01-14T23:00:00Z").getTime();
+    const r = heartsNow(h(0, evening, "2027-01-14"), "free", evening + 5 * HOUR, TODAY);
+    expect(r).toEqual({ count: 1, updatedAt: evening + 5 * HOUR, day: TODAY });
+    // за сутки (24 ч) возвращается 4 сердечка (24 / 5 = 4,8), а не полный запас
+    expect(heartsNow(h(0, evening, "2027-01-14"), "free", evening + DAY, TODAY).count).toBe(4);
+  });
+
+  it("восстановление по одному за regenMs (5 ч)", () => {
+    expect(heartsNow(h(2, T0), "free", T0 + 5 * HOUR - 1, TODAY).count).toBe(2);
+    expect(heartsNow(h(2, T0), "free", T0 + 5 * HOUR, TODAY).count).toBe(3);
+    const r = heartsNow(h(2, T0), "free", T0 + 11 * HOUR, TODAY);
     expect(r.count).toBe(4);
-    expect(r.updatedAt).toBe(T0 + 8 * HOUR);
+    expect(r.updatedAt).toBe(T0 + 10 * HOUR);
   });
 
-  it("у Лайта восстановление быстрее (2 ч)", () => {
+  it("у Лайта восстановление быстрее (2,5 ч) и запас 10", () => {
+    expect(heartsNow(h(5, T0), "lite", T0 + 150 * MINUTE - 1, TODAY).count).toBe(5);
+    expect(heartsNow(h(5, T0), "lite", T0 + 150 * MINUTE, TODAY).count).toBe(6);
     expect(heartsNow(h(5, T0), "lite", T0 + 5 * HOUR, TODAY).count).toBe(7);
+    expect(heartsNow(h(5, T0), "lite", T0 + 100 * HOUR, TODAY).count).toBe(10);
+  });
+
+  it("стартовый запас: у бесплатного полный, Лайту при первом чтении докладывается до 10", () => {
+    expect(heartsNow(START_HEARTS, "free", T0, TODAY)).toBe(START_HEARTS);
+    expect(heartsNow(START_HEARTS, "lite", T0, TODAY)).toEqual({ count: 10, updatedAt: T0, day: TODAY });
   });
 
   it("не выше запаса; при полном — время обновляется", () => {
@@ -201,7 +226,8 @@ describe("сердечки: heartsNow", () => {
 
   it("heartsView: nextAt = следующее восстановление; null при полном/безлимите", () => {
     const v = heartsView(h(3, T0), "free", T0 + HOUR, TODAY);
-    expect(v).toEqual({ count: 3, max: 5, unlimited: false, nextAt: T0 + 4 * HOUR });
+    expect(v).toEqual({ count: 3, max: 5, unlimited: false, nextAt: T0 + 5 * HOUR });
+    expect(heartsView(h(3, T0), "lite", T0 + HOUR, TODAY).nextAt).toBe(T0 + 150 * MINUTE);
     expect(heartsView(h(5, T0), "free", T0, TODAY).nextAt).toBeNull();
     const u = heartsView(START_HEARTS, "unlimited", T0, TODAY);
     expect(u.unlimited).toBe(true);
@@ -236,12 +262,14 @@ describe("сердечки: loseHeart / addHearts / refill", () => {
   });
 
   it("учитывает восстановленное перед списанием", () => {
-    // 1 сердечко + 1 восстановилось (4 ч) = 2, минус 1 = 1
-    expect(loseHeart(h(1, T0), "free", T0 + 4 * HOUR, TODAY).count).toBe(1);
+    // 1 сердечко + 1 восстановилось (5 ч) = 2, минус 1 = 1
+    expect(loseHeart(h(1, T0), "free", T0 + 5 * HOUR, TODAY).count).toBe(1);
   });
 
-  it("новый день: полный запас, потом минус один", () => {
-    expect(loseHeart(h(0, T0, "2027-01-14"), "free", T0, TODAY).count).toBe(4);
+  it("новый день запас не пополняет: вчерашний ноль остаётся нулём", () => {
+    const r = loseHeart(h(0, T0, "2027-01-14"), "free", T0, TODAY);
+    expect(r.count).toBe(0);
+    expect(loseHeart(h(2, T0, "2027-01-14"), "free", T0 + HOUR, TODAY).count).toBe(1);
   });
 
   it("безлимит — без изменений (та же ссылка)", () => {
@@ -283,43 +311,93 @@ describe("магазин: buyItem", () => {
   });
   const buy = (s: BuyState, id: ShopItemId, tier: "free" | "lite" | "unlimited" = "free", now = T0) => buyItem(s, id, tier, now, TODAY);
 
-  it("heart-1: +1 сердечко за 40 чипов", () => {
+  const heartsAt = (count: number): Hearts => ({ count, updatedAt: T0, day: TODAY });
+  const walletOf = (chips: number) => ({ chips, earned: chips, spent: 0 });
+
+  it("heart-1: +1 сердечко за 25 чипов", () => {
     const r = buy(base(), "heart-1");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.hearts.count).toBe(3);
-    expect(r.wallet).toEqual({ chips: 460, earned: 500, spent: 40 });
+    expect(r.wallet).toEqual({ chips: 475, earned: 500, spent: 25 });
     expect(r.boost).toBeNull();
   });
 
-  it("hearts-full: полный запас за 150", () => {
+  it("hearts-3: +3 сердечка за 60 чипов (по 20 за штуку)", () => {
+    const item = SHOP_ITEMS.find((i) => i.id === "hearts-3");
+    expect(item).toMatchObject({ kind: "heart", price: 60, amount: 3 });
+    const r = buy(base(), "hearts-3");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.hearts.count).toBe(5);
+    expect(r.wallet).toEqual({ chips: 440, earned: 500, spent: 60 });
+    // с пустого запаса: 0 → 3, таймер восстановления не сбрасывается
+    const z = buy(base({ hearts: heartsAt(0) }), "hearts-3");
+    expect(z.ok && z.hearts).toEqual({ count: 3, updatedAt: T0, day: TODAY });
+  });
+
+  it("hearts-3 у Лайта (запас 10): помещается, пока не хватает хотя бы трёх", () => {
+    const r = buy(base({ hearts: heartsAt(7) }), "hearts-3", "lite");
+    expect(r.ok && r.hearts.count).toBe(10);
+    expect(buy(base({ hearts: heartsAt(8) }), "hearts-3", "lite")).toEqual({ ok: false, reason: "overflow" });
+  });
+
+  it("hearts-3 переполняет запас — отказ overflow, чипы не списываются; поштучно можно", () => {
+    // 3 из 5: не хватает 2 < 3
+    expect(buy(base({ hearts: heartsAt(3) }), "hearts-3")).toEqual({ ok: false, reason: "overflow" });
+    expect(buy(base({ hearts: heartsAt(4) }), "hearts-3")).toEqual({ ok: false, reason: "overflow" });
+    // ровно по запасу — проходит
+    expect(buy(base({ hearts: heartsAt(2) }), "hearts-3").ok).toBe(true);
+    // поштучно и «полный запас» при переполнении остаются доступными
+    expect(buy(base({ hearts: heartsAt(4) }), "heart-1").ok).toBe(true);
+    expect(buy(base({ hearts: heartsAt(4) }), "hearts-full").ok).toBe(true);
+  });
+
+  it("порядок проверок: unlimited → full → overflow → chips", () => {
+    expect(buy(base({ hearts: heartsAt(4) }), "hearts-3", "unlimited")).toEqual({ ok: false, reason: "unlimited" });
+    expect(buy(base({ hearts: heartsAt(5) }), "hearts-3")).toEqual({ ok: false, reason: "full" });
+    // переполнение важнее нехватки чипов: пусть сразу берёт по одному
+    expect(buy(base({ hearts: heartsAt(4), wallet: walletOf(0) }), "hearts-3")).toEqual({ ok: false, reason: "overflow" });
+    expect(buy(base({ hearts: heartsAt(1), wallet: walletOf(59) }), "hearts-3")).toEqual({ ok: false, reason: "chips" });
+  });
+
+  it("hearts-full: полный запас за 90", () => {
     const r = buy(base(), "hearts-full");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.hearts.count).toBe(5);
-    expect(r.wallet.chips).toBe(350);
+    expect(r.wallet.chips).toBe(410);
+    const lite = buy(base(), "hearts-full", "lite");
+    expect(lite.ok && lite.hearts.count).toBe(10);
   });
 
-  it("причины отказа: unknown / unlimited / full / chips", () => {
+  it("причины отказа: unknown / unlimited / full / overflow / chips", () => {
     expect(buy(base(), "nope" as ShopItemId)).toEqual({ ok: false, reason: "unknown" });
     expect(buy(base(), "heart-1", "unlimited")).toEqual({ ok: false, reason: "unlimited" });
     expect(buy(base(), "hearts-full", "unlimited")).toEqual({ ok: false, reason: "unlimited" });
-    expect(buy(base({ hearts: { count: 5, updatedAt: T0, day: TODAY } }), "heart-1")).toEqual({ ok: false, reason: "full" });
-    expect(buy(base({ hearts: { count: 5, updatedAt: T0, day: TODAY } }), "hearts-full")).toEqual({ ok: false, reason: "full" });
-    expect(buy(base({ wallet: { chips: 39, earned: 39, spent: 0 } }), "heart-1")).toEqual({ ok: false, reason: "chips" });
-    expect(buy(base({ wallet: { chips: 149, earned: 149, spent: 0 } }), "hearts-full")).toEqual({ ok: false, reason: "chips" });
-    expect(buy(base({ wallet: { chips: 59, earned: 59, spent: 0 } }), "boost-15")).toEqual({ ok: false, reason: "chips" });
+    expect(buy(base({ hearts: heartsAt(5) }), "heart-1")).toEqual({ ok: false, reason: "full" });
+    expect(buy(base({ hearts: heartsAt(5) }), "hearts-full")).toEqual({ ok: false, reason: "full" });
+    expect(buy(base({ hearts: heartsAt(4) }), "hearts-3")).toEqual({ ok: false, reason: "overflow" });
+    expect(buy(base({ wallet: walletOf(24) }), "heart-1")).toEqual({ ok: false, reason: "chips" });
+    expect(buy(base({ wallet: walletOf(59) }), "hearts-3")).toEqual({ ok: false, reason: "chips" });
+    expect(buy(base({ wallet: walletOf(89) }), "hearts-full")).toEqual({ ok: false, reason: "chips" });
+    expect(buy(base({ wallet: walletOf(39) }), "boost-15")).toEqual({ ok: false, reason: "chips" });
+    expect(buy(base({ wallet: walletOf(119) }), "boost-60")).toEqual({ ok: false, reason: "chips" });
   });
 
   it("ровно хватает чипов — покупка проходит, баланс 0", () => {
-    const r = buy(base({ wallet: { chips: 40, earned: 40, spent: 0 } }), "heart-1");
+    const r = buy(base({ wallet: walletOf(25) }), "heart-1");
     expect(r.ok && r.wallet.chips).toBe(0);
+    const r3 = buy(base({ wallet: walletOf(60) }), "hearts-3");
+    expect(r3.ok && r3.wallet.chips).toBe(0);
   });
 
   it("при восстановлении «полный запас» считается с учётом времени", () => {
-    // 4 сердечка + прошло 4 ч = полный запас → покупать нечего
-    const s = base({ hearts: { count: 4, updatedAt: T0, day: TODAY } });
-    expect(buy(s, "heart-1", "free", T0 + 4 * HOUR)).toEqual({ ok: false, reason: "full" });
+    // 4 сердечка + прошло 5 ч = полный запас → покупать нечего
+    const s = base({ hearts: heartsAt(4) });
+    expect(buy(s, "heart-1", "free", T0 + 5 * HOUR)).toEqual({ ok: false, reason: "full" });
+    // 3 сердечка + 5 ч = 4: набор из трёх уже не поместится
+    expect(buy(base({ hearts: heartsAt(3) }), "hearts-3", "free", T0 + 5 * HOUR)).toEqual({ ok: false, reason: "overflow" });
   });
 
   it("бустер не трогает сердечки и работает при безлимите", () => {
@@ -328,7 +406,7 @@ describe("магазин: buyItem", () => {
     if (!r.ok) return;
     expect(r.boost).toEqual({ mult: 2, until: T0 + 15 * MINUTE });
     expect(r.hearts).toEqual(base().hearts);
-    expect(r.wallet.chips).toBe(440);
+    expect(r.wallet.chips).toBe(460);
   });
 
   it("повторная покупка бустера продлевает время", () => {
@@ -341,20 +419,67 @@ describe("магазин: buyItem", () => {
     expect(second.boost).toEqual({ mult: 2, until: T0 + 15 * MINUTE + 60 * MINUTE });
   });
 
-  it("цены каталога", () => {
+  it("цены каталога (порядок: сердечки по возрастанию, потом бустеры)", () => {
+    expect(SHOP_ITEMS.map((i) => i.id)).toEqual(["heart-1", "hearts-3", "hearts-full", "boost-15", "boost-60"]);
     expect(Object.fromEntries(SHOP_ITEMS.map((i) => [i.id, i.price]))).toEqual({
-      "heart-1": 40,
-      "hearts-full": 150,
-      "boost-15": 60,
-      "boost-60": 180,
+      "heart-1": 25,
+      "hearts-3": 60,
+      "hearts-full": 90,
+      "boost-15": 40,
+      "boost-60": 120,
     });
   });
 
-  it("наборы за деньги: бонус и бейджи", () => {
-    expect(CHIP_PACKS.map((p) => p.id)).toEqual(["chips-300", "chips-1000", "chips-3000"]);
-    expect(CHIP_PACKS.find((p) => p.badge === "popular")?.id).toBe("chips-1000");
-    expect(CHIP_PACKS.find((p) => p.badge === "best")?.id).toBe("chips-3000");
-    expect(BOOST_PACKS.every((p) => p.mult === 2 && p.price > 0)).toBe(true);
+  it("чем больше сердечек в наборе, тем дешевле штука (полный запас бесплатного — 18)", () => {
+    const one = SHOP_ITEMS.find((i) => i.id === "heart-1")!;
+    const three = SHOP_ITEMS.find((i) => i.id === "hearts-3")!;
+    const full = SHOP_ITEMS.find((i) => i.id === "hearts-full")!;
+    expect(three.price / (three.amount ?? 1)).toBeLessThan(one.price);
+    expect(full.price / PLAN_FEATURES.free.maxHearts).toBeLessThan(three.price / (three.amount ?? 1));
+  });
+
+  it("наборы чипов за деньги: цены, без бонуса, бейджи", () => {
+    expect(CHIP_PACKS.map((p) => [p.id, p.chips, p.price])).toEqual([
+      ["chips-100", 100, 190],
+      ["chips-300", 300, 490],
+      ["chips-750", 750, 990],
+      ["chips-2000", 2000, 1990],
+    ]);
+    expect(CHIP_PACKS.every((p) => p.bonus === 0)).toBe(true);
+    expect(CHIP_PACKS.find((p) => p.badge === "popular")?.id).toBe("chips-750");
+    expect(CHIP_PACKS.find((p) => p.badge === "best")?.id).toBe("chips-2000");
+  });
+
+  it("packSaving: выгода против самого маленького набора", () => {
+    expect(packSaving(CHIP_PACKS[0])).toBe(0);
+    expect(packSaving(CHIP_PACKS[1])).toBe(14); // 490/300 = 1,633 против 1,9 ₸ за чип
+    expect(packSaving(CHIP_PACKS[2])).toBe(31); // 990/750 = 1,32
+    expect(packSaving(CHIP_PACKS[3])).toBe(48); // 1990/2000 = 0,995
+    // чем больше набор, тем выгоднее
+    const savings = CHIP_PACKS.map(packSaving);
+    expect([...savings].sort((a, b) => a - b)).toEqual(savings);
+  });
+
+  it("packSaving учитывает бонус и не бывает отрицательным", () => {
+    expect(packSaving({ id: "x", chips: 100, bonus: 100, price: 190 })).toBe(50);
+    expect(packSaving({ id: "y", chips: 10, bonus: 0, price: 1000 })).toBe(0);
+  });
+
+  it("HEART_PASSES: сердечки без ограничений на 24 часа и 7 дней", () => {
+    expect(HEART_PASSES.map((p) => [p.id, p.hours, p.price])).toEqual([
+      ["hearts-24h", 24, 149],
+      ["hearts-7d", 168, 590],
+    ]);
+    // неделя дешевле, чем семь суточных пропусков
+    const [day, week] = HEART_PASSES;
+    expect(week.price).toBeLessThan((week.hours / day.hours) * day.price);
+  });
+
+  it("бустеры за деньги: ×2 на 24 часа и 7 дней", () => {
+    expect(BOOST_PACKS.map((p) => [p.id, p.mult, p.hours, p.price])).toEqual([
+      ["boost-24h", 2, 24, 290],
+      ["boost-7d", 2, 168, 990],
+    ]);
   });
 });
 
@@ -406,25 +531,32 @@ describe("чипы за опыт", () => {
     expect(earnAmount(NaN, 1)).toBe(0);
   });
 
-  it("chipsForXp: 5 XP = 1 чип", () => {
-    expect(chipsForXp(10, 1)).toBe(2);
-    expect(chipsForXp(4, 1)).toBe(0);
-    expect(chipsForXp(5, 1)).toBe(1);
-    expect(chipsForXp(12, 1)).toBe(2);
+  it("CHIPS_PER_XP: 5 XP = 2 чипа; приветственные 20 чипов", () => {
+    expect(CHIPS_PER_XP * 5).toBeCloseTo(2, 10);
+    expect(WELCOME_CHIPS).toBe(20);
+    expect(START_WALLET).toEqual({ chips: 20, earned: 20, spent: 0 });
+  });
+
+  it("chipsForXp: 5 XP = 2 чипа (вниз до целого)", () => {
+    expect(chipsForXp(5, 1)).toBe(2);
+    expect(chipsForXp(10, 1)).toBe(4);
+    expect(chipsForXp(12, 1)).toBe(4);
+    expect(chipsForXp(4, 1)).toBe(1);
+    expect(chipsForXp(2, 1)).toBe(0);
     expect(chipsForXp(0, 2)).toBe(0);
     expect(chipsForXp(-10, 2)).toBe(0);
   });
 
   it("chipsForXp: множители тарифа и бустера", () => {
-    expect(chipsForXp(10, 1.5)).toBe(3);
-    expect(chipsForXp(10, 2)).toBe(4);
-    expect(chipsForXp(5, 1.5)).toBe(1);
-    expect(chipsForXp(10, chipMultiplier("lite", { mult: 2, until: T0 + 1 }, T0))).toBe(6);
-    expect(chipsForXp(10, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(8);
+    expect(chipsForXp(10, 1.5)).toBe(6);
+    expect(chipsForXp(10, 2)).toBe(8);
+    expect(chipsForXp(5, 1.5)).toBe(3);
+    expect(chipsForXp(10, chipMultiplier("lite", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
+    expect(chipsForXp(10, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(16);
   });
 
-  it("плавающая арифметика не съедает чип (0.2 * 35 и т.п.)", () => {
-    for (let xp = 0; xp <= 500; xp += 5) expect(chipsForXp(xp, 1)).toBe(xp / 5);
+  it("плавающая арифметика не съедает чип (0.4 * 35 и т.п.)", () => {
+    for (let xp = 0; xp <= 500; xp += 5) expect(chipsForXp(xp, 1)).toBe((xp / 5) * 2);
   });
 });
 
@@ -485,13 +617,27 @@ describe("ИИ: quoteAi", () => {
     expect(quoteAi("hint", "free", undefined, 100, TODAY)).toEqual({ ok: true, kind: "hint", day: TODAY, pay: "free", cost: 0 });
     expect(quoteAi("hint", "free", usage(2), 100, TODAY).pay).toBe("free");
     expect(quoteAi("hint", "free", usage(3), 100, TODAY)).toEqual({ ok: true, kind: "hint", day: TODAY, pay: "chips", cost: AI_COST.hint });
-    expect(quoteAi("photo", "free", usage(3), 100, TODAY).cost).toBe(30);
-    expect(quoteAi("chat", "free", usage(3), 100, TODAY).cost).toBe(10);
+    expect(quoteAi("photo", "free", usage(3), 100, TODAY).cost).toBe(10);
+    expect(quoteAi("chat", "free", usage(3), 100, TODAY).cost).toBe(7);
+  });
+
+  it("цены обращений: подсказка 3, разбор 5, вопрос 5, чат 7, фото 10, разбор пробника 15, голос 2, отзыв 0", () => {
+    expect(AI_COST).toEqual({ hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, review: 15, voice: 2, feedback: 0 });
+  });
+
+  it("голосовой вопрос: расшифровка стоит 2 чипа сверх бесплатного, бесплатна в пределах лимита и при безлимите", () => {
+    expect(quoteAi("voice", "free", usage(3), 100, TODAY)).toEqual({ ok: true, kind: "voice", day: TODAY, pay: "chips", cost: 2 });
+    expect(quoteAi("voice", "free", usage(3), 2, TODAY).ok).toBe(true);
+    expect(quoteAi("voice", "free", usage(3), 1, TODAY)).toEqual({ ok: false, kind: "voice", day: TODAY, cost: 2, reason: "chips" });
+    expect(quoteAi("voice", "free", usage(0), 0, TODAY)).toMatchObject({ ok: true, pay: "free", cost: 0 });
+    expect(quoteAi("voice", "unlimited", usage(500, 10), 0, TODAY)).toMatchObject({ ok: true, pay: "plan", cost: 0 });
+    // голос съедает бесплатный лимит как обычное обращение
+    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 1, free: 1 });
   });
 
   it("не хватает чипов — причина chips и цена", () => {
-    expect(quoteAi("ask", "free", usage(3), 9, TODAY)).toEqual({ ok: false, kind: "ask", day: TODAY, cost: 10, reason: "chips" });
-    expect(quoteAi("ask", "free", usage(3), 10, TODAY).ok).toBe(true);
+    expect(quoteAi("ask", "free", usage(3), 4, TODAY)).toEqual({ ok: false, kind: "ask", day: TODAY, cost: 5, reason: "chips" });
+    expect(quoteAi("ask", "free", usage(3), 5, TODAY).ok).toBe(true);
   });
 
   it("Лайт: 30 бесплатных", () => {
@@ -630,9 +776,9 @@ describe("sanitize*: мусор на входе", () => {
     expect(sanitizeHearts({ updatedAt: Infinity }).updatedAt).toBe(0);
   });
 
-  it("sanitizeWallet: мусор — стартовые 100 чипов, не отрицательные", () => {
+  it("sanitizeWallet: мусор — стартовые 20 чипов, не отрицательные", () => {
     for (const g of garbage) expect(sanitizeWallet(g)).toEqual({ chips: START_WALLET.chips, earned: START_WALLET.earned, spent: 0 });
-    expect(sanitizeWallet({ chips: -5, earned: "x", spent: -1 })).toEqual({ chips: 100, earned: 100, spent: 0 });
+    expect(sanitizeWallet({ chips: -5, earned: "x", spent: -1 })).toEqual({ chips: 20, earned: 20, spent: 0 });
     expect(sanitizeWallet({ chips: 7.8, earned: 20, spent: 13 })).toEqual({ chips: 7, earned: 20, spent: 13 });
     expect(sanitizeWallet({ chips: 0 }).chips).toBe(0);
   });

@@ -3,9 +3,9 @@
 //
 // Правила (решение #31, docs/DECISIONS.md):
 // - сердечки тратятся только в уроках (ошибка с первой попытки); тренировка, пробный ЕНТ и игры их не тратят;
-// - каждый день — полный запас, потерянное сердечко возвращается само через regenMs;
+// - потерянное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
 // - тренировка (в том числе работа над ошибками) возвращает сердечко — бесплатный путь всегда есть;
-// - чипы зарабатываются опытом (5 XP = 1 чип) и бонусами; на чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
+// - чипы зарабатываются опытом (5 XP = 2 чипа) и бонусами; на чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
 // - оплата деньгами (тарифы, наборы чипов) пока не подключена — экран «скоро» без имитации платежа.
 
 export const MINUTE = 60_000;
@@ -41,8 +41,8 @@ export interface PlanFeatures {
 }
 
 export const PLAN_FEATURES: Record<PlanTier, PlanFeatures> = {
-  free: { maxHearts: 5, regenMs: 4 * HOUR, aiFree: 3, chipMultiplier: 1 },
-  lite: { maxHearts: 10, regenMs: 2 * HOUR, aiFree: 30, chipMultiplier: 1.5 },
+  free: { maxHearts: 5, regenMs: 5 * HOUR, aiFree: 3, chipMultiplier: 1 },
+  lite: { maxHearts: 10, regenMs: 150 * MINUTE, aiFree: 30, chipMultiplier: 1.5 },
   unlimited: { maxHearts: Infinity, regenMs: 0, aiFree: Infinity, chipMultiplier: 2 },
 };
 
@@ -122,7 +122,7 @@ export interface Hearts {
   count: number;
   /** С какого момента идёт восстановление (мс). */
   updatedAt: number;
-  /** День последнего полного запаса «ГГГГ-ММ-ДД». */
+  /** День последнего изменения «ГГГГ-ММ-ДД» (справочно; полного запаса по дням нет). */
   day: string;
 }
 
@@ -137,14 +137,13 @@ export interface HeartsView {
 export const START_HEARTS: Hearts = { count: PLAN_FEATURES.free.maxHearts, updatedAt: 0, day: "" };
 
 /**
- * Сердечки на момент now: новый день — полный запас; иначе прибавляем восстановленные.
- * При безлимите состояние не меняется.
+ * Сердечки на момент now: прибавляем восстановленные (одно за regenMs, не выше запаса).
+ * Запас больше максимума (переход на тариф ниже) обрезается. При безлимите состояние не меняется.
  */
 export function heartsNow(h: Hearts, tier: PlanTier, now: number, today: string): Hearts {
   const { maxHearts: max, regenMs } = PLAN_FEATURES[tier];
   if (!Number.isFinite(max)) return h;
-  if (h.day !== today) return { count: max, updatedAt: now, day: today };
-  if (h.count >= max) return h.count === max && h.updatedAt <= now ? h : { count: max, updatedAt: now, day: today };
+  if (h.count >= max) return h.count === max ? h : { count: max, updatedAt: now, day: today };
   const gained = regenMs > 0 ? Math.floor(Math.max(0, now - h.updatedAt) / regenMs) : 0;
   if (gained <= 0) return h;
   const count = Math.min(max, h.count + gained);
@@ -232,10 +231,10 @@ export interface LedgerEntry {
   note?: string;
 }
 
-export const WELCOME_CHIPS = 100;
+export const WELCOME_CHIPS = 20;
 export const START_WALLET: Wallet = { chips: WELCOME_CHIPS, earned: WELCOME_CHIPS, spent: 0 };
-/** 5 XP = 1 чип. */
-export const CHIPS_PER_XP = 0.2;
+/** 5 XP = 2 чипа. */
+export const CHIPS_PER_XP = 0.4;
 export const CHIP_BONUS = { lesson: 5, perfect: 5, dailyGoal: 15, achievement: 20, exam: 10 } as const;
 export const MAX_LEDGER = 50;
 /** Начисления одной причины в пределах этого окна склеиваются в одну строку истории. */
@@ -247,7 +246,7 @@ export function earnAmount(base: number, multiplier: number): number {
   return Math.floor(base * multiplier + 1e-9);
 }
 
-/** Чипы за опыт: 5 XP = 1 чип, умножается на множитель тарифа и бустера. */
+/** Чипы за опыт: 5 XP = 2 чипа, умножается на множитель тарифа и бустера. */
 export function chipsForXp(xp: number, multiplier: number): number {
   return earnAmount(xp * CHIPS_PER_XP, multiplier);
 }
@@ -305,28 +304,36 @@ export function sanitizeBoost(raw: unknown): Boost | null {
 
 // ---------- Магазин (за чипы) ----------
 
-export type ShopItemId = "heart-1" | "hearts-full" | "boost-15" | "boost-60";
+export type ShopItemId = "heart-1" | "hearts-3" | "hearts-full" | "boost-15" | "boost-60";
 
 export interface ShopItem {
   id: ShopItemId;
   kind: "heart" | "refill" | "boost";
   /** Цена в чипах. */
   price: number;
+  /** Сердечки: сколько штук (по умолчанию 1). */
+  amount?: number;
   /** Бустер: множитель и длительность. */
   mult?: number;
   minutes?: number;
 }
 
+/**
+ * За чипы. Сердечки дешёвые (урок с парой ошибок окупает их сам), чем больше берёшь — тем дешевле штука:
+ * 1 — 25, 3 — 60 (по 20), полный запас — 90 (по 18 у бесплатного тарифа). Бустер: 15 мин — 40, час — 120.
+ */
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: "heart-1", kind: "heart", price: 40 },
-  { id: "hearts-full", kind: "refill", price: 150 },
-  { id: "boost-15", kind: "boost", price: 60, mult: 2, minutes: 15 },
-  { id: "boost-60", kind: "boost", price: 180, mult: 2, minutes: 60 },
+  { id: "heart-1", kind: "heart", price: 25, amount: 1 },
+  { id: "hearts-3", kind: "heart", price: 60, amount: 3 },
+  { id: "hearts-full", kind: "refill", price: 90 },
+  { id: "boost-15", kind: "boost", price: 40, mult: 2, minutes: 15 },
+  { id: "boost-60", kind: "boost", price: 120, mult: 2, minutes: 60 },
 ];
 
 export const shopItem = (id: ShopItemId): ShopItem | undefined => SHOP_ITEMS.find((i) => i.id === id);
 
-export type BuyFail = "chips" | "full" | "unlimited" | "unknown";
+/** chips — не хватает чипов; full — запас полный; overflow — столько не поместится; unlimited — безлимит. */
+export type BuyFail = "chips" | "full" | "overflow" | "unlimited" | "unknown";
 
 export interface BuyState {
   wallet: Wallet;
@@ -350,7 +357,10 @@ export function buyItem(
     const v = heartsView(state.hearts, tier, now, today);
     if (v.unlimited) return { ok: false, reason: "unlimited" };
     if (v.count >= v.max) return { ok: false, reason: "full" };
-    hearts = item.kind === "heart" ? addHearts(state.hearts, 1, tier, now, today) : refillHearts(tier, now, today);
+    const amount = item.amount ?? 1;
+    // Набор больше, чем не хватает, — переплата: предлагаем брать поштучно.
+    if (item.kind === "heart" && amount > 1 && v.max - v.count < amount) return { ok: false, reason: "overflow" };
+    hearts = item.kind === "heart" ? addHearts(state.hearts, amount, tier, now, today) : refillHearts(tier, now, today);
   }
   if (state.wallet.chips < item.price) return { ok: false, reason: "chips" };
   if (item.kind === "boost") boost = extendBoost(state.boost, item.mult ?? 2, item.minutes ?? 15, now);
@@ -370,10 +380,32 @@ export interface ChipPack {
   badge?: "popular" | "best";
 }
 
+/** Чипы чуть дороже сердечек; чем больше набор, тем дешевле чип (скидка — против самого маленького набора). */
 export const CHIP_PACKS: ChipPack[] = [
-  { id: "chips-300", chips: 300, bonus: 0, price: 390 },
-  { id: "chips-1000", chips: 1000, bonus: 100, price: 990, badge: "popular" },
-  { id: "chips-3000", chips: 3000, bonus: 600, price: 2490, badge: "best" },
+  { id: "chips-100", chips: 100, bonus: 0, price: 190 },
+  { id: "chips-300", chips: 300, bonus: 0, price: 490 },
+  { id: "chips-750", chips: 750, bonus: 0, price: 990, badge: "popular" },
+  { id: "chips-2000", chips: 2000, bonus: 0, price: 1990, badge: "best" },
+];
+
+/** Насколько набор выгоднее самого маленького (целые проценты, 0 — у самого маленького). */
+export function packSaving(pack: ChipPack): number {
+  const base = CHIP_PACKS[0];
+  const perChip = (p: ChipPack) => p.price / (p.chips + p.bonus);
+  return Math.max(0, Math.round((1 - perChip(pack) / perChip(base)) * 100));
+}
+
+/** Сердечки без ограничений на время (за ₸, оплата скоро) — для тех, кто не готов к подписке. */
+export interface HeartPass {
+  id: string;
+  hours: number;
+  /** ₸ */
+  price: number;
+}
+
+export const HEART_PASSES: HeartPass[] = [
+  { id: "hearts-24h", hours: 24, price: 149 },
+  { id: "hearts-7d", hours: 24 * 7, price: 590 },
 ];
 
 export interface BoostPack {
@@ -385,17 +417,20 @@ export interface BoostPack {
 }
 
 export const BOOST_PACKS: BoostPack[] = [
-  { id: "boost-24h", mult: 2, hours: 24, price: 490 },
-  { id: "boost-7d", mult: 2, hours: 24 * 7, price: 1490 },
+  { id: "boost-24h", mult: 2, hours: 24, price: 290 },
+  { id: "boost-7d", mult: 2, hours: 24 * 7, price: 990 },
 ];
 
 // ---------- ИИ: бесплатно по тарифу, дальше за чипы ----------
 
-/** Вид обращения к ИИ. feedback — отзыв после урока: всегда бесплатен (дешёвая модель, без запроса ученика). */
-export type AiKind = "hint" | "explain" | "ask" | "chat" | "photo" | "review" | "feedback";
+/**
+ * Вид обращения к ИИ. feedback — отзыв после урока: всегда бесплатен (дешёвая модель, без запроса ученика);
+ * voice — расшифровка голосового вопроса (сам ответ — отдельное обращение chat).
+ */
+export type AiKind = "hint" | "explain" | "ask" | "chat" | "photo" | "review" | "voice" | "feedback";
 
-/** Цена сверх бесплатных обращений, чипов. */
-export const AI_COST: Record<AiKind, number> = { hint: 5, explain: 5, ask: 10, chat: 10, photo: 30, review: 20, feedback: 0 };
+/** Цена сверх бесплатных обращений, чипов (решение #34). */
+export const AI_COST: Record<AiKind, number> = { hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, review: 15, voice: 2, feedback: 0 };
 
 /** Потолок обращений в день по тарифу — защита от перерасхода (в том числе при безлимите). */
 export const AI_DAILY_CAP: Record<PlanTier, number> = { free: 60, lite: 150, unlimited: 300 };

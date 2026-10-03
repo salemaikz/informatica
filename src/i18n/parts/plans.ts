@@ -53,7 +53,7 @@ export const plansDict = {
   "plans.card.renew": { ru: "Продлить", kk: "Ұзарту" },
 
   // Главные пункты
-  "plans.perk.lite.hearts": { ru: "{n} сердечек в день, новое каждые {time}", kk: "Күніне {n} жүрек, жаңасы әр {time} сайын" },
+  "plans.perk.lite.hearts": { ru: "{n} сердечек, новое каждые {time}", kk: "{n} жүрек, жаңасы әр {time} сайын" },
   "plans.perk.lite.ai": { ru: "ИИ-помощник: {n} обращений в день", kk: "ЖИ-көмекші: күніне {n} сұрау" },
   "plans.perk.chips": { ru: "Чипы ×{mult} за опыт и награды", kk: "Тәжірибе мен марапат үшін чиптер ×{mult}" },
   "plans.perk.unl.hearts": { ru: "Сердечки не тратятся — уроки без остановок", kk: "Жүректер жұмсалмайды — сабақтар тоқтаусыз" },
@@ -75,7 +75,7 @@ export const plansDict = {
   "plans.cmp.free": { ru: "Бесплатно", kk: "Тегін" },
   "plans.cmp.access": { ru: "Уроки, тренировки, игры, пробный ЕНТ", kk: "Сабақтар, жаттығулар, ойындар, сынақ ҰБТ" },
   "plans.cmp.history": { ru: "История тестов и работа над ошибками", kk: "Тесттер тарихы және қателермен жұмыс" },
-  "plans.cmp.hearts": { ru: "Сердечки в день", kk: "Күніне жүрек" },
+  "plans.cmp.hearts": { ru: "Запас сердечек", kk: "Жүрек қоры" },
   "plans.cmp.regen": { ru: "Возврат сердечка", kk: "Жүрек қалпына келуі" },
   "plans.cmp.ai": { ru: "ИИ-помощник в день", kk: "Күніне ЖИ-көмекші" },
   "plans.cmp.chips": { ru: "Множитель чипов", kk: "Чип көбейткіші" },
@@ -93,6 +93,9 @@ export const plansDict = {
 
   // Карточка в профиле
   "plans.profile.free": { ru: "Бесплатный тариф", kk: "Тегін тариф" },
-  "plans.profile.freeText": { ru: "{hearts} сердечек в день, ИИ-помощник: {ai} в день", kk: "Күніне {hearts} жүрек, ЖИ-көмекші: күніне {ai}" },
+  "plans.profile.freeText": {
+    ru: "{hearts} сердечек, новое каждые {time}; ИИ: {ai} в день",
+    kk: "{hearts} жүрек, жаңасы әр {time} сайын; ЖИ: күніне {ai}",
+  },
   "plans.profile.cta": { ru: "Тарифы", kk: "Тарифтер" },
 } satisfies Record<string, L>;

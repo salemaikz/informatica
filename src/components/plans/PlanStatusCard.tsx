@@ -9,6 +9,7 @@ import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { useNow, usePlan } from "@/components/economy/useEconomy";
+import { formatHours } from "./plans-helpers";
 
 /** Карточка тарифа для профиля: текущий тариф, сколько осталось, кнопка «Тарифы» → /plans?from=profile. */
 export function PlanStatusCard({ className }: { className?: string }) {
@@ -41,7 +42,11 @@ export function PlanStatusCard({ className }: { className?: string }) {
           {paid ? (
             daysLeft > 0 && <p className="text-sm font-bold text-warning-strong">{t("plans.status.left", { days: daysText(daysLeft, lang) })}</p>
           ) : (
-            <p className="text-sm font-semibold text-muted">{t("plans.profile.freeText", { hearts: PLAN_FEATURES.free.maxHearts, ai: PLAN_FEATURES.free.aiFree })}</p>
+            <p className="text-sm font-semibold text-muted">{t("plans.profile.freeText", {
+                hearts: PLAN_FEATURES.free.maxHearts,
+                time: formatHours(PLAN_FEATURES.free.regenMs, lang),
+                ai: PLAN_FEATURES.free.aiFree,
+              })}</p>
           )}
           {!paid && offerTrial && (
             <Pill tone="gold" className="mt-1.5 border border-gold/60">

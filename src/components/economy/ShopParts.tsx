@@ -140,7 +140,9 @@ export function ChipItemRow({
         ? t("shop.fail.full")
         : av.reason === "unlimited"
           ? t("shop.fail.unlimited")
-          : t("shop.fail.chips", { n: av.missing ?? 0 });
+          : av.reason === "overflow"
+            ? t("shop.fail.overflow")
+            : t("shop.fail.chips", { n: av.missing ?? 0 });
 
   return (
     <m.div

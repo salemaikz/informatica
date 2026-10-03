@@ -1,4 +1,4 @@
-import { MINUTE, DAY, SHOP_ITEMS, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
+import { CHIPS_PER_XP, MINUTE, DAY, SHOP_ITEMS, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
 import { daysText } from "@/lib/goals";
 import type { Lang } from "@/lib/types";
 
@@ -21,6 +21,15 @@ export function formatRemaining(ms: number, lang: Lang): string {
 export function formatSpan(hours: number, lang: Lang): string {
   if (hours >= 48 && hours % 24 === 0) return daysText(hours / 24, lang);
   return `${hours} ${lang === "kk" ? "сағ" : "ч"}`;
+}
+
+/** Курс чипов для подписей: «5 XP = 2 чипа» — наименьшее целое число XP, дающее целое число чипов (из CHIPS_PER_XP). */
+export function chipRate(): { xp: number; n: number } {
+  for (let xp = 1; xp <= 100; xp++) {
+    const n = xp * CHIPS_PER_XP;
+    if (n >= 1 && Math.abs(n - Math.round(n)) < 1e-9) return { xp, n: Math.round(n) };
+  }
+  return { xp: Math.round(1 / CHIPS_PER_XP), n: 1 };
 }
 
 /** Множитель: «×2», «×1,5» (запятая и в русском, и в казахском). */
@@ -46,13 +55,15 @@ export function formatCompact(n: number): string {
 export type ShopAvailability = { ok: true } | { ok: false; reason: BuyFail; missing?: number };
 
 /**
- * Можно ли купить товар за чипы сейчас. Порядок причин как в buyItem: безлимит → запас полон → не хватает чипов.
+ * Можно ли купить товар за чипы сейчас. Порядок причин как в buyItem:
+ * безлимит → запас полон → набор не помещается (overflow) → не хватает чипов.
  * Для бустеров запас сердечек не важен.
  */
 export function shopAvailability(item: ShopItem, hearts: HeartsView, chips: number): ShopAvailability {
   if (item.kind === "heart" || item.kind === "refill") {
     if (hearts.unlimited) return { ok: false, reason: "unlimited" };
     if (hearts.count >= hearts.max) return { ok: false, reason: "full" };
+    if (item.kind === "heart" && (item.amount ?? 1) > 1 && hearts.max - hearts.count < (item.amount ?? 1)) return { ok: false, reason: "overflow" };
   }
   if (chips < item.price) return { ok: false, reason: "chips", missing: item.price - chips };
   return { ok: true };
@@ -60,7 +71,7 @@ export function shopAvailability(item: ShopItem, hearts: HeartsView, chips: numb
 
 /** Сколько сердечек добавит товар (для подписи). */
 export function heartsGain(item: ShopItem, hearts: HeartsView): number {
-  if (item.kind === "heart") return 1;
+  if (item.kind === "heart") return item.amount ?? 1;
   if (item.kind === "refill" && !hearts.unlimited) return Math.max(0, hearts.max - hearts.count);
   return 0;
 }
@@ -70,7 +81,7 @@ export function knownShopId(note: string | undefined): ShopItem["id"] | undefine
   return SHOP_ITEMS.find((i) => i.id === note)?.id;
 }
 
-const AI_KINDS = ["hint", "explain", "ask", "chat", "photo", "review", "feedback"] as const;
+const AI_KINDS = ["hint", "explain", "ask", "chat", "voice", "photo", "review", "feedback"] as const;
 export function knownAiKind(note: string | undefined): (typeof AI_KINDS)[number] | undefined {
   return AI_KINDS.find((k) => k === note);
 }

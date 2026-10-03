@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPulse } from "lucide-react";
+import { ArrowRight, BookOpen, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
@@ -19,7 +19,7 @@ import { useChips, useHearts, useNow } from "./useEconomy";
 import { formatNum, formatRemaining, shopAvailability } from "./shop-helpers";
 import { readHearts } from "./HeartsBar";
 
-/** Строка покупки сердечек за чипы: иконка, название, цена или «не хватает N». */
+/** Строка покупки сердечек за чипы (компактная, три подряд умещаются на 360 px): иконка, название, цена или «не хватает N». */
 function BuyRow({
   id,
   icon,
@@ -67,18 +67,18 @@ function BuyRow({
         disabled={blocked}
         aria-disabled={!av.ok}
         className={cn(
-          "flex min-h-16 w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition-[translate,box-shadow,filter] duration-75 active:translate-y-[2px]",
+          "flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left transition-[translate,box-shadow,filter] duration-75 active:translate-y-[2px]",
           av.ok
             ? "border-heart/40 bg-heart-soft shadow-[0_3px_0_var(--border)] hover:brightness-95"
             : "border-border bg-surface opacity-80",
         )}
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-heart" aria-hidden>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-heart" aria-hidden>
           {icon}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-extrabold leading-tight">{t(nameKey)}</span>
-          <span className="block text-sm font-semibold text-muted">{t(descKey)}</span>
+          <span className="block text-[13px] font-semibold leading-snug text-muted">{t(descKey)}</span>
         </span>
         <span
           className={cn(
@@ -183,8 +183,9 @@ function Content({
               <span className="tabular-nums">{formatNum(chips)}</span>
             </span>
           </div>
-          <BuyRow id="hearts-full" icon={<HeartPulse size={24} aria-hidden />} nameKey="hearts.out.refill" descKey="hearts.out.refillDesc" onBought={bought} />
-          <BuyRow id="heart-1" icon={<Heart size={24} fill="currentColor" aria-hidden />} nameKey="hearts.out.one" descKey="hearts.out.oneDesc" onBought={bought} />
+          <BuyRow id="heart-1" icon={<Heart size={22} fill="currentColor" aria-hidden />} nameKey="hearts.out.one" descKey="hearts.out.oneDesc" onBought={bought} />
+          <BuyRow id="hearts-3" icon={<HeartPlus size={22} aria-hidden />} nameKey="hearts.out.three" descKey="hearts.out.threeDesc" onBought={bought} />
+          <BuyRow id="hearts-full" icon={<HeartPulse size={22} aria-hidden />} nameKey="hearts.out.refill" descKey="hearts.out.refillDesc" onBought={bought} />
           <LinkCard href="/practice" tone="primary" icon={<Dumbbell size={24} />} title={t("hearts.out.practice")} desc={t("hearts.out.practiceDesc")} />
           <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc")} />
           {theoryHref && (

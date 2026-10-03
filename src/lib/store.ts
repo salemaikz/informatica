@@ -78,6 +78,8 @@ import {
   type Wallet,
 } from "./economy";
 import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
+import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
+import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
 
 export type { LessonStat } from "./review";
 export type { HistoryEntry, WrongItem } from "./history";
@@ -123,6 +125,8 @@ export interface Profile {
   weeklyLessons: number;
   /** Что проходим: ЕНТ или школьная программа (карта на главной). */
   track: Track;
+  /** Знает основы — раздел «Компьютер с нуля» не рекомендуется первым (выбор в онбординге). */
+  skipBasics: boolean;
 }
 
 export interface DayStat {
@@ -218,6 +222,11 @@ export interface AppState {
 
   /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
   history: HistoryEntry[];
+
+  /** ИИ-чат 2.0: список чатов (сообщения — в IndexedDB, lib/chat-store.ts). */
+  chats: ChatMeta[];
+  /** Практикум кода: решённые задачи (lib/ide/types.ts). */
+  codeTasks: Record<string, CodeTaskStat>;
 }
 
 /** Итог урока/тренировки для экрана результатов. */
@@ -289,6 +298,20 @@ export interface AppActions {
   startTrial: () => boolean;
   /** Окно тарифов показано. */
   notePaywallShown: () => void;
+
+  // ---- ИИ-чат 2.0 ----
+  /** Новый чат; возвращает id. Больше MAX_CHATS — вытесняется самый старый незакреплённый (его сообщения удаляет вызывающий). */
+  createChat: (mode: ChatMode, title?: string, topic?: EntTopicId) => string;
+  renameChat: (id: string, title: string) => void;
+  pinChat: (id: string, pinned: boolean) => void;
+  /** Удаляет чат из списка (сообщения из IndexedDB удаляет вызывающий: deleteMessages). */
+  deleteChat: (id: string) => void;
+  /** После нового сообщения: превью, счётчик, время; title — если ещё не задан. */
+  touchChat: (id: string, patch: { preview: string; count: number; title?: string }) => void;
+
+  // ---- практикум кода ----
+  /** Итог проверки задачи: XP за первое решение (A 10 / B 15 / C 20), освоение навыка. */
+  recordCodeTask: (task: IdeTask, ok: boolean) => { xp: number; first: boolean };
   /** Итог мини-игры: XP, рекорд, освоение навыков, серия. */
   recordGame: (gameId: string, result: GameResult, mode?: GameMode) => GameReward;
   /**
@@ -324,6 +347,7 @@ export const defaultProfile: Profile = {
   targetScore: 35,
   weeklyLessons: 4,
   track: "ent",
+  skipBasics: false,
 };
 
 const initialState: AppState = {
@@ -352,6 +376,8 @@ const initialState: AppState = {
   practiceHearts: { day: "", count: 0 },
   paywall: { lastShownAt: 0, views: 0 },
   history: [],
+  chats: [],
+  codeTasks: {},
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -362,7 +388,7 @@ const emptyDay = (): DayStat => ({ xp: 0, answers: 0, correct: 0, seconds: 0, le
 const tierOf = (s: Pick<AppState, "plan">, now = Date.now()) => effectiveTier(s.plan, now);
 
 /**
- * Чипы за то, что изменилось между prev и next: опыт (5 XP = 1 чип), дневная цель, новые достижения
+ * Чипы за то, что изменилось между prev и next: опыт (5 XP = 2 чипа), дневная цель, новые достижения
  * и бонусы extra. Всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
  */
 function settleChips(prev: AppState, next: AppState, extra: { base: number; reason: ChipReason }[] = [], now = Date.now()): AppState {
@@ -446,7 +472,7 @@ function cleanProfile(raw: unknown): Profile {
   const targetScore = typeof p.targetScore === "number" && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : defaultProfile.targetScore;
   const weeklyLessons = typeof p.weeklyLessons === "number" && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : defaultProfile.weeklyLessons;
   const examDate = typeof p.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate) ? p.examDate : null;
-  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate, grade, track };
+  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate, grade, track, skipBasics: p.skipBasics === true };
 }
 
 /** Миграции сохранений: v1 (конспекты по ключу урока) → v2 (папки и записи). */
@@ -487,6 +513,15 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
         : { day: "", count: 0 },
     paywall: sanitizePaywall(p.paywall),
     history: sanitizeHistory(p.history),
+    chats: sanitizeChats(p.chats),
+    codeTasks:
+      p.codeTasks && typeof p.codeTasks === "object" && !Array.isArray(p.codeTasks)
+        ? Object.fromEntries(
+            Object.entries(p.codeTasks).filter(
+              ([, v]) => !!v && typeof v === "object" && typeof (v as CodeTaskStat).attempts === "number",
+            ),
+          )
+        : {},
   };
 }
 
@@ -826,6 +861,65 @@ export const useApp = create<AppState & AppActions>()(
       },
 
       notePaywallShown: () => set((s) => ({ paywall: { lastShownAt: Date.now(), views: s.paywall.views + 1 } })),
+
+      // ---------- ИИ-чат 2.0 ----------
+
+      createChat: (mode, title, topic) => {
+        const id = `c${uid()}`;
+        const now = Date.now();
+        set((s) => {
+          let chats = [{ id, title: (title ?? "").trim().slice(0, TITLE_LEN), mode, topic, createdAt: now, updatedAt: now, preview: "", count: 0 }, ...s.chats];
+          if (chats.length > MAX_CHATS) {
+            const victim = [...chats].reverse().find((c) => !c.pinned && c.id !== id);
+            if (victim) chats = chats.filter((c) => c.id !== victim.id);
+            else chats = chats.slice(0, MAX_CHATS);
+          }
+          return { chats };
+        });
+        return id;
+      },
+
+      renameChat: (id, title) =>
+        set((s) => ({ chats: s.chats.map((c) => (c.id === id ? { ...c, title: title.trim().slice(0, TITLE_LEN) } : c)) })),
+
+      pinChat: (id, pinned) => set((s) => ({ chats: s.chats.map((c) => (c.id === id ? { ...c, pinned: pinned || undefined } : c)) })),
+
+      deleteChat: (id) => set((s) => ({ chats: s.chats.filter((c) => c.id !== id) })),
+
+      touchChat: (id, patch) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === id
+              ? { ...c, preview: patch.preview.slice(0, 90), count: patch.count, updatedAt: Date.now(), title: c.title || (patch.title ?? "").slice(0, TITLE_LEN) }
+              : c,
+          ),
+        })),
+
+      // ---------- практикум кода ----------
+
+      recordCodeTask: (task, ok) => {
+        const s = get();
+        const prev = s.codeTasks[task.id];
+        const first = ok && !prev?.solved;
+        const xp = first ? CODE_XP[task.level] : 0;
+        const today = todayKey();
+        const day = s.days[today] ?? emptyDay();
+        const skills = task.skill ? { ...s.skills, [task.skill]: updateSkill(s.skills[task.skill], ok ? 1 : 0) } : s.skills;
+        let next: AppState = {
+          ...s,
+          xp: s.xp + xp,
+          skills,
+          streak: bumpStreak(s.streak, today),
+          days: { ...s.days, [today]: { ...day, xp: day.xp + xp, answers: day.answers + 1, correct: day.correct + (ok ? 1 : 0) } },
+          codeTasks: {
+            ...s.codeTasks,
+            [task.id]: { solved: !!prev?.solved || ok, attempts: (prev?.attempts ?? 0) + 1, at: first ? Date.now() : (prev?.at ?? Date.now()) },
+          },
+        };
+        next = { ...next, ...evaluate(next) };
+        set(settleChips(s, next));
+        return { xp, first };
+      },
 
       recordGame: (gameId, result, mode = "normal") => {
         const s = get();

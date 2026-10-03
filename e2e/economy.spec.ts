@@ -26,13 +26,14 @@ async function seed(page: Page, extra: Record<string, unknown> = {}) {
 test("магазин: покупка бустера за чипы, окно тарифов и пробный период", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await seed(page);
+  // Новичку дарят 20 чипов — на бустер (40) не хватает, поэтому кладём 100 в кошелёк.
+  await seed(page, { wallet: { chips: 100, earned: 100, spent: 0 } });
   await page.goto("/shop");
   await expect(page.getByRole("heading", { name: "Магазин" })).toBeVisible();
-  // Новичку — 100 чипов.
   await expect(page.getByLabel("Чипы: 100. Открыть магазин").first()).toBeVisible();
-  await page.getByRole("button", { name: /^Купить: .*15/ }).first().click();
-  await expect(page.getByLabel("Чипы: 40. Открыть магазин").first()).toBeVisible();
+  // Бустер ×2 на 15 минут стоит 40 чипов: 100 → 60.
+  await page.getByRole("button", { name: /^Купить: .*15 мин/ }).first().click();
+  await expect(page.getByLabel("Чипы: 60. Открыть магазин").first()).toBeVisible();
 
   // Покупка за деньги — честное «Оплата скоро».
   await page.goto("/plans?from=shop");

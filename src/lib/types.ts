@@ -134,7 +134,44 @@ export type Scene =
   /** Растровая картинка: строки одинаковой длины из символов палитры; codes — показать коды пикселей. */
   | { kind: "pixels"; rows: string[]; palette: Record<string, string>; codes?: boolean; caption?: Text }
   /** HTML-код и его вид в браузере (рендерится в изолированном iframe без скриптов). */
-  | { kind: "web"; html: string; css?: string; caption?: Text };
+  | { kind: "web"; html: string; css?: string; caption?: Text }
+  // ---- v0.7: иллюстрации «компьютер с нуля» (решение #36) ----
+  /** Галерея рисунков устройств и деталей (SVG): items — что показать, highlight — что выделить. */
+  | { kind: "hardware"; items: HardwareId[]; highlight?: HardwareId[]; labels?: boolean; caption?: Text }
+  /** Системный блок изнутри с выносками: подсветить детали (по шагам разбора — разные). */
+  | { kind: "pc-inside"; highlight?: PcPart[]; labels?: boolean; caption?: Text }
+  /** Цикл процессора: выборка → декодирование → выполнение → запись. step — активный этап (0–3). */
+  | { kind: "cpu-cycle"; step?: 0 | 1 | 2 | 3; instr?: string; caption?: Text }
+  /** Клавиатура с подсвеченными клавишами (сочетание — по порядку нажатия): ["Ctrl", "C"]. */
+  | { kind: "keyboard"; keys: string[]; caption?: Text }
+  /** Сравнение объёмов: полосы в логарифмическом масштабе с подписью размера (Б, КБ, МБ, ГБ, ТБ). */
+  | { kind: "sizes"; items: { label: Text; bytes: number; icon?: IconName }[]; caption?: Text }
+  /** Дерево папок и файлов; active — путь к выделенному элементу («Учёба/Информатика/урок.docx»). */
+  | { kind: "files"; tree: FileNode[]; active?: string; caption?: Text }
+  /** Слои (стопка): ОС между программами и железом, уровни памяти и т.п. axis — подписи шкалы сверху и снизу. */
+  | { kind: "layers"; items: { title: Text; text?: Text; icon?: IconName }[]; highlight?: number; axis?: { top: Text; bottom: Text }; caption?: Text };
+
+/** Рисунки устройств и деталей для сцены hardware (components/scenes/hardware). */
+export type HardwareId =
+  // внутри системного блока
+  | "case" | "motherboard" | "cpu" | "cooler" | "ram" | "ssd" | "hdd" | "gpu" | "psu"
+  // носители
+  | "flash" | "sd" | "cd" | "cloud" | "ext-hdd"
+  // ввод
+  | "keyboard" | "mouse" | "touchpad" | "touchscreen" | "mic" | "webcam" | "scanner" | "gamepad"
+  // вывод
+  | "monitor" | "printer" | "speakers" | "headphones" | "projector"
+  // компьютеры вокруг нас
+  | "desktop" | "laptop" | "phone" | "tablet" | "smartwatch" | "atm" | "pos" | "car" | "server" | "router";
+
+/** Детали на схеме «системный блок изнутри». */
+export type PcPart = "motherboard" | "cpu" | "cooler" | "ram" | "ssd" | "hdd" | "gpu" | "psu" | "fans" | "ports";
+
+/** Узел дерева файлов: папка (children) или файл. */
+export interface FileNode {
+  name: string;
+  children?: FileNode[];
+}
 
 export type QuestArt = "door" | "door-open" | "locker" | "locker-open" | "window-lamps" | "room";
 

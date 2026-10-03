@@ -7,6 +7,9 @@ import { clientIp, rateLimit } from "@/server/rate-limit";
 import { sameOrigin, sanitizeContext, sanitizeImage, sanitizeTask } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
+import { CHAT_MODES, type ChatMode } from "@/lib/chats";
+import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
+import type { EntTopicId } from "@/lib/types";
 
 // Чат с ИИ-наставником: свободный диалог, подсказка к заданию, разбор ошибки. Ответ — потоковый текст.
 
@@ -31,6 +34,9 @@ export async function POST(req: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "bad_json");
 
   const mode = MODES.includes(body.mode as TutorMode) ? (body.mode as TutorMode) : "chat";
+  // ИИ-чат 2.0: режим и тема — недоверенные данные, только из списка.
+  const chatMode = CHAT_MODES.includes(body.chatMode as ChatMode) ? (body.chatMode as ChatMode) : undefined;
+  const topicId = typeof body.topic === "string" && ENT_TOPICS.some((t) => t.id === body.topic) ? (body.topic as EntTopicId) : undefined;
   const ctx = sanitizeContext(body.context);
   const task = sanitizeTask(body.task);
   const image = sanitizeImage(body.image);
@@ -74,7 +80,8 @@ export async function POST(req: Request) {
   const cacheReq = cacheableRequest(mode, history, task, !!image);
   if (cacheReq && task) return cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns() });
 
-  const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task) }, ...userTurns()];
+  const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
+  const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task, { chatMode, topic }) }, ...userTurns()];
 
   try {
     const model = image ? MODELS.vision : MODELS.tutor;

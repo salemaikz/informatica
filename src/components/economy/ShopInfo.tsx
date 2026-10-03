@@ -1,9 +1,9 @@
 "use client";
 
-import { BadgeCheck, BookOpen, Bot, Camera, Cpu, GraduationCap, Lightbulb, MessageCircle, Sparkles, Target, Trophy, Wand2, Zap, type LucideIcon } from "lucide-react";
+import { BadgeCheck, BookOpen, Bot, Camera, Cpu, GraduationCap, Lightbulb, MessageCircle, Mic, Sparkles, Target, Trophy, Wand2, Zap, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { AI_COST, CHIP_BONUS, CHIPS_PER_XP, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { AI_COST, CHIP_BONUS, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { dayDiff, formatClock, formatMult, formatNum, knownAiKind, knownShopId } from "./shop-helpers";
+import { chipRate, dayDiff, formatClock, formatMult, formatNum, knownAiKind, knownShopId } from "./shop-helpers";
 import { ChipPrice, IconTile } from "./ShopParts";
 import { useAiQuote, useNow } from "./useEconomy";
 
@@ -28,6 +28,7 @@ const EARN_ROWS: { id: "lesson" | "perfect" | "dailyGoal" | "achievement" | "exa
 /** «Как заработать чипы»: курс обмена и бонусы (значения из economy.ts). */
 export function EarnList() {
   const { t } = useT();
+  const rate = chipRate();
   return (
     <Card className="p-0 sm:p-0">
       <ul className="divide-y-2 divide-border">
@@ -35,7 +36,7 @@ export function EarnList() {
           <IconTile tone="gold">
             <Zap size={22} />
           </IconTile>
-          <span className="min-w-0 flex-1 font-extrabold">{t("shop.earn.xp", { xp: Math.round(1 / CHIPS_PER_XP) })}</span>
+          <span className="min-w-0 flex-1 font-extrabold">{t("shop.earn.xp", { xp: rate.xp, n: rate.n })}</span>
         </li>
         {EARN_ROWS.map((r) => (
           <li key={r.id} className="flex items-center gap-3 p-3.5">
@@ -66,6 +67,7 @@ const AI_ROWS: { kind: AiKind; icon: LucideIcon; key: DictKey }[] = [
   { kind: "explain", icon: Wand2, key: "shop.ai.explain" },
   { kind: "ask", icon: Bot, key: "shop.ai.ask" },
   { kind: "chat", icon: MessageCircle, key: "shop.ai.chat" },
+  { kind: "voice", icon: Mic, key: "shop.ai.voice" },
   { kind: "photo", icon: Camera, key: "shop.ai.photo" },
   { kind: "review", icon: GraduationCap, key: "shop.ai.review" },
   { kind: "feedback", icon: Sparkles, key: "shop.ai.feedback" },
@@ -125,6 +127,7 @@ const REASON_KEY: Record<Exclude<ChipReason, "buy" | "ai" | "refund">, DictKey> 
 
 const ITEM_NAME: Record<string, DictKey> = {
   "heart-1": "shop.item.heart-1",
+  "hearts-3": "shop.item.hearts-3",
   "hearts-full": "shop.item.hearts-full",
   "boost-15": "shop.item.boost-15",
   "boost-60": "shop.item.boost-60",

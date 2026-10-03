@@ -17,6 +17,13 @@ import { PixelsScene } from "./PixelsScene";
 import { QuestSceneView } from "./QuestScene";
 import { TableScene } from "./TableScene";
 import { WebScene } from "./WebScene";
+import { HardwareScene } from "./HardwareScene";
+import { PcInsideScene } from "./PcInsideScene";
+import { CpuCycleScene } from "./CpuCycleScene";
+import { KeyboardScene } from "./KeyboardScene";
+import { SizesScene } from "./SizesScene";
+import { FilesScene } from "./FilesScene";
+import { LayersScene } from "./LayersScene";
 
 function Body({ scene }: { scene: Scene }): ReactNode {
   switch (scene.kind) {
@@ -46,6 +53,20 @@ function Body({ scene }: { scene: Scene }): ReactNode {
       return <PixelsScene scene={scene} />;
     case "web":
       return <WebScene scene={scene} />;
+    case "hardware":
+      return <HardwareScene scene={scene} />;
+    case "pc-inside":
+      return <PcInsideScene scene={scene} />;
+    case "cpu-cycle":
+      return <CpuCycleScene scene={scene} />;
+    case "keyboard":
+      return <KeyboardScene scene={scene} />;
+    case "sizes":
+      return <SizesScene scene={scene} />;
+    case "files":
+      return <FilesScene scene={scene} />;
+    case "layers":
+      return <LayersScene scene={scene} />;
   }
 }
 
