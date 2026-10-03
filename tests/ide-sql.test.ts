@@ -156,6 +156,17 @@ describe("SQL: база и запуск", () => {
     expect(hasRecursive("-- with recursive\nSELECT 1")).toBe(false);
     const r = runSql(SQL, "WITH RECURSIVE t(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t) SELECT * FROM t");
     expect(r.ok).toBe(false);
+    expect(hasRecursive("WITH t(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t) SELECT COUNT(*) FROM t")).toBe(true);
+    expect(runSql(SQL, "WITH t(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t) SELECT COUNT(*) FROM t").ok).toBe(false);
+  });
+
+  it("changes считает только свои изменения; replace() не мутация", () => {
+    const r = runSql(SQL, "CREATE TABLE t(a); INSERT INTO t VALUES(1),(2)");
+    expect(r.ok && r.changes).toBe(2);
+    const d = runSql(SQL, "DROP TABLE students");
+    expect(d.ok && d.changes).toBe(0);
+    const s = runSql(SQL, "SELECT replace(name,'a','b') FROM students");
+    expect(s.ok && s.mutated).toBe(false);
   });
 
   it("сравнение результатов: порядок, числа, NULL", () => {

@@ -45,16 +45,16 @@ export const TASKS: IdeTask[] = [
     level: 1,
     title: { ru: "Условие if", kk: "if шарты" },
     prompt: {
-      ru: "Дана переменная `age`. Если `age` не меньше 18 — выведите `adult`, иначе выведите `minor`.",
-      kk: "`age` айнымалысы берілген. Егер `age` 18-ден кем болмаса — `adult` шығарыңыз, әйтпесе `minor` шығарыңыз.",
+      ru: "Допишите функцию `status(age)`: если `age` не меньше 18 — она возвращает `adult`, иначе `minor`. Вызовы ниже выведут результаты.",
+      kk: "`status(age)` функциясын аяқтаңыз: егер `age` 18-ден кем болмаса — `adult`, әйтпесе `minor` қайтарсын. Төмендегі шақырулар нәтижелерді шығарады.",
     },
-    starter: "let age = 16;\n\n// ...\n",
+    starter: "function status(age) {\n  // ...\n}\n\nconsole.log(status(16));\nconsole.log(status(18));\nconsole.log(status(30));\n",
     hint: {
-      ru: "Конструкция: `if (условие) { … } else { … }`. «Не меньше» записывается как `>=`.",
-      kk: "Құрылымы: `if (шарт) { … } else { … }`. «Кем емес» дегені `>=` түрінде жазылады.",
+      ru: "Конструкция: `if (условие) { return … } else { return … }`. «Не меньше» записывается как `>=`; число 18 уже считается взрослым.",
+      kk: "Құрылымы: `if (шарт) { return … } else { return … }`. «Кем емес» дегені `>=` түрінде жазылады; 18 саны да ересек болып саналады.",
     },
-    solution: 'let age = 16;\n\nif (age >= 18) {\n  console.log("adult");\n} else {\n  console.log("minor");\n}',
-    check: { kind: "js", stdout: "minor" },
+    solution: 'function status(age) {\n  if (age >= 18) {\n    return "adult";\n  } else {\n    return "minor";\n  }\n}\n\nconsole.log(status(16));\nconsole.log(status(18));\nconsole.log(status(30));',
+    check: { kind: "js", stdout: "minor\nadult\nadult" },
   },
   {
     id: "js-4-for",

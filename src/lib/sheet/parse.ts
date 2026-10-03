@@ -36,7 +36,9 @@ const NAME_START = /[A-Za-z_Ѐ-ӿ]/;
 const NAME_PART = /[A-Za-z0-9_Ѐ-ӿ]/;
 const QUOTE_OPEN = '"“”„«';
 const QUOTE_CLOSE = '"“”»';
-const hasCyrillic = (s: string) => /[Ѐ-ӿ]/.test(s);
+/** Кириллические двойники латинских букв (русская раскладка на телефоне): А1 вместо A1. */
+const HOMOGLYPHS: Record<string, string> = { А: "A", В: "B", С: "C", Е: "E", Н: "H", К: "K", М: "M", Р: "P", Т: "T", Х: "X", а: "a", в: "b", с: "c", е: "e", н: "h", к: "k", м: "m", р: "p", т: "t", х: "x" };
+const toLatinLookalikes = (s: string) => s.replace(/[АВСЕНКМРТХавсенкмртх]/g, (ch) => HOMOGLYPHS[ch]);
 const isDigit = (c: string | undefined) => c !== undefined && c >= "0" && c <= "9";
 
 /** Есть ли «;» вне строк: тогда запятая в числах — десятичная (как в русском Excel). */
@@ -60,11 +62,10 @@ export function tokenize(src: string): { tokens: Token[]; error?: ParseError } {
   const fail = (kind: ParseErrorKind, pos: number) => ({ tokens, error: { kind, pos } as ParseError });
   let i = 0;
 
-  /** Запятая между цифрами — десятичная, если: есть «;», запятая вне вызова функции, в скобках-группировке или в русской функции. */
+  /** Запятая между цифрами — десятичная, если есть «;», либо запятая вне вызова функции (в скобках-группировке). Без «;» внутри вызова функции запятая — разделитель. */
   const commaIsDecimal = () => {
     if (semi || stack.length === 0) return true;
-    const top = stack[stack.length - 1].fn;
-    return top === null || hasCyrillic(top);
+    return stack[stack.length - 1].fn === null;
   };
 
   while (i < src.length) {
@@ -134,7 +135,7 @@ export function tokenize(src: string): { tokens: Token[]; error?: ParseError } {
     }
     // Ссылки и имена
     if (c === "$" || NAME_START.test(c)) {
-      const m = /^\$?[A-Za-z]{1,3}\$?\d+/.exec(src.slice(i));
+      const m = /^\$?[A-Za-z]{1,3}\$?\d+/.exec(toLatinLookalikes(src.slice(i, i + 12)));
       if (m) {
         const end = i + m[0].length;
         const next = src[end];

@@ -44,7 +44,8 @@ function ideEval(doc, rules) {
           var el = els[b];
           if (!el.hasAttribute(r.name)) continue;
           var val = el.getAttribute(r.name);
-          if (r.equals == null ? ideNorm(val) !== "" : ideNorm(val) === ideNorm(r.equals)) ok = true;
+          var nv = ideNorm(val).replace(/\/+$/, "");
+          if (r.equals == null ? ideNorm(val) !== "" : nv === ideNorm(r.equals).replace(/\/+$/, "")) ok = true;
         }
       }
     } catch (e) {
@@ -86,15 +87,24 @@ if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded"
 /** Убрать <!DOCTYPE> в начале — мы ставим свой. */
 const stripDoctype = (code: string) => code.replace(/^\s*<!doctype[^>]*>/i, "");
 
-/** Документ для видимого предпросмотра: код ученика как есть (с режимом стандартов). */
-export const buildPreviewDoc = (code: string) => `<!doctype html>${stripDoctype(code)}`;
+/** Есть ли в коде скрипты или обработчики событий — их автоматически не запускаем. */
+export const hasScripts = (code: string) => /<script\b|\bon[a-z]+\s*=|javascript:/i.test(code);
 
 /**
- * Документ для проверки: проверщик стоит ПЕРЕД кодом ученика — незакрытый тег или комментарий в коде его не «проглотит».
- * Скрипт попадает в <head> (парсер сам создаёт html/head), код ученика дополняет документ.
+ * Документ для видимого предпросмотра. Ссылки открываются в новом контексте (в песочнице без allow-popups это просто блок),
+ * поэтому предпросмотр не «уходит» на чужую страницу. Скрипты ученика по умолчанию запрещены CSP
+ * (бесконечный цикл в iframe без отдельного процесса мог бы заморозить всё приложение); allowScripts — по явной кнопке.
+ */
+export const buildPreviewDoc = (code: string, allowScripts = false) =>
+  `<!doctype html>${allowScripts || !hasScripts(code) ? "" : `<meta http-equiv="Content-Security-Policy" content="script-src 'none'">`}<base target="_blank">${stripDoctype(code)}`;
+
+/**
+ * Документ для проверки: CSP с nonce разрешает ТОЛЬКО скрипт проверщика — скрипты ученика не выполняются
+ * (не могут зависнуть и подделать postMessage). Проверщик стоит ПЕРЕД кодом ученика — незакрытый тег или комментарий
+ * в коде его не «проглотит». Скрипт попадает в <head> (парсер сам создаёт html/head), код ученика дополняет документ.
  */
 export const buildCheckDoc = (code: string, nonce: string, rules: DomRule[]) =>
-  `<!doctype html><script>${buildCheckerScript(nonce, rules)}</script>${stripDoctype(code)}`;
+  `<!doctype html><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'"><script nonce="${nonce}">${buildCheckerScript(nonce, rules)}</script>${stripDoctype(code)}`;
 
 /** Случайный nonce (в браузере — crypto.getRandomValues). */
 export function randomNonce(): string {

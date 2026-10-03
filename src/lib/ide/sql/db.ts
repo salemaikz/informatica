@@ -10,6 +10,8 @@ export const SQLJS_VERSION = "1.14.2";
 export const DISPLAY_ROWS = 100;
 /** Предел строк, которые мы вообще собираем (защита от случайного перекрёстного соединения). */
 const MAX_COLLECT = 10_000;
+/** Предел подсчёта строк сверх MAX_COLLECT. */
+const MAX_COUNT = 1_000_000;
 
 /** Учебные таблицы, как в задачах ЕНТ. Все числа в условиях — числовые, чтобы не путать русские и латинские буквы. */
 export const SCHEMA_SQL = `
@@ -104,7 +106,13 @@ export function loadSql(locateFile?: (file: string) => string): Promise<SqlJsSta
     enginePromise = (async () => {
       const mod = (await import("sql.js")) as unknown as { default?: typeof import("sql.js").default } & typeof import("sql.js").default;
       const init = mod.default ?? mod;
-      return init({ locateFile: locateFile ?? ((f) => `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/${f}`) });
+      if (locateFile) return init({ locateFile });
+      // wasm качаем сами: sql.js кэширует свой промис инициализации, и упавшая загрузка внутри него не повторяется.
+      const url = `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm-browser.wasm`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`wasm download failed: ${res.status}`);
+      const wasmBinary = await res.arrayBuffer();
+      return init({ wasmBinary, locateFile: (f) => `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/${f}` });
     })().catch((e) => {
       enginePromise = null;
       throw e;
@@ -151,7 +159,7 @@ export interface SqlRunErr {
 }
 export type SqlRun = SqlRunOk | SqlRunErr;
 
-const MUTATION_RE = /\b(update|insert|delete|replace|drop|alter|create)\b/i;
+const MUTATION_RE = /(^|;)\s*(update|insert|delete|replace|drop|alter|create)\b/i;
 const MUTATED_TABLE_RE = /\b(?:update|insert\s+(?:or\s+\w+\s+)?into|delete\s+from|replace\s+into)\s+["`[]?([A-Za-z_][A-Za-z0-9_]*)/i;
 
 /** Убирает комментарии и содержимое строк — чтобы искать ключевые слова только в коде. */
@@ -162,9 +170,9 @@ export function stripSql(sql: string): string {
     .replace(/'(?:[^']|'')*'/g, "''");
 }
 
-/** Рекурсивные запросы могут не закончиться, а прервать их в основном потоке нельзя — в учебном курсе они не нужны. */
+/** WITH (в т.ч. рекурсивный без слова RECURSIVE) может не закончиться, а прервать его в основном потоке нельзя — в курсе CTE не нужны. */
 export function hasRecursive(sql: string): boolean {
-  return /\bwith\s+recursive\b/i.test(stripSql(sql));
+  return /\bwith\b/i.test(stripSql(sql));
 }
 
 /** Имя таблицы, которую меняет запрос (первая из UPDATE / INSERT INTO / DELETE FROM). */
@@ -180,7 +188,7 @@ function collect(stmt: Statement): ResultSet {
   while (stmt.step()) {
     total++;
     if (rows.length < MAX_COLLECT) rows.push(stmt.get());
-    else break;
+    else if (total >= MAX_COUNT) break; // дальше только считаем, не храня строки
   }
   return { columns, rows, total };
 }
@@ -191,15 +199,14 @@ export function runOn(db: Database, sql: string): SqlRun {
   const t0 = typeof performance !== "undefined" ? performance.now() : 0;
   try {
     const sets: ResultSet[] = [];
-    let changes = 0;
+    const totalChanges = () => Number(db.exec("SELECT total_changes()")[0].values[0][0]);
+    const before = totalChanges();
     for (const stmt of db.iterateStatements(sql)) {
       const names = stmt.getColumnNames();
       if (names.length > 0) sets.push(collect(stmt));
-      else {
-        stmt.step();
-        changes += db.getRowsModified();
-      }
+      else stmt.step();
     }
+    const changes = totalChanges() - before;
     const mutated = MUTATION_RE.test(stripSql(sql));
     let after: SqlRunOk["after"];
     const table = mutated ? mutatedTable(sql) : null;

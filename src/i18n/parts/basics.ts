@@ -35,7 +35,7 @@ export const basicsDict = {
   },
 
   // ---------- files ----------
-  "basics.files.aria": { ru: "Дерево папок", kk: "Бумалар ағашы" },
+  "basics.files.aria": { ru: "Дерево папок", kk: "Қалталар ағашы" },
   "basics.files.disk": { ru: "Диск C:", kk: "C: диск" },
   "basics.files.path": { ru: "Путь", kk: "Жол" },
   "basics.files.selected": { ru: "Выбрано: {path}", kk: "Таңдалған: {path}" },

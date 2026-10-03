@@ -6,6 +6,8 @@ import { parseTrace, type TraceData } from "./trace";
 // Только в браузере (Worker). Чистая логика проверки — в check.ts.
 
 const WORKER_URL = "/ide/python-worker.js";
+/** Сколько ждём загрузку Pyodide (CDN завис / нет сети), мс. */
+const LOAD_TIMEOUT_MS = 60000;
 
 export type RunStatus = "loading" | "running";
 
@@ -24,6 +26,8 @@ export interface RunOptions {
   /** Собрать пошаговую трассировку. */
   trace?: boolean;
   timeoutMs?: number;
+  /** input() без приглашения в выводе (для проверки задач). */
+  quiet?: boolean;
   /** Загрузка Pyodide / программа запущена (с этого момента идёт таймаут). */
   onStatus?: (s: RunStatus) => void;
 }
@@ -75,6 +79,7 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(loadTimer);
       w.removeEventListener("message", onMessage);
       w.removeEventListener("error", onError);
       resolve({ ...r, ms: r.ms ?? (t0 ? Math.round(performance.now() - t0) : 0) });
@@ -94,6 +99,7 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
           break;
         case "start":
           opts.onStatus?.("running");
+          clearTimeout(loadTimer);
           t0 = performance.now();
           timer = setTimeout(() => fail({ timedOut: true, ms: timeout }), timeout);
           break;
@@ -107,7 +113,8 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
           finish({ stdout, trace, ms: m.ms, cut: m.cut });
           break;
         case "error":
-          if (m.kind === "load") fail({ stdout: "", loadFailed: true });
+          if (m.kind === "fatal") fail({ stdout, error: { line: null, text: m.text ?? "Error" } });
+          else if (m.kind === "load") fail({ stdout: "", loadFailed: true });
           else finish({ stdout, trace, error: { line: m.line ?? null, text: m.text ?? "Error" }, ms: m.ms });
           break;
       }
@@ -115,7 +122,8 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
     const onError = () => fail({ loadFailed: true, stdout: "" });
     w.addEventListener("message", onMessage);
     w.addEventListener("error", onError);
-    w.postMessage({ type: "run", id, code: opts.code, stdin: opts.stdin ?? "", trace: !!opts.trace });
+    w.postMessage({ type: "run", id, code: opts.code, stdin: opts.stdin ?? "", trace: !!opts.trace, quiet: !!opts.quiet });
+    const loadTimer = setTimeout(() => fail({ loadFailed: true, stdout: "" }), LOAD_TIMEOUT_MS);
   });
 }
 

@@ -84,6 +84,9 @@ export function sanitizeTask(raw: unknown): TaskContext | undefined {
     hint: str(t.hint, 500),
     whyWrong: str(t.whyWrong, 600),
     stepKey: str(t.stepKey, 80),
+    ide: str(t.ide, 40),
+    code: str(t.code, 2000),
+    error: str(t.error, 500),
   };
 }
 

@@ -33,6 +33,8 @@ export const isFormula = (raw: string | undefined | null): boolean => typeof raw
 export function formatNumber(n: number): string {
   if (!Number.isFinite(n)) return "";
   const x = Object.is(n, -0) ? 0 : n;
+  const abs = Math.abs(x);
+  if (abs >= 1e11 || (abs !== 0 && abs < 1e-9)) return x.toExponential(5).replace(/\.?0+e/, "e").replace(/e([+-])(\d)$/, "e$10$2").replace("e", "E").replace(".", ",");
   const s = String(Number(x.toPrecision(11)));
   const m = /^(-?[\d.]+)e([+-])(\d+)$/.exec(s);
   const out = m ? `${m[1]}E${m[2]}${m[3].padStart(2, "0")}` : s;

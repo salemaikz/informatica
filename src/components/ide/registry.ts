@@ -82,7 +82,7 @@ export const IDE_REGISTRY: Record<IdeLang, IdeLangInfo> = {
   },
 };
 
-export const isIdeLang = (v: unknown): v is IdeLang => typeof v === "string" && v in IDE_REGISTRY;
+export const isIdeLang = (v: unknown): v is IdeLang => typeof v === "string" && Object.hasOwn(IDE_REGISTRY, v);
 
 export function findTask(lang: IdeLang, id: string): IdeTask | undefined {
   return IDE_REGISTRY[lang].tasks.find((t) => t.id === id);

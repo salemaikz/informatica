@@ -8,6 +8,7 @@ export type CssSheet = Map<string, Record<string, string>>;
 /** Текст всех блоков <style> документа (склеен через перевод строки). */
 export function extractStyleText(html: string): string {
   const parts: string[] = [];
+  html = html.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
   const re = /<style\b[^>]*>([\s\S]*?)(?:<\/style\s*>|$)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) parts.push(m[1]);
@@ -95,8 +96,9 @@ export function colorKey(value: string): string {
 export const sameCssValue = (a: string, b: string) => colorKey(a) === colorKey(b);
 
 /** Объявления «свойство: значение; …» → объект. Точка с запятой внутри скобок/кавычек (url(data:…)) не разделяет. */
-function parseDeclarations(body: string): Record<string, string> {
+function parseDeclarations(body: string): { props: Record<string, string>; important: Set<string> } {
   const props: Record<string, string> = Object.create(null);
+  const importantNames = new Set<string>();
   const decls: string[] = [];
   let cur = "";
   let depth = 0;
@@ -118,10 +120,20 @@ function parseDeclarations(body: string): Record<string, string> {
     if (i < 1) continue;
     const name = d.slice(0, i).trim().toLowerCase();
     const value = normalizeValue(d.slice(i + 1));
-    if (/^-?[a-z_][a-z0-9_-]*$/.test(name) && value) props[name] = value;
+    const important = /!\s*important/i.test(d.slice(i + 1));
+    if (/^-?[a-z_][a-z0-9_-]*$/.test(name) && value) {
+      // Внутри блока !important не перебивается обычным значением.
+      if (!important && importantNames.has(name)) continue;
+      props[name] = value;
+      if (important) importantNames.add(name);
+      else importantNames.delete(name);
+    }
   }
-  return props;
+  return { props, important: importantNames };
 }
+
+/** Какие свойства правила объявлены с !important (последнее обычное значение их не перебивает). */
+const IMPORTANT = new WeakMap<object, Set<string>>();
 
 const GROUP_AT_RULES = /^@(media|supports|layer|container|document)\b/i;
 
@@ -157,12 +169,19 @@ export function parseCss(css: string, sheet: CssSheet = new Map()): CssSheet {
       if (GROUP_AT_RULES.test(prelude)) parseCss(body, sheet);
       continue;
     }
-    const props = parseDeclarations(body);
+    const { props, important } = parseDeclarations(body);
     for (const sel of prelude.split(",")) {
       const key = normalizeSelector(sel);
       if (!key) continue;
       const target = sheet.get(key) ?? Object.create(null);
-      Object.assign(target, props);
+      const imp = IMPORTANT.get(target) ?? new Set<string>();
+      for (const name of Object.keys(props)) {
+        if (imp.has(name) && !important.has(name)) continue;
+        target[name] = props[name];
+        if (important.has(name)) imp.add(name);
+        else imp.delete(name);
+      }
+      IMPORTANT.set(target, imp);
       sheet.set(key, target);
     }
   }

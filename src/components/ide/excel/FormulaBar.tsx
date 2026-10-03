@@ -33,12 +33,12 @@ export function FormulaBar({ addr, value, dirty, inputRef, onChange, onFocus, on
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
   return (
     <div className="flex items-stretch gap-2">
-      <div
+      <output
         aria-label={t("idexl.bar.address")}
         className="flex w-14 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-surface-2 font-mono text-sm font-extrabold"
       >
         {addr}
-      </div>
+      </output>
       <div className="flex min-w-0 flex-1 items-center rounded-xl border-2 border-border bg-surface focus-within:border-primary">
         <span aria-hidden className="select-none pl-3 font-mono text-sm font-bold italic text-primary">
           fx

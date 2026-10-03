@@ -54,7 +54,7 @@ export const ResultBanner = forwardRef<HTMLDivElement, { state: ResultState; nex
             initial={{ scale: 0.4, opacity: 0, y: 8 }}
             animate={{ scale: [0.4, 1.25, 1], opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="shrink-0 rounded-full bg-gold-soft px-3 py-1 text-base font-black tabular-nums text-warning-strong"
+            className="shrink-0 rounded-full bg-gold-soft px-3 py-1 text-base font-black tabular-nums text-gold"
           >
             {t("ide.result.xp", { n: xp })}
           </m.span>

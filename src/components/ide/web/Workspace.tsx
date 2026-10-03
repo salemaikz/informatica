@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Code, Eye, Loader2, SquareCheckBig } from "lucide-react";
+import { Code, Eye, Loader2, Play, SquareCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { WorkspaceProps } from "@/lib/ide/types";
-import { buildPreviewDoc, checkWeb } from "@/lib/ide/web/checks";
+import { buildPreviewDoc, checkWeb, hasScripts } from "@/lib/ide/web/checks";
 import { runDomRules } from "@/lib/ide/web/runner";
 
 // Рабочая область HTML/CSS: редактор + живой предпросмотр в изолированном iframe.
@@ -31,7 +31,18 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
     const id = setTimeout(() => setPreviewCode(code), PREVIEW_DELAY_MS);
     return () => clearTimeout(id);
   }, [code]);
-  const srcDoc = useMemo(() => buildPreviewDoc(previewCode), [previewCode]);
+  // Скрипты ученика запускаются только по кнопке и только для этой версии кода (правка — снова выключено).
+  const [scriptsFor, setScriptsFor] = useState<string | null>(null);
+  const scriptsOn = scriptsFor === previewCode;
+  const needsRun = hasScripts(previewCode) && !scriptsOn;
+  const srcDoc = useMemo(() => buildPreviewDoc(previewCode, scriptsOn), [previewCode, scriptsOn]);
+  // Ключ: «Запустить скрипты» перезагружает страницу, даже если код не менялся.
+  const [runKey, setRunKey] = useState(0);
+  function runScripts() {
+    setPreviewCode(code);
+    setScriptsFor(code);
+    setRunKey((k) => k + 1);
+  }
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -63,7 +74,18 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
             key={id}
             type="button"
             role="tab"
+            id={`ideweb-tab-${id}`}
+            aria-controls={`ideweb-panel-${id}`}
             aria-selected={tab === id}
+            tabIndex={tab === id ? 0 : -1}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                const next: Tab = id === "code" ? "page" : "code";
+                setTab(next);
+                document.getElementById(`ideweb-tab-${next}`)?.focus();
+              }
+            }}
             onClick={() => setTab(id)}
             className={cn(
               "flex h-11 items-center justify-center gap-2 rounded-xl text-[15px] font-extrabold transition-colors",
@@ -78,15 +100,16 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className={cn("min-w-0", tab !== "code" && "hidden lg:block")}>
+        <div role="tabpanel" id="ideweb-panel-code" aria-labelledby="ideweb-tab-code" className={cn("min-w-0", tab !== "code" && "hidden lg:block")}>
           <CodeEditor value={code} onChange={onCodeChange} language="html" ariaLabel={t("ideweb.editor.aria")} minHeight={320} />
         </div>
 
-        <section aria-label={t("ideweb.preview.title")} className={cn("min-w-0 space-y-2", tab !== "page" && "hidden lg:block")}>
+        <section role="tabpanel" id="ideweb-panel-page" aria-labelledby="ideweb-tab-page" className={cn("min-w-0 space-y-2", tab !== "page" && "hidden lg:block")}>
           <h3 className="hidden text-xs font-extrabold uppercase tracking-wide text-muted lg:block">{t("ideweb.preview.title")}</h3>
           {/* Изоляция: sandbox="allow-scripts" БЕЗ allow-same-origin — у страницы пустое происхождение, доступа к приложению нет.
               Белый фон — как у «листа» браузера: страница ученика рисуется независимо от темы приложения. */}
           <iframe
+            key={runKey}
             title={t("ideweb.preview.aria")}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
@@ -94,6 +117,14 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
             className="h-80 w-full rounded-2xl border-2 border-border lg:h-[26rem]"
             style={{ background: "#fff" }}
           />
+          {needsRun && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-warning-soft px-3 py-2 text-sm text-warning-strong">
+              <p className="min-w-0 flex-1 font-semibold">{t("ideweb.preview.scripts")}</p>
+              <Button variant="secondary" size="sm" onClick={runScripts} icon={<Play size={16} aria-hidden />}>
+                {t("ideweb.preview.runScripts")}
+              </Button>
+            </div>
+          )}
           <p className="text-xs text-muted">
             {t("ideweb.preview.live")} {t("ideweb.preview.note")}
           </p>

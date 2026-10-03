@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Воркер JavaScript практикума: код ученика без сети и без загрузки чужих скриптов (решение #35).
+        source: "/ide/js-worker.js",
+        headers: [{ key: "Content-Security-Policy", value: "default-src 'none'; script-src 'self' 'unsafe-eval'" }],
+      },
+      {
         source: "/sw.js",
         headers: [
           { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },

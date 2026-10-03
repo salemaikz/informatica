@@ -272,3 +272,20 @@ describe("словарь idexl.*", () => {
     }
   });
 });
+
+import { checkExcel as chk } from "@/lib/ide/excel/check";
+import { TASKS as XT } from "@/lib/ide/excel/tasks";
+
+describe("антиобход проверок", () => {
+  const t = (id: string) => XT.find((x) => x.id === id)!;
+  it("константная формула не засчитывается", () => {
+    expect(chk(t("xl-1-sum").check as never, JSON.stringify({ A1: "12", B1: "7", C1: "5", D1: "9", E1: "=33" })).ok).toBe(false);
+  });
+  it("xl-5: ручные и относительные формулы не засчитываются", () => {
+    const c = t("xl-5-abs").check as never;
+    const base = { B2: "50", B3: "70", B4: "30", B5: "50", B6: "=СУММ(B2:B5)" };
+    expect(chk(c, JSON.stringify({ ...base, C2: "=25", C3: "=35", C4: "=15", C5: "=25" })).ok).toBe(false);
+    expect(chk(c, JSON.stringify({ ...base, C2: "=B2/B6*100", C3: "=B3/B6*100", C4: "=B4/B6*100", C5: "=B5/B6*100" })).ok).toBe(false);
+    expect(chk(c, t("xl-5-abs").solution).ok).toBe(true);
+  });
+});

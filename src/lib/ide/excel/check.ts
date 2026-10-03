@@ -1,8 +1,11 @@
 import type { L } from "@/lib/types";
-import { evaluateSheet, formatValue, isError, isFormula, parseNumberText, parseSheetCode, type SheetCells, type Value } from "@/lib/sheet";
+import { evaluateSheet, formatValue, formulaRefs, isError, isFormula, normalizeAddr, parseAddr, parseNumberText, parseSheetCode, shiftFormula, type SheetCells, type Value } from "@/lib/sheet";
 import type { CheckResult, IdeCheck } from "../types";
 
-export type ExcelCheck = Extract<IdeCheck, { kind: "excel" }>;
+/** Задача на «протягивание»: ячейки `to` должны быть копиями `from` (со сдвигом ссылок), а в `from` — закреплённая строка ($). */
+export type ExcelCheck = Extract<IdeCheck, { kind: "excel" }> & { copies?: { from: string; to: string[] } };
+
+const normFormula = (s: string | undefined) => (s ?? "").replace(/\s+/g, "").toUpperCase();
 
 /** Допуск при сравнении чисел (после пересчёта остаются хвосты двоичной дроби). */
 const EPS = 1e-9;
@@ -34,6 +37,10 @@ function showExpected(expected: string | number, lang: "ru" | "kk"): string {
 
 const showGot = (v: Value, lang: "ru" | "kk") => (v === null ? (lang === "ru" ? "пусто" : "бос") : formatValue(v));
 
+/** Для sample (строка без перевода): все варианты текста через « / », пустая ячейка — «—». */
+const showExpectedNeutral = (expected: string | number) => (typeof expected === "number" ? formatValue(expected) : alternatives(expected).join(" / "));
+const showGotNeutral = (v: Value) => (v === null ? "—" : formatValue(v));
+
 /**
  * Проверка Excel-задачи: код — JSON ячеек, значения считаются движком (src/lib/sheet).
  * Сначала проверяются ячейки, где обязательна формула (число, введённое вручную, не засчитывается),
@@ -44,14 +51,20 @@ export function checkExcel(check: ExcelCheck, code: string): CheckResult {
   const result = evaluateSheet(cells);
   const formulas = check.formulas ?? [];
   const expected = Object.entries(check.cells);
-  const total = formulas.length + expected.length;
+  const copies = check.copies;
+  const total = formulas.length + expected.length + (copies ? 1 : 0);
   let passed = 0;
   let message: L | undefined;
   let sample: CheckResult["sample"];
 
   for (const addr of formulas) {
-    if (isFormula(cells[addr])) passed++;
-    else if (!message) {
+    if (isFormula(cells[addr]) && formulaRefs(cells[addr]).length > 0) passed++;
+    else if (!message && isFormula(cells[addr])) {
+      message = {
+        ru: `Формула в ячейке ${addr} должна ссылаться на ячейки таблицы, а не содержать готовое число.`,
+        kk: `${addr} ұяшығындағы формула дайын санды емес, кестедегі ұяшықтарға сілтеме жасауы керек.`,
+      };
+    } else if (!message) {
       message = {
         ru: `В ячейке ${addr} должна быть формула: начните ввод со знака «=», а не вводите число вручную.`,
         kk: `${addr} ұяшығында формула болуы керек: енгізуді «=» белгісінен бастаңыз, санды қолмен жазбаңыз.`,
@@ -66,7 +79,32 @@ export function checkExcel(check: ExcelCheck, code: string): CheckResult {
         ru: `Ячейка ${addr}: ожидалось ${showExpected(want, "ru")}, получилось ${showGot(got, "ru")}.`,
         kk: `${addr} ұяшығы: күтілгені ${showExpected(want, "kk")}, шыққаны ${showGot(got, "kk")}.`,
       };
-      sample = { input: addr, expected: showExpected(want, "ru"), got: showGot(got, "ru") };
+      sample = { input: addr, expected: showExpectedNeutral(want), got: showGotNeutral(got) };
+    }
+  }
+  if (copies) {
+    const from = normalizeAddr(copies.from);
+    const src = from ? parseAddr(from) : null;
+    const fromRaw = from ? cells[from] : undefined;
+    const absRow = !!fromRaw && formulaRefs(fromRaw).some((r) => /\$\d/.test(fromRaw.slice(r.start, r.end)));
+    const copied =
+      !!src &&
+      isFormula(fromRaw) &&
+      copies.to.every((to) => {
+        const a = parseAddr(to);
+        return !!a && normFormula(cells[to]) === normFormula(shiftFormula((fromRaw ?? "").trim(), a.row - src.row, a.col - src.col));
+      });
+    if (absRow && copied) passed++;
+    else if (!message) {
+      message = !absRow
+        ? {
+            ru: `В ячейке ${copies.from} закрепите ссылку на итог знаком «$» (например, $B$6), иначе при копировании она «поедет».`,
+            kk: `${copies.from} ұяшығында жалпы қосындыға сілтемені «$» белгісімен бекітіңіз (мысалы, $B$6), әйтпесе көшіргенде ол жылжып кетеді.`,
+          }
+        : {
+            ru: `Ячейки ${copies.to.join(", ")} должны быть получены протягиванием ${copies.from}: не вводите формулы заново.`,
+            kk: `${copies.to.join(", ")} ұяшықтары ${copies.from} ұяшығын созу арқылы алынуы керек: формулаларды қайта жазбаңыз.`,
+          };
     }
   }
   return { ok: passed === total, passed, total, message, sample };

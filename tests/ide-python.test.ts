@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TASKS } from "@/lib/ide/python/tasks";
-import { checkPython, normalizeOutput, sameOutput, type PyRun } from "@/lib/ide/python/check";
+import { PY_FORBID, TASKS } from "@/lib/ide/python/tasks";
+import { checkPython, findForbidden, normalizeOutput, sameOutput, type PyRun } from "@/lib/ide/python/check";
 import { changedVars, codeLine, highlightFor, outputAt, parseTrace, TRACE_STEP_LIMIT, type TraceData } from "@/lib/ide/python/trace";
 import { idePythonDict } from "@/i18n/parts/ide-python";
 import { IDE_REGISTRY } from "@/components/ide/registry";
@@ -126,6 +126,23 @@ describe("задачи Python", () => {
   it("перевод в двоичную — вручную: в эталоне нет bin и format", () => {
     const t = TASKS.find((x) => x.id === "py-10-binary")!;
     expect(t.solution).not.toMatch(/\bbin\(|\bformat\(/);
+  });
+
+  it("ограничения: bin/format/max запрещены, эталон проходит", async () => {
+    const bin = TASKS.find((x) => x.id === "py-10-binary")!;
+    const max3 = TASKS.find((x) => x.id === "py-4-max3")!;
+    const f10 = PY_FORBID["py-10-binary"];
+    for (const bad of ["print(bin(int(input()))[2:])", 'n=int(input())\nprint(f"{n:b}")', 'print("{:b}".format(int(input())))', "print(format(5, 'b'))"]) {
+      expect(findForbidden(bad, f10), bad).not.toBeNull();
+    }
+    expect(findForbidden(bin.solution, f10)).toBeNull();
+    expect(findForbidden('# bin(x)\nprint("bin( format(")', f10)).toBeNull();
+    expect(findForbidden("print(max(a, b, c))", PY_FORBID["py-4-max3"])).not.toBeNull();
+    expect(findForbidden(max3.solution, PY_FORBID["py-4-max3"])).toBeNull();
+    let calls = 0;
+    const r = await checkPython(bin.check as never, "print(bin(int(input()))[2:])", async () => { calls++; return { stdout: "" }; }, f10);
+    expect(r.ok).toBe(false);
+    expect(calls).toBe(0);
   });
 
   describe.skipIf(!hasPython)("эталоны (системный python3)", () => {
@@ -279,6 +296,35 @@ describe("воркер Pyodide", () => {
     });
     it("каждый запуск с чистыми переменными", () => {
       expect(runWorkerPython("print('x' in globals())").out).toBe("False\n");
+    });
+    it("состояние не протекает между запусками (builtins, лимит рекурсии)", () => {
+      const code = "import builtins, sys\nbuiltins.input = lambda *a: '7'\nsys.setrecursionlimit(50000)\n";
+      const drv = [
+        "import json, sys",
+        "ns = {}",
+        `exec(open(${JSON.stringify(join(dir, "runner.py"))}, encoding='utf-8').read(), ns)`,
+        "lim = sys.getrecursionlimit()",
+        `ns['_ide_run'](${JSON.stringify(code)}, '', False, None)`,
+        "ch = []",
+        "ns['_ide_run']('print(input())', '1\\n', False, ch.append)",
+        "print(json.dumps({'out': ''.join(ch), 'same': lim == sys.getrecursionlimit()}))",
+      ].join("\n");
+      writeFileSync(join(dir, "leak.py"), drv);
+      const r = spawnSync("python3", [join(dir, "leak.py")], { encoding: "utf8", timeout: 20000 });
+      expect(JSON.parse(r.stdout)).toEqual({ out: "1\n", same: true });
+    });
+    it("quiet: приглашение input() не печатается", () => {
+      const drv = [
+        "import json",
+        "ns = {}",
+        `exec(open(${JSON.stringify(join(dir, "runner.py"))}, encoding='utf-8').read(), ns)`,
+        "ch = []",
+        `ns['_ide_run'](${JSON.stringify('a = input("Введите: ")\nprint(a)')}, '5\\n', False, ch.append, True)`,
+        "print(json.dumps(''.join(ch)))",
+      ].join("\n");
+      writeFileSync(join(dir, "quiet.py"), drv);
+      const r = spawnSync("python3", [join(dir, "quiet.py")], { encoding: "utf8", timeout: 20000 });
+      expect(JSON.parse(r.stdout)).toBe("5\n");
     });
     it("очень длинный вывод обрезается", () => {
       const r = runWorkerPython("print('x' * 300000)");

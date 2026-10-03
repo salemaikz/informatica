@@ -15,5 +15,5 @@ export const TONE_CLASS: Record<IdeLangInfo["tone"], { soft: string; bar: string
   success: { soft: "bg-success-soft text-success-strong", bar: "var(--success)" },
   warning: { soft: "bg-warning-soft text-warning-strong", bar: "var(--warning)" },
   ai: { soft: "bg-ai-soft text-ai", bar: "var(--ai)" },
-  gold: { soft: "bg-gold-soft text-warning-strong", bar: "var(--gold)" },
+  gold: { soft: "bg-gold-soft text-gold", bar: "var(--gold)" },
 };

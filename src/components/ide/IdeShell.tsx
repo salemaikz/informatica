@@ -76,7 +76,7 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
       {task ? (
-        <div className="min-w-0 lg:sticky lg:top-4">
+        <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
           <TaskPanel task={task} editor={info.editor} solutionOpenable={canShowSolution(stat)} />
         </div>
       ) : (

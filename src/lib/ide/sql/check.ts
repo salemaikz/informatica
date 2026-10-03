@@ -1,7 +1,7 @@
 import type { Database, SqlJsStatic } from "sql.js";
 import type { L } from "@/lib/types";
 import type { CheckResult, IdeCheck } from "../types";
-import { cellText, createDb, runOn, type Cell, type ResultSet } from "./db";
+import { cellText, createDb, runOn, stripSql, type Cell, type ResultSet } from "./db";
 
 // Проверка задач SQL: результат запроса ученика сравнивается с результатом эталона на той же учебной базе.
 // Имена столбцов не важны, порядок строк — только если задача требует ORDER BY (ordered).
@@ -13,6 +13,10 @@ const MSG_EMPTY: L = { ru: "Сначала напишите запрос.", kk: 
 const MSG_NO_RESULT: L = {
   ru: "Запрос ничего не вернул: в этой задаче нужен SELECT.",
   kk: "Сұраныс ештеңе қайтармады: бұл есепте SELECT керек.",
+};
+const MSG_LITERAL: L = {
+  ru: "Нужно получить ответ запросом к таблице (FROM), а не написать готовое значение.",
+  kk: "Жауапты дайын мән жазып емес, кестеге сұраныс (FROM) арқылы алу керек.",
 };
 const MSG_VALUES: L = {
   ru: "Строк столько же, сколько нужно, но данные отличаются. Проверьте условие и вычисления.",
@@ -27,8 +31,8 @@ const MSG_TABLE: L = {
   kk: "Сіздің сұранысыңыздан кейін кесте күтілген нәтижеден өзгеше. WHERE шартын және жаңа мәндерді тексеріңіз.",
 };
 const MSG_RECURSIVE: L = {
-  ru: "Рекурсивные запросы (WITH RECURSIVE) здесь не поддерживаются — для этой задачи они не нужны.",
-  kk: "Рекурсивті сұраныстар (WITH RECURSIVE) мұнда қолдау таппайды — бұл есепке олар қажет емес.",
+  ru: "Конструкция WITH здесь не поддерживается — для этой задачи она не нужна.",
+  kk: "WITH конструкциясы мұнда қолдау таппайды — бұл есепке ол қажет емес.",
 };
 
 const TABLES = "students, classes, books, orders";
@@ -36,7 +40,7 @@ const TABLES = "students, classes, books, orders";
 /** Понятное объяснение ошибки SQLite на двух языках (исходное сообщение показывается отдельно). */
 export function explainSqlError(raw: string): L {
   const msg = raw.trim();
-  if (/recursive queries are not supported/i.test(msg)) return MSG_RECURSIVE;
+  if (/with is not supported|recursive queries are not supported/i.test(msg)) return MSG_RECURSIVE;
   let m = /no such table: (.+)/i.exec(msg);
   if (m) {
     return {
@@ -48,7 +52,7 @@ export function explainSqlError(raw: string): L {
   if (m) {
     return {
       ru: `Такого столбца нет: ${m[1]}. Загляните в «Таблицы базы» и проверьте названия. Текст в условии пишите в одинарных кавычках: 'текст'.`,
-      kk: `Мұндай баған жоқ: ${m[1]}. «Деректер қоры кестелерін» ашып, атауларды тексеріңіз. Шарттағы мәтінді жалғыз тырнақшаға ал: 'мәтін'.`,
+      kk: `Мұндай баған жоқ: ${m[1]}. «Деректер қоры кестелерін» ашып, атауларды тексеріңіз. Шарттағы мәтінді жалғыз тырнақшаға алыңыз: 'мәтін'.`,
     };
   }
   m = /ambiguous column name: (.+)/i.exec(msg);
@@ -139,7 +143,13 @@ export function formatSet(s: ResultSet, max = SAMPLE_ROWS): string {
   return lines.join("\n");
 }
 
-const diffMessage = (d: Exclude<Diff, "same">, got: ResultSet, want: ResultSet): L => {
+const diffMessage = (d: Exclude<Diff, "same">, got: ResultSet, want: ResultSet, reference: string): L => {
+  const ref = stripSql(reference);
+  const hint: L = /group\s+by/i.test(ref)
+    ? { ru: "Проверьте GROUP BY.", kk: "GROUP BY-ды тексеріңіз." }
+    : /\bwhere\b/i.test(ref)
+      ? { ru: "Проверьте условие WHERE.", kk: "WHERE шартын тексеріңіз." }
+      : { ru: "Проверьте условие и FROM.", kk: "Шартты және FROM-ды тексеріңіз." };
   if (d === "columns") {
     return {
       ru: `Столбцов в результате: ${got.columns.length}, а нужно ${want.columns.length}. Проверьте, какие столбцы перечислены после SELECT.`,
@@ -148,8 +158,8 @@ const diffMessage = (d: Exclude<Diff, "same">, got: ResultSet, want: ResultSet):
   }
   if (d === "count") {
     return {
-      ru: `Строк в результате: ${got.rows.length}, а ожидалось ${want.rows.length}. Проверьте условие WHERE.`,
-      kk: `Нәтижеде жолдар саны: ${got.rows.length}, ал ${want.rows.length} күтілген. WHERE шартын тексеріңіз.`,
+      ru: `Строк в результате: ${got.rows.length}, а ожидалось ${want.rows.length}. ${hint.ru}`,
+      kk: `Нәтижеде жолдар саны: ${got.rows.length}, ал ${want.rows.length} күтілген. ${hint.kk}`,
     };
   }
   return d === "order" ? MSG_ORDER : MSG_VALUES;
@@ -185,7 +195,8 @@ export function checkSql(check: SqlCheck, code: string, SQL: SqlJsStatic): Check
       // Задача на изменение: сравниваем содержимое таблицы после обоих запросов.
       const a = runOn(mine, check.checkQuery);
       const b = runOn(ref, check.checkQuery);
-      if (!a.ok || !b.ok) return fail(a.ok ? (b as { error: string }).error : a.error);
+      if (!a.ok) return fail(explainSqlError(a.error));
+      if (!b.ok) return fail(`Reference check failed: ${b.error}`);
       got = lastSet(a.sets);
       want = lastSet(b.sets);
       ordered = true;
@@ -195,10 +206,11 @@ export function checkSql(check: SqlCheck, code: string, SQL: SqlJsStatic): Check
     }
     if (!want) return fail("Reference query returned no result");
     if (!got) return fail(MSG_NO_RESULT);
+    if (!check.checkQuery && /\bfrom\b/i.test(stripSql(check.reference)) && !/\bfrom\b/i.test(stripSql(code))) return fail(MSG_LITERAL);
 
     const d = compareSets(got, want, ordered);
     if (d === "same") return { ok: true, passed: 1, total: 1 };
-    const message = check.checkQuery && d !== "columns" ? MSG_TABLE : diffMessage(d, got, want);
+    const message = check.checkQuery && d !== "columns" ? MSG_TABLE : diffMessage(d, got, want, check.reference);
     return fail(message, { expected: formatSet(want), got: formatSet(got) });
   } finally {
     mine.close();

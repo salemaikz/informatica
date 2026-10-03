@@ -319,7 +319,11 @@ def("СУММЕСЛИ", "SUMIF", 2, 3, (args, env) => {
   if (isError(crit)) return crit;
   const pred = predicate(crit);
   let total = 0;
-  for (const c of env.stored(range.r)) {
+  const cellsToScan: { col: number; row: number; value: Value }[] = [];
+  if (pred(null) && rangeArea(range.r) <= 10000) {
+    for (let row = range.r.r1; row <= range.r.r2; row++) for (let col = range.r.c1; col <= range.r.c2; col++) cellsToScan.push({ col, row, value: env.get(col, row) });
+  } else cellsToScan.push(...env.stored(range.r));
+  for (const c of cellsToScan) {
     if (!pred(c.value)) continue;
     const v = sumArg && sumArg.k === "r" ? env.get(sumArg.r.c1 + (c.col - range.r.c1), sumArg.r.r1 + (c.row - range.r.r1)) : c.value;
     if (isError(v)) return v;

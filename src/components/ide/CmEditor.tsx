@@ -111,6 +111,8 @@ export default function CmEditor({ value, onChange, language, ariaLabel, minHeig
   const onChangeRef = useRef(onChange);
   // Признак «правка пришла снаружи» — её не отдаём обратно в onChange.
   const external = useRef(false);
+  // Последнее значение, которое редактор сам отдал наружу: эффект синхронизации не должен откатывать свои же правки (IME/Android).
+  const lastEmitted = useRef(value);
   const [comp] = useState(() => ({ lang: new Compartment(), ro: new Compartment(), aria: new Compartment() }));
 
   useEffect(() => {
@@ -142,10 +144,14 @@ export default function CmEditor({ value, onChange, language, ariaLabel, minHeig
             ...historyKeymap,
           ]),
           comp.lang.of(languageExtension(language)),
-          comp.ro.of(EditorState.readOnly.of(readOnly)),
+          comp.ro.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
           comp.aria.of(EditorView.contentAttributes.of({ "aria-label": ariaLabel, spellcheck: "false", autocapitalize: "off", autocorrect: "off" })),
           EditorView.updateListener.of((u) => {
-            if (u.docChanged && !external.current) onChangeRef.current(u.state.doc.toString());
+            if (u.docChanged && !external.current) {
+              const v = u.state.doc.toString();
+              lastEmitted.current = v;
+              onChangeRef.current(v);
+            }
           }),
         ],
       }),
@@ -162,6 +168,8 @@ export default function CmEditor({ value, onChange, language, ariaLabel, minHeig
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    if (value === lastEmitted.current) return;
+    lastEmitted.current = value;
     const cur = view.state.doc.toString();
     if (cur === value) return;
     external.current = true;
@@ -177,7 +185,7 @@ export default function CmEditor({ value, onChange, language, ariaLabel, minHeig
   }, [language, comp]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: comp.ro.reconfigure(EditorState.readOnly.of(readOnly)) });
+    viewRef.current?.dispatch({ effects: comp.ro.reconfigure([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]) });
   }, [readOnly, comp]);
 
   useEffect(() => {

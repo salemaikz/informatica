@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Mascot } from "@/components/mascot/Mascot";
 import { ButtonLink } from "@/components/ui/Button";
+import { IDE_LANGS, type IdeLang } from "@/lib/ide/types";
 import { useT } from "@/i18n/useT";
 import { IdeShell } from "./IdeShell";
 import { findTask, isIdeLang } from "./registry";
@@ -11,7 +12,7 @@ import { findTask, isIdeLang } from "./registry";
 /** /code/[lang]/[task]: условие, рабочая область, итог. Неизвестный язык — 404; нет такой задачи — подсказка вернуться к списку. */
 export function IdeTaskPage({ lang, taskId }: { lang: string; taskId: string }) {
   const { t } = useT();
-  if (!isIdeLang(lang)) notFound();
+  if (!IDE_LANGS.includes(lang as IdeLang) || !isIdeLang(lang)) notFound();
   const task = findTask(lang, taskId);
 
   return (

@@ -80,6 +80,7 @@ describe("«Продолжить»", () => {
   it("последняя решена — следующая нерешённая того же языка", () => {
     const r = continueTarget(byLang, { py1: stat(true, 1, 30) });
     expect(r?.task.id).toBe("py2");
+    expect(r?.started).toBe(false);
   });
 
   it("всё решено — null; пустой реестр — null", () => {
@@ -113,18 +114,26 @@ describe("контекст для ИИ", () => {
     expect(clip("abcdef", 4)).toBe("abc…");
   });
 
-  it("условие, код и ошибка укладываются в лимит theory сервера (1500)", () => {
+  it("условие, код и ошибка — отдельными полями в пределах лимитов сервера (server/context.ts)", () => {
     const ctx = buildAiTask({ langTitle: "Python", title: "T", statement: "s".repeat(5000), code: "c".repeat(5000), error: "e".repeat(5000) });
+    expect(ctx.ide).toBe("Python");
     expect(ctx.theory!.length).toBeLessThanOrEqual(1500);
+    expect(ctx.code!.length).toBeLessThanOrEqual(2000);
+    expect(ctx.error!.length).toBeLessThanOrEqual(500);
     expect(ctx.prompt.length).toBeLessThanOrEqual(600);
-    expect(ctx.theory).toContain("Ошибка при запуске");
+    expect(ctx.answered).toBe(false);
   });
 
   it("без задачи (песочница) и с пустым кодом", () => {
     const ctx = buildAiTask({ langTitle: "SQL", code: "  " });
     expect(ctx.prompt).toContain("SQL");
-    expect(ctx.theory).toContain("пока пустой");
+    expect(ctx.code).toBe("");
+    expect(ctx.theory).toBeUndefined();
     expect(ctx.answered).toBe(false);
+  });
+
+  it("решённая задача разрешает разбор решения", () => {
+    expect(buildAiTask({ langTitle: "SQL", code: "SELECT 1", solved: true }).answered).toBe(true);
   });
 });
 

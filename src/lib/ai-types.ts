@@ -37,6 +37,10 @@ export interface TaskContext {
   whyWrong?: string;
   /** Стабильный ключ задания (id шага) — для логов/аналитики; ключ кэша строит сервер по содержимому. */
   stepKey?: string;
+  /** Практикум кода (решение #35): язык, код ученика и ошибка/итог проверки. */
+  ide?: string;
+  code?: string;
+  error?: string;
 }
 
 export type TutorMode = "chat" | "hint" | "explain" | "ask";

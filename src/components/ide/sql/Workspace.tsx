@@ -139,7 +139,7 @@ function RunView({ run }: { run: Extract<SqlRun, { ok: true }> }) {
         />
       ))}
       {run.mutated && (
-        <p className="rounded-2xl border-2 border-success/40 bg-success-soft px-4 py-3 text-sm font-bold">
+        <p className="rounded-2xl border-2 border-border bg-surface-2 px-4 py-3 text-sm font-bold">
           {t("idesql.result.changed", { n: run.changes })}
         </p>
       )}

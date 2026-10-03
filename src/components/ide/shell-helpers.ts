@@ -62,11 +62,11 @@ export function continueTarget(
   if (last) {
     if (!codeTasks[last.id]?.solved) return { task: last, started: true };
     const next = nextUnsolved(byLang[last.lang] ?? [], last.id, codeTasks);
-    if (next) return { task: next, started: true };
+    if (next) return { task: next, started: false };
   }
   for (const l of IDE_LANGS) {
     const first = nextUnsolved(byLang[l] ?? [], null, codeTasks);
-    if (first) return { task: first, started: !!last };
+    if (first) return { task: first, started: false };
   }
   return null;
 }
@@ -99,14 +99,13 @@ export function buildAiTask(p: {
   solved?: boolean;
   stepKey?: string;
 }): TaskContext {
-  const parts: string[] = [`Язык: ${p.langTitle}.`];
-  if (p.statement) parts.push(`Условие: ${clip(p.statement.trim(), 450)}`);
-  const code = p.code.trim();
-  parts.push(code ? `Код ученика:\n${clip(code, 700)}` : "Код ученика пока пустой.");
-  if (p.error) parts.push(`Ошибка при запуске:\n${clip(p.error.trim(), 250)}`);
+  // Практикум: код и ошибка — отдельными полями; сервер (server/prompts.ts) не даёт готового решения, пока задача не решена.
   return {
     prompt: clip(p.title ?? `Свободная практика (${p.langTitle})`, 120),
-    theory: parts.join("\n\n"),
+    ide: p.langTitle,
+    theory: p.statement ? clip(p.statement.trim(), 1200) : undefined,
+    code: clip(p.code.trim(), 1800),
+    error: p.error ? clip(p.error.trim(), 450) : undefined,
     answered: !!p.solved,
     stepKey: p.stepKey,
   };

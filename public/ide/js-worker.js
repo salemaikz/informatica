@@ -27,13 +27,30 @@
   var indirectEval = G.eval;
 
   // ----- Отключаем сеть, хранилища и пр. -----
-  ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "indexedDB", "caches", "Worker", "SharedWorker", "BroadcastChannel"].forEach(function (name) {
+  // Закрываем и на самом объекте, и на всех прототипах (delete self.fetch иначе «открыл» бы прототипный fetch).
+  // Главная защита от сети — CSP в заголовках ответа для этого файла (next.config.ts: default-src 'none').
+  var BLOCKED = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "indexedDB", "caches", "Worker", "SharedWorker", "BroadcastChannel"];
+  BLOCKED.forEach(function (name) {
+    if (Object.prototype.hasOwnProperty.call(G, name)) return;
     try {
-      Object.defineProperty(G, name, { value: undefined, configurable: true, writable: true });
-    } catch (e) {
-      /* нет такого свойства — ничего страшного */
+      Object.defineProperty(G, name, { value: undefined, configurable: false, writable: false });
+    } catch {
+      /* ничего страшного */
     }
   });
+  var proto = G;
+  while (proto && proto !== Object.prototype) {
+    BLOCKED.forEach(function (name) {
+      // Только там, где свойство уже есть, — иначе засорили бы прототипы.
+      if (!Object.prototype.hasOwnProperty.call(proto, name)) return;
+      try {
+        Object.defineProperty(proto, name, { value: undefined, configurable: false, writable: false });
+      } catch {
+        /* нет такого свойства или уже закрыто — ничего страшного */
+      }
+    });
+    proto = Object.getPrototypeOf(proto);
+  }
 
   // ----- Форматирование значений (как в Node/браузере, но в одну строку) -----
   function quote(s) {
@@ -85,7 +102,7 @@
       var val;
       try {
         val = inspect(v[k], depth + 1, seen);
-      } catch (e) {
+      } catch {
         val = "[Getter]";
       }
       return key + ": " + val;
@@ -115,7 +132,7 @@
           case "%i": return String(parseInt(a, 10));
           case "%f": return String(parseFloat(a));
           case "%j":
-            try { return JSON.stringify(a); } catch (e) { return "[Circular]"; }
+            try { return JSON.stringify(a); } catch { return "[Circular]"; }
           default: return inspect(a, 0, []);
         }
       });
@@ -141,6 +158,10 @@
       return;
     }
     var out = indent && text ? text.split("\n").map(function (l) { return indent + l; }).join("\n") : text;
+    if (chars + out.length > CHAR_LIMIT) {
+      out = out.slice(0, CHAR_LIMIT - chars);
+      cut = true;
+    }
     lines++;
     chars += out.length;
     post({ type: "log", id: runId, level: level, text: out });
@@ -263,7 +284,7 @@
     if (err instanceof Error) return (err.name || "Error") + ": " + err.message;
     try {
       return "Uncaught " + inspect(err, 0, []);
-    } catch (e) {
+    } catch {
       return "Uncaught error";
     }
   }

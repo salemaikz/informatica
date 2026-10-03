@@ -250,15 +250,32 @@ describe("связь с iframe: postMessage и nonce", () => {
 
   it("документ проверки: проверщик стоит перед кодом ученика, doctype один", () => {
     const doc = buildCheckDoc("<!DOCTYPE html>\n<html><body><h1>x</h1><!-- не закрыто", nonce, rules);
-    expect(doc.startsWith("<!doctype html><script>")).toBe(true);
+    expect(doc.startsWith("<!doctype html><meta http-equiv=\"Content-Security-Policy\"")).toBe(true);
+    expect(doc).toContain(`script-src 'nonce-${nonce}'`);
+    expect(doc).toContain(`<script nonce="${nonce}">`);
     expect(doc.toLowerCase().match(/<!doctype/g)).toHaveLength(1);
     expect(doc.indexOf("</script>")).toBeLessThan(doc.indexOf("<html>"));
     expect(doc).toContain(nonce);
   });
   it("документ предпросмотра: свой doctype и код ученика без изменений", () => {
-    expect(buildPreviewDoc("<h1>x</h1>")).toBe("<!doctype html><h1>x</h1>");
-    expect(buildPreviewDoc("  <!DOCTYPE html><h1>x</h1>")).toBe("<!doctype html><h1>x</h1>");
+    const base = '<!doctype html><base target="_blank">';
+    expect(buildPreviewDoc("<h1>x</h1>")).toBe(`${base}<h1>x</h1>`);
+    expect(buildPreviewDoc("  <!DOCTYPE html><h1>x</h1>")).toBe(`${base}<h1>x</h1>`);
     expect(buildPreviewDoc("<h1>x</h1>")).not.toContain("<script");
+  });
+  it("предпросмотр: скрипты ученика закрыты CSP, пока ученик не нажал «Запустить»", () => {
+    const code = "<h1>x</h1><script>while(true){}</script>";
+    expect(buildPreviewDoc(code)).toContain("script-src 'none'");
+    expect(buildPreviewDoc(code, true)).not.toContain("Content-Security-Policy");
+  });
+  it("ссылка: слэш в конце href не мешает; !important и комментарии в CSS", async () => {
+    const withSlash = "<a href=\"https://example.com/\">Open</a>";
+    const win = new Window();
+    win.document.write(withSlash);
+    const doc = win.document;
+    expect(new Function(`${CHECKER_CORE}; return ideEval;`)()(doc, [{ type: "attr", selector: "a", name: "href", equals: "https://example.com" }])).toEqual([true]);
+    expect(hasCssRule(sheetFromHtml("<style>h1{color:blue !important} h1{color:red}</style>"), "h1", "color", "blue")).toBe(true);
+    expect(hasCssRule(sheetFromHtml("<!-- <style>h1{color:blue}</style> -->"), "h1", "color", "blue")).toBe(false);
   });
 });
 

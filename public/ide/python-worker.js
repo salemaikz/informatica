@@ -1,7 +1,7 @@
 // Web Worker «Практикума»: Python (Pyodide, WebAssembly) в браузере ученика.
 // Протокол (сообщения основного потока -> воркеру):
 //   { type: "init" }                                  — прогреть Pyodide (необязательно)
-//   { type: "run", id, code, stdin, trace? }          — выполнить программу
+//   { type: "run", id, code, stdin, trace?, quiet? }  — выполнить программу (quiet — input() без приглашения, для проверки)
 // Воркер -> основной поток:
 //   { type: "loading", id? }       — началась загрузка Pyodide (≈ 10 МБ один раз, дальше из кэша браузера)
 //   { type: "ready" }              — ответ на init
@@ -11,6 +11,7 @@
 //   { type: "done", id, ms }       — программа завершилась
 //   { type: "error", id, line, text }                 — ошибка программы (последняя строка трассировки и номер строки)
 //   { type: "error", id, kind: "load", text }         — не удалось загрузить Pyodide (нет сети)
+//   { type: "error", id, kind: "fatal", text }        — сбой Pyodide/JS: воркер закрывается, основной поток создаст новый
 // Таймаут и перезапуск воркера делает основной поток (worker.terminate()).
 //
 // ВАЖНО: Pyodide 314+ больше не поддерживает «классические» воркеры (importScripts) — только модульные.
@@ -23,7 +24,7 @@ const BASE = "https://cdn.jsdelivr.net/pyodide/v" + PYODIDE_VERSION + "/full/";
 // Python-часть: запуск программы ученика, перехват ввода-вывода, трассировка (sys.settrace).
 // Внутри нет обратных кавычек и «${» — исходник вынимают тесты (tests/ide-python.test.ts) и гоняют системным python3.
 const RUNNER = String.raw`
-import sys, io, json, builtins
+import sys, io, json, builtins, time
 
 _IDE_FILE = "<program>"
 _IDE_STEP_LIMIT = 300
@@ -46,6 +47,7 @@ class _IdeOut:
         self.pending = ""
         self.n = 0
         self.cut = False
+        self.last = 0.0
         self.encoding = "utf-8"
 
     def write(self, s):
@@ -61,11 +63,13 @@ class _IdeOut:
             if self.keep:
                 self.parts.append(s)
             self.pending += s
-            if "\n" in s or len(self.pending) >= 2000:
+            # Отправляем по размеру или по времени — чтобы при зависании был виден уже выведенный текст.
+            if len(self.pending) >= 2000 or time.monotonic() - self.last >= 0.05:
                 self.flush()
         return size
 
     def flush(self):
+        self.last = time.monotonic()
         if self.pending and self.emit is not None:
             text = self.pending
             self.pending = ""
@@ -178,7 +182,15 @@ def _ide_make_tracer(steps, out, state):
     return glob
 
 
-def _ide_run(code, stdin_text, trace, emit):
+def _ide_quiet_input(prompt=""):
+    """input() для проверки: приглашение не печатается в вывод."""
+    line = sys.stdin.readline()
+    if not line:
+        raise EOFError("EOF when reading a line")
+    return line[:-1] if line.endswith("\n") else line
+
+
+def _ide_run(code, stdin_text, trace, emit, quiet=False):
     keep = bool(trace)
     out = _IdeOut(emit, _IDE_TRACE_OUT_LIMIT if keep else _IDE_OUT_LIMIT, keep)
     saved = (sys.stdin, sys.stdout, sys.stderr)
@@ -189,6 +201,11 @@ def _ide_run(code, stdin_text, trace, emit):
     state = {"truncated": False}
     error = None
     g = {"__name__": "__main__", "__builtins__": builtins}
+    # Воркер общий: запоминаем builtins и лимит рекурсии, чтобы программа ученика не влияла на следующие запуски.
+    saved_builtins = dict(builtins.__dict__)
+    saved_limit = sys.getrecursionlimit()
+    if quiet:
+        builtins.input = _ide_quiet_input
     try:
         try:
             co = compile(code, _IDE_FILE, "exec")
@@ -214,6 +231,12 @@ def _ide_run(code, stdin_text, trace, emit):
                 steps.append({"line": None, "fn": None, "vars": _ide_snapshot(g), "out": out.n})
     finally:
         sys.stdin, sys.stdout, sys.stderr = saved
+        sys.settrace(None)
+        sys.setrecursionlimit(saved_limit)
+        bd = builtins.__dict__
+        for k in [k for k in bd if k not in saved_builtins]:
+            del bd[k]
+        bd.update(saved_builtins)
         out.flush()
     res = {"error": error, "cut": out.cut}
     if keep:
@@ -266,12 +289,14 @@ self.onmessage = async (ev) => {
   self.postMessage({ type: "start", id });
   const t0 = Date.now();
   try {
-    const raw = runner(String(m.code || ""), String(m.stdin || ""), !!m.trace, (text) => self.postMessage({ type: "stdout", id, text }));
+    const raw = runner(String(m.code || ""), String(m.stdin || ""), !!m.trace, (text) => self.postMessage({ type: "stdout", id, text }), !!m.quiet);
     const res = JSON.parse(raw);
     if (res.trace) self.postMessage({ type: "trace", id, trace: res.trace });
     if (res.error) self.postMessage({ type: "error", id, line: res.error.line, text: res.error.text, ms: Date.now() - t0 });
     else self.postMessage({ type: "done", id, ms: Date.now() - t0, cut: !!res.cut });
   } catch (e) {
-    self.postMessage({ type: "error", id, line: null, text: errText(e), ms: Date.now() - t0 });
+    // Сбой на уровне JS/Pyodide (например, переполнение стека): состояние интерпретатора неопределённо — воркер закрываем.
+    self.postMessage({ type: "error", id, kind: "fatal", text: errText(e), ms: Date.now() - t0 });
+    self.close();
   }
 };

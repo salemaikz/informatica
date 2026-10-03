@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { CheckResult, WorkspaceProps } from "@/lib/ide/types";
 import { checkPython } from "@/lib/ide/python/check";
+import { PY_FORBID } from "@/lib/ide/python/tasks";
 import { runPython, type PyRunResult, type RunStatus } from "@/lib/ide/python/runner";
 import { highlightFor, type TraceData } from "@/lib/ide/python/trace";
 
@@ -24,7 +25,8 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
   const { t } = useT();
   const taskId = task?.id ?? "sandbox";
   const pyCheck = task?.check.kind === "python" ? task.check : null;
-  const defaultStdin = pyCheck?.tests[0]?.stdin ?? "";
+  // В песочнице пример кода просит имя — подставляем его, чтобы первый запуск не падал с EOFError.
+  const defaultStdin = pyCheck ? (pyCheck.tests[0]?.stdin ?? "") : "Aru\n";
 
   // Ввод: пока ученик не менял — берём ввод первого теста задачи (без эффектов).
   const [stdinState, setStdinState] = useState<{ key: string; value: string } | null>(null);
@@ -73,11 +75,17 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     setPhase("running");
     setTrace(null);
     let firstError: string | null = null;
-    const res: CheckResult = await checkPython(pyCheck, code, async (c, s) => {
-      const r = await runPython({ code: c, stdin: s, onStatus });
-      if (firstError === null && r.error) firstError = errorLine(r.error);
-      return r;
-    });
+    const res: CheckResult = await checkPython(
+      pyCheck,
+      code,
+      async (c, s) => {
+        const r = await runPython({ code: c, stdin: s, quiet: true, onStatus });
+        if (firstError === null && r.error) firstError = errorLine(r.error);
+        if (firstError === null && r.timedOut) firstError = t("idepy.timeout");
+        return r;
+      },
+      task ? PY_FORBID[task.id] : undefined,
+    );
     if (!mounted.current) return;
     setPhase("idle");
     setChecking(false);
@@ -85,10 +93,12 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     onCheck(res);
   }
 
-  const tracing = trace !== null;
+  // Трассировка относится к коду, на котором она снята: если код изменили снаружи (например, «Сбросить») — она неактуальна.
+  const activeTrace = trace && trace.code === code ? trace : null;
+  const tracing = activeTrace !== null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+    <div className="@container grid gap-4 @3xl:grid-cols-2 @3xl:items-start">
       <div className="min-w-0 space-y-3">
         <CodeEditor
           value={code}
@@ -97,7 +107,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
           ariaLabel={t("idepy.editor.aria")}
           minHeight={240}
           readOnly={tracing}
-          highlightLine={trace ? highlightFor(trace.data, step) : undefined}
+          highlightLine={activeTrace ? highlightFor(activeTrace.data, step) : undefined}
         />
 
         <div>
@@ -119,10 +129,10 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="primary" size="lg" disabled={busy} onClick={() => run(false)} icon={<Play size={20} aria-hidden />}>
+          <Button variant="primary" size="md" disabled={busy} onClick={() => run(false)} icon={<Play size={20} aria-hidden />}>
             {t("idepy.run")}
           </Button>
-          <Button variant="secondary" size="lg" disabled={busy} onClick={() => run(true)} icon={<Footprints size={20} aria-hidden />}>
+          <Button variant="secondary" size="md" disabled={busy} onClick={() => run(true)} icon={<Footprints size={20} aria-hidden />}>
             {t("idepy.step")}
           </Button>
           {pyCheck && (
@@ -142,8 +152,8 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
       </div>
 
       <div className="min-w-0 space-y-3">
-        {trace && !busy ? (
-          <Tracer trace={trace.data} code={trace.code} index={step} onIndex={setStep} onClose={() => setTrace(null)} />
+        {activeTrace && !busy ? (
+          <Tracer trace={activeTrace.data} code={activeTrace.code} index={step} onIndex={setStep} onClose={() => setTrace(null)} />
         ) : (
           <OutputPanel phase={phase} result={result} errorLine={errorLine} />
         )}

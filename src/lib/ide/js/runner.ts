@@ -5,6 +5,9 @@ import { RUN_TIMEOUT_MS, type JsRunLike } from "./check";
 
 const WORKER_URL = "/ide/js-worker.js";
 
+/** Сколько ждём загрузки самого воркера (медленный интернет), мс. Не входит в таймаут программы. */
+const LOAD_TIMEOUT_MS = 10000;
+
 export interface JsLine {
   level: "log" | "warn" | "error";
   text: string;
@@ -64,13 +67,20 @@ export function runJs(code: string, timeoutMs: number = RUN_TIMEOUT_MS): Promise
       if (active === w) active = null;
       resolve({ stdout: lines.map((l) => l.text).join("\n"), lines, error, ms: Math.round(performance.now() - t0), ...extra });
     };
-    const timer = setTimeout(() => finish({ timedOut: true, ms: timeoutMs }), timeoutMs);
+    // До «ready» тикает только таймер загрузки; 3 с программы стартуют, когда воркер готов.
+    let timer = setTimeout(() => finish({ loadFailed: true }), LOAD_TIMEOUT_MS);
 
     let ready = false;
     w.onmessage = (ev: MessageEvent<WorkerMsg>) => {
       const m = ev.data;
       if (!m) return;
-      if (m.type === "ready") ready = true;
+      if (m.type === "ready" && !ready) {
+        ready = true;
+        clearTimeout(timer);
+        timer = setTimeout(() => finish({ timedOut: true, ms: timeoutMs }), timeoutMs);
+        w.postMessage({ type: "run", id, code });
+        return;
+      }
       if (m.id !== id) return;
       if (m.type === "log") {
         const level = m.level === "warn" || m.level === "error" ? m.level : "log";
@@ -84,6 +94,5 @@ export function runJs(code: string, timeoutMs: number = RUN_TIMEOUT_MS): Promise
       if (!ready) finish({ loadFailed: true });
       else finish({ error: error ?? { line: null, text: ev.message || "Error" } });
     };
-    w.postMessage({ type: "run", id, code });
   });
 }

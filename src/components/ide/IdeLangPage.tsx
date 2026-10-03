@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ButtonLink } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
-import type { IdeLang } from "@/lib/ide/types";
+import { IDE_LANGS, type IdeLang } from "@/lib/ide/types";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { IdeShell } from "./IdeShell";
@@ -20,7 +20,7 @@ type Mode = "tasks" | "sandbox";
 
 /** /code/[lang]: вкладки языков, переключатель «Задачи / Песочница», список задач или свободная рабочая область. */
 export function IdeLangPage({ lang }: { lang: string }) {
-  if (!isIdeLang(lang)) notFound();
+  if (!IDE_LANGS.includes(lang as IdeLang) || !isIdeLang(lang)) notFound();
   return <LangView key={lang} lang={lang} />;
 }
 

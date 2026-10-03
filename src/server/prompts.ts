@@ -67,8 +67,20 @@ export function tutorSystemPrompt(
     : `ДАННЫЕ УЧЕНИКА (для персонализации, не пересказывай их дословно):\n${renderContext(ctx)}`;
   const chatRule = mode === "chat" && opts.chatMode ? CHAT_MODE_RULE[opts.chatMode](opts.topic) : "";
   const parts = [BASE, LANG_RULE[ctx.lang], MODE_RULE[mode], ...(chatRule ? [chatRule] : []), student];
-  if (task?.theory) parts.push(`ТЕОРИЯ ТЕКУЩЕГО ШАГА УРОКА${task.prompt ? ` «${task.prompt}»` : ""}:\n${task.theory}`);
-  if (task?.prompt && !task.theory) {
+  if (task?.ide) {
+    // Практикум кода: условие, код ученика, ошибка. Готовую программу целиком — только если задача уже решена.
+    const t = [`ПРАКТИКУМ КОДА (${task.ide})${task.prompt ? `, задача «${task.prompt}»` : ""}.`];
+    if (task.theory) t.push(`Условие:\n${task.theory}`);
+    t.push(task.code ? `Код ученика:\n\`\`\`\n${task.code}\n\`\`\`` : "Код ученика пока пустой.");
+    if (task.error) t.push(`Ошибка или итог проверки:\n${task.error}`);
+    t.push(
+      task.answered
+        ? "Задача уже решена — можно показать и разобрать эталонное решение, предложить, как написать короче или понятнее."
+        : "Объясни простыми словами, что означает ошибка и в какой строке её причина, подскажи ПЕРВЫЙ шаг исправления. НЕ пиши готовую программу или запрос целиком, даже если просят: задача ещё не решена.",
+    );
+    parts.push(t.join("\n\n"));
+  } else if (task?.theory) parts.push(`ТЕОРИЯ ТЕКУЩЕГО ШАГА УРОКА${task.prompt ? ` «${task.prompt}»` : ""}:\n${task.theory}`);
+  if (task?.prompt && !task.theory && !task.ide) {
     const t = [`ЗАДАНИЕ: ${task.prompt}`];
     if (task.options?.length) t.push(`Варианты: ${task.options.join(" | ")}`);
     // В подсказке и в вопросе к ещё не решённому заданию ответ модели виден, но сообщать его нельзя.

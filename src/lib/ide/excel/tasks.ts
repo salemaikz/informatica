@@ -1,5 +1,6 @@
 import { fillCells, serializeSheet, type SheetCells } from "@/lib/sheet";
 import type { IdeTask } from "../types";
+import type { ExcelCheck } from "./check";
 
 // Задачи Практикума — Excel (docs/specs/ide.md, I4). Код задачи — JSON ячеек {"A1":"5","B1":"=A1*2"}.
 // Данные в ячейках без перевода (числа, латинские слова), чтобы одна таблица подходила обоим языкам.
@@ -10,7 +11,7 @@ const sheet = (cells: SheetCells) => serializeSheet(cells);
 /** Эталон: формула в `from`, протянутая вниз на `n` ячеек. */
 const down = (cells: SheetCells, from: string, n: number): SheetCells => fillCells(cells, from, "down", n).cells;
 
-const T4_START: SheetCells = { A1: "Student", B1: "Score", C1: "Result", A2: "Aidar", B2: "18", A3: "Madina", B3: "7", A4: "Daniyar", B4: "12", A5: "Aruzhan", B5: "10", A6: "Berik", B6: "4" };
+const T4_START: SheetCells = { A1: "№", B1: "Балл", C1: "Нәтиже", A2: "Aidar", B2: "18", A3: "Madina", B3: "7", A4: "Daniyar", B4: "12", A5: "Aruzhan", B5: "10", A6: "Berik", B6: "4" };
 const T5_START: SheetCells = { B2: "50", B3: "70", B4: "30", B5: "50", B6: "=СУММ(B2:B5)" };
 
 export const TASKS: IdeTask[] = [
@@ -116,7 +117,9 @@ export const TASKS: IdeTask[] = [
       kind: "excel",
       cells: { B6: 200, C2: 25, C3: 35, C4: 15, C5: 25 },
       formulas: ["C2", "C3", "C4", "C5"],
-    },
+      // copies: ожидается в IdeCheck (types.ts — за главной моделью); пока расширение читает check.ts
+      copies: { from: "C2", to: ["C3", "C4", "C5"] },
+    } as ExcelCheck,
   },
   {
     id: "xl-6-countif",

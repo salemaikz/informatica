@@ -205,7 +205,11 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
   const fill = (direction: "down" | "right") => {
     const base = commit();
     if ((base[s.sel] ?? "").trim() === "") return;
-    const r = fillCells(base, s.sel, direction, s.fillN);
+    const src = parseAddr(s.sel);
+    if (!src) return;
+    const max = direction === "down" ? GRID_ROWS - src.row : GRID_COLS - src.col;
+    if (max <= 0) return;
+    const r = fillCells(base, s.sel, direction, Math.min(s.fillN, max));
     if (!r.filled.length) return;
     apply(r.cells);
     patch({ draft: null, filled: r.filled });
@@ -280,7 +284,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
               key={f.en}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => insertText(`${name}()`, 1)}
+              onClick={() => insertText(`${canPick() || barText.trim() !== "" ? "" : "="}${name}()`, 1)}
               className="h-9 shrink-0 rounded-xl border-2 border-border bg-primary-soft px-2.5 font-mono text-xs font-extrabold text-primary hover:brightness-95 focus-visible:outline-3 focus-visible:outline-primary"
             >
               {name}

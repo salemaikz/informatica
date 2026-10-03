@@ -31,22 +31,24 @@ export function TaskPanel({
 
   return (
     <section className="rounded-3xl border-2 border-border bg-surface p-4">
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        aria-expanded={!collapsed}
-        aria-label={t(collapsed ? "ide.task.expand" : "ide.task.collapse")}
-        className="flex min-h-11 w-full items-center gap-3 text-left"
-      >
-        <span className="min-w-0 flex-1">
+      <div className="flex min-h-11 w-full items-center gap-3 text-left">
+        <div className="min-w-0 flex-1">
           <span className="mb-1 flex items-center gap-2">
             <span className="rounded-lg bg-primary-soft px-2 py-0.5 text-xs font-extrabold text-primary">{t("ide.level", { l: LEVEL_LETTER[task.level] })}</span>
             <span className="text-xs font-extrabold uppercase tracking-wide text-muted">{t(`ide.levelName.${task.level}`)}</span>
           </span>
           <h1 className="text-xl font-extrabold leading-tight">{l(task.title)}</h1>
-        </span>
-        <ChevronDown size={22} className={cn("shrink-0 text-muted transition-transform", !collapsed && "rotate-180")} aria-hidden />
-      </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          aria-label={t(collapsed ? "ide.task.expand" : "ide.task.collapse")}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2"
+        >
+          <ChevronDown size={22} className={cn("transition-transform", !collapsed && "rotate-180")} aria-hidden />
+        </button>
+      </div>
 
       {!collapsed && (
         <div className="mt-3 flex flex-col gap-3">

@@ -275,6 +275,16 @@ describe("задачи JavaScript", () => {
     expect(IDE_REGISTRY.js.tasks).toBe(TASKS);
   });
 
+  it("js-3-if: ошибка «> 18» вместо «>= 18» не проходит", async () => {
+    const task = TASKS.find((x) => x.id === "js-3-if")!;
+    if (task.check.kind !== "js") throw new Error("kind");
+    const run: JsRun = async (code) => {
+      const r = await runInWorker(code);
+      return { stdout: r.stdout, error: r.error };
+    };
+    expect((await checkJs(task.check, task.solution.replace(">= 18", "> 18"), run)).ok).toBe(false);
+  });
+
   for (const task of TASKS) {
     if (task.check.kind !== "js") continue;
     const check = task.check;

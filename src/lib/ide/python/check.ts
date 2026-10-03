@@ -41,10 +41,52 @@ export const MSG_LOAD: L = {
 };
 const MSG_EMPTY: L = { ru: "Сначала напишите программу.", kk: "Алдымен бағдарлама жазыңыз." };
 
+/** Запрещённая конструкция (ограничение из условия задачи): regexp по коду без комментариев и (если inStrings не задан) без строк. */
+export interface PyForbid {
+  re: string;
+  why: L;
+  /** Искать и внутри строковых литералов (для f-строк вида f"{n:b}"). */
+  inStrings?: boolean;
+}
+
+/** Код без комментариев и (если strings = false) без содержимого строк — чтобы запрет не срабатывал на тексте. */
+export function scrubCode(code: string, strings: boolean): string {
+  let out = "";
+  let i = 0;
+  while (i < code.length) {
+    const c = code[i];
+    if (c === "#") {
+      while (i < code.length && code[i] !== "\n") i++;
+    } else if (c === '"' || c === "'") {
+      const triple = code.startsWith(c.repeat(3), i);
+      const q = triple ? c.repeat(3) : c;
+      let j = i + q.length;
+      while (j < code.length && !code.startsWith(q, j) && (triple || code[j] !== "\n")) j += code[j] === "\\" ? 2 : 1;
+      const end = Math.min(code.length, code.startsWith(q, j) ? j + q.length : j);
+      out += strings ? code.slice(i, end) : '""' + code.slice(i, end).replace(/[^\n]/g, "");
+      i = end;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/** Первое нарушенное ограничение или null. */
+export function findForbidden(code: string, forbid: PyForbid[] | undefined): PyForbid | null {
+  if (!forbid?.length) return null;
+  const withStrings = scrubCode(code, true);
+  const noStrings = scrubCode(code, false);
+  return forbid.find((f) => new RegExp(f.re).test(f.inStrings ? withStrings : noStrings)) ?? null;
+}
+
 /** Проверка задачи: код запускается на каждом тесте; результат — сколько тестов пройдено и что не так в первом провале. */
-export async function checkPython(check: Extract<IdeCheck, { kind: "python" }>, code: string, run: PyRun): Promise<CheckResult> {
+export async function checkPython(check: Extract<IdeCheck, { kind: "python" }>, code: string, run: PyRun, forbid?: PyForbid[]): Promise<CheckResult> {
   const total = check.tests.length;
   if (!code.trim()) return { ok: false, passed: 0, total, message: MSG_EMPTY };
+  const banned = findForbidden(code, forbid);
+  if (banned) return { ok: false, passed: 0, total, message: banned.why };
   let passed = 0;
   let firstFail: Pick<CheckResult, "message" | "sample"> | null = null;
   for (let i = 0; i < total; i++) {

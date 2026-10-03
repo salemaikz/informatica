@@ -125,7 +125,7 @@ function OutputPanel({ busy, result, errorLine }: { busy: boolean; result: JsRun
       ) : (
         <>
           <Lines result={result} />
-          {result.cut && <p className="text-xs font-bold text-warning-strong">{t("ideweb.js.out.cut")}</p>}
+          {(result.cut || limitLines(result.lines).truncated) && <p className="text-xs font-bold text-warning-strong">{t("ideweb.js.out.cut")}</p>}
           {result.timedOut && (
             <div className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-3 text-sm text-warning-strong">
               <Clock size={18} className="mt-0.5 shrink-0" aria-hidden />
@@ -157,7 +157,7 @@ function Lines({ result }: { result: JsRunResult }) {
   if (result.lines.length === 0) {
     return result.error || result.timedOut ? null : <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">{t("ideweb.js.out.empty")}</p>;
   }
-  const shown = limitLines(result.lines);
+  const { shown } = limitLines(result.lines);
   return (
     <div className="max-h-72 overflow-auto rounded-xl bg-surface-2 px-3 py-2 font-mono text-[15px]">
       {shown.map((l, i) => (
@@ -169,14 +169,18 @@ function Lines({ result }: { result: JsRunResult }) {
   );
 }
 
-/** Первые строки вывода, пока не набралось SHOW_LIMIT символов. */
-function limitLines(lines: JsRunResult["lines"]): JsRunResult["lines"] {
+/** Первые строки вывода, пока не набралось SHOW_LIMIT символов; последняя строка режется по остатку. */
+function limitLines(lines: JsRunResult["lines"]): { shown: JsRunResult["lines"]; truncated: boolean } {
   const shown: JsRunResult["lines"] = [];
   let used = 0;
   for (const l of lines) {
+    const room = SHOW_LIMIT - used;
+    if (l.text.length + 1 > room) {
+      if (room > 0) shown.push({ ...l, text: l.text.slice(0, room) });
+      return { shown, truncated: true };
+    }
     used += l.text.length + 1;
-    if (used > SHOW_LIMIT) break;
     shown.push(l);
   }
-  return shown;
+  return { shown, truncated: false };
 }
