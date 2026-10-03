@@ -44,7 +44,8 @@ function write(file, ids, exportName, type, typeImport, outName) {
   writeFileSync(join(root, file), lines.join("\n"));
 }
 
-const lessons = scan("src/content/lessons", "lesson", []);
+// ns-1-bits подключён в course.ts вручную (lessonBits); алиас lesson в нём — только для check-content.
+const lessons = scan("src/content/lessons", "lesson", ["ns-1-bits.ts"]);
 const banks = scan("src/lib/bank", "BANKS", ["index.ts", "pool.ts", "types.ts"]);
 const ent = scan("src/content/ent", "ITEMS", ["index.ts"]);
 
