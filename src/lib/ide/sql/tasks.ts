@@ -182,7 +182,7 @@ export const TASKS: IdeTask[] = [
     starter: "SELECT title, author, year\nFROM books\nWHERE author \n  AND year ",
     hint: {
       ru: "`author IN ('a', 'b', 'c')` заменяет длинную цепочку `OR`. Текст пишут в одинарных кавычках. Второе условие присоедините через `AND`.",
-      kk: "`author IN ('a', 'b', 'c')` ұзын `OR` тізбегін алмастырады. Мәтін жалғыз тырнақшада жазылады. Екінші шартты `AND` арқылы қосыңыз.",
+      kk: "`author IN ('a', 'b', 'c')` ұзын `OR` тізбегін алмастырады. Мәтін бір тырнақшада жазылады. Екінші шартты `AND` арқылы қосыңыз.",
     },
     solution: "SELECT title, author, year\nFROM books\nWHERE author IN ('Brown', 'Taylor', 'Wilson')\n  AND year >= 2020;",
     check: { kind: "sql", reference: "SELECT title, author, year FROM books WHERE author IN ('Brown', 'Taylor', 'Wilson') AND year >= 2020" },
@@ -234,7 +234,7 @@ export const TASKS: IdeTask[] = [
     title: { ru: "Два ключа сортировки и LIMIT", kk: "Екі сұрыптау кілті және LIMIT" },
     prompt: {
       ru: "Выведите `name`, `class` и `score` учеников, отсортировав **сначала по классу (по возрастанию)**, а **внутри класса — по баллу (по убыванию)**. Покажите только **первые 5 строк**.",
-      kk: "Оқушылардың `name`, `class` және `score` бағандарын шығарыңыз: **алдымен сынып бойынша (өсу ретімен)**, ал **сынып ішінде бал бойынша (кему ретімен)** сұрыптаңыз. Тек **алғашқы 5 жолды** көрсетіңіз.",
+      kk: "Оқушылардың `name`, `class` және `score` бағандарын шығарыңыз: **алдымен сынып бойынша (өсу ретімен)**, ал **сынып ішінде балл бойынша (кему ретімен)** сұрыптаңыз. Тек **алғашқы 5 жолды** көрсетіңіз.",
     },
     starter: "SELECT name, class, score\nFROM students\nORDER BY \n",
     hint: {
@@ -357,7 +357,7 @@ export const TASKS: IdeTask[] = [
     starter: "INSERT INTO classes\nVALUES ();",
     hint: {
       ru: "`INSERT INTO таблица VALUES (значение1, значение2, ...)`. Значения идут в порядке столбцов таблицы, текст — в одинарных кавычках.",
-      kk: "`INSERT INTO кесте VALUES (мән1, мән2, ...)`. Мәндер кесте бағандарының ретімен жазылады, мәтін — жалғыз тырнақшада.",
+      kk: "`INSERT INTO кесте VALUES (мән1, мән2, ...)`. Мәндер кесте бағандарының ретімен жазылады, мәтін — бір тырнақшада.",
     },
     solution: "INSERT INTO classes\nVALUES (7, 'Ivanov K.', 108);",
     check: { kind: "sql", reference: "INSERT INTO classes VALUES (7, 'Ivanov K.', 108)", checkQuery: "SELECT * FROM classes ORDER BY class" },

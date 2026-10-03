@@ -50,13 +50,13 @@ const FIRST_CODE = [
 ];
 
 /** Список как таблица: сверху индексы, ниже значения; область поиска — подсвеченные столбцы, середина — ячейка. */
-const arrayScene = (values: string[], area: number[], mid?: number): Scene => ({
+const arrayScene = (values: string[], area: number[], mid?: number, cells?: [number, number][]): Scene => ({
   kind: "table",
   columns: values.map((_, i) => String(i)),
   rows: [values],
   mono: true,
   highlightCols: area,
-  highlightCells: mid === undefined ? undefined : [[0, mid]],
+  highlightCells: cells ?? (mid === undefined ? undefined : [[0, mid]]),
   caption: { ru: "Сверху — индексы, ниже — значения", kk: "Жоғарыда — индекстер, төменде — мәндер" },
 });
 
@@ -383,7 +383,7 @@ export const lesson: Lesson = {
             ru: "Теперь l = 0 больше r = -1: область пуста. Функция возвращает **-1** — «числа нет». Но оно есть! Программа не сломалась, она просто **молча ошиблась**.",
             kk: "Енді l = 0, ол r = -1-ден үлкен: аймақ бос. Функция **-1** қайтарады — «сан жоқ». Бірақ ол бар! Программа бұзылған жоқ, ол жай ғана **үнсіз қателесті**.",
           },
-          scene: { ...arrayScene(TRAP5, []), highlightCells: [[0, 3]] },
+          scene: arrayScene(TRAP5, [], undefined, [[0, 3]]),
         },
         {
           text: {
