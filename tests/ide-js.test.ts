@@ -243,8 +243,8 @@ describe("воркер: ограничения", () => {
 });
 
 describe("задачи JavaScript", () => {
-  it("6 задач, id уникальны, уровни растут A→C", () => {
-    expect(TASKS).toHaveLength(6);
+  it("10 задач, id уникальны, уровни растут A→C", () => {
+    expect(TASKS).toHaveLength(10);
     expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
     const levels = TASKS.map((t) => t.level);
     expect(levels).toEqual([...levels].sort());
@@ -283,6 +283,34 @@ describe("задачи JavaScript", () => {
       return { stdout: r.stdout, error: r.error };
     };
     expect((await checkJs(task.check, task.solution.replace(">= 18", "> 18"), run)).ok).toBe(false);
+  });
+
+  it("js-8-even: печать всех чисел без условия не проходит", async () => {
+    const task = TASKS.find((x) => x.id === "js-8-even")!;
+    if (task.check.kind !== "js") throw new Error("kind");
+    const run: JsRun = async (code) => {
+      const r = await runInWorker(code);
+      return { stdout: r.stdout, error: r.error };
+    };
+    expect((await checkJs(task.check, "for (let i = 1; i <= 10; i++) console.log(i);", run)).ok).toBe(false);
+  });
+  it("js-9-filter и js-10-palindrome: альтернативные решения принимаются, неверные нет", async () => {
+    const run: JsRun = async (code) => {
+      const r = await runInWorker(code);
+      return { stdout: r.stdout, error: r.error };
+    };
+    const chk = (id: string) => {
+      const t = TASKS.find((x) => x.id === id)!;
+      if (t.check.kind !== "js") throw new Error("kind");
+      return t.check;
+    };
+    const alt9 = 'const nums = [5, 12, 7, 8, 3, 10, 4];\nconst r = [];\nfor (const x of nums) { if (x % 2 === 0) r.push(x * x); }\nconsole.log(r.join(" "));';
+    expect((await checkJs(chk("js-9-filter"), alt9, run)).ok).toBe(true);
+    expect((await checkJs(chk("js-9-filter"), 'console.log([12, 8, 10, 4].join(" "))', run)).ok).toBe(false);
+    const alt10 =
+      'function isPalindrome(s) {\n  for (let i = 0; i < s.length / 2; i++) { if (s[i] !== s[s.length - 1 - i]) return "no"; }\n  return "yes";\n}\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));';
+    expect((await checkJs(chk("js-10-palindrome"), alt10, run)).ok).toBe(true);
+    expect((await checkJs(chk("js-10-palindrome"), 'function isPalindrome(s) { return "yes"; }\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));', run)).ok).toBe(false);
   });
 
   for (const task of TASKS) {

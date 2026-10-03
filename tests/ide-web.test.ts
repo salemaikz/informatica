@@ -296,8 +296,8 @@ describe("изоляция iframe (по исходникам)", () => {
 });
 
 describe("задачи HTML/CSS", () => {
-  it("8 задач, id уникальны, уровни растут A→C", () => {
-    expect(TASKS).toHaveLength(8);
+  it("14 задач, id уникальны, уровни растут A→C", () => {
+    expect(TASKS).toHaveLength(14);
     expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
     const levels = TASKS.map((t) => t.level);
     expect(levels).toEqual([...levels].sort());
@@ -307,7 +307,7 @@ describe("задачи HTML/CSS", () => {
   it("двуязычные тексты, навыки web.*, проверка web, у каждого правила есть why", () => {
     for (const task of TASKS) {
       expect(task.lang, task.id).toBe("web");
-      expect(task.skill, task.id).toMatch(/^web\.(html|css)$/);
+      expect(task.skill, task.id).toMatch(/^web\.(html|css|content|tables|layout)$/);
       for (const f of [task.title, task.prompt, task.hint!]) {
         expect(f?.ru?.trim(), task.id).toBeTruthy();
         expect(f?.kk?.trim(), task.id).toBeTruthy();
@@ -324,12 +324,18 @@ describe("задачи HTML/CSS", () => {
       }
     }
   });
-  it("навыки: задачи про CSS — web.css, остальные — web.html", () => {
+  it("навыки: задачи про CSS — web.css или web.layout, остальные — web.html, web.content или web.tables", () => {
     for (const task of TASKS) {
       if (task.check.kind !== "web") continue;
       const hasCss = task.check.rules.some((r) => r.type === "css");
-      expect(task.skill, task.id).toBe(hasCss ? "web.css" : "web.html");
+      expect(task.skill, task.id).toMatch(hasCss ? /^web\.(css|layout)$/ : /^web\.(html|content|tables)$/);
     }
+  });
+  it("курс 2.0: по 2 задачи на уровень среди новых, все три новых навыка представлены", () => {
+    const v2 = TASKS.filter((t) => Number(t.id.split("-")[1]) >= 9);
+    expect(v2).toHaveLength(6);
+    expect([1, 2, 3].map((lv) => v2.filter((t) => t.level === lv).length)).toEqual([2, 2, 2]);
+    expect(new Set(v2.map((t) => t.skill))).toEqual(new Set(["web.content", "web.tables", "web.layout"]));
   });
   it("в казахских текстах нет эмодзи, латинской «i» внутри кириллицы и «бинарлы»", () => {
     const all = TASKS.map((t) => `${t.title.kk} ${t.prompt.kk} ${t.hint?.kk} ${t.check.kind === "web" ? t.check.rules.map((r) => r.why.kk).join(" ") : ""}`).join(" ");
@@ -368,6 +374,13 @@ describe("задачи HTML/CSS", () => {
     expect((await go("web-6-table", "<table><tbody><tr><td>1<td>2<tr><td>3<td>4</table>")).ok).toBe(true);
     expect((await go("web-7-color", "<style>H1{color:#00F}</style><h1>x</h1>")).ok).toBe(true);
     expect((await go("web-8-class", '<style>.note{background:yellow;padding:4px}</style><p class="note">x</p>')).ok).toBe(true);
+    expect((await go("web-9-ol", "<H2>steps</H2><OL><LI>Open<LI>Write<LI>Save</OL>")).ok).toBe(true);
+    expect((await go("web-10-links", '<a target="_blank" href="https://nct.kz/">NCT</a><a href="contacts.html">Contacts</a>')).ok).toBe(true);
+    expect((await go("web-11-colspan", '<table><tbody><tr><th colspan=2>Results<tr><td>Math<td>Info</table>')).ok).toBe(true);
+    expect((await go("web-12-form", '<form><input id="name" type="text"><label for="name">Name</label><button type="submit">Send</button></form>')).ok).toBe(true);
+    expect((await go("web-13-align", "<style>h1{text-align:CENTER}p{color:green}</style><h1>x</h1><p>y</p>")).ok).toBe(false);
+    expect((await go("web-13-align", "<style>h1{text-align:center}p{color:rgb(0,128,0)}</style><h1>x</h1><p>y</p>")).ok).toBe(true);
+    expect((await go("web-14-box", '<style>.card{width:300px;padding:20px;border:2px dashed red;margin:0 auto}</style><div class="card"><p>x</p></div>')).ok).toBe(true);
   });
   it("типичные ошибки не принимаются", async () => {
     const byId = (id: string) => {
@@ -384,6 +397,11 @@ describe("задачи HTML/CSS", () => {
     expect((await go("web-6-table", "<table><tr><td>1</td></tr><tr><td>2</td></tr></table>")).ok).toBe(false);
     expect((await go("web-7-color", "<style>h1{color:red}</style><h1>x</h1>")).ok).toBe(false);
     expect((await go("web-8-class", '<style>.note{background-color:yellow}</style><p class="note">x</p>')).ok).toBe(false);
+    expect((await go("web-9-ol", "<h2>Steps</h2><ul><li>Open</li><li>Write</li><li>Save</li></ul>")).ok).toBe(false);
+    expect((await go("web-10-links", '<a href="https://nct.kz">NCT</a><a href="contacts.html">Contacts</a>')).ok).toBe(false);
+    expect((await go("web-11-colspan", "<table><tr><td>Results</td></tr><tr><td>Math</td><td>Info</td></tr></table>")).ok).toBe(false);
+    expect((await go("web-12-form", '<form><label>Name</label><input type="text"><button>Send</button></form>')).ok).toBe(false);
+    expect((await go("web-14-box", '<style>.card{width:300px;padding:20px;border:1px solid black}</style><div class="card"><p>x</p></div>')).ok).toBe(false);
   });
 });
 
