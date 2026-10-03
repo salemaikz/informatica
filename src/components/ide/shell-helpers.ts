@@ -25,6 +25,44 @@ export function groupByLevel(tasks: readonly IdeTask[]): { level: Level; tasks: 
   return out;
 }
 
+/** Когда задач больше, список группируется по навыкам, а не по уровням. */
+export const SKILL_GROUP_MIN_TASKS = 12;
+
+export const shouldGroupBySkill = (tasks: readonly IdeTask[]): boolean => tasks.length > SKILL_GROUP_MIN_TASKS;
+
+/** Группа задач одного навыка (skill = null — у задач навыка нет). */
+export interface SkillGroup {
+  skill: string | null;
+  tasks: IdeTask[];
+  solved: number;
+}
+
+/**
+ * Группы по навыку: внутри — от A к C (порядок авторов сохраняется); группы идут от простых к сложным
+ * (по наименьшему уровню задачи в группе, затем в порядке появления навыка в списке).
+ */
+export function groupBySkill(tasks: readonly IdeTask[], codeTasks: CodeTasks): SkillGroup[] {
+  const map = new Map<string, IdeTask[]>();
+  for (const t of tasks) {
+    const key = t.skill ?? "";
+    const list = map.get(key);
+    if (list) list.push(t);
+    else map.set(key, [t]);
+  }
+  return [...map.entries()]
+    .map(([key, list], i) => {
+      const sorted = sortTasks(list);
+      return { i, min: sorted[0].level, group: { skill: key || null, tasks: sorted, solved: sorted.filter((t) => codeTasks[t.id]?.solved).length } };
+    })
+    .sort((a, b) => a.min - b.min || a.i - b.i)
+    .map((x) => x.group);
+}
+
+/** Какая группа раскрыта сразу: первая, где есть нерешённые (индекс; -1 — все решены). */
+export function firstOpenGroup(groups: readonly SkillGroup[]): number {
+  return groups.findIndex((g) => g.solved < g.tasks.length);
+}
+
 /** Сколько задач решено из всех. */
 export function langProgress(tasks: readonly IdeTask[], codeTasks: CodeTasks): { solved: number; total: number } {
   let solved = 0;

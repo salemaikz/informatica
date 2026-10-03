@@ -10,6 +10,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { MascotSays } from "@/components/mascot/Mascot";
 import { QuickActions } from "@/components/learn/QuickActions";
 import { ContinueCard } from "@/components/learn/ContinueCard";
+import { PlanCard } from "@/components/plan/PlanCard";
 import { ViewSwitch, useMapView } from "@/components/learn/ViewSwitch";
 import { PathView } from "@/components/learn/PathView";
 import { EntMap } from "@/components/learn/EntMap";
@@ -84,6 +85,8 @@ export default function LearnPage() {
             firstTime={firstTime}
             onModes={() => hero && setSheet(hero.ref.id)}
           />
+
+          <PlanCard />
 
           <ViewSwitch view={view} onChange={setView} />
 

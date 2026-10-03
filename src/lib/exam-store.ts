@@ -15,7 +15,7 @@ const INDEX_KEY = `${PREFIX}index`;
 /** Сколько попыток держим в IndexedDB (как MAX_EXAMS в store.ts). */
 export const MAX_ATTEMPTS = 50;
 
-const KINDS: readonly ExamKind[] = ["full", "mini", "topic"];
+const KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
 const TOPIC_IDS = new Set<string>(ENT_TOPICS.map((t) => t.id));
 
 /** Отзыв ИИ по попытке («Разбор от Бита»): хранится в попытке, повторно не запрашивается. */
@@ -30,6 +30,8 @@ export interface ExamAttempt {
   kind: ExamKind;
   seed: number;
   topics?: EntTopicId[];
+  /** Контрольная по разделу: id раздела. */
+  unit?: string;
   paper: ExamPaper;
   answers: ExamAnswers;
   /** Индекс текущего вопроса. */
@@ -187,6 +189,7 @@ export function sanitizeState(raw: unknown, paper: ExamPaper): ExamAttemptState 
     kind: paper.kind,
     seed: paper.seed,
     topics: topics.length ? topics : undefined,
+    unit: paper.kind === "unit" && isUnitId(s.unit) ? s.unit : undefined,
     answers: sanitizeAnswers(s.answers, paper),
     current: Number.isInteger(s.current) ? Math.max(0, Math.min(paper.items.length - 1, s.current as number)) : 0,
     startedAt: fin(s.startedAt) ? s.startedAt : 0,
@@ -203,6 +206,9 @@ export function sanitizeAttempt(rawPaper: unknown, rawState: unknown): ExamAttem
   const state = sanitizeState(rawState, paper);
   return state ? { ...state, paper } : null;
 }
+
+/** Корректный id раздела (приходит из адреса и хранилища). */
+export const isUnitId = (s: unknown): s is string => typeof s === "string" && /^[a-z][a-z0-9]{0,15}$/.test(s);
 
 /** Идентификатор попытки: время + случайный хвост. */
 export function newAttemptId(now: number, rand: () => number = Math.random): string {
@@ -283,8 +289,11 @@ export function skillScoresOf(paper: ExamPaper, answers: ExamAnswers): Record<st
   return out;
 }
 
-/** Итог попытки для store.recordExam. Темы без заданий в варианте не попадают в byTopic. */
-export function buildSummary(attempt: ExamAttempt, finishedAt: number): ExamSummary {
+/**
+ * Итог попытки для store.recordExam. Темы без заданий в варианте не попадают в byTopic.
+ * title — название для истории тестов (контрольная: «Контрольная: <раздел>»).
+ */
+export function buildSummary(attempt: ExamAttempt, finishedAt: number, title?: string): ExamSummary {
   const r = scoreExam(attempt.paper, attempt.answers);
   const byTopic: ExamSummary["byTopic"] = {};
   for (const [t, v] of Object.entries(r.byTopic)) if (v.max > 0) byTopic[t as EntTopicId] = { points: v.points, max: v.max };
@@ -298,6 +307,8 @@ export function buildSummary(attempt: ExamAttempt, finishedAt: number): ExamSumm
     durationSec: Math.round(attempt.elapsedMs / 1000),
     byTopic,
     topics: attempt.kind === "topic" ? attempt.topics : undefined,
+    unit: attempt.kind === "unit" ? attempt.unit : undefined,
+    title: attempt.kind === "unit" && title ? title : undefined,
   };
 }
 

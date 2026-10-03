@@ -164,7 +164,7 @@ export interface GameStat {
   lastAt: number;
 }
 
-export type ExamKind = "full" | "mini" | "topic";
+export type ExamKind = "full" | "mini" | "topic" | "unit";
 
 /** Итог попытки пробного ЕНТ (сами вопросы и ответы — в IndexedDB, lib/exam-store.ts). */
 export interface ExamSummary {
@@ -179,6 +179,10 @@ export interface ExamSummary {
   byTopic: Partial<Record<EntTopicId, { points: number; max: number }>>;
   /** Темы теста по теме. */
   topics?: EntTopicId[];
+  /** Контрольная по разделу: id раздела (звёзды на карте курса считаются по нему). */
+  unit?: string;
+  /** Название для истории тестов («Контрольная: …») на языке ученика. */
+  title?: string;
 }
 
 export interface AppState {
@@ -977,7 +981,7 @@ export const useApp = create<AppState & AppActions>()(
             at: summary.at,
             kind: "exam",
             mode: summary.kind,
-            title: "",
+            title: typeof summary.title === "string" ? summary.title.slice(0, 120) : "",
             examId: summary.id,
             correct,
             total,

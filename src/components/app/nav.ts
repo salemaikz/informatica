@@ -48,7 +48,7 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
-  { id: "learn", href: "/learn", label: "nav.learn", icon: BookOpen, match: ["/learn", "/lesson"], subs: [] },
+  { id: "learn", href: "/learn", label: "nav.learn", icon: BookOpen, match: ["/learn", "/lesson", "/plan"], subs: [] },
   {
     id: "practice",
     href: "/practice",

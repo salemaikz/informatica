@@ -83,6 +83,16 @@ export function unitSkillIds(unit: Unit, lessons: Record<string, Lesson>, skills
   return [...set];
 }
 
+/** Готовые уроки раздела (есть на карте как «доступен» и найдены в курсе): без них контрольной раздела нет. */
+export function readyLessonCount(unit: Unit, lessons: Record<string, Lesson>): number {
+  return unit.lessons.filter((r) => r.status === "available" && !!lessons[r.id]).length;
+}
+
+/** Навыки контрольной раздела: как `unitSkillIds`; раздел без готовых уроков — пусто (контрольной нет). */
+export function checkpointSkillIds(unit: Unit, lessons: Record<string, Lesson>, skills: Skill[]): string[] {
+  return readyLessonCount(unit, lessons) > 0 ? unitSkillIds(unit, lessons, skills) : [];
+}
+
 /** Среднее освоение навыков (не тронутые — 0). */
 export function averageMastery(skillIds: string[], stats: Record<string, SkillStat>): number {
   if (!skillIds.length) return 0;

@@ -1,9 +1,11 @@
 "use client";
 
-import { ChevronRight, ClipboardCheck, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCheck, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { LESSONS, UNITS } from "@/content/course";
+import { SKILLS } from "@/content/skills";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import { ENT_POOL } from "@/content/ent";
 import type { DictKey } from "@/i18n/dict";
@@ -11,14 +13,18 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { loadActiveAttempt, type ExamAttempt } from "@/lib/exam-store";
 import type { ExamKind } from "@/lib/exam";
-import { isAnswered } from "@/lib/exam";
+import { bestUnitResult, isAnswered } from "@/lib/exam";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { useApp } from "@/lib/store";
 import type { EntTopicId } from "@/lib/types";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
+import { ICONS } from "@/components/scenes/icons";
+import { unitVars } from "@/components/learn/useLearn";
+import { checkpointOf, examTitle } from "./checkpoint";
 import { ExamChart } from "./ExamChart";
+import { StarRow } from "./StarRow";
 import { EXAM_FORMAT, examLink, formatDay, historyPoints, randomSeed, ratioOf, toneOf, toggleTopic, MAX_TOPIC_PICK } from "./logic";
 
 /** Сколько заданий каждой темы в банке (вопросы контекстных считаем по одному). */
@@ -28,7 +34,7 @@ function poolCounts(): Record<EntTopicId, number> {
   return out;
 }
 
-const MODE_ICON: Record<ExamKind, LucideIcon> = { mini: Zap, full: ClipboardCheck, topic: ListChecks };
+const MODE_ICON: Record<ExamKind, LucideIcon> = { mini: Zap, full: ClipboardCheck, topic: ListChecks, unit: BookOpen };
 const TONE_PILL = { danger: "danger", warning: "warning", success: "success" } as const;
 const HISTORY_SHOWN = 6;
 
@@ -111,6 +117,15 @@ export function ExamHub() {
   const dateFmt = (at: number) => formatDay(at, lang, true, now);
 
   const start = (kind: ExamKind) => router.push(examLink(kind, randomSeed(), kind === "topic" ? topics : []));
+  const startUnit = (unitId: string) => router.push(examLink("unit", randomSeed(), [], unitId));
+  // Контрольные разделов: только у тех, где есть готовые уроки и хватает заданий.
+  const checkpoints = useMemo(
+    () =>
+      UNITS.map((unit, i) => ({ unit, index: i, cp: checkpointOf(unit, LESSONS, SKILLS, ENT_POOL) }))
+        .filter((x) => x.cp)
+        .map((x) => ({ ...x, best: bestUnitResult(exams, x.unit.id) })),
+    [exams],
+  );
 
   const activeProgress = active ? active.paper.items.filter((q) => isAnswered(q, active.answers[q.key])).length : 0;
 
@@ -130,7 +145,7 @@ export function ExamHub() {
           <span className="min-w-0 flex-1">
             <span className="block font-extrabold text-primary">{t("exam.resume.title")}</span>
             <span className="block text-sm font-semibold text-muted">
-              {t(`exam.mode.${active.kind}` as DictKey)} · {t("exam.resume.progress", { done: activeProgress, total: active.paper.items.length })}
+              {examTitle(active.kind, active.unit, t, l)} · {t("exam.resume.progress", { done: activeProgress, total: active.paper.items.length })}
             </span>
           </span>
           <ChevronRight size={20} className="text-primary" aria-hidden />
@@ -176,6 +191,48 @@ export function ExamHub() {
           </ModeCard>
         </div>
       </div>
+
+      {/* Контрольные по разделам */}
+      {checkpoints.length > 0 && (
+        <section>
+          <SectionTitle>{t("exam.unit.hub.title")}</SectionTitle>
+          <p className="-mt-1 mb-3 text-sm font-semibold text-muted">
+            {t("exam.unit.hub.desc", { n: EXAM_FORMAT.unit.questions, m: EXAM_FORMAT.unit.minutes })}
+          </p>
+          <ul className="flex flex-col gap-2">
+            {checkpoints.map(({ unit, index, best }) => {
+              const Icon = unit.icon ? ICONS[unit.icon] : BookOpen;
+              const stars = best?.stars ?? 0;
+              return (
+                <li key={unit.id} style={unitVars(unit.color)} className="flex items-center gap-3 rounded-2xl border-2 border-border bg-surface p-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-b-4 border-(--u-edge) bg-(--u-fill) text-white">
+                    <Icon size={22} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-extrabold">
+                      {index + 1} · {l(unit.title)}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs font-bold text-muted">
+                      <StarRow stars={stars} size={15} />
+                      <span className="truncate">{best ? t("exam.unit.best", { a: best.points, b: best.max }) : t("exam.unit.new")}</span>
+                    </span>
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-10 shrink-0"
+                    aria-label={t("exam.unit.row.aria", { unit: l(unit.title) })}
+                    disabled={empty}
+                    onClick={() => startUnit(unit.id)}
+                  >
+                    {t("common.start")}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Прогноз балла */}
       <section>
@@ -227,7 +284,7 @@ export function ExamHub() {
                       className="flex items-center gap-3 rounded-2xl border-2 border-border bg-surface p-3 transition-colors hover:bg-surface-2 active:translate-y-0.5"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-extrabold">{t(`exam.mode.${e.kind}` as DictKey)}</span>
+                        <span className="block truncate font-extrabold">{e.kind === "unit" && e.title ? e.title : t(`exam.mode.${e.kind}` as DictKey)}</span>
                         <span className="block text-xs font-semibold text-muted">
                           {dateFmt(e.at)}
                           {e.kind === "topic" && e.topics?.length ? ` · ${e.topics.map((x) => l(ENT_TOPICS.find((tp) => tp.id === x)?.short ?? x)).join(", ")}` : ""}

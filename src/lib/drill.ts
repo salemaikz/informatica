@@ -6,7 +6,8 @@ import { dueLessons, type LessonStat } from "./review";
 import { isQuestion } from "./evaluate";
 import { entStepFromRef, isEntRef } from "./ent-steps";
 import { MAX_WRONG_PER_ENTRY, openWrong, type HistoryEntry } from "./history";
-import { seeded } from "./text";
+import { hashString, seeded } from "./text";
+import { shuffleOptions } from "./bank/pool";
 import { LESSONS, UNITS, findStep } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import type { GameMeta } from "@/games/types";
@@ -229,7 +230,11 @@ export function buildMistakes(
   mistakes.slice(0, limit).forEach((m, i) => {
     const original = findStep(m.lessonId, m.stepId);
     let step: QuestionStep | undefined = original && isQuestion(original) && original.type !== "solution" ? original : undefined;
-    if (!step && isEntRef(m.stepId)) step = entStepFromRef(m.stepId);
+    // Задание ЕНТ в работе над ошибками — варианты перемешаны (у части заданий верный вариант стоит первым).
+    if (!step && isEntRef(m.stepId)) {
+      const ent = entStepFromRef(m.stepId);
+      step = ent && shuffleOptions(ent, hashString(m.stepId));
+    }
     if (!step && m.skill && hasBank(m.skill)) {
       const lvl = levelFromMastery(stats[m.skill]?.mastery ?? 0);
       step = bankFor(m.skill)!.question(lvl, seed + i);

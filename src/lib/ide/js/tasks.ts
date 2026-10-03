@@ -1,10 +1,10 @@
 import type { IdeTask } from "../types";
 
-// Задачи JavaScript (docs/specs/ide.md, I3): 6 задач от A к C. Навыка курса нет — JavaScript в ҰБТ почти не встречается,
+// Задачи JavaScript (docs/specs/ide.md, I3): 6 базовых задач + 4 задачи курса 2.0 (docs/specs/ide-v2.md), всего 10, от A к C. Навыка курса нет — JavaScript в ҰБТ почти не встречается,
 // это база для веба. Проверка — вывод console.log (check.ts). Эталоны гоняются в node:vm (tests/ide-js.test.ts).
 // Строки в выводе — латиницей: код и вывод не переводятся.
 
-export const TASKS: IdeTask[] = [
+const BASE: IdeTask[] = [
   {
     id: "js-1-log",
     lang: "js",
@@ -108,3 +108,127 @@ export const TASKS: IdeTask[] = [
     check: { kind: "js", stdout: "20" },
   },
 ];
+
+// Задачи курса 2.0: строки, цикл с условием, map/filter, функция со строкой.
+const V2: IdeTask[] = [
+  {
+    id: "js-7-string",
+    lang: "js",
+    level: 1,
+    title: { ru: "Длина и регистр строки", kk: "Жолдың ұзындығы және регистрі" },
+    prompt: {
+      ru: "Дана строка `s`. Выведите её длину, затем строку заглавными буквами, затем первый символ — каждое значение с новой строки.",
+      kk: "`s` жолы берілген. Оның ұзындығын, одан кейін жолды бас әріптермен, сосын бірінші символын шығарыңыз — әр мән жаңа жолдан.",
+    },
+    starter: 'let s = "informatics";
+
+// ...
+',
+    hint: {
+      ru: "Длина — свойство `s.length` (без скобок), заглавные буквы — метод `s.toUpperCase()`, первый символ — `s[0]`: нумерация с нуля.",
+      kk: "Ұзындық — `s.length` қасиеті (жақшасыз), бас әріптер — `s.toUpperCase()` әдісі, бірінші символ — `s[0]`: нөмірлеу нөлден басталады.",
+    },
+    solution: 'let s = "informatics";
+
+console.log(s.length);
+console.log(s.toUpperCase());
+console.log(s[0]);',
+    check: { kind: "js", stdout: "11
+INFORMATICS
+i" },
+  },
+  {
+    id: "js-8-even",
+    lang: "js",
+    level: 2,
+    title: { ru: "Чётные числа", kk: "Жұп сандар" },
+    prompt: {
+      ru: "С помощью цикла `for` и условия `if` выведите все чётные числа от 1 до 10, каждое с новой строки.",
+      kk: "`for` циклі мен `if` шарты арқылы 1-ден 10-ға дейінгі барлық жұп сандарды шығарыңыз, әрқайсысы жаңа жолдан.",
+    },
+    starter: "for (let i = 1; i <= 10; i++) {
+  // ...
+}
+",
+    hint: {
+      ru: "Число чётное, если остаток от деления на 2 равен нулю: `i % 2 === 0`. Печатайте `i` только внутри `if`.",
+      kk: "Сан 2-ге бөлгендегі қалдық нөлге тең болса, жұп болады: `i % 2 === 0`. `i` мәнін тек `if` ішінде шығарыңыз.",
+    },
+    solution: "for (let i = 1; i <= 10; i++) {
+  if (i % 2 === 0) {
+    console.log(i);
+  }
+}",
+    check: { kind: "js", stdout: "2
+4
+6
+8
+10" },
+  },
+  {
+    id: "js-9-filter",
+    lang: "js",
+    level: 3,
+    title: { ru: "filter и map", kk: "filter және map" },
+    prompt: {
+      ru: "Дан массив `nums`. Оставьте в нём только чётные числа (`filter`), возведите каждое в квадрат (`map`) и выведите результат одной строкой через пробел (`join(\" \")`).",
+      kk: "`nums` массиві берілген. Одан тек жұп сандарды қалдырыңыз (`filter`), әрқайсысын квадраттаңыз (`map`) және нәтижені бос орынмен бөліп бір жолға шығарыңыз (`join(\" \")`).",
+    },
+    starter: 'const nums = [5, 12, 7, 8, 3, 10, 4];
+const result = [];
+
+// ...
+
+console.log(result.join(" "));
+',
+    hint: {
+      ru: "Методы можно записать цепочкой: `nums.filter(x => …).map(x => …)`. В `filter` функция возвращает условие, в `map` — новое значение.",
+      kk: "Әдістерді тізбектеп жазуға болады: `nums.filter(x => …).map(x => …)`. `filter` ішіндегі функция шартты, `map` ішіндегі функция жаңа мәнді қайтарады.",
+    },
+    solution: 'const nums = [5, 12, 7, 8, 3, 10, 4];
+const result = nums.filter((x) => x % 2 === 0).map((x) => x * x);
+
+console.log(result.join(" "));',
+    check: { kind: "js", stdout: "144 64 100 16" },
+  },
+  {
+    id: "js-10-palindrome",
+    lang: "js",
+    level: 3,
+    title: { ru: "Палиндром", kk: "Палиндром" },
+    prompt: {
+      ru: "Допишите функцию `isPalindrome(s)`: она возвращает `yes`, если строка читается одинаково слева направо и справа налево, иначе `no`. Вызовы ниже выведут результаты.",
+      kk: "`isPalindrome(s)` функциясын аяқтаңыз: жол солдан оңға да, оңнан солға да бірдей оқылса, `yes`, әйтпесе `no` қайтарсын. Төмендегі шақырулар нәтижелерді шығарады.",
+    },
+    starter: 'function isPalindrome(s) {
+  // ...
+}
+
+console.log(isPalindrome("level"));
+console.log(isPalindrome("python"));
+console.log(isPalindrome("kazak"));
+',
+    hint: {
+      ru: "Переверните строку: `s.split(\"\").reverse().join(\"\")` — и сравните результат с самой `s` через `===`.",
+      kk: "Жолды аударыңыз: `s.split(\"\").reverse().join(\"\")` — және нәтижені `s` жолының өзімен `===` арқылы салыстырыңыз.",
+    },
+    solution:
+      'function isPalindrome(s) {
+  const rev = s.split("").reverse().join("");
+  if (rev === s) {
+    return "yes";
+  }
+  return "no";
+}
+
+console.log(isPalindrome("level"));
+console.log(isPalindrome("python"));
+console.log(isPalindrome("kazak"));',
+    check: { kind: "js", stdout: "yes
+no
+yes" },
+  },
+];
+
+/** Все задачи; порядок — от A к C (сортировка устойчивая: внутри уровня базовые задачи идут первыми). */
+export const TASKS: IdeTask[] = [...BASE, ...V2].sort((a, b) => a.level - b.level);

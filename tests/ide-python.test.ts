@@ -93,13 +93,38 @@ describe("checkPython (с подставным запуском)", () => {
 });
 
 describe("задачи Python", () => {
-  it("10 задач, id уникальны, уровни растут A→C", () => {
-    expect(TASKS).toHaveLength(10);
+  it("40 задач, id уникальны, уровни от A до C", () => {
+    expect(TASKS).toHaveLength(40);
     expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
-    const levels = TASKS.map((t) => t.level);
-    expect(levels).toEqual([...levels].sort());
-    expect(levels[0]).toBe(1);
-    expect(levels[levels.length - 1]).toBe(3);
+    const count = (lv: number) => TASKS.filter((t) => t.level === lv).length;
+    // баланс уровней: простых меньше всего не должно быть, сложных — не меньше пятой части новых
+    expect(count(1)).toBeGreaterThanOrEqual(10);
+    expect(count(2)).toBeGreaterThanOrEqual(15);
+    expect(count(3)).toBeGreaterThanOrEqual(8);
+    // первые 10 задач — старый порядок A→C
+    const first = TASKS.slice(0, 10).map((t) => t.level);
+    expect(first).toEqual([...first].sort());
+  });
+  it("новые навыки курса 2.0: у каждого есть задачи, 5 задач «найди ошибку», 3 «касса»", () => {
+    const by = (skill: string) => TASKS.filter((t) => t.skill === skill);
+    for (const sk of ["py.io", "py.types", "py.ops", "py.cond", "py.for", "py.while", "py.nested", "py.patterns", "py.strmethods", "py.listops", "py.matrix", "py.params", "py.recursion", "py.sort", "py.search", "py.graphs"]) {
+      expect(by(sk).length, sk).toBeGreaterThanOrEqual(1);
+    }
+    expect(by("py.debug")).toHaveLength(5);
+    expect(by("py.context")).toHaveLength(3);
+    expect(by("py.patterns").length).toBeGreaterThanOrEqual(3);
+  });
+  it("в каждой задаче несколько тестов с краевыми случаями (≥ 3, кроме «Вывода и арифметики»)", () => {
+    for (const task of TASKS) {
+      if (task.check.kind !== "python" || task.id === "py-1-hello") continue;
+      expect(task.check.tests.length, task.id).toBeGreaterThanOrEqual(3);
+    }
+  });
+  it("«найди ошибку»: заготовка — рабочая по форме программа, отличается от эталона", () => {
+    for (const task of TASKS.filter((t) => t.skill === "py.debug")) {
+      expect(task.starter.trim(), task.id).not.toBe(task.solution.trim());
+      expect(task.starter.length, task.id).toBeGreaterThan(30);
+    }
   });
   it("двуязычные тексты, навыки py.*, проверка python", () => {
     for (const task of TASKS) {
@@ -143,6 +168,24 @@ describe("задачи Python", () => {
     const r = await checkPython(bin.check as never, "print(bin(int(input()))[2:])", async () => { calls++; return { stdout: "" }; }, f10);
     expect(r.ok).toBe(false);
     expect(calls).toBe(0);
+  });
+
+  it("новые ограничения: эталоны их не нарушают, запрещённые приёмы ловятся", () => {
+    const byId = (id: string) => TASKS.find((x) => x.id === id)!;
+    for (const [id, rules] of Object.entries(PY_FORBID)) expect(findForbidden(byId(id).solution, rules), id).toBeNull();
+    for (const id of Object.keys(PY_FORBID)) expect(byId(id), id).toBeTruthy();
+    const bad: Record<string, string[]> = {
+      "py-14-ops-reverse3": ["n = input()\nprint(int(n[::-1]))", "print(int(str(int(input()))[::-1]))"],
+      "py-21-pat-maxpos": ["a = [1]\nprint(max(a))", "a = [1]\nprint(a.index(1))"],
+      "py-22-pat-reverse": ["print(int(str(input())[::-1]))"],
+      "py-23-pat-gcd": ["from math import gcd\nprint(gcd(1, 2))", "import math\nprint(math.gcd(1, 2))"],
+      "py-29-rec-fib": ["def fib(n):\n    for i in range(n):\n        pass", "while True:\n    pass"],
+      "py-30-sort-bubble": ["a.sort()", "print(sorted(a))"],
+      "py-31-search-binary": ["print(a.index(x))", "print(a.find(x))", "print(a.count(x))"],
+    };
+    for (const [id, codes] of Object.entries(bad)) for (const code of codes) expect(findForbidden(code, PY_FORBID[id]), `${id}: ${code}`).not.toBeNull();
+    // слова в строках и комментариях не считаются нарушением
+    expect(findForbidden('# for x in y\nprint("while sorted(a)")', PY_FORBID["py-29-rec-fib"])).toBeNull();
   });
 
   describe.skipIf(!hasPython)("эталоны (системный python3)", () => {

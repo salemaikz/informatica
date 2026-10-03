@@ -1,6 +1,6 @@
 import type { IdeTask } from "../types";
 
-// Задачи HTML/CSS (docs/specs/ide.md, I3): 8 задач от A к C. Один документ — HTML со <style>.
+// Задачи HTML/CSS (docs/specs/ide.md, I3): 8 базовых задач + 6 задач курса 2.0 (docs/specs/ide-v2.md), всего 14, от A к C. Один документ — HTML со <style>.
 // Тексты на странице (My site, Python…) — латиницей и без перевода: ученик набирает их в коде как есть.
 // Правильность решает checks.ts: структура — скриптом в iframe, CSS — разбором <style>.
 
@@ -11,7 +11,7 @@ const SKELETON = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export const TASKS: IdeTask[] = [
+const BASE: IdeTask[] = [
   {
     id: "web-1-h1",
     lang: "web",
@@ -385,3 +385,347 @@ export const TASKS: IdeTask[] = [
     },
   },
 ];
+
+// Задачи курса 2.0: списки и ссылки (web.content), таблицы и формы (web.tables), блочная модель и выравнивание (web.layout).
+const V2: IdeTask[] = [
+  {
+    id: "web-9-ol",
+    lang: "web",
+    level: 1,
+    skill: "web.content",
+    title: { ru: "Нумерованный список", kk: "Нөмірленген тізім" },
+    prompt: {
+      ru: "Создайте заголовок `<h2>` с текстом `Steps` и под ним нумерованный список `<ol>` из трёх пунктов `<li>`: `Open`, `Write`, `Save`.",
+      kk: "Мәтіні `Steps` болатын `<h2>` тақырыбын және оның астында үш `<li>` тармағы бар нөмірленген `<ol>` тізімін жасаңыз: `Open`, `Write`, `Save`.",
+    },
+    starter: SKELETON,
+    hint: {
+      ru: "Нумерованный список отличается от маркированного только внешним тегом: пункты `<li>` лежат внутри `<ol>…</ol>`.",
+      kk: "Нөмірленген тізім маркерленгеннен тек сыртқы тегімен ерекшеленеді: `<li>` тармақтары `<ol>…</ol>` ішінде тұрады.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<body>
+  <h2>Steps</h2>
+  <ol>
+    <li>Open</li>
+    <li>Write</li>
+    <li>Save</li>
+  </ol>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        { type: "text", selector: "h2", equals: "Steps", why: { ru: "Нужен заголовок `<h2>` с текстом `Steps`.", kk: "Мәтіні `Steps` болатын `<h2>` тақырыбы қажет." } },
+        { type: "exists", selector: "ol", count: 1, why: { ru: "Нужен один нумерованный список `<ol>`.", kk: "Бір нөмірленген `<ol>` тізімі қажет." } },
+        {
+          type: "exists",
+          selector: "ol > li",
+          count: 3,
+          why: { ru: "В списке должно быть ровно три пункта `<li>`.", kk: "Тізімде дәл үш `<li>` тармағы болуы керек." },
+        },
+        { type: "text", selector: "ol li", equals: "Open", why: { ru: "Нет пункта `Open`.", kk: "`Open` тармағы жоқ." } },
+        { type: "text", selector: "ol li", equals: "Write", why: { ru: "Нет пункта `Write`.", kk: "`Write` тармағы жоқ." } },
+        { type: "text", selector: "ol li", equals: "Save", why: { ru: "Нет пункта `Save`.", kk: "`Save` тармағы жоқ." } },
+      ],
+    },
+  },
+  {
+    id: "web-10-links",
+    lang: "web",
+    level: 2,
+    skill: "web.content",
+    title: { ru: "Две ссылки", kk: "Екі сілтеме" },
+    prompt: {
+      ru: "Создайте две ссылки `<a>`. Первая: текст `NCT`, адрес `https://nct.kz`, открывается в новой вкладке (`target=\"_blank\"`). Вторая: текст `Contacts`, адрес — файл `contacts.html` в той же папке (относительная ссылка).",
+      kk: "Екі `<a>` сілтемесін жасаңыз. Біріншісі: мәтіні `NCT`, мекенжайы `https://nct.kz`, жаңа қойындыда ашылады (`target=\"_blank\"`). Екіншісі: мәтіні `Contacts`, мекенжайы — сол қалтадағы `contacts.html` файлы (қатысты сілтеме).",
+    },
+    starter: SKELETON,
+    hint: {
+      ru: "Оба адреса пишутся в `href`. Для новой вкладки к первой ссылке добавьте ещё один атрибут — `target`. Относительная ссылка — это просто имя файла без `https://`.",
+      kk: "Екі мекенжай да `href` атрибутына жазылады. Жаңа қойынды үшін бірінші сілтемеге тағы бір атрибут — `target` қосыңыз. Қатысты сілтеме — `https://` жоқ, жай ғана файл атауы.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<body>
+  <a href="https://nct.kz" target="_blank">NCT</a>
+  <a href="contacts.html">Contacts</a>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        { type: "exists", selector: "a", count: 2, why: { ru: "На странице нужны ровно две ссылки `<a>`.", kk: "Бетте дәл екі `<a>` сілтемесі қажет." } },
+        {
+          type: "text",
+          selector: "a[href=\"https://nct.kz\"]",
+          equals: "NCT",
+          why: { ru: "Нужна ссылка с `href=\"https://nct.kz\"` и текстом `NCT`.", kk: "`href=\"https://nct.kz\"` және `NCT` мәтіні бар сілтеме қажет." },
+        },
+        {
+          type: "attr",
+          selector: "a[href=\"https://nct.kz\"]",
+          name: "target",
+          equals: "_blank",
+          why: { ru: "Первая ссылка должна открываться в новой вкладке: `target=\"_blank\"`.", kk: "Бірінші сілтеме жаңа қойындыда ашылуы керек: `target=\"_blank\"`." },
+        },
+        {
+          type: "text",
+          selector: "a[href=\"contacts.html\"]",
+          equals: "Contacts",
+          why: { ru: "Нужна ссылка с `href=\"contacts.html\"` и текстом `Contacts`.", kk: "`href=\"contacts.html\"` және `Contacts` мәтіні бар сілтеме қажет." },
+        },
+      ],
+    },
+  },
+  {
+    id: "web-11-colspan",
+    lang: "web",
+    level: 2,
+    skill: "web.tables",
+    title: { ru: "Таблица с объединением", kk: "Ұяшықтары біріктірілген кесте" },
+    prompt: {
+      ru: "Создайте таблицу из двух строк. В первой — одна ячейка-заголовок `<th>` с текстом `Results`, растянутая на два столбца (`colspan=\"2\"`). Во второй — две ячейки `<td>`: `Math` и `Info`.",
+      kk: "Екі жолдан тұратын кесте жасаңыз. Біріншісінде — мәтіні `Results` болатын, екі бағанға созылған (`colspan=\"2\"`) бір тақырып ұяшығы `<th>`. Екіншісінде — екі `<td>` ұяшығы: `Math` және `Info`.",
+    },
+    starter: SKELETON,
+    hint: {
+      ru: "Атрибут `colspan` ставится в открывающий тег ячейки: `<th colspan=\"…\">`. Раз ячейка занимает два столбца, во второй строке их как раз две.",
+      kk: "`colspan` атрибуты ұяшықтың ашатын тегіне жазылады: `<th colspan=\"…\">`. Ұяшық екі бағанды алатындықтан, екінші жолда да екі ұяшық болады.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<body>
+  <table border="1">
+    <tr>
+      <th colspan="2">Results</th>
+    </tr>
+    <tr>
+      <td>Math</td>
+      <td>Info</td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        { type: "exists", selector: "table tr", count: 2, why: { ru: "В таблице должно быть ровно две строки `<tr>`.", kk: "Кестеде дәл екі `<tr>` жолы болуы керек." } },
+        { type: "text", selector: "table th", equals: "Results", why: { ru: "Нужна ячейка-заголовок `<th>` с текстом `Results`.", kk: "Мәтіні `Results` болатын `<th>` тақырып ұяшығы қажет." } },
+        {
+          type: "attr",
+          selector: "table th",
+          name: "colspan",
+          equals: "2",
+          why: { ru: "Ячейка `<th>` должна занимать два столбца: `colspan=\"2\"`.", kk: "`<th>` ұяшығы екі бағанды алуы керек: `colspan=\"2\"`." },
+        },
+        { type: "exists", selector: "table td", count: 2, why: { ru: "Во второй строке нужны две ячейки `<td>`.", kk: "Екінші жолда екі `<td>` ұяшығы қажет." } },
+        { type: "text", selector: "table td", equals: "Math", why: { ru: "Нет ячейки `Math`.", kk: "`Math` ұяшығы жоқ." } },
+        { type: "text", selector: "table td", equals: "Info", why: { ru: "Нет ячейки `Info`.", kk: "`Info` ұяшығы жоқ." } },
+      ],
+    },
+  },
+  {
+    id: "web-12-form",
+    lang: "web",
+    level: 3,
+    skill: "web.tables",
+    title: { ru: "Форма с подписью", kk: "Жазуы бар форма" },
+    prompt: {
+      ru: "Создайте форму `<form>`: поле ввода `<input type=\"text\">` с `id=\"name\"`, подпись `<label>` с текстом `Name`, связанную с полем атрибутом `for`, и кнопку `<button>` с текстом `Send`.",
+      kk: "`<form>` формасын жасаңыз: `id=\"name\"` болатын `<input type=\"text\">` енгізу өрісі, өріспен `for` атрибуты арқылы байланысқан, мәтіні `Name` болатын `<label>` жазуы және мәтіні `Send` болатын `<button>` батырмасы.",
+    },
+    starter: SKELETON,
+    hint: {
+      ru: "Всё лежит внутри `<form>…</form>`. Значение `for` у подписи должно совпадать с `id` поля — так они связываются.",
+      kk: "Бәрі `<form>…</form>` ішінде тұрады. Жазудың `for` мәні өрістің `id` мәнімен бірдей болуы керек — солай олар байланысады.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<body>
+  <form>
+    <label for="name">Name</label>
+    <input type="text" id="name">
+    <button>Send</button>
+  </form>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        { type: "exists", selector: "form", count: 1, why: { ru: "Нужна одна форма `<form>`.", kk: "Бір `<form>` формасы қажет." } },
+        {
+          type: "attr",
+          selector: "form input#name",
+          name: "type",
+          equals: "text",
+          why: { ru: "Внутри формы нужно поле `<input type=\"text\" id=\"name\">`.", kk: "Форма ішінде `<input type=\"text\" id=\"name\">` өрісі қажет." },
+        },
+        {
+          type: "text",
+          selector: "form label[for=\"name\"]",
+          equals: "Name",
+          why: { ru: "Нужна подпись `<label for=\"name\">` с текстом `Name`.", kk: "Мәтіні `Name` болатын `<label for=\"name\">` жазуы қажет." },
+        },
+        { type: "text", selector: "form button", equals: "Send", why: { ru: "Внутри формы нужна кнопка `<button>` с текстом `Send`.", kk: "Форма ішінде мәтіні `Send` болатын `<button>` батырмасы қажет." } },
+      ],
+    },
+  },
+  {
+    id: "web-13-align",
+    lang: "web",
+    level: 1,
+    skill: "web.layout",
+    title: { ru: "Выравнивание и цвет", kk: "Туралау және түс" },
+    prompt: {
+      ru: "В `<style>` выровняйте заголовок `h1` по центру (`text-align: center`) и задайте абзацу `p` зелёный цвет `#008000` (свойство `color`).",
+      kk: "`<style>` ішінде `h1` тақырыбын ортасына туралаңыз (`text-align: center`) және `p` абзацына `#008000` жасыл түсін беріңіз (`color` қасиеті).",
+    },
+    starter: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+
+  </style>
+</head>
+<body>
+  <h1>Welcome</h1>
+  <p>Hello</p>
+</body>
+</html>`,
+    hint: {
+      ru: "Два отдельных правила: `h1 { … }` и `p { … }`. Выравнивание текста — свойство `text-align`, цвет — `color`.",
+      kk: "Екі бөлек ереже: `h1 { … }` және `p { … }`. Мәтінді туралау — `text-align` қасиеті, түс — `color`.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    h1 {
+      text-align: center;
+    }
+    p {
+      color: #008000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome</h1>
+  <p>Hello</p>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        {
+          type: "exists",
+          selector: "h1, p",
+          min: 2,
+          why: { ru: "Заголовок и абзац должны остаться на странице.", kk: "Тақырып пен абзац бетте қалуы керек." },
+        },
+        {
+          type: "css",
+          selector: "h1",
+          property: "text-align",
+          equals: "center",
+          why: { ru: "В `<style>` нужно правило `h1` со свойством `text-align: center`.", kk: "`<style>` ішінде `text-align: center` қасиеті бар `h1` ережесі қажет." },
+        },
+        {
+          type: "css",
+          selector: "p",
+          property: "color",
+          equals: "#008000",
+          why: { ru: "В `<style>` нужно правило `p` со свойством `color: #008000`.", kk: "`<style>` ішінде `color: #008000` қасиеті бар `p` ережесі қажет." },
+        },
+      ],
+    },
+  },
+  {
+    id: "web-14-box",
+    lang: "web",
+    level: 3,
+    skill: "web.layout",
+    title: { ru: "Блок по центру", kk: "Ортадағы блок" },
+    prompt: {
+      ru: "Оформите блок `<div class=\"card\">`. В `<style>` для `.card` задайте: ширину `width: 300px`, внутренний отступ `padding: 20px`, рамку `border` и внешние отступы `margin: 0 auto` (блок встанет по центру).",
+      kk: "`<div class=\"card\">` блогын безендіріңіз. `<style>` ішінде `.card` үшін мыналарды беріңіз: ені `width: 300px`, ішкі шегініс `padding: 20px`, `border` жиегі және сыртқы шегініс `margin: 0 auto` (блок ортада тұрады).",
+    },
+    starter: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+
+  </style>
+</head>
+<body>
+  <div class="card">
+    <p>Hello</p>
+  </div>
+</body>
+</html>`,
+    hint: {
+      ru: "Все четыре свойства пишутся в одном правиле `.card { … }`. Рамка задаётся, например, так: `border: 1px solid black;`. В `margin: 0 auto` первое значение — сверху и снизу, второе — слева и справа.",
+      kk: "Төрт қасиеттің бәрі бір `.card { … }` ережесіне жазылады. Жиек, мысалы, былай беріледі: `border: 1px solid black;`. `margin: 0 auto` жазбасында бірінші мән — жоғарғы және төменгі, екінші мән — сол және оң жақ шегініс.",
+    },
+    solution: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    .card {
+      width: 300px;
+      padding: 20px;
+      border: 1px solid black;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <p>Hello</p>
+  </div>
+</body>
+</html>`,
+    check: {
+      kind: "web",
+      rules: [
+        {
+          type: "exists",
+          selector: "div.card p",
+          min: 1,
+          why: { ru: "Абзац должен остаться внутри блока `<div class=\"card\">`.", kk: "Абзац `<div class=\"card\">` блогының ішінде қалуы керек." },
+        },
+        {
+          type: "css",
+          selector: ".card",
+          property: "width",
+          equals: "300px",
+          why: { ru: "В правиле `.card` нужно `width: 300px`.", kk: "`.card` ережесінде `width: 300px` қажет." },
+        },
+        {
+          type: "css",
+          selector: ".card",
+          property: "padding",
+          equals: "20px",
+          why: { ru: "В правиле `.card` нужно `padding: 20px`.", kk: "`.card` ережесінде `padding: 20px` қажет." },
+        },
+        {
+          type: "css",
+          selector: ".card",
+          property: "border",
+          why: { ru: "Добавьте в правило `.card` рамку — свойство `border`.", kk: "`.card` ережесіне жиек — `border` қасиетін қосыңыз." },
+        },
+        {
+          type: "css",
+          selector: ".card",
+          property: "margin",
+          equals: "0 auto",
+          why: { ru: "В правиле `.card` нужно `margin: 0 auto`.", kk: "`.card` ережесінде `margin: 0 auto` қажет." },
+        },
+      ],
+    },
+  },
+];
+
+/** Все задачи; порядок — от A к C (сортировка устойчивая: внутри уровня базовые задачи идут первыми). */
+export const TASKS: IdeTask[] = [...BASE, ...V2].sort((a, b) => a.level - b.level);

@@ -7,6 +7,7 @@ import {
   MINI_COUNTS,
   STRONG_FROM_RATIO,
   TOPIC_COUNTS,
+  UNIT_COUNTS,
   WEAK_BELOW_RATIO,
   contextQuestionOf,
   isAnswered,
@@ -23,7 +24,8 @@ import type { ExamSummary } from "@/lib/store";
 import { plain, tx } from "@/lib/text";
 import type { EntTopicId, Lang, Lesson, Text } from "@/lib/types";
 
-const KINDS: readonly ExamKind[] = ["full", "mini", "topic"];
+const KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
+const UNIT_ID = /^[a-z][a-z0-9]{0,15}$/;
 const TOPIC_IDS = new Set<string>(ENT_TOPICS.map((t) => t.id));
 
 /** Сколько тем можно выбрать в «Тесте по теме». */
@@ -40,6 +42,8 @@ export const EXAM_FORMAT: Record<ExamKind, { questions: number; minutes: number;
     points: FULL_COUNTS.single + (FULL_COUNTS.multi + FULL_COUNTS.match) * 2 + 5,
   },
   topic: { questions: sum(TOPIC_COUNTS), minutes: EXAM_TIME_LIMIT_SEC.topic / 60, points: TOPIC_COUNTS.single + (TOPIC_COUNTS.multi + TOPIC_COUNTS.match) * 2 },
+  // Контрольная по разделу: контекстное задание — один вопрос (1 балл); без контекстных вместо него ещё один single.
+  unit: { questions: sum(UNIT_COUNTS), minutes: EXAM_TIME_LIMIT_SEC.unit / 60, points: UNIT_COUNTS.single + (UNIT_COUNTS.multi + UNIT_COUNTS.match) * 2 + UNIT_COUNTS.context },
 };
 
 // ---------- Адрес ----------
@@ -49,6 +53,8 @@ export interface RunParams {
   /** null — в адресе нет (корректного) seed; экран возьмёт случайный. */
   seed: number | null;
   topics: EntTopicId[];
+  /** Для kind = "unit": id раздела. */
+  unit?: string;
 }
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -71,13 +77,18 @@ export function parseRunParams(sp: Record<string, string | string[] | undefined>
   const rawSeed = first(sp.seed);
   const n = rawSeed && /^\d{1,10}$/.test(rawSeed) ? Number(rawSeed) : NaN;
   const topics = kind === "topic" ? parseTopics(first(sp.topics)) : [];
-  return { kind: kind as ExamKind, seed: Number.isInteger(n) && n < 2 ** 32 ? n : null, topics };
+  const rawUnit = first(sp.unit);
+  const unit = kind === "unit" && rawUnit && UNIT_ID.test(rawUnit) ? rawUnit : undefined;
+  // Контрольная без раздела — не вариант: экран продолжит начатую попытку или уведёт в хаб.
+  if (kind === "unit" && !unit) return null;
+  return { kind: kind as ExamKind, seed: Number.isInteger(n) && n < 2 ** 32 ? n : null, topics, unit };
 }
 
 /** Относительная ссылка на вариант. */
-export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = []): string {
+export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = [], unit?: string): string {
   const q = new URLSearchParams({ kind, seed: String(seed >>> 0) });
   if (kind === "topic" && topics.length) q.set("topics", topics.join(","));
+  if (kind === "unit" && unit) q.set("unit", unit);
   return `/exam/run?${q.toString()}`;
 }
 
@@ -146,10 +157,10 @@ export interface HistoryPoint {
   maxPoints: number;
 }
 
-/** Последние `n` попыток мини/полного (тест по теме картину не показывает) — от старых к новым. */
+/** Последние `n` попыток мини/полного (тест по теме и контрольные по разделам картину не показывают) — от старых к новым. */
 export function historyPoints(exams: ExamSummary[], n = 10): HistoryPoint[] {
   return exams
-    .filter((e) => e.kind !== "topic" && e.maxPoints > 0)
+    .filter((e) => e.kind !== "topic" && e.kind !== "unit" && e.maxPoints > 0)
     .sort((a, b) => b.at - a.at)
     .slice(0, n)
     .reverse()

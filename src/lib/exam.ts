@@ -6,16 +6,20 @@ import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Le
 // Пробный ЕНТ: сборка варианта из банка, подсчёт баллов, советы по результату.
 // Чистая логика без React. Формат ЕНТ — docs/ENT.md, раздел 1.
 
-export type ExamKind = "full" | "mini" | "topic";
+export type ExamKind = "full" | "mini" | "topic" | "unit";
 export type EntKind = EntItem["kind"];
 
 /** Явные ограничения формата. */
 export const FULL_COUNTS = { single: 25, multi: 5, match: 5 } as const;
 export const MINI_COUNTS = { single: 11, multi: 2, match: 2 } as const; // 9 + 2 «без контекста»
 export const TOPIC_COUNTS = { single: 6, multi: 2, match: 2 } as const;
+/** Контрольная по разделу: 10 + 2 + 2 + 1 вопрос контекстного задания (нет контекстных — 11 single). */
+export const UNIT_COUNTS = { single: 10, multi: 2, match: 2, context: 1 } as const;
+/** Меньше заданий в разделе — контрольной нет. */
+export const UNIT_MIN_ITEMS = 10;
 /** Время: 2 минуты на задание (как в спецификации ЕНТ). */
 export const SEC_PER_QUESTION = 120;
-export const EXAM_TIME_LIMIT_SEC: Record<ExamKind, number> = { full: 80 * 60, mini: 30 * 60, topic: 20 * 60 };
+export const EXAM_TIME_LIMIT_SEC: Record<ExamKind, number> = { full: 80 * 60, mini: 30 * 60, topic: 20 * 60, unit: 25 * 60 };
 /** Доли уровней A/B/C в варианте: 50/30/20. */
 const LEVEL_SHARE: readonly [number, number, number] = [0.5, 0.3, 0.2];
 /** Вопросов в контекстном задании. */
@@ -58,6 +62,8 @@ export interface BuildExamOpts {
   pool: EntItem[];
   /** Для kind = "topic": выбранные темы. */
   topics?: EntTopicId[];
+  /** Для kind = "unit": навыки раздела (`unitSkillIds`); берутся только задания этих навыков. */
+  skillIds?: readonly string[];
 }
 
 // ---------- Темы и соседи ----------
@@ -280,8 +286,148 @@ function expand(item: EntItem): ExamQuestion[] {
   return [{ key: item.id, item, maxPoints: item.kind === "single" ? 1 : 2 }];
 }
 
+// ---------- Контрольная по разделу ----------
+
+type UnitPlain = Exclude<EntItem, EntContext>;
+const byItemId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** Задания раздела: обычные и контекстные (с вопросами), только навыков раздела; по id — порядок банка не влияет. */
+function unitItems(pool: readonly EntItem[], skillIds: readonly string[] | undefined) {
+  const skills = new Set(skillIds ?? []);
+  const inUnit = pool.filter((i) => skills.has(i.skill));
+  return {
+    plain: inUnit.filter((i): i is UnitPlain => i.kind !== "context").sort(byItemId),
+    contexts: inUnit.filter((i): i is EntContext => i.kind === "context" && i.questions.length > 0).sort(byItemId),
+  };
+}
+
+/** Сколько заданий войдёт в контрольную раздела (до 15): контекстное даёт один вопрос. */
+export function unitPaperSize(pool: readonly EntItem[], skillIds: readonly string[] | undefined): number {
+  const { plain, contexts } = unitItems(pool, skillIds);
+  const total = UNIT_COUNTS.single + UNIT_COUNTS.multi + UNIT_COUNTS.match + UNIT_COUNTS.context;
+  return Math.min(total, plain.length + (contexts.length ? 1 : 0));
+}
+
+/** Есть ли у раздела контрольная: хватает заданий его навыков. */
+export const hasUnitExam = (pool: readonly EntItem[], skillIds: readonly string[] | undefined) =>
+  unitPaperSize(pool, skillIds) >= UNIT_MIN_ITEMS;
+
+/**
+ * Контрольная по разделу: 10 single, 2 multi, 2 match и 1 вопрос контекстного задания (нет контекстных — 11 single),
+ * уровни ≈ 50/30/20, без повторов. Вид, которого не хватило, добирается другими видами (с записью в notes).
+ * Навыки раздела по возможности представлены равномерно.
+ */
+function buildUnitExam(opts: BuildExamOpts): ExamPaper {
+  const { seed } = opts;
+  const rand = seeded(seed);
+  const { plain, contexts } = unitItems(opts.pool, opts.skillIds);
+  const hasCtx = contexts.length > 0;
+  const target: Record<PlainKind, number> = {
+    single: UNIT_COUNTS.single + (hasCtx ? 0 : UNIT_COUNTS.context),
+    multi: UNIT_COUNTS.multi,
+    match: UNIT_COUNTS.match,
+  };
+  const avail: Record<PlainKind, number> = { single: 0, multi: 0, match: 0 };
+  for (const it of plain) avail[it.kind]++;
+  const n: Record<PlainKind, number> = {
+    single: Math.min(target.single, avail.single),
+    multi: Math.min(target.multi, avail.multi),
+    match: Math.min(target.match, avail.match),
+  };
+  let deficit = PLAIN_KINDS.reduce((s, k) => s + target[k] - n[k], 0);
+  for (const k of PLAIN_KINDS) {
+    const add = Math.min(deficit, avail[k] - n[k]);
+    n[k] += add;
+    deficit -= add;
+  }
+  const notes: ExamNote[] = [];
+  let rest = deficit;
+  for (const k of ["match", "multi", "single"] as const) {
+    const missing = target[k] - Math.min(target[k], avail[k]);
+    if (missing <= 0) continue;
+    const unfilled = Math.min(rest, missing);
+    rest -= unfilled;
+    notes.push({ topic: null, kind: k, missing, filledFrom: [], unfilled });
+  }
+
+  const used = new Set<string>();
+  const skillUse = new Map<string, number>();
+  const bump = (skill: string) => skillUse.set(skill, (skillUse.get(skill) ?? 0) + 1);
+  const least = <T extends { skill: string }>(cands: T[]): T[] => {
+    const min = Math.min(...cands.map((c) => skillUse.get(c.skill) ?? 0));
+    return cands.filter((c) => (skillUse.get(c.skill) ?? 0) === min);
+  };
+  const chosen: Record<PlainKind, UnitPlain[]> = { single: [], multi: [], match: [] };
+  for (const k of PLAIN_KINDS) {
+    for (const level of levelPlan(n[k], rand)) {
+      const cands = plain.filter((i) => i.kind === k && !used.has(i.id));
+      if (!cands.length) break;
+      const picked = nearestLevelPick(least(cands), level, rand);
+      used.add(picked.id);
+      bump(picked.skill);
+      chosen[k].push(picked);
+    }
+  }
+  let ctxQuestion: ExamQuestion | null = null;
+  if (hasCtx) {
+    const ctx = least(contexts)[Math.floor(rand() * least(contexts).length)];
+    const sub = Math.floor(rand() * ctx.questions.length);
+    // Полное задание с исходным номером вопроса: разбор и «работа над ошибками» находят вопрос по sub.
+    ctxQuestion = { key: `${ctx.id}#${sub}`, item: shuffleEntItem(ctx, seed), sub, maxPoints: 1 };
+  }
+
+  const items: ExamQuestion[] = [
+    ...shuffle(chosen.single, rand).flatMap((it) => expand(shuffleEntItem(it, seed))),
+    ...(ctxQuestion ? [ctxQuestion] : []),
+    ...shuffle(chosen.multi, rand).flatMap((it) => expand(shuffleEntItem(it, seed))),
+    ...shuffle(chosen.match, rand).flatMap((it) => expand(shuffleEntItem(it, seed))),
+  ];
+  return { kind: "unit", seed, items, maxPoints: items.reduce((s, q) => s + q.maxPoints, 0), timeLimitSec: EXAM_TIME_LIMIT_SEC.unit, notes };
+}
+
+// ---------- Звёзды контрольной ----------
+
+export type Stars = 0 | 1 | 2 | 3;
+
+/** Звёзды по доле баллов: ≥ 50% — 1, ≥ 70% — 2, ≥ 90% — 3. */
+export function starsFor(points: number, max: number): Stars {
+  if (!Number.isFinite(points) || !Number.isFinite(max) || max <= 0) return 0;
+  const r = points / max;
+  return r >= 0.9 ? 3 : r >= 0.7 ? 2 : r >= 0.5 ? 1 : 0;
+}
+
+export interface UnitBest {
+  points: number;
+  max: number;
+  stars: Stars;
+}
+
+/**
+ * Лучший результат контрольной раздела по сохранённым итогам (данные из localStorage — недоверенные).
+ * Лучший — по доле баллов; при равенстве — тот, где заданий больше.
+ */
+export function bestUnitResult(
+  exams: readonly { kind?: string; unit?: unknown; points?: unknown; maxPoints?: unknown }[],
+  unitId: string,
+): UnitBest | null {
+  let best: UnitBest | null = null;
+  let bestRatio = -1;
+  for (const e of exams) {
+    if (!e || e.kind !== "unit" || e.unit !== unitId) continue;
+    if (typeof e.points !== "number" || typeof e.maxPoints !== "number" || !Number.isFinite(e.points) || !Number.isFinite(e.maxPoints) || e.maxPoints <= 0) continue;
+    const points = Math.max(0, Math.min(e.maxPoints, e.points));
+    const ratio = points / e.maxPoints;
+    if (ratio > bestRatio || (ratio === bestRatio && best && e.maxPoints > best.max)) {
+      bestRatio = ratio;
+      best = { points, max: e.maxPoints, stars: starsFor(points, e.maxPoints) };
+    }
+  }
+  return best;
+}
+
 /** Собирает вариант детерминированно: один seed → один вариант. */
 export function buildExam(opts: BuildExamOpts): ExamPaper {
+  if (opts.kind === "unit") return buildUnitExam(opts);
   const { kind, seed, pool } = opts;
   const rand = seeded(seed);
   const notes: ExamNote[] = [];

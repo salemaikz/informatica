@@ -15,6 +15,7 @@ import { averageMastery, canExtern, isPassed, nodeState, pathLayout, pluralForm,
 import { unitVars } from "./useLearn";
 import { UnitArt } from "./UnitArt";
 import { LessonNode } from "./LessonNode";
+import { CheckpointNode } from "./CheckpointNode";
 
 // Раздел на карте = «местность»: шапка с иллюстрацией, прогрессом и освоением + извилистая дорога через уроки.
 
@@ -127,6 +128,8 @@ function UnitSectionImpl({
           />
         ))}
       </div>
+      {/* Контрольная раздела — после последнего урока (нет готовых уроков или заданий — узла нет). */}
+      <CheckpointNode unit={unit} lessons={lessons} />
     </section>
   );
 }

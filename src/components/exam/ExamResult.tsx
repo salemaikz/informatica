@@ -3,14 +3,14 @@
 import { ArrowRight, BookOpen, Clock, Dumbbell, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { LESSONS, lessonNumber } from "@/content/course";
+import { LESSONS, UNITS, lessonNumber } from "@/content/course";
 import { entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
-import { examAdvice, scoreExam, SEC_PER_QUESTION, type ExamKind } from "@/lib/exam";
+import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from "@/lib/exam";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { useApp } from "@/lib/store";
@@ -26,6 +26,8 @@ import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
+import { examTitle } from "./checkpoint";
+import { StarRow } from "./StarRow";
 
 const TONE_COLOR: Record<Tone, string> = {
   danger: "var(--danger)",
@@ -112,6 +114,10 @@ export function ExamResult({ id }: { id: string }) {
   if (!loaded.done) return <p className="py-20 text-center font-bold text-muted">{t("common.loading")}</p>;
 
   const kind: ExamKind | null = attempt?.kind ?? summary?.kind ?? null;
+  // Контрольная по разделу: название раздела в заголовке итога, звёзды, возврат к разделу на карте.
+  const unitId = kind === "unit" ? (attempt?.unit ?? summary?.unit) : undefined;
+  const unitDef = unitId ? UNITS.find((u) => u.id === unitId) : undefined;
+  const kindLabel = examTitle(kind ?? "mini", unitId, t, l);
   const points = result?.points ?? summary?.points;
   const maxPoints = result?.maxPoints ?? summary?.maxPoints;
 
@@ -176,7 +182,7 @@ export function ExamResult({ id }: { id: string }) {
       const data = await lessonFeedback({
         context: buildStudentContext(app),
         lesson: t("exam.ai.lesson", {
-          kind: t(`exam.mode.${attempt.kind}` as DictKey),
+          kind: kindLabel,
           points: result.points,
           max: result.maxPoints,
         }),
@@ -227,11 +233,12 @@ export function ExamResult({ id }: { id: string }) {
             <span className="text-xl font-black">{Math.round(ratio * 100)}%</span>
           </Ring>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold text-muted">{t(`exam.mode.${kind}` as DictKey)}</p>
+            <p className="text-sm font-extrabold text-muted">{kindLabel}</p>
             <p className="text-4xl font-black leading-tight">
               {points}
               <span className="ml-1.5 text-lg font-extrabold text-muted">{t("exam.of", { max: maxPoints })}</span>
             </p>
+            {kind === "unit" && <StarRow stars={starsFor(points, maxPoints)} size={20} className="mt-1" />}
             <p className="flex items-center gap-1.5 text-xs font-bold text-muted">
               <Clock size={13} aria-hidden />
               {formatDay(at, lang, false, now)}
@@ -460,7 +467,7 @@ export function ExamResult({ id }: { id: string }) {
         <ButtonLink href="/exam" variant="secondary" block icon={<RotateCcw size={18} aria-hidden />}>
           {t("exam.result.again")}
         </ButtonLink>
-        <Link href="/learn" className="flex items-center justify-center gap-1.5 py-2 font-extrabold text-primary">
+        <Link href={unitDef ? `/learn#unit-${unitDef.id}` : "/learn"} className="flex items-center justify-center gap-1.5 py-2 font-extrabold text-primary">
           {t("exam.result.toLearn")} <ArrowRight size={16} aria-hidden />
         </Link>
       </div>

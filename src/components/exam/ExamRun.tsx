@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, Flag, LayoutGrid, Play, TimerOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
 import type { DictKey } from "@/i18n/dict";
@@ -32,6 +33,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
+import { checkpointById, examTitle } from "./checkpoint";
 import { ExamNotes } from "./ExamNotes";
 import { formatClock, randomSeed, remainingSec } from "./logic";
 import { Navigator } from "./Navigator";
@@ -41,6 +43,16 @@ export interface ExamRunProps {
   kind: ExamKind | null;
   seed: number | null;
   topics: EntTopicId[];
+  /** Для kind = "unit": id раздела. */
+  unit?: string;
+}
+
+/** Параметры варианта, который собрали для экрана условий. */
+interface Fresh {
+  paper: ExamPaper;
+  seed: number;
+  topics: EntTopicId[];
+  unit?: string;
 }
 
 type Phase =
@@ -48,21 +60,27 @@ type Phase =
   /** Нет параметров и нет начатой попытки. */
   | { name: "none" }
   /** Новая попытка: показываем вариант и условия, таймер пока не идёт. */
-  | { name: "intro"; paper: ExamPaper; seed: number; topics: EntTopicId[]; replaces: ExamAttempt | null }
+  | ({ name: "intro"; replaces: ExamAttempt | null } & Fresh)
   /** Есть начатая другая попытка: продолжить или начать новую. */
-  | { name: "resume"; active: ExamAttempt; fresh: { paper: ExamPaper; seed: number; topics: EntTopicId[] } | null }
+  | { name: "resume"; active: ExamAttempt; fresh: Fresh | null }
   | { name: "run"; attempt: ExamAttempt };
 
-const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics: EntTopicId[]) =>
-  a.kind === kind && (seed === null || a.seed === seed) && (kind !== "topic" || (a.topics ?? []).join() === topics.join());
+const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string) =>
+  a.kind === kind &&
+  (seed === null || a.seed === seed) &&
+  (kind !== "topic" || (a.topics ?? []).join() === topics.join()) &&
+  (kind !== "unit" || a.unit === unit);
 
-function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[]) {
+function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string): Fresh {
   const s = seed ?? randomSeed();
-  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics }), seed: s, topics };
+  // Контрольная: навыки раздела. Неизвестный раздел или раздел без контрольной (нет готовых уроков, < 10 заданий)
+  // даёт пустой вариант — экран условий скажет об этом.
+  const cp = kind === "unit" ? checkpointById(unit, ENT_POOL) : null;
+  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [] }), seed: s, topics, unit: cp?.unitId };
 }
 
 /** Экран прохождения: загрузка → (продолжить?) → условия → сами задания. Спокойная оболочка без маскота, XP, звуков и ИИ. */
-export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
+export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) {
   const { t } = useT();
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
   // Массив из пропсов может прийти новым при той же строке — эффект зависит от строки, а не от ссылки.
@@ -73,15 +91,15 @@ export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
     let off = false;
     loadActiveAttempt().then((active) => {
       if (off) return;
-      if (active && (!kind || sameVariant(active, kind, seed, topics))) return setPhase({ name: "run", attempt: active });
+      if (active && (!kind || sameVariant(active, kind, seed, topics, unit))) return setPhase({ name: "run", attempt: active });
       if (!kind) return setPhase({ name: "none" });
       if (active) return setPhase({ name: "resume", active, fresh: null });
-      setPhase({ name: "intro", ...buildFresh(kind, seed, topics), replaces: null });
+      setPhase({ name: "intro", ...buildFresh(kind, seed, topics, unit), replaces: null });
     });
     return () => {
       off = true;
     };
-  }, [kind, seed, topics]);
+  }, [kind, seed, topics, unit]);
 
   if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} />;
 
@@ -98,13 +116,14 @@ export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
         <ResumeChoice
           active={phase.active}
           onContinue={() => setPhase({ name: "run", attempt: phase.active })}
-          onFresh={() => setPhase({ name: "intro", ...buildFresh(kind, seed, topics), replaces: phase.active })}
+          onFresh={() => setPhase({ name: "intro", ...buildFresh(kind, seed, topics, unit), replaces: phase.active })}
         />
       )}
       {phase.name === "intro" && (
         <Intro
           paper={phase.paper}
           topics={phase.topics}
+          unit={phase.unit}
           onStart={async () => {
             if (phase.replaces) await deleteAttempt(phase.replaces.id);
             const now = Date.now();
@@ -113,6 +132,7 @@ export function ExamRun({ kind, seed, topics: topicsProp }: ExamRunProps) {
               kind: phase.paper.kind,
               seed: phase.seed,
               topics: phase.paper.kind === "topic" ? phase.topics : undefined,
+              unit: phase.paper.kind === "unit" ? phase.unit : undefined,
               paper: phase.paper,
               answers: {},
               current: 0,
@@ -138,14 +158,14 @@ function Calm({ children }: { children: React.ReactNode }) {
 }
 
 function ResumeChoice({ active, onContinue, onFresh }: { active: ExamAttempt; onContinue: () => void; onFresh: () => void }) {
-  const { t } = useT();
+  const { t, l } = useT();
   const { answered } = progressOf(active.paper, active.answers);
   const left = remainingSec(active.paper.timeLimitSec, active.elapsedMs);
   return (
     <div className="flex flex-col gap-4 pt-6">
       <h1 className="text-2xl font-extrabold">{t("exam.resume.title")}</h1>
       <p className="font-semibold text-muted">
-        {t(`exam.mode.${active.kind}` as DictKey)} · {t("exam.resume.progress", { done: answered, total: active.paper.items.length })} ·{" "}
+        {examTitle(active.kind, active.unit, t, l)} · {t("exam.resume.progress", { done: answered, total: active.paper.items.length })} ·{" "}
         {t("exam.resume.left", { time: formatClock(left) })}
       </p>
       <Button size="lg" block icon={<Play size={20} aria-hidden />} onClick={onContinue}>
@@ -159,14 +179,16 @@ function ResumeChoice({ active, onContinue, onFresh }: { active: ExamAttempt; on
   );
 }
 
-function Intro({ paper, topics, onStart }: { paper: ExamPaper; topics: EntTopicId[]; onStart: () => Promise<void> }) {
+function Intro({ paper, topics, unit, onStart }: { paper: ExamPaper; topics: EntTopicId[]; unit?: string; onStart: () => Promise<void> }) {
   const { t, l } = useT();
   const [busy, setBusy] = useState(false);
   const empty = paper.items.length === 0;
   return (
     <div className="flex flex-col gap-4 pt-6">
       <div>
-        <h1 className="text-2xl font-extrabold">{t(`exam.mode.${paper.kind}` as DictKey)}</h1>
+        <h1 className="text-2xl font-extrabold">
+          {examTitle(paper.kind, unit, t, l)}
+        </h1>
         {!empty && (
           <p className="mt-1 flex flex-wrap items-center gap-1.5">
             <Pill tone="muted">{t("exam.fmt.questions", { n: paper.items.length })}</Pill>
@@ -211,7 +233,7 @@ function Intro({ paper, topics, onStart }: { paper: ExamPaper; topics: EntTopicI
 type Sheet = null | "nav" | "finish" | "exit";
 
 function Runner({ initial }: { initial: ExamAttempt }) {
-  const { t } = useT();
+  const { t, l } = useT();
   const router = useRouter();
   useToolboxLevel("ent");
 
@@ -351,7 +373,9 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     };
     // Ошибки попытки уходят в историю тестов и общую «работу над ошибками» (ссылки ent:…, lib/ent-steps.ts).
     const app = useApp.getState();
-    app.recordExam(buildSummary(attempt, now), skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
+    // Название для истории тестов — на языке ученика в момент записи.
+    const title = attempt.kind === "unit" && attempt.unit ? examTitle("unit", attempt.unit, t, l) : undefined;
+    app.recordExam(buildSummary(attempt, now, title), skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
     const { paper: _paper, ...state } = attempt;
     void _paper;
     try {

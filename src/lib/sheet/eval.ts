@@ -432,6 +432,59 @@ def("КОРЕНЬ", "SQRT", 1, 1, (args, env) => {
   return x < 0 ? ERR.num : fix(Math.sqrt(x));
 });
 
+// --- Текст ---
+
+/** Текст одного аргумента: ошибка распространяется, диапазон из нескольких ячеек — #ЗНАЧ!. */
+function text1(a: Arg, env: Env): string | SheetError {
+  const v = scalarOf(a, env);
+  return isError(v) ? v : valueToText(v);
+}
+
+def("СТРОЧН", "LOWER", 1, 1, (args, env) => {
+  const s = text1(args[0], env);
+  return isError(s) ? s : s.toLowerCase();
+});
+def("ПРОПИСН", "UPPER", 1, 1, (args, env) => {
+  const s = text1(args[0], env);
+  return isError(s) ? s : s.toUpperCase();
+});
+def("ДЛСТР", "LEN", 1, 1, (args, env) => {
+  const s = text1(args[0], env);
+  return isError(s) ? s : [...s].length;
+});
+def("СЦЕПИТЬ", "CONCATENATE", 1, 255, (args, env) => {
+  let out = "";
+  for (const a of args) {
+    const s = text1(a, env);
+    if (isError(s)) return s;
+    out += s;
+  }
+  return out;
+});
+
+/** Число символов для ЛЕВСИМВ/ПРАВСИМВ: по умолчанию 1, дробная часть отбрасывается, отрицательное — #ЗНАЧ!. */
+function charCount(a: Arg | undefined, env: Env): number | SheetError {
+  if (!a) return 1;
+  const n = num1(a, env);
+  if (isError(n)) return n;
+  return n < 0 ? ERR.value : Math.trunc(n);
+}
+
+def("ЛЕВСИМВ", "LEFT", 1, 2, (args, env) => {
+  const s = text1(args[0], env);
+  if (isError(s)) return s;
+  const n = charCount(args[1], env);
+  return isError(n) ? n : [...s].slice(0, n).join("");
+});
+def("ПРАВСИМВ", "RIGHT", 1, 2, (args, env) => {
+  const s = text1(args[0], env);
+  if (isError(s)) return s;
+  const n = charCount(args[1], env);
+  if (isError(n)) return n;
+  const chars = [...s];
+  return n === 0 ? "" : chars.slice(Math.max(0, chars.length - n)).join("");
+});
+
 // ---------- Лист целиком ----------
 
 export interface SheetResult {

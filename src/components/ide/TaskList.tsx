@@ -1,24 +1,118 @@
 "use client";
 
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { cn } from "@/lib/cn";
 import type { IdeLang, IdeTask } from "@/lib/ide/types";
+import { skillById } from "@/content/skills";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
-import { groupByLevel, LEVEL_LETTER } from "./shell-helpers";
+import { firstOpenGroup, groupByLevel, groupBySkill, LEVEL_LETTER, shouldGroupBySkill, type CodeTasks } from "./shell-helpers";
 
-/** Список задач языка: группы по уровням A → C, решённые — с зелёной галочкой. */
+/** Строка задачи: номер или галочка, название, (в группах по навыку) буква уровня. */
+function TaskRow({ lang, task, n, stat, showLevel }: { lang: IdeLang; task: IdeTask; n: number; stat: CodeTasks[string] | undefined; showLevel?: boolean }) {
+  const { t, l } = useT();
+  const solved = !!stat?.solved;
+  return (
+    <li>
+      <Link
+        href={`/code/${lang}/${task.id}`}
+        className={cn(
+          "flex min-h-16 items-center gap-3 rounded-2xl border-2 bg-surface px-3.5 py-2.5 transition-colors hover:bg-surface-2 active:translate-y-px",
+          solved ? "border-success/40" : "border-border",
+        )}
+      >
+        <span
+          role="img"
+          aria-label={t(solved ? "ide.list.solved" : "ide.list.todo")}
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold",
+            solved ? "bg-success text-white" : "bg-surface-2 text-muted",
+          )}
+        >
+          {solved ? <Check size={20} strokeWidth={3} /> : n}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-extrabold">{l(task.title)}</span>
+          {!solved && stat && stat.attempts > 0 && <span className="block text-xs font-bold text-muted">{t("ide.list.attempts", { n: stat.attempts })}</span>}
+        </span>
+        {showLevel && (
+          <span
+            title={t("ide.level", { l: LEVEL_LETTER[task.level] })}
+            className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-lg bg-primary-soft px-1.5 text-xs font-extrabold text-primary"
+          >
+            {LEVEL_LETTER[task.level]}
+          </span>
+        )}
+        <ChevronRight size={20} className="shrink-0 text-muted" aria-hidden />
+      </Link>
+    </li>
+  );
+}
+
+/**
+ * Список задач языка. До 12 задач — группы по уровням A → C; больше — группы по навыку (внутри от A к C),
+ * у группы счётчик «Решено: 3 из 8»; раскрыта первая группа с нерешёнными задачами, остальные можно раскрыть.
+ */
 export function TaskList({ lang, tasks }: { lang: IdeLang; tasks: readonly IdeTask[] }) {
   const { t, l } = useT();
   const codeTasks = useApp((s) => s.codeTasks);
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-border bg-surface p-6 text-center">
         <Mascot mood="thinking" size={72} />
         <p className="max-w-sm font-semibold text-muted">{t("ide.list.empty")}</p>
+      </div>
+    );
+  }
+
+  if (shouldGroupBySkill(tasks)) {
+    const groups = groupBySkill(tasks, codeTasks);
+    const firstOpen = firstOpenGroup(groups);
+    const offsets = groups.map((_, i) => groups.slice(0, i).reduce((sum, g) => sum + g.tasks.length, 0));
+    return (
+      <div className="flex flex-col gap-3">
+        {groups.map((g, gi) => {
+          const key = g.skill ?? "";
+          const isOpen = toggled[key] ?? gi === firstOpen;
+          const skill = g.skill ? skillById(g.skill) : undefined;
+          const title = skill ? l(skill.title) : t("ide.level", { l: LEVEL_LETTER[g.tasks[0].level] });
+          const done = g.solved === g.tasks.length;
+          const panelId = `ide-skill-${lang}-${key || "other"}`;
+          return (
+            <section key={key} className="flex flex-col gap-2">
+              <h2>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={panelId}
+                  onClick={() => setToggled((m) => ({ ...m, [key]: !isOpen }))}
+                  className={cn(
+                    "flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 bg-surface px-3.5 py-2 text-left transition-colors hover:bg-surface-2",
+                    done ? "border-success/40" : "border-border",
+                  )}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-extrabold">{title}</span>
+                    <span className={cn("block text-xs font-bold", done ? "text-success" : "text-muted")}>{t("ide.hub.solved", { done: g.solved, total: g.tasks.length })}</span>
+                  </span>
+                  <ChevronDown size={20} className={cn("shrink-0 text-muted transition-transform", isOpen && "rotate-180")} aria-hidden />
+                </button>
+              </h2>
+              {isOpen && (
+                <ul id={panelId} className="flex flex-col gap-2">
+                  {g.tasks.map((task, ti) => (
+                    <TaskRow key={task.id} lang={lang} task={task} n={offsets[gi] + ti + 1} stat={codeTasks[task.id]} showLevel />
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
       </div>
     );
   }
@@ -35,40 +129,9 @@ export function TaskList({ lang, tasks }: { lang: IdeLang; tasks: readonly IdeTa
             {t(`ide.levelName.${g.level}`)}
           </h2>
           <ul className="flex flex-col gap-2">
-            {g.tasks.map((task, ti) => {
-              const n = offsets[gi] + ti + 1;
-              const stat = codeTasks[task.id];
-              const solved = !!stat?.solved;
-              return (
-                <li key={task.id}>
-                  <Link
-                    href={`/code/${lang}/${task.id}`}
-                    className={cn(
-                      "flex min-h-16 items-center gap-3 rounded-2xl border-2 bg-surface px-3.5 py-2.5 transition-colors hover:bg-surface-2 active:translate-y-px",
-                      solved ? "border-success/40" : "border-border",
-                    )}
-                  >
-                    <span
-                      role="img"
-                      aria-label={t(solved ? "ide.list.solved" : "ide.list.todo")}
-                      className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold",
-                        solved ? "bg-success text-white" : "bg-surface-2 text-muted",
-                      )}
-                    >
-                      {solved ? <Check size={20} strokeWidth={3} /> : n}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-extrabold">{l(task.title)}</span>
-                      {!solved && stat && stat.attempts > 0 && (
-                        <span className="block text-xs font-bold text-muted">{t("ide.list.attempts", { n: stat.attempts })}</span>
-                      )}
-                    </span>
-                    <ChevronRight size={20} className="shrink-0 text-muted" aria-hidden />
-                  </Link>
-                </li>
-              );
-            })}
+            {g.tasks.map((task, ti) => (
+              <TaskRow key={task.id} lang={lang} task={task} n={offsets[gi] + ti + 1} stat={codeTasks[task.id]} />
+            ))}
           </ul>
         </section>
       ))}
