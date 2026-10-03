@@ -169,10 +169,10 @@ export const lesson: Lesson = {
       scene: {
         kind: "flow",
         nodes: [
-          { id: "s", shape: "io", label: lk("Берём балл из B2", "B2 ұяшығынан балды аламыз"), x: 2, y: 0 },
-          { id: "c", shape: "if", label: "B2 >= 60 ?", x: 2, y: 2 },
+          { id: "s", shape: "io", label: lk("Берём балл из B2", "B2: балды аламыз"), x: 1, y: 0 },
+          { id: "c", shape: "if", label: "B2 >= 60 ?", x: 1, y: 2 },
           { id: "y", shape: "box", label: PASS, x: 0, y: 4 },
-          { id: "n", shape: "box", label: FAIL, x: 4, y: 4 },
+          { id: "n", shape: "box", label: FAIL, x: 2, y: 4 },
         ],
         edges: [
           { from: "s", to: "c" },

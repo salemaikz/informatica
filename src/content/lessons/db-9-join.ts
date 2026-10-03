@@ -122,7 +122,7 @@ export const lesson: Lesson = {
         kind: "flow",
         nodes: [
           { id: "s", shape: "box", label: "Students", x: 0, y: 0 },
-          { id: "c", shape: "box", label: "Classes", x: 3, y: 0 },
+          { id: "c", shape: "box", label: "Classes", x: 2, y: 0 },
         ],
         edges: [{ from: "s", to: "c", label: "ClassID" }],
         caption: l("Фамилия руководителя лежит в другой таблице", "Жетекшінің тегі басқа кестеде жатыр"),

@@ -36,23 +36,13 @@ function Shape({ box, active }: { box: FlowBox; active: boolean }) {
   }
 }
 
-/** Внутренние отступы подписи, чтобы текст не вылезал за скошенные края фигуры. */
-const LABEL_PAD: Record<Node["shape"], string> = {
-  start: "px-3",
-  end: "px-3",
-  action: "px-1.5",
-  box: "px-2",
-  io: "px-4",
-  if: "",
-  device: "px-1.5",
-};
-
 /**
  * Блок-схема на сетке: овалы, прямоугольники, ромбы, параллелограммы и карточки устройств, стрелки с одним изломом.
- * Размеры считаются по ширине контейнера (не масштабируем картинку целиком), поэтому подписи остаются 13 px.
+ * Размеры считаются по ширине контейнера (не масштабируем картинку целиком): подписи 13 px, а если слово не влезает
+ * в блок — 12 или 11 px (см. flowFit). Переносим строки только между словами; если схема всё равно шире экрана — прокрутка.
  */
 export function FlowScene({ scene }: { scene: FlowSceneData }) {
-  const { t, l } = useT();
+  const { t, l, lang } = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(336);
 
@@ -64,11 +54,11 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
     return () => ro.disconnect();
   }, []);
 
-  const layout = useMemo(() => layoutFlow(scene, avail), [scene, avail]);
+  const layout = useMemo(() => layoutFlow(scene, avail, lang), [scene, avail, lang]);
   const nodeById = new Map(scene.nodes.map((n) => [n.id, n]));
 
   return (
-    // Минимальная ширина ячейки 56 px: на очень узком экране схема из 5 столбцов прокручивается внутри сцены.
+    // Если слова не влезают даже на кегле 11 px (или ячейка < 56 px), схема прокручивается внутри сцены.
     <div ref={ref} className="mx-auto w-full max-w-xl overflow-x-auto">
       <div
         role="img"
@@ -90,7 +80,7 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
             const geom = layout.edges.find((g) => g.from === edge.from && g.to === edge.to);
             if (!geom || !edge.label) return null;
             return (
-              <text key={`lbl:${i}`} x={geom.labelAt[0]} y={geom.labelAt[1]} textAnchor={geom.labelAnchor} fontSize={13} fontWeight={800} className="fill-muted">
+              <text key={`lbl:${i}`} x={geom.labelAt[0]} y={geom.labelAt[1]} textAnchor={geom.labelAnchor} fontSize={layout.fontPx} fontWeight={800} className="fill-muted">
                 {l(edge.label)}
               </text>
             );
@@ -104,22 +94,18 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
           return (
             <div
               key={box.id}
+              lang={lang}
               className={cn(
-                "absolute flex items-center justify-center overflow-hidden text-center text-[13px] font-bold leading-tight text-text",
+                "absolute flex items-center justify-center overflow-hidden text-center font-bold leading-tight text-text",
                 node.shape === "device" && "flex-col gap-0.5",
-                LABEL_PAD[node.shape],
               )}
-              style={{
-                left: box.cx - box.w / 2,
-                top: box.cy - box.h / 2,
-                width: box.w,
-                height: box.h,
-                // Текст ромба — во вписанном прямоугольнике: отступ по ширине самого ромба, а не фиксированный.
-                ...(node.shape === "if" ? { paddingInline: Math.max(4, Math.round(box.w * 0.18)) } : null),
-              }}
+              style={{ left: box.cx - box.w / 2, top: box.cy - box.h / 2, width: box.w, height: box.h, fontSize: layout.fontPx }}
             >
               {showIcon && <Icon size={22} strokeWidth={2.2} className={cn("shrink-0", scene.active === box.id ? "text-primary" : "text-primary-strong")} />}
-              <span className="line-clamp-3 break-words">{l(node.label)}</span>
+              {/* Колонка текста посчитана в layoutFlow (у ромба — вписанный прямоугольник). Рвать слова не даём; дефис — только если слово почти во всю колонку. */}
+              <span className={cn("line-clamp-3 max-w-full break-normal", box.tight ? "hyphens-auto" : "hyphens-none")} style={{ width: box.textW }}>
+                {l(node.label)}
+              </span>
             </div>
           );
         })}

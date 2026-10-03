@@ -215,8 +215,8 @@ export const lesson: Lesson = {
             kind: "flow",
             nodes: [
               { id: "c", shape: "box", label: l("Клиенты", "Клиенттер"), x: 0, y: 0 },
-              { id: "o", shape: "box", label: l("Заказы", "Тапсырыстар"), x: 2, y: 0 },
-              { id: "g", shape: "box", label: l("Товары", "Тауарлар"), x: 4, y: 0 },
+              { id: "g", shape: "box", label: l("Товары", "Тауарлар"), x: 2, y: 0 },
+              { id: "o", shape: "box", label: l("Заказы", "Тапсырыстар"), x: 1, y: 1 },
             ],
             edges: [
               { from: "c", to: "o", label: "1 : N" },

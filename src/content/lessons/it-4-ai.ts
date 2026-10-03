@@ -32,10 +32,10 @@ const neuronFlow: Scene = {
   kind: "flow",
   nodes: [
     { id: "x1", shape: "io", label: l("Солнце (x₁)", "Күн ашық (x₁)"), x: 0, y: 0 },
-    { id: "x2", shape: "io", label: l("Домашка (x₂)", "Үй жұмысы (x₂)"), x: 0, y: 1 },
-    { id: "x3", shape: "io", label: l("Друг зовёт (x₃)", "Дос шақырды (x₃)"), x: 0, y: 2 },
-    { id: "n", shape: "action", label: l("Нейрон: s = Σ x·w", "Нейрон: s = Σ x·w"), icon: "brain", x: 2, y: 1 },
-    { id: "out", shape: "io", label: l("s ≥ T? выход 1 или 0", "s ≥ T? шығыс 1 немесе 0"), x: 4, y: 1 },
+    { id: "x2", shape: "io", label: l("Домашка (x₂)", "Үй жұмысы (x₂)"), x: 1, y: 0 },
+    { id: "x3", shape: "io", label: l("Друг зовёт (x₃)", "Дос шақырды (x₃)"), x: 2, y: 0 },
+    { id: "n", shape: "action", label: l("Нейрон: s = Σ x·w", "Нейрон: s = Σ x·w"), icon: "brain", x: 1, y: 1 },
+    { id: "out", shape: "io", label: l("s ≥ T? выход 1 или 0", "s ≥ T? шығыс 1 немесе 0"), x: 1, y: 2 },
   ],
   edges: [
     { from: "x1", to: "n", label: "w₁ = 3" },

@@ -148,10 +148,11 @@ export const lesson: Lesson = {
           scene: {
             kind: "flow",
             nodes: [
-              { id: "u1", shape: "action", label: "Ахметов", x: 0, y: 0 },
-              { id: "u2", shape: "action", label: "Беков", x: 2, y: 0 },
-              { id: "c1", shape: "box", label: l("Шахматы", "Шахмат"), x: 0, y: 3 },
-              { id: "c2", shape: "box", label: l("Робототехника", "Робототехника"), x: 1, y: 3 },
+              // Два столбца «змейкой»: на телефоне «Робототехника» не влезает в три столбца, а при двух стрелка по диагонали пересекла бы блок.
+              { id: "c1", shape: "box", label: l("Шахматы", "Шахмат"), x: 0, y: 0 },
+              { id: "u1", shape: "action", label: "Ахметов", x: 1, y: 0 },
+              { id: "u2", shape: "action", label: "Беков", x: 0, y: 1 },
+              { id: "c2", shape: "box", label: l("Робототехника", "Робототехника"), x: 1, y: 1 },
             ],
             edges: [
               { from: "u1", to: "c1" },

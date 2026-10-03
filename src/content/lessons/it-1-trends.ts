@@ -33,11 +33,11 @@ const cloudFlow: Scene = {
   kind: "flow",
   nodes: [
     { id: "phone", shape: "device", label: l("Телефон", "Телефон"), icon: "phone", x: 0, y: 0 },
-    { id: "laptop", shape: "device", label: l("Ноутбук", "Ноутбук"), icon: "laptop", x: 4, y: 0 },
-    { id: "net", shape: "box", label: l("Интернет", "Интернет"), icon: "globe", x: 2, y: 1 },
-    { id: "cloud", shape: "box", label: l("Облако (серверы)", "Бұлт (серверлер)"), icon: "cloud", x: 2, y: 2 },
+    { id: "laptop", shape: "device", label: l("Ноутбук", "Ноутбук"), icon: "laptop", x: 2, y: 0 },
+    { id: "net", shape: "box", label: l("Интернет", "Интернет"), icon: "globe", x: 1, y: 1 },
+    { id: "cloud", shape: "box", label: l("Облако (серверы)", "Бұлт (серверлер)"), icon: "cloud", x: 1, y: 2 },
     { id: "files", shape: "box", label: l("Хранение файлов", "Файлдарды сақтау"), icon: "folder", x: 0, y: 3 },
-    { id: "calc", shape: "box", label: l("Вычисления", "Есептеулер"), icon: "cpu", x: 4, y: 3 },
+    { id: "calc", shape: "box", label: l("Вычисления", "Есептеулер"), icon: "cpu", x: 2, y: 3 },
   ],
   edges: [
     { from: "phone", to: "net" },
@@ -88,11 +88,11 @@ const iotFlow: Scene = {
   kind: "flow",
   nodes: [
     { id: "sensor", shape: "device", label: l("Датчик", "Датчик"), icon: "zap", x: 0, y: 0 },
-    { id: "meter", shape: "device", label: l("Умный счётчик", "Ақылды есептегіш"), icon: "chart", x: 4, y: 0 },
-    { id: "net", shape: "box", label: l("Интернет", "Интернет"), icon: "wifi", x: 2, y: 1 },
-    { id: "cloud", shape: "box", label: l("Программа в облаке", "Бұлттағы программа"), icon: "cloud", x: 2, y: 2 },
+    { id: "meter", shape: "device", label: l("Умный счётчик", "Ақылды есептегіш"), icon: "chart", x: 2, y: 0 },
+    { id: "net", shape: "box", label: l("Интернет", "Интернет"), icon: "wifi", x: 1, y: 1 },
+    { id: "cloud", shape: "box", label: l("Программа в облаке", "Бұлттағы программа"), icon: "cloud", x: 1, y: 2 },
     { id: "app", shape: "device", label: l("Телефон хозяина", "Иесінің телефоны"), icon: "phone", x: 0, y: 3 },
-    { id: "gadget", shape: "device", label: l("Кондиционер, замок", "Кондиционер, құлып"), icon: "settings", x: 4, y: 3 },
+    { id: "gadget", shape: "device", label: l("Умный замок", "Ақылды құлып"), icon: "settings", x: 2, y: 3 },
   ],
   edges: [
     { from: "sensor", to: "net", label: l("данные", "деректер") },
