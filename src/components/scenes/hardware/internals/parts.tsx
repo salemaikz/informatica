@@ -13,17 +13,17 @@ export function CaseArt() {
       {/* окно бокового стекла */}
       <path d="M75 18 L87 13 L87 66 L75 71 Z" fill={C.dark2} />
       <ellipse cx={81} cy={30} rx={4.4} ry={6.2} fill={C.dark} />
-      <ellipse cx={81} cy={30} rx={2.2} ry={3} fill={C.primary} opacity={0.75} />
+      <ellipse cx={81} cy={30} rx={2.2} ry={3} fill={C.glow} opacity={0.75} />
       <ellipse cx={81} cy={50} rx={4.4} ry={6.2} fill={C.dark} />
-      <ellipse cx={81} cy={50} rx={2.2} ry={3} fill={C.primary} opacity={0.75} />
+      <ellipse cx={81} cy={50} rx={2.2} ry={3} fill={C.glow} opacity={0.75} />
       <path d="M75 18 L87 13 L87 20 L75 25 Z" {...GLOSS} />
       {/* передняя панель */}
       <rect x={36} y={12} width={36} height={69} rx={2} fill={C.shell2} />
       <rect x={39} y={15} width={30} height={63} rx={1.5} fill={C.dark} />
       {/* кнопка питания с подсветкой */}
       <circle cx={54} cy={23} r={4.2} fill={C.dark2} />
-      <circle cx={54} cy={23} r={3} fill="none" stroke={C.primary} strokeWidth={1.2} />
-      <path d="M54 20.6 V23" stroke={C.primary} strokeWidth={1.2} strokeLinecap="round" />
+      <circle cx={54} cy={23} r={3} fill="none" stroke={C.glow} strokeWidth={1.2} />
+      <path d="M54 20.6 V23" stroke={C.glow} strokeWidth={1.2} strokeLinecap="round" />
       {/* порты USB и аудио */}
       <rect x={44} y={31} width={6} height={2.4} rx={0.6} fill={C.dark2} stroke={C.shell3} strokeWidth={0.5} />
       <rect x={52} y={31} width={6} height={2.4} rx={0.6} fill={C.dark2} stroke={C.shell3} strokeWidth={0.5} />
@@ -55,9 +55,9 @@ export function MotherboardArt() {
       {/* разъёмы задней панели */}
       <rect x={16} y={8} width={10} height={30} rx={1} fill={C.metal2} />
       <rect x={18} y={11} width={6} height={4} rx={0.6} fill={C.dark2} />
-      <rect x={18} y={18} width={6} height={4} rx={0.6} fill={C.primary} />
+      <rect x={18} y={18} width={6} height={4} rx={0.6} fill={C.slate} />
       <rect x={18} y={25} width={6} height={4} rx={0.6} fill={C.dark2} />
-      <circle cx={21} cy={33.5} r={1.6} fill={C.success} />
+      <circle cx={21} cy={33.5} r={1.6} fill={C.led} />
       {/* сокет процессора */}
       <rect x={30} y={14} width={24} height={24} rx={1.5} fill={C.metal3} />
       <rect x={33} y={17} width={18} height={18} rx={1} fill={C.metal1} />
@@ -231,7 +231,7 @@ export function SsdArt() {
       <rect x={13.5} y={33} width={4} height={8} rx={0.6} fill={C.gold} />
       <rect x={13.5} y={44} width={4} height={11} rx={0.6} fill={C.gold} />
       {/* светодиод */}
-      <circle cx={86} cy={69} r={1.4} fill={C.primary} />
+      <circle cx={86} cy={69} r={1.4} fill={C.glow} />
     </Art>
   );
 }
@@ -262,7 +262,7 @@ export function HddArt() {
       <circle cx={89} cy={66} r={6} fill={C.metal3} />
       <circle cx={89} cy={66} r={3} fill={C.metal1} />
       {/* шлейф */}
-      <path d="M92 60 C96 52 96 44 99 36" fill="none" stroke={C.warning} strokeWidth={2} strokeLinecap="round" />
+      <path d="M92 60 C96 52 96 44 99 36" fill="none" stroke={C.wireYellow} strokeWidth={2} strokeLinecap="round" />
       {/* винты */}
       {[
         [22, 12],
@@ -287,7 +287,7 @@ export function GpuArt() {
       {/* кожух */}
       <rect x={12} y={18} width={102} height={42} rx={5} fill={C.dark} />
       <path d="M12 23 a5 5 0 0 1 5 -5 h92 a5 5 0 0 1 5 5 v3 h-102 Z" fill={C.shell3} opacity={0.35} />
-      <path d="M66 18 l6 42 h3 l-6 -42 Z" fill={C.primary} opacity={0.8} />
+      <path d="M66 18 l6 42 h3 l-6 -42 Z" fill={C.slate} opacity={0.8} />
       {/* вентиляторы */}
       {[40, 90].map((cx) => (
         <g key={cx}>
@@ -313,8 +313,8 @@ export function PsuArt() {
       {/* провода */}
       <g fill="none" strokeLinecap="round" strokeWidth={2.2}>
         <path d="M86 52 C98 52 100 62 106 64" stroke={C.dark} />
-        <path d="M86 58 C96 58 98 68 104 70" stroke={C.warning} />
-        <path d="M86 46 C100 44 102 52 108 54" stroke={C.danger} />
+        <path d="M86 58 C96 58 98 68 104 70" stroke={C.wireYellow} />
+        <path d="M86 46 C100 44 102 52 108 54" stroke={C.wireRed} />
       </g>
       <rect x={102} y={58} width={12} height={16} rx={1.5} fill={C.paper} />
       <Stripes x={104} y={60} n={4} w={8} h={2.2} step={3.4} fill={C.shell3} vertical={false} />
@@ -334,9 +334,9 @@ export function PsuArt() {
       <rect x={73} y={20} width={11} height={9} rx={1.5} fill={C.dark2} />
       <rect x={75.5} y={22.5} width={6} height={4} rx={0.6} fill={C.shell3} />
       <rect x={75} y={33} width={7} height={10} rx={1} fill={C.dark2} />
-      <rect x={76.5} y={34.5} width={4} height={4} rx={0.5} fill={C.danger} />
+      <rect x={76.5} y={34.5} width={4} height={4} rx={0.5} fill={C.wireRed} />
       {/* значок «высокое напряжение» */}
-      <path d="M79 54 L75 62 H78.5 L77 69 L82 60 H78.5 L80 54 Z" fill={C.warning} />
+      <path d="M79 54 L75 62 H78.5 L77 69 L82 60 H78.5 L80 54 Z" fill={C.volt} />
     </Art>
   );
 }

@@ -142,8 +142,8 @@ export type Scene =
   | { kind: "pc-inside"; highlight?: PcPart[]; labels?: boolean; caption?: Text }
   /** Цикл процессора: выборка → декодирование → выполнение → запись. step — активный этап (0–3). */
   | { kind: "cpu-cycle"; step?: 0 | 1 | 2 | 3; instr?: string; caption?: Text }
-  /** Клавиатура с подсвеченными клавишами (сочетание — по порядку нажатия): ["Ctrl", "C"]. */
-  | { kind: "keyboard"; keys: string[]; caption?: Text }
+  /** Клавиатура с подсвеченными клавишами (сочетание — по порядку нажатия): ["Ctrl", "C"]; combo: false — просто список клавиш. */
+  | { kind: "keyboard"; keys: string[]; combo?: boolean; caption?: Text }
   /** Сравнение объёмов: полосы в логарифмическом масштабе с подписью размера (Б, КБ, МБ, ГБ, ТБ). */
   | { kind: "sizes"; items: { label: Text; bytes: number; icon?: IconName }[]; caption?: Text }
   /** Дерево папок и файлов; active — путь к выделенному элементу («Учёба/Информатика/урок.docx»). */

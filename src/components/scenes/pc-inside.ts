@@ -6,7 +6,11 @@ import { HARDWARE_NAMES } from "./hardware/names";
 /** Все детали схемы в порядке рисования (снизу вверх по слоям). */
 export const PC_PARTS = ["ports", "motherboard", "cpu", "cooler", "ram", "gpu", "psu", "ssd", "hdd", "fans"] as const satisfies readonly PcPart[];
 
-/** Названия деталей, которых нет среди рисунков сцены hardware (ru + kk). */
+/**
+ * Названия деталей, которых нет среди рисунков сцены hardware (ru + kk).
+ * Исключение из правила «строки — в src/i18n/dict.ts», как и hardware/names.ts: тексты сцены живут рядом с ней,
+ * чтобы сцена разрабатывалась независимо. TODO: прогнать через npm run review:kk (нет ключа в среде исполнителя).
+ */
 export const PC_EXTRA_NAMES: Record<"fans" | "ports", L> = {
   fans: { ru: "Вентиляторы", kk: "Желдеткіштер" },
   ports: { ru: "Порты", kk: "Порттар" },
@@ -52,17 +56,23 @@ export const PC_GEO = {
 
 export type Side = "left" | "right";
 
+/** Радиатор кулера (координаты корпуса). Он короче процессора: нижний край процессора с контактами виден под ним. */
+export const PC_COOLER_BOX = { x: 40, y: 19, w: 42, h: 29 } as const;
+
+/** Процессор (координаты корпуса). */
+export const PC_CPU_BOX = { x: 44, y: 24, w: 34, h: 34 } as const;
+
 /** Точка выноски на детали (в координатах корпуса) и сторона подписи. */
 export const PC_ANCHORS: Record<PcPart, { x: number; y: number; side: Side }> = {
   cooler: { x: 44, y: 24, side: "left" },
-  cpu: { x: 61, y: 41, side: "left" },
+  cpu: { x: 52, y: 52, side: "left" },
   ports: { x: 16, y: 66, side: "left" },
   gpu: { x: 30, y: 108, side: "left" },
+  motherboard: { x: 60, y: 146, side: "left" },
   psu: { x: 18, y: 204, side: "left" },
   fans: { x: 131, y: 30, side: "right" },
   ram: { x: 101, y: 74, side: "right" },
   ssd: { x: 132, y: 104, side: "right" },
-  motherboard: { x: 108, y: 148, side: "right" },
   hdd: { x: 127, y: 190, side: "right" },
 };
 

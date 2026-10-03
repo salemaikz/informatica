@@ -5,29 +5,51 @@ import type { ReactNode } from "react";
 
 const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
 
-/** Палитра. Светлый/серый пластик строится от --muted и --surface, поэтому сам подстраивается под тему. */
+/**
+ * Тон, зависящий от темы: `light-dark()` берёт значение по `color-scheme`, который задаёт globals.css
+ * в каждом блоке темы. Если в globals.css появится токен `--<name>`, он важнее (fallback не нужен).
+ */
+const tone = (name: string, light: string, dark: string) => `var(--${name}, light-dark(${light}, ${dark}))`;
+
+/**
+ * Палитра — только из токенов темы, без своих hex.
+ * Порядок оттенков пластика одинаков в обеих темах: shell1 светлее shell2 светлее shell3
+ * (shell3 — тень/нижние грани), dark/dark2 темнее любого shell; в тёмной теме dark чуть светлее карточки,
+ * чтобы рамки не терялись на фоне.
+ */
 export const C = {
   /** Светлый пластик / корпус. */
-  shell1: mix("var(--muted)", 16, "var(--surface)"),
+  shell1: tone("device-shell-1", mix("var(--muted)", 16, "var(--surface)"), mix("var(--muted)", 52, "var(--surface)")),
   /** Пластик в полутени. */
-  shell2: mix("var(--muted)", 34, "var(--surface)"),
-  /** Пластик в тени, рёбра. */
-  shell3: mix("var(--muted)", 58, "var(--surface)"),
+  shell2: tone("device-shell-2", mix("var(--muted)", 34, "var(--surface)"), mix("var(--muted)", 40, "var(--surface)")),
+  /** Пластик в тени, рёбра, нижние грани. */
+  shell3: tone("device-shell-3", mix("var(--muted)", 58, "var(--surface)"), mix("var(--muted)", 28, "var(--surface)")),
   /** Тёмный пластик (рамки экранов, кнопки) — тёмный в обеих темах. */
-  dark: mix("var(--muted)", 34, "#121722"),
+  dark: tone("device-dark", mix("var(--muted)", 30, "var(--text)"), mix("var(--muted)", 12, "var(--surface)")),
   /** Ещё темнее: глубина, отверстия, щели. */
-  dark2: mix("var(--muted)", 14, "#0b0f17"),
+  dark2: tone("device-dark-2", mix("var(--muted)", 10, "var(--text)"), mix("var(--muted)", 3, "var(--bg)")),
   /** Выключенное стекло экрана. */
-  glass: mix("var(--primary-strong)", 26, "#0a111d"),
+  glass: tone("device-glass", mix("var(--primary-strong)", 26, "var(--text)"), mix("var(--primary-strong)", 26, "var(--bg)")),
   /** Включённый экран: фон и детали интерфейса. */
   lit: mix("var(--primary)", 22, "var(--surface)"),
   litDeep: mix("var(--primary)", 55, "var(--surface)"),
-  /** Бумага. */
-  paper: mix("#ffffff", 88, "var(--surface)"),
-  paperLine: mix("var(--muted)", 45, "#ffffff"),
-  /** Кожа (палец). */
-  skin: mix("var(--warning)", 22, "#efc9ae"),
-  skinShade: mix("var(--warning-strong)", 30, "#d9a685"),
+  /** Бумага (в тёмной теме — чуть приглушённая) и линии/контур на ней. */
+  paper: tone("paper", "var(--surface)", mix("var(--text)", 88, "var(--surface)")),
+  paperLine: tone("paper-line", mix("var(--muted)", 45, "var(--surface)"), "var(--muted)"),
+  /** Кожа (палец): тёплый оттенок из warning/danger на светлой основе. */
+  skin: tone(
+    "skin",
+    mix("var(--warning)", 28, mix("var(--danger)", 12, "var(--surface)")),
+    mix("var(--warning)", 28, mix("var(--danger)", 12, "var(--text)")),
+  ),
+  skinShade: tone(
+    "skin-shade",
+    mix("var(--warning-strong)", 40, mix("var(--danger)", 15, "var(--surface)")),
+    mix("var(--warning-strong)", 40, mix("var(--danger)", 15, "var(--text)")),
+  ),
+  /** Блик (почти белый) и тень (почти чёрная) — всегда с прозрачностью. */
+  gloss: tone("art-gloss", "var(--surface)", "var(--text)"),
+  shade: tone("art-shadow", "var(--text)", "var(--bg)"),
   primary: "var(--primary)",
   primaryStrong: "var(--primary-strong)",
   primarySoft: "var(--primary-soft)",
@@ -39,8 +61,8 @@ export const C = {
   streak: "var(--streak)",
 } as const;
 
-/** Блик и тень — нейтральные полупрозрачные (работают на любом фоне). */
-export const GLOSS = { fill: "#ffffff", fillOpacity: 0.22 } as const;
+/** Блик — полупрозрачный светлый (работает на любом фоне). */
+export const GLOSS = { fill: C.gloss, fillOpacity: 0.22 } as const;
 
 /** Холст рисунка. Подпись даёт сама сцена (role="img" + aria-label), поэтому рисунок скрыт от чтеца. */
 export function Art({ children }: { children: ReactNode }) {
@@ -53,7 +75,7 @@ export function Art({ children }: { children: ReactNode }) {
 
 /** Мягкая тень под предметом. */
 export function Shadow({ cx = 60, cy = 82, rx = 44, ry = 4 }: { cx?: number; cy?: number; rx?: number; ry?: number }) {
-  return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="#000000" fillOpacity={0.13} />;
+  return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={C.shade} fillOpacity={0.13} />;
 }
 
 /** Дуги «волн» (звук, Wi‑Fi): центр, направление в градусах, радиусы. */

@@ -5,6 +5,8 @@ import { INTERNAL_ART, INTERNAL_IDS } from "@/components/scenes/hardware/interna
 import { PC_PART_ART } from "@/components/scenes/pc-inside-art";
 import {
   PC_ANCHORS,
+  PC_COOLER_BOX,
+  PC_CPU_BOX,
   PC_GEO,
   PC_INSIDE_TEXT,
   PC_PARTS,
@@ -51,6 +53,15 @@ describe("pc-inside: детали и выноски", () => {
       expect(pcPartName(p).ru.trim()).not.toBe("");
       expect(pcPartName(p).kk.trim()).not.toBe("");
     }
+  });
+
+  it("процессор виден из-под кулера, и выноска «Процессор» указывает на него, а не на кулер", () => {
+    const inBox = (p: { x: number; y: number }, b: { x: number; y: number; w: number; h: number }) =>
+      p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+    expect(PC_COOLER_BOX.y + PC_COOLER_BOX.h).toBeLessThan(PC_CPU_BOX.y + PC_CPU_BOX.h - 6);
+    expect(inBox(PC_ANCHORS.cpu, PC_CPU_BOX)).toBe(true);
+    expect(inBox(PC_ANCHORS.cpu, PC_COOLER_BOX)).toBe(false);
+    expect(inBox(PC_ANCHORS.cooler, PC_COOLER_BOX)).toBe(true);
   });
 
   it("точки выносок внутри корпуса в координатах сцены", () => {

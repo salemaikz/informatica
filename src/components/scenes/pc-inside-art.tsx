@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { PcPart } from "@/lib/types";
 import { C, Fan, Stripes, mix } from "./hardware/internals/kit";
+import { PC_COOLER_BOX as K, PC_CPU_BOX as P } from "./pc-inside";
 
 // Рисунок «системный блок изнутри» (вид сбоку со снятой крышкой) в координатах корпуса 150 × 236.
 // Задняя стенка слева (порты, задний вентилятор), передняя — справа (вентиляторы, накопители), БП внизу.
@@ -15,11 +16,11 @@ const NORMAL: Record<PcPart, Tones> = {
   cooler: [C.metal2, C.metal1, C.dark, C.copper, C.shell3, C.dark2],
   ram: [C.pcb2, C.pcb, C.chip, C.gold, C.chipTop, C.dark2],
   gpu: [C.dark, C.shell3, C.dark2, C.metal2, C.pcb, C.gold],
-  psu: [C.dark, C.shell3, C.dark2, C.warning, C.paper, C.danger],
-  ssd: [C.dark, C.dark2, C.paper, C.shell3, C.success, C.metal2],
+  psu: [C.dark, C.shell3, C.dark2, C.wireYellow, C.paper, C.wireRed],
+  ssd: [C.dark, C.dark2, C.paper, C.shell3, C.led, C.metal2],
   hdd: [C.metal2, C.metal1, C.metal3, C.paper, C.dark, C.shell3],
   fans: [C.dark, C.dark2, C.shell3, C.shell2, C.shell3, C.dark2],
-  ports: [C.metal1, C.metal3, C.dark2, C.success, C.warning, C.metal2],
+  ports: [C.metal1, C.metal3, C.dark2, C.led, C.wireYellow, C.metal2],
 };
 
 /** Оттенки подсвеченной детали: вся деталь — в гамме primary. */
@@ -135,7 +136,7 @@ function Motherboard() {
 function Cpu() {
   return (
     <g>
-      <rect x={44} y={24} width={34} height={34} rx={2} fill={A} />
+      <rect x={P.x} y={P.y} width={P.w} height={P.h} rx={2} fill={A} />
       <Stripes x={47} y={54.5} n={9} w={1.6} h={2.6} step={3.3} fill={Cc} />
       <rect x={49} y={29} width={24} height={24} rx={2} fill={B} />
       <rect x={50.5} y={30.5} width={21} height={21} rx={1.5} fill={D} />
@@ -155,9 +156,10 @@ function Cooler() {
         <path d="M65 20 V14" />
         <path d="M72 20 V15" />
       </g>
-      <rect x={40} y={19} width={42} height={44} rx={2} fill={A} />
-      <Stripes x={41.2} y={20} n={14} w={1.3} h={42} step={2.95} fill={B} />
-      <Fan cx={61} cy={41} size={34} frame={Cc} hole={F} blade={E} hub={B} />
+      {/* радиатор короче процессора: снизу видны край процессора и контакты */}
+      <rect x={K.x} y={K.y} width={K.w} height={K.h} rx={2} fill={A} />
+      <Stripes x={K.x + 1.2} y={K.y + 1} n={14} w={1.3} h={K.h - 2} step={2.95} fill={B} />
+      <Fan cx={K.x + K.w / 2} cy={K.y + K.h / 2} size={K.h - 3} frame={Cc} hole={F} blade={E} hub={B} />
     </g>
   );
 }

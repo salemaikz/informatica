@@ -6,7 +6,10 @@ import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
 import { KB_UNITS, KEY_ROWS, comboText, keyCaption, litKeyIds, type KeyDef } from "./keyboard";
 
-type KeyboardData = Extract<Scene, { kind: "keyboard" }>;
+// combo: false — набор отдельных клавиш (не нажимать вместе); поле добавляет types.ts
+type KeyboardData = Extract<Scene, { kind: "keyboard" }> & { combo?: boolean };
+
+const ON_INK = "var(--on-primary, #fff)";
 
 // Размеры в единицах viewBox: клавиша 1 = U, зазор GAP, поля корпуса PAD.
 const U = 22;
@@ -57,10 +60,11 @@ function Glyph({ k, cx, cy, color }: { k: KeyDef; cx: number; cy: number; color:
 export function KeyboardScene({ scene }: { scene: KeyboardData }) {
   const { t } = useT();
   const reduce = useReduceMotion();
+  const isCombo = scene.combo !== false;
   const lit = litKeyIds(scene.keys);
   const anyLit = lit.size > 0;
   const space = t("basics.kb.space");
-  const combo = comboText(scene.keys, space);
+  const combo = comboText(scene.keys, space, isCombo);
   const fade = reduce ? undefined : "fill 200ms ease, opacity 200ms ease";
 
   return (
@@ -78,7 +82,7 @@ export function KeyboardScene({ scene }: { scene: KeyboardData }) {
                 const w = k.w * U - GAP;
                 const face = on ? "var(--primary)" : isMod(k) ? KEY_FACE_MOD : KEY_FACE;
                 const edge = on ? "var(--primary-strong)" : KEY_EDGE;
-                const ink = on ? "#fff" : "var(--text)";
+                const ink = on ? ON_INK : "var(--text)";
                 const cx = x + w / 2;
                 const cy = y + h / 2;
                 const arrow = ["←", "↑", "→", "↓"].includes(k.norm);
@@ -89,13 +93,13 @@ export function KeyboardScene({ scene }: { scene: KeyboardData }) {
                     <rect x={x} y={y + 1.6} width={w} height={h} rx={3.5} fill={edge} />
                     <rect x={x} y={y} width={w} height={h} rx={3.5} fill={face} stroke={on ? "none" : "var(--border)"} strokeWidth={0.6} style={{ transition: fade }} />
                     {arrow || k.norm === "win" ? (
-                      <Glyph k={k} cx={cx} cy={cy} color={on ? "#fff" : "var(--muted)"} />
+                      <Glyph k={k} cx={cx} cy={cy} color={on ? ON_INK : "var(--muted)"} />
                     ) : k.sub ? (
                       <>
                         <text x={cx - 1.5} y={cy + 4.2} textAnchor="middle" fontSize={11.5} fontWeight={800} fill={ink}>
                           {label}
                         </text>
-                        <text x={x + w - 2.6} y={y + 7.4} textAnchor="end" fontSize={6.4} fontWeight={700} fill={on ? "#fff" : "var(--muted)"}>
+                        <text x={x + w - 2.6} y={y + 7.4} textAnchor="end" fontSize={6.4} fontWeight={700} fill={on ? ON_INK : "var(--muted)"}>
                           {k.sub}
                         </text>
                       </>
@@ -120,11 +124,11 @@ export function KeyboardScene({ scene }: { scene: KeyboardData }) {
       </svg>
 
       <div className="mt-4 text-center" aria-hidden="true">
-        <div className="text-xs font-bold text-muted">{t("basics.kb.press")}</div>
+        {isCombo && <div className="text-xs font-bold text-muted">{t("basics.kb.press")}</div>}
         <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2">
           {scene.keys.map((k, i) => (
             <Fragment key={i}>
-              {i > 0 && <span className="text-xl font-extrabold text-muted">+</span>}
+              {i > 0 && isCombo && <span className="text-xl font-extrabold text-muted">+</span>}
               <kbd className="rounded-xl border-2 border-primary bg-primary-soft px-3.5 py-1.5 font-sans text-xl font-extrabold leading-none text-primary shadow-[0_3px_0_var(--primary)]">
                 {keyCaption(k, space)}
               </kbd>

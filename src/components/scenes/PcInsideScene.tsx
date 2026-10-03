@@ -40,7 +40,7 @@ export function PcInsideScene({ scene }: { scene: Extract<Scene, { kind: "pc-ins
       viewBox={viewBox}
       role="img"
       aria-label={aria}
-      className={cn("mx-auto block h-auto w-full", labels ? "max-w-[460px]" : "max-w-[300px]")}
+      className={cn("mx-auto block h-auto w-full", labels ? "max-w-[460px]" : "max-h-[50vh] max-w-[220px]")}
     >
       <g transform={`translate(${g.caseX} ${g.caseY}) scale(${+g.scale.toFixed(4)})`}>
         <CaseShell />
@@ -77,9 +77,10 @@ export function PcInsideScene({ scene }: { scene: Extract<Scene, { kind: "pc-ins
                 fontSize={g.fontSize}
                 fontWeight={on ? 800 : 700}
                 fill={on ? "var(--primary)" : "var(--text)"}
+                dominantBaseline="central"
               >
                 {c.lines.map((line, i) => (
-                  <tspan key={i} x={tx} y={c.top + g.lineH * (i + 0.5)} dominantBaseline="central">
+                  <tspan key={i} x={tx} y={c.top + g.lineH * (i + 0.5)}>
                     {line}
                   </tspan>
                 ))}

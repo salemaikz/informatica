@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { barWidths, formatBytes } from "@/components/scenes/sizes";
 import { flattenTree, iconFor, normalizePath, pathState, windowsPath } from "@/components/scenes/files";
-import { KB_UNITS, KEY_ROWS, canonical, comboText, keyCaption, litKeyIds } from "@/components/scenes/keyboard";
+import { KB_UNITS, KEY_ROWS, canonical, comboText, isKnownKey, keyCaption, litKeyIds } from "@/components/scenes/keyboard";
 import { layerState } from "@/components/scenes/layers";
-import { instrFontSize } from "@/components/scenes/CpuCycleScene";
+import { instrFontSize, instrLines } from "@/components/scenes/CpuCycleScene";
 import { basicsDict } from "@/i18n/parts/basics";
 import type { FileNode } from "@/lib/types";
 
@@ -182,7 +182,10 @@ describe("клавиатура: подсветка", () => {
     expect(canonical("ArrowLeft")).toBe("←");
     expect(canonical("down")).toBe("↓");
     expect(canonical("с")).toBe("c"); // русская «с» — та же клавиша
-    expect(canonical("К")).toBe("r");
+    expect(canonical("К")).toBe("k"); // look-alike
+    expect(canonical("А")).toBe("a");
+    expect(canonical("Х")).toBe("x");
+    expect(canonical("Ы")).toBe("s"); // не похожа — по раскладке
   });
 
   it("Ctrl + C подсвечивает левый Ctrl и C", () => {
@@ -204,6 +207,27 @@ describe("клавиатура: подсветка", () => {
     expect(keyCaption("f5", "")).toBe("F5");
     expect(keyCaption("delete", "")).toBe("Del");
     expect(keyCaption("left", "")).toBe("←");
+  });
+});
+
+describe("keyboard list mode / known keys / instr lines", () => {
+  it("list caption joins with commas", () => {
+    expect(comboText(["Backspace", "Delete", "Enter", "Esc"], "Пробел", false)).toBe("Backspace, Del, Enter, Esc");
+  });
+  it("Cyrillic look-alikes light the intended key", () => {
+    expect([...litKeyIds(["Ctrl", "А"])].sort()).toEqual(["a", "ctrl"]);
+    expect(litKeyIds(["Х"]).has("x")).toBe(true);
+  });
+  it("isKnownKey", () => {
+    expect(isKnownKey("Ctrl")).toBe(true);
+    expect(isKnownKey("PrtSc")).toBe(false);
+    expect(isKnownKey("/")).toBe(false);
+  });
+  it("24-char instr stays legible on two lines", () => {
+    const s = "MOV AX, [0x1F40] + 0x0001".slice(0, 24);
+    const lines = instrLines(s);
+    expect(lines.length).toBe(2);
+    expect(instrFontSize(Math.max(...lines.map((x) => x.length)))).toBeGreaterThanOrEqual(9);
   });
 });
 

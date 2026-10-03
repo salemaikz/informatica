@@ -7,7 +7,7 @@ import { Art, C, GLOSS, Grid, Shadow, Waves } from "./kit";
 const KEY_ROWS = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2],
   [1.5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.5],
-  [1.75, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.25],
+  [1.75, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.25],
   [2.25, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.75],
   [1.25, 1.25, 1.25, 6.25, 1.25, 1.25, 1.25, 1.25],
 ];
@@ -53,7 +53,7 @@ export function MouseArt() {
   return (
     <Art>
       <path d="M60 13 C60 5 64 3 68 0" fill="none" stroke={C.dark} strokeWidth={2.4} strokeLinecap="round" />
-      <path d={body} fill="#000000" fillOpacity={0.13} transform="translate(3 4)" />
+      <path d={body} fill={C.shade} fillOpacity={0.13} transform="translate(3 4)" />
       <path d={body} fill={C.shell1} />
       {/* тень правого бока */}
       <path d="M72 15 C81 21 85 33 85 47 C85 69 75 81 60 81 C70 76 76 64 76 47 C76 32 75 22 72 15 Z" fill={C.shell2} />
@@ -101,7 +101,7 @@ function Finger({ x, y, angle }: { x: number; y: number; angle: number }) {
     <g transform={`rotate(${angle} ${x} ${y})`}>
       <rect x={x - 5.5} y={y - 2} width="11" height="46" rx="5.5" fill={C.skinShade} />
       <rect x={x - 5.5} y={y - 2} width="9.5" height="46" rx="4.75" fill={C.skin} />
-      <rect x={x - 3.8} y={y - 0.6} width="6.6" height="7.5" rx="3.2" fill="#ffffff" fillOpacity={0.45} />
+      <rect x={x - 3.8} y={y - 0.6} width="6.6" height="7.5" rx="3.2" fill={C.gloss} fillOpacity={0.45} />
       <path d={`M${x - 4} ${y + 16} H${x + 3}`} stroke={C.skinShade} strokeWidth={0.8} strokeLinecap="round" />
     </g>
   );
@@ -148,7 +148,7 @@ export function MicArt() {
       <rect x="58.5" y="52" width="3" height="26" rx="1.2" fill={C.shell3} />
       <path d="M45 36 V44 Q45 55 60 55 Q75 55 75 44 V36" fill="none" stroke={C.shell3} strokeWidth={3} strokeLinecap="round" />
       <rect x="48" y="10" width="24" height="42" rx="12" fill={C.dark} />
-      <rect x="66" y="34" width="4" height="15" rx="2" fill="#ffffff" fillOpacity={0.12} />
+      <rect x="66" y="34" width="4" height="15" rx="2" fill={C.gloss} fillOpacity={0.12} />
       <path d="M48 32 V22 A12 12 0 0 1 72 22 V32 Z" fill={C.shell2} />
       <g stroke={C.shell3} strokeWidth={0.9}>{mesh}</g>
       <ellipse cx="54" cy="16" rx="2.5" ry="4" transform="rotate(30 54 16)" {...GLOSS} />
@@ -165,18 +165,18 @@ export function WebcamArt() {
       <rect x="14" y="60" width="92" height="34" rx="4" fill={C.dark} />
       <rect x="18" y="64" width="84" height="30" rx="1.5" fill={C.lit} />
       <rect x="18" y="64" width="84" height="5" fill={C.litDeep} fillOpacity={0.5} />
-      <ellipse cx="60" cy="61" rx="18" ry="2" fill="#000000" fillOpacity={0.2} />
+      <ellipse cx="60" cy="61" rx="18" ry="2" fill={C.shade} fillOpacity={0.2} />
       {/* крепление */}
       <path d="M53 52 H67 L69 61 H51 Z" fill={C.shell3} />
       {/* корпус камеры */}
       <rect x="30" y="20" width="60" height="34" rx="17" fill={C.dark2} />
       <rect x="30" y="18" width="60" height="33" rx="16.5" fill={C.dark} />
-      <path d="M38 24 Q60 17 82 24" fill="none" stroke="#ffffff" strokeOpacity={0.18} strokeWidth={2.4} strokeLinecap="round" />
+      <path d="M38 24 Q60 17 82 24" fill="none" stroke={C.gloss} strokeOpacity={0.18} strokeWidth={2.4} strokeLinecap="round" />
       <circle cx="60" cy="35" r="12.5" fill={C.shell3} />
       <circle cx="60" cy="35" r="10" fill={C.dark2} />
       <circle cx="60" cy="35" r="6.5" fill={C.glass} />
       <circle cx="60" cy="35" r="3" fill={C.primary} fillOpacity={0.6} />
-      <circle cx="57.2" cy="32.2" r="1.8" fill="#ffffff" fillOpacity={0.75} />
+      <circle cx="57.2" cy="32.2" r="1.8" fill={C.gloss} fillOpacity={0.75} />
       <circle cx="80" cy="35" r="2" fill={C.success} />
       <g fill={C.shell3}>
         <circle cx="39" cy="33" r="0.8" />
@@ -194,7 +194,7 @@ export function ScannerArt() {
       <Shadow cy={79} rx={54} />
       {/* открытая крышка */}
       <path d="M16 45 H104 L98 9 H22 Z" fill={C.shell2} />
-      <path d="M21 43 H99 L94.5 13 H25.5 Z" fill={C.paper} />
+      <path d="M21 43 H99 L94.5 13 H25.5 Z" fill={C.paper} stroke={C.paperLine} strokeWidth={0.6} strokeLinejoin="round" />
       <path d="M21 43 H99 L94.5 13 H25.5 Z" fill="var(--muted)" fillOpacity={0.08} />
       {/* верх корпуса со стеклом */}
       <path d="M16 44 H104 L112 58 H8 Z" fill={C.shell1} />
@@ -206,7 +206,7 @@ export function ScannerArt() {
       <path d="M65 46 H67.5 L69.5 56 H67 Z" fill={C.primary} />
       {/* передняя панель */}
       <path d="M8 58 H112 V71 A4 4 0 0 1 108 75 H12 A4 4 0 0 1 8 71 Z" fill={C.shell2} />
-      <rect x="8" y="58" width="104" height="3" fill="#ffffff" fillOpacity={0.25} />
+      <rect x="8" y="58" width="104" height="3" fill={C.gloss} fillOpacity={0.25} />
       <circle cx="101" cy="66.5" r="3" fill={C.primary} />
       <circle cx="92" cy="66.5" r="1.4" fill={C.success} />
       <path d="M16 66.5 H40" stroke={C.shell3} strokeWidth={1.4} strokeLinecap="round" />
@@ -223,7 +223,7 @@ export function GamepadArt() {
       <rect x="22" y="19" width="22" height="9" rx="4.5" fill={C.shell3} />
       <rect x="76" y="19" width="22" height="9" rx="4.5" fill={C.shell3} />
       <path d={body} fill={C.dark} />
-      <path d="M36 24 H84 C94 24 101 27 104 34 C106 39 107 44 108 49 C96 40 80 36 60 36 C40 36 24 40 12 49 C13 44 14 39 16 34 C19 27 26 24 36 24 Z" fill="#ffffff" fillOpacity={0.12} />
+      <path d="M36 24 H84 C94 24 101 27 104 34 C106 39 107 44 108 49 C96 40 80 36 60 36 C40 36 24 40 12 49 C13 44 14 39 16 34 C19 27 26 24 36 24 Z" fill={C.gloss} fillOpacity={0.12} />
       {/* крестовина */}
       <rect x="29" y="34" width="6" height="16" rx="1.2" fill={C.dark2} />
       <rect x="24" y="39" width="16" height="6" rx="1.2" fill={C.dark2} />

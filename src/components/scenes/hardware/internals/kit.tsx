@@ -18,10 +18,10 @@ export const C = {
   metal1: mix("var(--muted)", 10, "#f4f6fa"),
   metal2: mix("var(--muted)", 32, "#e4e8f0"),
   metal3: mix("var(--muted)", 62, "#c9cfdb"),
-  /** Печатная плата (зелёный текстолит) и дорожки. */
-  pcb: mix("var(--success-strong)", 62, "#0f2b20"),
-  pcb2: mix("var(--success-strong)", 82, "#1d4a36"),
-  pcbLine: mix("var(--success)", 55, "#bfe9d3"),
+  /** Печатная плата (зелёный текстолит) и дорожки — постоянный зелёный, не токен success. */
+  pcb: mix("var(--muted)", 12, "#164a33"),
+  pcb2: mix("var(--muted)", 12, "#226a49"),
+  pcbLine: mix("var(--muted)", 12, "#8fd3ad"),
   /** Микросхема. */
   chip: mix("var(--muted)", 18, "#10141c"),
   chipTop: mix("var(--muted)", 30, "#1a202b"),
@@ -30,13 +30,16 @@ export const C = {
   copper: mix("var(--streak)", 55, "#a5582a"),
   /** Наклейка/бумага. */
   paper: mix("var(--muted)", 6, "#ffffff"),
-  primary: "var(--primary)",
-  primaryStrong: "var(--primary-strong)",
-  primarySoft: "var(--primary-soft)",
-  success: "var(--success)",
-  warning: "var(--warning)",
-  danger: "var(--danger)",
-  ai: "var(--ai)",
+  /** Цветной пластик (сине-серый): не primary, чтобы синий оставался цветом «выделено». */
+  slate: mix("var(--muted)", 25, "#4f6d93"),
+  slateDark: mix("var(--muted)", 25, "#38506f"),
+  slateSoft: mix("var(--muted)", 25, "#d3dde9"),
+  /** Декоративные цвета (светодиоды, провода, наклейки) — постоянные, без смысловых токенов темы. */
+  led: "#4fd18b",
+  glow: "#7fdde6",
+  wireRed: "#d9534a",
+  wireYellow: "#e8b23a",
+  volt: "#f2c230",
 } as const;
 
 /** Блик — нейтральный полупрозрачный (работает на любом фоне). */

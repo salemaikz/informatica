@@ -50,6 +50,21 @@
   --heart-strong: #c92a50;
   --heart-soft: #ffe8ee;
 
+  /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
+  --device-shell-1: color-mix(in srgb, var(--muted) 16%, var(--surface));
+  --device-shell-2: color-mix(in srgb, var(--muted) 34%, var(--surface));
+  --device-shell-3: color-mix(in srgb, var(--muted) 58%, var(--surface));
+  --device-dark: color-mix(in srgb, var(--muted) 30%, var(--text));
+  --device-dark-2: color-mix(in srgb, var(--muted) 10%, var(--text));
+  --device-glass: color-mix(in srgb, var(--primary-strong) 26%, var(--text));
+  --paper: var(--surface);
+  --paper-line: color-mix(in srgb, var(--muted) 45%, var(--surface));
+  --skin: color-mix(in srgb, var(--warning) 28%, color-mix(in srgb, var(--danger) 12%, var(--surface)));
+  --skin-shade: color-mix(in srgb, var(--warning-strong) 40%, color-mix(in srgb, var(--danger) 15%, var(--surface)));
+  --art-gloss: var(--surface);
+  --art-shadow: var(--text);
+  --on-primary: #ffffff;
+
   color-scheme: light;
 }
 
@@ -90,6 +105,21 @@
   --heart: #ff5f84;
   --heart-strong: #d63c62;
   --heart-soft: #3d1a26;
+
+  /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
+  --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
+  --device-shell-2: color-mix(in srgb, var(--muted) 40%, var(--surface));
+  --device-shell-3: color-mix(in srgb, var(--muted) 28%, var(--surface));
+  --device-dark: color-mix(in srgb, var(--muted) 12%, var(--surface));
+  --device-dark-2: color-mix(in srgb, var(--muted) 3%, var(--bg));
+  --device-glass: color-mix(in srgb, var(--primary-strong) 26%, var(--bg));
+  --paper: color-mix(in srgb, var(--text) 88%, var(--surface));
+  --paper-line: var(--muted);
+  --skin: color-mix(in srgb, var(--warning) 28%, color-mix(in srgb, var(--danger) 12%, var(--text)));
+  --skin-shade: color-mix(in srgb, var(--warning-strong) 40%, color-mix(in srgb, var(--danger) 15%, var(--text)));
+  --art-gloss: var(--text);
+  --art-shadow: var(--bg);
+  --on-primary: #0f1420;
 
   color-scheme: dark;
 }
@@ -132,6 +162,21 @@
     --heart-strong: #d63c62;
     --heart-soft: #3d1a26;
 
+    /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
+    --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
+    --device-shell-2: color-mix(in srgb, var(--muted) 40%, var(--surface));
+    --device-shell-3: color-mix(in srgb, var(--muted) 28%, var(--surface));
+    --device-dark: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    --device-dark-2: color-mix(in srgb, var(--muted) 3%, var(--bg));
+    --device-glass: color-mix(in srgb, var(--primary-strong) 26%, var(--bg));
+    --paper: color-mix(in srgb, var(--text) 88%, var(--surface));
+    --paper-line: var(--muted);
+    --skin: color-mix(in srgb, var(--warning) 28%, color-mix(in srgb, var(--danger) 12%, var(--text)));
+    --skin-shade: color-mix(in srgb, var(--warning-strong) 40%, color-mix(in srgb, var(--danger) 15%, var(--text)));
+    --art-gloss: var(--text);
+    --art-shadow: var(--bg);
+    --on-primary: #0f1420;
+
     color-scheme: dark;
   }
 }
@@ -166,6 +211,7 @@
   --color-heart: var(--heart);
   --color-heart-strong: var(--heart-strong);
   --color-heart-soft: var(--heart-soft);
+  --color-on-primary: var(--on-primary);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;

@@ -32,7 +32,7 @@ export function LayersScene({ scene }: { scene: LayersData }) {
           <span className="text-[11px] font-bold leading-tight text-muted">{l(axis.bottom)}</span>
         </div>
       )}
-      <ol aria-label={t("basics.layers.aria")} className="flex min-w-0 flex-1 flex-col gap-2">
+      <ol aria-label={axis ? `${t("basics.layers.aria")}. ${l(axis.top)} → ${l(axis.bottom)}` : t("basics.layers.aria")} className="flex min-w-0 flex-1 flex-col gap-2">
         {scene.items.map((item, i) => {
           const state = layerState(i, scene.highlight);
           const on = state === "active";
@@ -42,7 +42,7 @@ export function LayersScene({ scene }: { scene: LayersData }) {
               key={i}
               aria-current={on || undefined}
               initial={reduce ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: state === "dim" ? 0.55 : 1, y: 0 }}
+              animate={{ opacity: state === "dim" ? 0.72 : 1, y: 0 }}
               transition={{ ...springSoft, delay: reduce ? 0 : Math.min(i, 8) * 0.05 }}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-3 rounded-2xl border bg-surface px-3 py-2.5",
@@ -51,7 +51,7 @@ export function LayersScene({ scene }: { scene: LayersData }) {
             >
               {Icon && (
                 <span
-                  className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", on ? "bg-primary text-white" : "bg-surface-2 text-muted")}
+                  className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", on ? "bg-primary text-[color:var(--on-primary,#fff)]" : "bg-surface-2 text-muted")}
                   aria-hidden="true"
                 >
                   <Icon className="size-5" strokeWidth={2} />

@@ -61,7 +61,10 @@ export const KEY_ROWS: KeyRow[] = [
   row([["Ctrl", 1.5], ["Win", 1.25], ["Alt", 1.25], ["Space", 5], ["Alt", 1.25], ["Ctrl", 1.75], ["←", 1], ["↓", 1], ["→", 1]]),
 ];
 
-/** Кириллица → клавиша латиницы по раскладке ЙЦУКЕН (чтобы «С» в данных подсветила клавишу C). */
+/** Кириллица, визуально совпадающая с латиницей: автор пишет «Ctrl+А» и имеет в виду A, а не клавишу по позиции ЙЦУКЕН. */
+const LOOKALIKE: Record<string, string> = { а: "a", в: "b", е: "e", к: "k", м: "m", н: "h", о: "o", р: "p", с: "c", т: "t", х: "x", у: "y" };
+
+/** Остальная кириллица → клавиша латиницы по раскладке ЙЦУКЕН (только буквенные клавиши). */
 const CYR_TO_LAT: Record<string, string> = Object.fromEntries(
   KEY_ROWS.flatMap((r) => r.keys.filter((k) => k.sub && /^[a-z]$/i.test(k.label)).map((k) => [k.sub!.toLowerCase(), k.label.toLowerCase()])),
 );
@@ -100,7 +103,7 @@ export function canonical(key: string): string {
   const s = key.trim().toLowerCase();
   const alias = ALIASES[s];
   if (alias) return alias;
-  return CYR_TO_LAT[s] ?? s;
+  return LOOKALIKE[s] ?? CYR_TO_LAT[s] ?? s;
 }
 
 /** Id клавиш раскладки, которые нужно подсветить (правые Ctrl/Alt/Shift не подсвечиваем — у них есть левые). */
@@ -126,7 +129,13 @@ export function keyCaption(key: string, spaceLabel: string): string {
   return c.length === 1 ? c.toUpperCase() : key.trim();
 }
 
-/** Сочетание строкой: «Ctrl + C». */
-export function comboText(keys: string[], spaceLabel: string): string {
-  return keys.map((k) => keyCaption(k, spaceLabel)).join(" + ");
+/** Есть ли такая клавиша в раскладке (для валидации контента). */
+export function isKnownKey(key: string): boolean {
+  const c = canonical(key);
+  return KEY_ROWS.some((r) => r.keys.some((k) => k.norm === c));
+}
+
+/** Сочетание строкой: «Ctrl + C»; для набора отдельных клавиш (combo = false) — через запятую. */
+export function comboText(keys: string[], spaceLabel: string, combo = true): string {
+  return keys.map((k) => keyCaption(k, spaceLabel)).join(combo ? " + " : ", ");
 }

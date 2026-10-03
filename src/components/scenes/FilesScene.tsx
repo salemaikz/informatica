@@ -33,9 +33,9 @@ export function FilesScene({ scene }: { scene: FilesData }) {
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div role="tree" aria-label={t("basics.files.aria")} className="rounded-2xl border border-border bg-surface p-2">
+      <div role="img" aria-label={scene.active ? `${t("basics.files.aria")}. ${t("basics.files.selected", { path: windowsPath(scene.active) })}` : t("basics.files.aria")} className="rounded-2xl border border-border bg-surface p-2">
         {/* корень — диск C: */}
-        <div className="flex h-8 items-center gap-2 px-1.5 text-sm font-extrabold text-text">
+        <div aria-hidden="true" className="flex h-8 items-center gap-2 px-1.5 text-sm font-extrabold text-text">
           <HardDrive className="size-[18px] shrink-0 text-muted" strokeWidth={2} aria-hidden="true" />
           {t("basics.files.disk")}
         </div>
@@ -47,10 +47,7 @@ export function FilesScene({ scene }: { scene: FilesData }) {
           return (
             <div
               key={r.path}
-              role="treeitem"
-              aria-selected={on}
-              aria-expanded={r.isFolder ? true : undefined}
-              aria-level={r.depth + 1}
+              aria-hidden="true"
               className={cn("flex h-8 items-stretch rounded-lg text-sm", on && "bg-primary-soft ring-2 ring-primary")}
             >
               {/* направляющие вложенности */}
@@ -73,7 +70,7 @@ export function FilesScene({ scene }: { scene: FilesData }) {
       </div>
 
       {scene.active && (
-        <div className="mt-3 rounded-2xl bg-surface px-3 py-2.5 ring-1 ring-border" aria-label={t("basics.files.selected", { path: windowsPath(scene.active) })}>
+        <div className="mt-3 rounded-2xl bg-surface px-3 py-2.5 ring-1 ring-border">
           <div className="text-xs font-bold text-muted">{t("basics.files.path")}</div>
           <div className="mt-0.5 break-all font-mono text-sm font-bold leading-snug text-text">{windowsPath(scene.active)}</div>
         </div>

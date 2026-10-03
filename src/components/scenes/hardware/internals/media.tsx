@@ -14,13 +14,13 @@ export function FlashArt() {
       <rect x={30} y={40} width={6} height={5} rx={0.6} fill={C.dark2} />
       <rect x={12} y={48} width={30} height={5} rx={0.6} fill={C.metal3} />
       {/* корпус */}
-      <rect x={40} y={27} width={68} height={34} rx={9} fill={C.primary} />
-      <rect x={40} y={45} width={68} height={16} rx={8} fill={C.primaryStrong} />
-      <rect x={40} y={36} width={68} height={16} fill={C.primary} />
+      <rect x={40} y={27} width={68} height={34} rx={9} fill={C.slate} />
+      <rect x={40} y={45} width={68} height={16} rx={8} fill={C.slateDark} />
+      <rect x={40} y={36} width={68} height={16} fill={C.slate} />
       <rect x={46} y={30} width={50} height={5} rx={2.5} {...GLOSS} />
       {/* петля и индикатор */}
-      <path d={ring(99, 44, 4.2, 2.2)} fill={C.primaryStrong} fillRule="evenodd" />
-      <circle cx={50} cy={44} r={1.6} fill={C.success} />
+      <path d={ring(99, 44, 4.2, 2.2)} fill={C.slateDark} fillRule="evenodd" />
+      <circle cx={50} cy={44} r={1.6} fill={C.led} />
     </Art>
   );
 }
@@ -32,8 +32,8 @@ export function SdArt() {
       <Shadow cx={58} cy={83} rx={38} />
       {/* SD */}
       <path d="M26 8 H62 L72 18 V78 a3 3 0 0 1 -3 3 H29 a3 3 0 0 1 -3 -3 Z" fill={C.dark} />
-      <path d="M29 30 H69 V70 H29 Z" fill={C.primary} />
-      <path d="M29 30 H69 V40 H29 Z" fill={C.primaryStrong} />
+      <path d="M29 30 H69 V70 H29 Z" fill={C.slate} />
+      <path d="M29 30 H69 V40 H29 Z" fill={C.slateDark} />
       <rect x={33} y={46} width={22} height={3} rx={1.5} fill={C.paper} opacity={0.9} />
       <rect x={33} y={52} width={14} height={3} rx={1.5} fill={C.paper} opacity={0.6} />
       {/* контакты */}
@@ -44,7 +44,7 @@ export function SdArt() {
       <rect x={22} y={32} width={4} height={5} rx={1} fill={C.paper} />
       {/* microSD */}
       <path d="M80 44 H96 L98 47 V52 L96 54 V74 a2 2 0 0 1 -2 2 H82 a2 2 0 0 1 -2 -2 Z" fill={C.dark} />
-      <rect x={82} y={58} width={12} height={14} rx={1} fill={C.primary} />
+      <rect x={82} y={58} width={12} height={14} rx={1} fill={C.slate} />
       <Stripes x={82} y={46} n={4} w={2} h={6} step={3.2} fill={C.gold} />
     </Art>
   );
@@ -58,10 +58,10 @@ export function CdArt() {
       <path d={ring(60, 44, 36, 6)} fill={C.metal2} fillRule="evenodd" />
       <path d={ring(60, 44, 34.5, 12)} fill={C.metal1} fillRule="evenodd" />
       {/* радужный отлив — сектора полупрозрачных цветов */}
-      <path d="M60 32 L60 9.5 A34.5 34.5 0 0 1 89.9 26.7 L70.4 38 A12 12 0 0 0 60 32 Z" fill={C.primary} opacity={0.28} />
-      <path d="M70.4 38 L89.9 26.7 A34.5 34.5 0 0 1 94.5 44 L72 44 A12 12 0 0 0 70.4 38 Z" fill={C.ai} opacity={0.22} />
-      <path d="M60 56 L60 78.5 A34.5 34.5 0 0 1 30.1 61.3 L49.6 50 A12 12 0 0 0 60 56 Z" fill={C.success} opacity={0.22} />
-      <path d="M49.6 50 L30.1 61.3 A34.5 34.5 0 0 1 25.5 44 L48 44 A12 12 0 0 0 49.6 50 Z" fill={C.warning} opacity={0.28} />
+      <path d="M60 32 L60 9.5 A34.5 34.5 0 0 1 89.9 26.7 L70.4 38 A12 12 0 0 0 60 32 Z" fill="#7aa8ff" opacity={0.28} />
+      <path d="M70.4 38 L89.9 26.7 A34.5 34.5 0 0 1 94.5 44 L72 44 A12 12 0 0 0 70.4 38 Z" fill="#c78bff" opacity={0.22} />
+      <path d="M60 56 L60 78.5 A34.5 34.5 0 0 1 30.1 61.3 L49.6 50 A12 12 0 0 0 60 56 Z" fill="#7fe0a8" opacity={0.22} />
+      <path d="M49.6 50 L30.1 61.3 A34.5 34.5 0 0 1 25.5 44 L48 44 A12 12 0 0 0 49.6 50 Z" fill="#ffd36b" opacity={0.28} />
       <circle cx={60} cy={44} r={28} fill="none" stroke={C.metal2} strokeWidth={0.6} />
       <circle cx={60} cy={44} r={20} fill="none" stroke={C.metal2} strokeWidth={0.6} />
       {/* прозрачное кольцо вокруг отверстия */}
@@ -83,13 +83,13 @@ export function CloudArt() {
       {/* облако */}
       <path
         d="M30 52 a14 14 0 0 1 2 -27.8 a20 20 0 0 1 37 -6 a15 15 0 0 1 22 13 a11 11 0 0 1 -1 21.8 Z"
-        fill={C.primarySoft}
-        stroke={C.primary}
+        fill={C.slateSoft}
+        stroke={C.slate}
         strokeWidth={2.4}
         strokeLinejoin="round"
       />
       {/* стрелки: загрузить и скачать */}
-      <g fill="none" stroke={C.primary} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+      <g fill="none" stroke={C.slate} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
         <path d="M52 44 V26 M45 33 L52 26 L59 33" />
         <path d="M70 26 V44 M63 37 L70 44 L77 37" />
       </g>
@@ -97,8 +97,8 @@ export function CloudArt() {
       <rect x={44} y={62} width={32} height={20} rx={2} fill={C.dark} />
       <rect x={46.5} y={64.5} width={27} height={6.5} rx={1} fill={C.dark2} />
       <rect x={46.5} y={73} width={27} height={6.5} rx={1} fill={C.dark2} />
-      <circle cx={50} cy={67.7} r={1.2} fill={C.success} />
-      <circle cx={50} cy={76.2} r={1.2} fill={C.success} />
+      <circle cx={50} cy={67.7} r={1.2} fill={C.led} />
+      <circle cx={50} cy={76.2} r={1.2} fill={C.led} />
       <Stripes x={56} y={66.7} n={5} w={1.4} h={2} step={3} fill={C.shell3} />
       <Stripes x={56} y={75.2} n={5} w={1.4} h={2} step={3} fill={C.shell3} />
     </Art>
@@ -123,7 +123,7 @@ export function ExtHddArt() {
       <circle cx={49} cy={46} r={16} fill="none" stroke={C.shell2} strokeWidth={1.4} opacity={0.6} />
       <circle cx={49} cy={46} r={3} fill={C.shell2} opacity={0.6} />
       {/* индикатор и разъём */}
-      <rect x={42} y={66} width={14} height={3} rx={1.5} fill={C.primary} />
+      <rect x={42} y={66} width={14} height={3} rx={1.5} fill={C.glow} />
       <rect x={72} y={56} width={8} height={10} rx={1.5} fill={C.dark2} />
     </Art>
   );

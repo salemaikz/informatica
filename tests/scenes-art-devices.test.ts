@@ -27,11 +27,19 @@ describe("DEVICE_ART", () => {
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toContain("NaN");
     expect(html).not.toContain("undefined");
-    // цвета — токены темы (var(--…)) или нейтральные блик/тень; без внешних картинок
+    // цвета — только токены темы (var(--…)), без hex/rgb; без внешних картинок
     expect(html).not.toMatch(/<image|href=/);
-    const fills = [...html.matchAll(/(?:fill|stroke)="([^"]+)"/g)].map((m) => m[1]);
-    for (const c of fills) {
-      expect(c === "none" || c.includes("var(--") || c === "#ffffff" || c === "#000000", `${id}: ${c}`).toBe(true);
+    // Все цветовые значения: атрибуты fill/stroke/stop-color и свойства в style="…".
+    const attrs = [...html.matchAll(/(?:fill|stroke|stop-color|color)="([^"]+)"/g)].map((m) => m[1]);
+    const styles = [...html.matchAll(/style="([^"]*)"/g)].flatMap((m) =>
+      [...m[1].matchAll(/(?:fill|stroke|stop-color|color|background(?:-color)?)\s*:\s*([^;]+)/g)].map((x) => x[1]),
+    );
+    for (const c of [...attrs, ...styles]) {
+      if (c === "none") continue;
+      expect(c, `${id}: ${c}`).toContain("var(--");
+      // после удаления имён переменных не должно остаться «сырых» цветов
+      const rest = c.replace(/var\(--[\w-]+/g, "").replace(/color-mix\(in srgb/g, "");
+      expect(rest, `${id}: ${c}`).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|\b(?:white|black)\b/i);
     }
   });
 });

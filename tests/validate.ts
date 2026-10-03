@@ -1,6 +1,7 @@
 import type { EntItem, L, Scene, Step, Text } from "@/lib/types";
 import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
+import { isKnownKey } from "@/components/scenes/keyboard";
 
 const filledL = (l: L) => !!l.ru?.trim() && !!l.kk?.trim();
 const filledText = (t: Text) => (typeof t === "string" ? !!t.trim() : filledL(t));
@@ -98,10 +99,11 @@ export function validateScene(scene: Scene): string[] {
     case "pc-inside":
       break;
     case "cpu-cycle":
-      need(scene.instr === undefined || scene.instr.length <= 24, "cpu-cycle: команда длиннее 24 символов");
+      need(scene.instr === undefined || scene.instr.length <= 14, "cpu-cycle: команда длиннее 14 символов");
       break;
     case "keyboard":
       need(scene.keys.length >= 1 && scene.keys.length <= 4, "keyboard: 1–4 клавиши");
+      need(scene.keys.every(isKnownKey), `keyboard: неизвестная клавиша (${scene.keys.filter((k) => !isKnownKey(k)).join(", ")})`);
       break;
     case "sizes":
       need(scene.items.length >= 2 && scene.items.length <= 7, "sizes: 2–7 полос");

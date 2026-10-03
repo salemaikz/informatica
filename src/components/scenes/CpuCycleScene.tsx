@@ -15,7 +15,7 @@ const VW = 360;
 const VH = 290;
 const CX = 180;
 const CY = 150;
-const R = 104;
+const R = 108;
 const NODE_R = 22;
 /** Углы этапов (градусы, 0 = вправо, по часовой): слева-сверху, справа-сверху, справа-снизу, слева-снизу. */
 const ANGLES = [-135, -45, 45, 135] as const;
@@ -46,8 +46,21 @@ function arcArrow(i: number) {
   };
 }
 
-/** Размер шрифта команды в центре кристалла: короткая «2 + 3» крупно, длинная мельче. */
-export const instrFontSize = (len: number) => Math.max(8, Math.min(17, Math.floor(56 / Math.max(len, 1) / 0.62)));
+/** Ширина кристалла под текст, единицы. */
+const INSTR_W = 54;
+const INSTR_MIN = 9;
+
+/** Размер шрифта команды в центре кристалла: короткая «2 + 3» крупно, длинная мельче (не меньше INSTR_MIN). */
+export const instrFontSize = (len: number) => Math.max(INSTR_MIN, Math.min(17, Math.floor(INSTR_W / Math.max(len, 1) / 0.62)));
+
+/** Длинную команду (шрифт ниже ~11) переносим на две строки по ближайшему к середине пробелу. */
+export function instrLines(instr: string): string[] {
+  if (instrFontSize(instr.length) >= 11 || !instr.includes(" ")) return [instr];
+  const mid = instr.length / 2;
+  let best = -1;
+  for (let i = 0; i < instr.length; i++) if (instr[i] === " " && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+  return [instr.slice(0, best).trim(), instr.slice(best + 1).trim()];
+}
 
 /**
  * Цикл процессора: выборка → декодирование → выполнение → запись по кругу вокруг значка процессора.
@@ -86,29 +99,46 @@ export function CpuCycleScene({ scene }: { scene: CpuCycleData }) {
 
         {/* процессор в центре */}
         <g aria-hidden="true">
-          {[-18, -6, 6, 18].map((o) => (
+          {[-20, -7, 7, 20].map((o) => (
             <g key={o} stroke="var(--muted)" strokeWidth={2.4} strokeLinecap="round">
-              <line x1={CX + o} y1={CY - 40} x2={CX + o} y2={CY - 33} />
-              <line x1={CX + o} y1={CY + 33} x2={CX + o} y2={CY + 40} />
-              <line x1={CX - 40} y1={CY + o} x2={CX - 33} y2={CY + o} />
-              <line x1={CX + 33} y1={CY + o} x2={CX + 40} y2={CY + o} />
+              <line x1={CX + o} y1={CY - 43} x2={CX + o} y2={CY - 36} />
+              <line x1={CX + o} y1={CY + 36} x2={CX + o} y2={CY + 43} />
+              <line x1={CX - 43} y1={CY + o} x2={CX - 36} y2={CY + o} />
+              <line x1={CX + 36} y1={CY + o} x2={CX + 43} y2={CY + o} />
             </g>
           ))}
-          <rect x={CX - 33} y={CY - 33} width={66} height={66} rx={9} fill="var(--surface-2)" stroke="var(--muted)" strokeWidth={2} />
-          <rect x={CX - 24} y={CY - 24} width={48} height={48} rx={5} fill="var(--primary-soft)" stroke="var(--primary)" strokeWidth={1.6} />
+          <rect x={CX - 36} y={CY - 36} width={72} height={72} rx={10} fill="var(--surface-2)" stroke="var(--muted)" strokeWidth={2} />
+          <rect x={CX - 28} y={CY - 28} width={56} height={56} rx={6} fill="var(--primary-soft)" stroke="var(--primary)" strokeWidth={1.6} />
           {instr ? (
-            <text
-              x={CX}
-              y={CY}
-              textAnchor="middle"
-              dominantBaseline="central"
-              className="font-mono"
-              fontSize={instrFontSize(instr.length)}
-              fontWeight={800}
-              fill="var(--text)"
-            >
-              {instr}
-            </text>
+            (() => {
+              const lines = instrLines(instr);
+              const longest = Math.max(...lines.map((x) => x.length));
+              const fs = instrFontSize(longest);
+              return (
+                <text
+                  x={CX}
+                  y={CY}
+                  textAnchor="middle"
+                  className="font-mono"
+                  fontSize={fs}
+                  fontWeight={800}
+                  fill="var(--text)"
+                >
+                  {lines.map((ln, i) => (
+                    <tspan
+                      key={i}
+                      x={CX}
+                      dy={lines.length === 1 ? "0.35em" : i === 0 ? "-0.15em" : "1.15em"}
+                      // длинная строка сжимается по ширине кристалла
+                      textLength={ln.length * 0.62 * fs > INSTR_W ? INSTR_W : undefined}
+                      lengthAdjust="spacingAndGlyphs"
+                    >
+                      {ln}
+                    </tspan>
+                  ))}
+                </text>
+              );
+            })()
           ) : (
             <text x={CX} y={CY} textAnchor="middle" dominantBaseline="central" fontSize={15} fontWeight={800} fill="var(--primary)">
               CPU
@@ -134,7 +164,7 @@ export function CpuCycleScene({ scene }: { scene: CpuCycleData }) {
                 strokeWidth={2.5}
                 style={{ transition: fade }}
               />
-              <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central" fontSize={17} fontWeight={800} fill={on ? "#fff" : "var(--muted)"}>
+              <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central" fontSize={17} fontWeight={800} fill={on ? "var(--on-primary, #fff)" : "var(--muted)"}>
                 {i + 1}
               </text>
               <text
