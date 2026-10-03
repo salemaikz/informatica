@@ -81,10 +81,12 @@ export function explainSqlError(raw: string): L {
       kk: "COUNT, SUM, AVG, MIN, MAX функцияларын WHERE ішінде қолдануға болмайды. Функция нәтижесі бойынша шарт HAVING ішінде жазылады.",
     };
   }
-  if (/UNIQUE constraint failed|PRIMARY KEY/i.test(msg)) {
+  m = /UNIQUE constraint failed: (?:\w+\.)?(\w+)/i.exec(msg);
+  if (m || /PRIMARY KEY/i.test(msg)) {
+    const col = m ? m[1] : "id";
     return {
-      ru: "Строка с таким id уже есть — id должен быть уникальным.",
-      kk: "Мұндай id кестеде бұрыннан бар — id бірегей болуы керек.",
+      ru: `Строка с таким значением ${col} уже есть — значение ключа должно быть уникальным.`,
+      kk: `Кестеде ${col} мәні осындай жол бұрыннан бар — кілттің мәні бірегей болуы керек.`,
     };
   }
   if (/values for \d+ columns|has \d+ columns but \d+ values/i.test(msg)) {

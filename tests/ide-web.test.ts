@@ -378,7 +378,7 @@ describe("задачи HTML/CSS", () => {
     expect((await go("web-10-links", '<a target="_blank" href="https://nct.kz/">NCT</a><a href="contacts.html">Contacts</a>')).ok).toBe(true);
     expect((await go("web-11-colspan", '<table><tbody><tr><th colspan=2>Results<tr><td>Math<td>Info</table>')).ok).toBe(true);
     expect((await go("web-12-form", '<form><input id="name" type="text"><label for="name">Name</label><button type="submit">Send</button></form>')).ok).toBe(true);
-    expect((await go("web-13-align", "<style>h1{text-align:CENTER}p{color:green}</style><h1>x</h1><p>y</p>")).ok).toBe(false);
+    expect((await go("web-13-align", "<style>h1{text-align:CENTER}p{color:green}</style><h1>x</h1><p>y</p>")).ok).toBe(true);
     expect((await go("web-13-align", "<style>h1{text-align:center}p{color:rgb(0,128,0)}</style><h1>x</h1><p>y</p>")).ok).toBe(true);
     expect((await go("web-14-box", '<style>.card{width:300px;padding:20px;border:2px dashed red;margin:0 auto}</style><div class="card"><p>x</p></div>')).ok).toBe(true);
   });

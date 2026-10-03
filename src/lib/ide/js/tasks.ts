@@ -120,22 +120,13 @@ const V2: IdeTask[] = [
       ru: "Дана строка `s`. Выведите её длину, затем строку заглавными буквами, затем первый символ — каждое значение с новой строки.",
       kk: "`s` жолы берілген. Оның ұзындығын, одан кейін жолды бас әріптермен, сосын бірінші символын шығарыңыз — әр мән жаңа жолдан.",
     },
-    starter: 'let s = "informatics";
-
-// ...
-',
+    starter: 'let s = "informatics";\n\n// ...\n',
     hint: {
       ru: "Длина — свойство `s.length` (без скобок), заглавные буквы — метод `s.toUpperCase()`, первый символ — `s[0]`: нумерация с нуля.",
       kk: "Ұзындық — `s.length` қасиеті (жақшасыз), бас әріптер — `s.toUpperCase()` әдісі, бірінші символ — `s[0]`: нөмірлеу нөлден басталады.",
     },
-    solution: 'let s = "informatics";
-
-console.log(s.length);
-console.log(s.toUpperCase());
-console.log(s[0]);',
-    check: { kind: "js", stdout: "11
-INFORMATICS
-i" },
+    solution: 'let s = "informatics";\n\nconsole.log(s.length);\nconsole.log(s.toUpperCase());\nconsole.log(s[0]);',
+    check: { kind: "js", stdout: "11\nINFORMATICS\ni" },
   },
   {
     id: "js-8-even",
@@ -146,24 +137,13 @@ i" },
       ru: "С помощью цикла `for` и условия `if` выведите все чётные числа от 1 до 10, каждое с новой строки.",
       kk: "`for` циклі мен `if` шарты арқылы 1-ден 10-ға дейінгі барлық жұп сандарды шығарыңыз, әрқайсысы жаңа жолдан.",
     },
-    starter: "for (let i = 1; i <= 10; i++) {
-  // ...
-}
-",
+    starter: "for (let i = 1; i <= 10; i++) {\n  // ...\n}\n",
     hint: {
       ru: "Число чётное, если остаток от деления на 2 равен нулю: `i % 2 === 0`. Печатайте `i` только внутри `if`.",
       kk: "Сан 2-ге бөлгендегі қалдық нөлге тең болса, жұп болады: `i % 2 === 0`. `i` мәнін тек `if` ішінде шығарыңыз.",
     },
-    solution: "for (let i = 1; i <= 10; i++) {
-  if (i % 2 === 0) {
-    console.log(i);
-  }
-}",
-    check: { kind: "js", stdout: "2
-4
-6
-8
-10" },
+    solution: "for (let i = 1; i <= 10; i++) {\n  if (i % 2 === 0) {\n    console.log(i);\n  }\n}",
+    check: { kind: "js", stdout: "2\n4\n6\n8\n10" },
   },
   {
     id: "js-9-filter",
@@ -174,21 +154,12 @@ i" },
       ru: "Дан массив `nums`. Оставьте в нём только чётные числа (`filter`), возведите каждое в квадрат (`map`) и выведите результат одной строкой через пробел (`join(\" \")`).",
       kk: "`nums` массиві берілген. Одан тек жұп сандарды қалдырыңыз (`filter`), әрқайсысын квадраттаңыз (`map`) және нәтижені бос орынмен бөліп бір жолға шығарыңыз (`join(\" \")`).",
     },
-    starter: 'const nums = [5, 12, 7, 8, 3, 10, 4];
-const result = [];
-
-// ...
-
-console.log(result.join(" "));
-',
+    starter: 'const nums = [5, 12, 7, 8, 3, 10, 4];\nconst result = [];\n\n// ...\n\nconsole.log(result.join(" "));\n',
     hint: {
       ru: "Методы можно записать цепочкой: `nums.filter(x => …).map(x => …)`. В `filter` функция возвращает условие, в `map` — новое значение.",
       kk: "Әдістерді тізбектеп жазуға болады: `nums.filter(x => …).map(x => …)`. `filter` ішіндегі функция шартты, `map` ішіндегі функция жаңа мәнді қайтарады.",
     },
-    solution: 'const nums = [5, 12, 7, 8, 3, 10, 4];
-const result = nums.filter((x) => x % 2 === 0).map((x) => x * x);
-
-console.log(result.join(" "));',
+    solution: 'const nums = [5, 12, 7, 8, 3, 10, 4];\nconst result = nums.filter((x) => x % 2 === 0).map((x) => x * x);\n\nconsole.log(result.join(" "));',
     check: { kind: "js", stdout: "144 64 100 16" },
   },
   {
@@ -200,33 +171,14 @@ console.log(result.join(" "));',
       ru: "Допишите функцию `isPalindrome(s)`: она возвращает `yes`, если строка читается одинаково слева направо и справа налево, иначе `no`. Вызовы ниже выведут результаты.",
       kk: "`isPalindrome(s)` функциясын аяқтаңыз: жол солдан оңға да, оңнан солға да бірдей оқылса, `yes`, әйтпесе `no` қайтарсын. Төмендегі шақырулар нәтижелерді шығарады.",
     },
-    starter: 'function isPalindrome(s) {
-  // ...
-}
-
-console.log(isPalindrome("level"));
-console.log(isPalindrome("python"));
-console.log(isPalindrome("kazak"));
-',
+    starter: 'function isPalindrome(s) {\n  // ...\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));\n',
     hint: {
       ru: "Переверните строку: `s.split(\"\").reverse().join(\"\")` — и сравните результат с самой `s` через `===`.",
       kk: "Жолды аударыңыз: `s.split(\"\").reverse().join(\"\")` — және нәтижені `s` жолының өзімен `===` арқылы салыстырыңыз.",
     },
     solution:
-      'function isPalindrome(s) {
-  const rev = s.split("").reverse().join("");
-  if (rev === s) {
-    return "yes";
-  }
-  return "no";
-}
-
-console.log(isPalindrome("level"));
-console.log(isPalindrome("python"));
-console.log(isPalindrome("kazak"));',
-    check: { kind: "js", stdout: "yes
-no
-yes" },
+      'function isPalindrome(s) {\n  const rev = s.split("").reverse().join("");\n  if (rev === s) {\n    return "yes";\n  }\n  return "no";\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));',
+    check: { kind: "js", stdout: "yes\nno\nyes" },
   },
 ];
 

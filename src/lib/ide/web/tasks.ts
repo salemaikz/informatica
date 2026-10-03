@@ -459,13 +459,13 @@ const V2: IdeTask[] = [
         { type: "exists", selector: "a", count: 2, why: { ru: "На странице нужны ровно две ссылки `<a>`.", kk: "Бетте дәл екі `<a>` сілтемесі қажет." } },
         {
           type: "text",
-          selector: "a[href=\"https://nct.kz\"]",
+          selector: "a[href^=\"https://nct.kz\"]",
           equals: "NCT",
           why: { ru: "Нужна ссылка с `href=\"https://nct.kz\"` и текстом `NCT`.", kk: "`href=\"https://nct.kz\"` және `NCT` мәтіні бар сілтеме қажет." },
         },
         {
           type: "attr",
-          selector: "a[href=\"https://nct.kz\"]",
+          selector: "a[href^=\"https://nct.kz\"]",
           name: "target",
           equals: "_blank",
           why: { ru: "Первая ссылка должна открываться в новой вкладке: `target=\"_blank\"`.", kk: "Бірінші сілтеме жаңа қойындыда ашылуы керек: `target=\"_blank\"`." },

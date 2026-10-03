@@ -163,8 +163,8 @@ export const TASKS: IdeTask[] = [
     },
     starter: "SELECT title, price\nFROM books\nWHERE price ",
     hint: {
-      ru: "`BETWEEN a AND b` значит «между a и b» и **включает обе границы**: это то же, что `>= a AND <= b`.",
-      kk: "`BETWEEN a AND b` «a мен b аралығында» дегенді білдіреді және **екі шекті де қосады**: бұл `>= a AND <= b` дегенмен бірдей.",
+      ru: "`BETWEEN a AND b` значит «между a и b» и **включает обе границы**: `x BETWEEN a AND b` — то же, что `x >= a AND x <= b`.",
+      kk: "`BETWEEN a AND b` «a мен b аралығында» дегенді білдіреді және **екі шекті де қамтиды**: `x BETWEEN a AND b` жазуы `x >= a AND x <= b` жазуымен бірдей.",
     },
     solution: "SELECT title, price\nFROM books\nWHERE price BETWEEN 3000 AND 4500;",
     check: { kind: "sql", reference: "SELECT title, price FROM books WHERE price BETWEEN 3000 AND 4500" },
@@ -194,13 +194,13 @@ export const TASKS: IdeTask[] = [
     skill: "db.where",
     title: { ru: "LIKE с «_» и скобки", kk: "«_» бар LIKE және жақшалар" },
     prompt: {
-      ru: "Даты в `orders` хранятся текстом, например `'2026-09-15'`. Найдите заказы, сделанные **с 10 по 19 сентября**, в которых заказано **больше одного экземпляра** (`qty > 1`) **или** книга с `book_id = 4`. Выведите `id`, `ordered`, `qty` и `book_id`.",
-      kk: "`orders` кестесінде күндер мәтін түрінде сақталады, мысалы `'2026-09-15'`. **10–19 қыркүйек** аралығында жасалған және **бір данадан көп** (`qty > 1`) **немесе** `book_id = 4` болатын тапсырыстарды табыңыз. `id`, `ordered`, `qty` және `book_id` бағандарын шығарыңыз.",
+      ru: "Даты в `orders` хранятся текстом, например `'2026-09-15'`. Среди заказов, сделанных **с 10 по 19 сентября**, найдите те, в которых **больше одного экземпляра** (`qty > 1`) **или** книга с `book_id = 4`. Выведите `id`, `ordered`, `qty` и `book_id`.",
+      kk: "`orders` кестесінде күндер мәтін түрінде сақталады, мысалы `'2026-09-15'`. **10–19 қыркүйек** аралығында жасалған тапсырыстардың ішінен саны **бір данадан көп** (`qty > 1`) **немесе** кітабы `book_id = 4` болатындарын табыңыз. `id`, `ordered`, `qty` және `book_id` бағандарын шығарыңыз.",
     },
     starter: "SELECT id, ordered, qty, book_id\nFROM orders\nWHERE ordered LIKE \n  AND ",
     hint: {
-      ru: "В `LIKE` знак `_` заменяет **ровно один** символ: `'2026-09-1_'` подходит к датам с 10 по 19. Условия с `OR` возьмите в скобки, иначе `AND` свяжется не с тем.",
-      kk: "`LIKE` ішіндегі `_` белгісі **дәл бір** таңбаны алмастырады: `'2026-09-1_'` 10-нан 19-ға дейінгі күндерге сәйкес келеді. `OR` бар шарттарды жақшаға алыңыз, әйтпесе `AND` басқа шартпен байланысады.",
+      ru: "В `LIKE` знак `_` заменяет **ровно один** символ: `'2026-08-2_'` подходит к датам с 20 по 29 августа. Условия с `OR` возьмите в скобки, иначе `AND` свяжется не с тем.",
+      kk: "`LIKE` ішіндегі `_` белгісі **дәл бір** таңбаны алмастырады: `'2026-08-2_'` 20–29 тамыз аралығындағы күндерге сәйкес келеді. `OR` бар шарттарды жақшаға алыңыз, әйтпесе `AND` басқа шартпен байланысады.",
     },
     solution: "SELECT id, ordered, qty, book_id\nFROM orders\nWHERE ordered LIKE '2026-09-1_'\n  AND (qty > 1 OR book_id = 4);",
     check: {
@@ -215,16 +215,16 @@ export const TASKS: IdeTask[] = [
     skill: "db.order",
     title: { ru: "Без повторов: DISTINCT", kk: "Қайталаусыз: DISTINCT" },
     prompt: {
-      ru: "Выведите **города**, из которых есть ученики, **без повторов** и **в алфавитном порядке**. Один столбец — `city`.",
-      kk: "Оқушылары бар **қалаларды** **қайталамай** және **әліпби ретімен** шығарыңыз. Бір баған — `city`.",
+      ru: "Выведите **годы издания** книг (`year`) из таблицы `books` **без повторов** и **по возрастанию**. Один столбец — `year`.",
+      kk: "`books` кестесіндегі кітаптардың **шыққан жылдарын** (`year`) **қайталамай** және **өсу ретімен** шығарыңыз. Бір баған — `year`.",
     },
-    starter: "SELECT city\nFROM students\n",
+    starter: "SELECT year\nFROM books\n",
     hint: {
-      ru: "`SELECT DISTINCT столбец` убирает повторяющиеся значения. Алфавитный порядок — это `ORDER BY city` (по возрастанию).",
-      kk: "`SELECT DISTINCT баған` қайталанатын мәндерді алып тастайды. Әліпби реті — `ORDER BY city` (өсу ретімен).",
+      ru: "`SELECT DISTINCT столбец` убирает повторяющиеся значения. Сортировка по возрастанию — `ORDER BY` без `DESC`.",
+      kk: "`SELECT DISTINCT баған` қайталанатын мәндерді алып тастайды. Өсу ретімен сұрыптау — `DESC` сөзі жоқ `ORDER BY`.",
     },
-    solution: "SELECT DISTINCT city\nFROM students\nORDER BY city;",
-    check: { kind: "sql", reference: "SELECT DISTINCT city FROM students ORDER BY city", ordered: true },
+    solution: "SELECT DISTINCT year\nFROM books\nORDER BY year;",
+    check: { kind: "sql", reference: "SELECT DISTINCT year FROM books ORDER BY year", ordered: true },
   },
   {
     id: "sql-13-order-limit",
@@ -239,7 +239,7 @@ export const TASKS: IdeTask[] = [
     starter: "SELECT name, class, score\nFROM students\nORDER BY \n",
     hint: {
       ru: "Ключи сортировки перечисляют через запятую: `ORDER BY a, b DESC`. Слово `DESC` относится только к тому столбцу, после которого стоит. `LIMIT n` в самом конце оставляет первые n строк.",
-      kk: "Сұрыптау кілттері үтір арқылы тізіледі: `ORDER BY a, b DESC`. `DESC` сөзі тек өзі тұрған бағанға қатысты. Соңындағы `LIMIT n` алғашқы n жолды қалдырады.",
+      kk: "Сұрыптау кілттері үтір арқылы тізіледі: `ORDER BY a, b DESC`. `DESC` сөзі тек өзінің алдындағы бағанға қатысты. Соңындағы `LIMIT n` алғашқы n жолды қалдырады.",
     },
     solution: "SELECT name, class, score\nFROM students\nORDER BY class, score DESC\nLIMIT 5;",
     check: { kind: "sql", reference: "SELECT name, class, score FROM students ORDER BY class, score DESC LIMIT 5", ordered: true },
@@ -274,8 +274,8 @@ export const TASKS: IdeTask[] = [
     },
     starter: "SELECT city,\nFROM students\nGROUP BY ",
     hint: {
-      ru: "`GROUP BY city` собирает строки в группы по городам. В `SELECT` кроме `city` ставят только функции, которые считаются по группе: `COUNT(*)` и `MAX(score)`.",
-      kk: "`GROUP BY city` жолдарды қалалар бойынша топтарға жинайды. `SELECT` ішінде `city` бағанынан басқа тек топ бойынша есептелетін функциялар тұрады: `COUNT(*)` және `MAX(score)`.",
+      ru: "`GROUP BY city` собирает строки в группы по городам. В `SELECT` кроме `city` ставят только агрегатные функции — они считаются отдельно по каждой группе. Подумайте, какая функция считает строки, а какая находит наибольшее значение.",
+      kk: "`GROUP BY city` жолдарды қалалар бойынша топтарға жинайды. `SELECT` ішінде `city` бағанынан басқа тек агрегаттық функциялар тұрады — олар әр топ үшін бөлек есептеледі. Қай функция жолдарды санайтынын, ал қайсысы ең үлкен мәнді табатынын ойлаңыз.",
     },
     solution: "SELECT city, COUNT(*), MAX(score)\nFROM students\nGROUP BY city;",
     check: { kind: "sql", reference: "SELECT city, COUNT(*), MAX(score) FROM students GROUP BY city" },
@@ -287,18 +287,18 @@ export const TASKS: IdeTask[] = [
     skill: "db.group",
     title: { ru: "WHERE и HAVING вместе", kk: "WHERE және HAVING бірге" },
     prompt: {
-      ru: "В таблице `orders` среди заказов, сделанных **не раньше `2026-09-05`**, найдите учеников, заказавших **в сумме не меньше 2 экземпляров**. Выведите `student_id` и сумму `qty`.",
-      kk: "`orders` кестесінде **`2026-09-05` күні немесе одан кейін** жасалған тапсырыстардың ішінен **жиыны кемінде 2 дана** тапсырыс берген оқушыларды табыңыз. `student_id` және `qty` қосындысын шығарыңыз.",
+      ru: "В таблице `orders` среди заказов, сделанных **не раньше `2026-09-08`**, найдите учеников, заказавших **в сумме не меньше 2 экземпляров** книг. Выведите `student_id` и сумму `qty`.",
+      kk: "`orders` кестесінде **`2026-09-08` күні немесе одан кейін** жасалған тапсырыстардың ішінен **жалпы саны кемінде 2 дана** кітапқа тапсырыс берген оқушыларды табыңыз. `student_id` және `qty` қосындысын шығарыңыз.",
     },
     starter: "SELECT student_id, SUM(qty)\nFROM orders\nWHERE \nGROUP BY \nHAVING ",
     hint: {
-      ru: "`WHERE` отбирает строки **до** группировки (здесь — по дате), а `HAVING` проверяет условие **для групп** (здесь — по `SUM(qty)`). Порядок: `WHERE`, `GROUP BY`, `HAVING`. Даты-тексты сравниваются как `ordered >= '2026-09-05'`.",
-      kk: "`WHERE` жолдарды топтауға **дейін** іріктейді (мұнда — күн бойынша), ал `HAVING` шартты **топтар үшін** тексереді (мұнда — `SUM(qty)` бойынша). Реті: `WHERE`, `GROUP BY`, `HAVING`. Мәтін түріндегі күндер `ordered >= '2026-09-05'` түрінде салыстырылады.",
+      ru: "`WHERE` отбирает строки **до** группировки (здесь — по дате), а `HAVING` проверяет условие **для групп** (здесь — по `SUM(qty)`). Порядок: `WHERE`, `GROUP BY`, `HAVING`. Даты вида `'ГГГГ-ММ-ДД'` сравнивают как обычный текст: `ordered < '2026-01-01'`.",
+      kk: "`WHERE` жолдарды топтауға **дейін** іріктейді (мұнда — күн бойынша), ал `HAVING` шартты **топтар үшін** тексереді (мұнда — `SUM(qty)` бойынша). Реті: `WHERE`, `GROUP BY`, `HAVING`. `'ЖЖЖЖ-АА-КК'` түріндегі күндер кәдімгі мәтін сияқты салыстырылады: `ordered < '2026-01-01'`.",
     },
-    solution: "SELECT student_id, SUM(qty)\nFROM orders\nWHERE ordered >= '2026-09-05'\nGROUP BY student_id\nHAVING SUM(qty) >= 2;",
+    solution: "SELECT student_id, SUM(qty)\nFROM orders\nWHERE ordered >= '2026-09-08'\nGROUP BY student_id\nHAVING SUM(qty) >= 2;",
     check: {
       kind: "sql",
-      reference: "SELECT student_id, SUM(qty) FROM orders WHERE ordered >= '2026-09-05' GROUP BY student_id HAVING SUM(qty) >= 2",
+      reference: "SELECT student_id, SUM(qty) FROM orders WHERE ordered >= '2026-09-08' GROUP BY student_id HAVING SUM(qty) >= 2",
     },
   },
   {
@@ -334,8 +334,8 @@ export const TASKS: IdeTask[] = [
     },
     starter: "SELECT books.title,\nFROM orders\nJOIN \nWHERE ",
     hint: {
-      ru: "Связь между таблицами — `orders.book_id = books.id`. Стоимость — `books.price * orders.qty`; то же выражение используйте и в `WHERE`.",
-      kk: "Кестелер арасындағы байланыс — `orders.book_id = books.id`. Құны — `books.price * orders.qty`; сол өрнекті `WHERE` ішінде де қолданыңыз.",
+      ru: "В `orders` номер книги хранится в `book_id`, а в `books` — в `id`: по ним и соединяйте. Стоимость — арифметическое выражение из столбцов двух таблиц; его можно писать и в `SELECT`, и в `WHERE`.",
+      kk: "`orders` кестесінде кітаптың нөмірі `book_id` бағанында, ал `books` кестесінде `id` бағанында сақталады: кестелерді солар арқылы қосыңыз. Құны — екі кестенің бағандарынан құралған арифметикалық өрнек; оны `SELECT` ішінде де, `WHERE` ішінде де жазуға болады.",
     },
     solution: "SELECT books.title, books.price * orders.qty\nFROM orders\nJOIN books ON orders.book_id = books.id\nWHERE books.price * orders.qty > 8000;",
     check: {
@@ -351,16 +351,16 @@ export const TASKS: IdeTask[] = [
     skill: "db.ddl",
     title: { ru: "Добавление строки: INSERT", kk: "Жол қосу: INSERT" },
     prompt: {
-      ru: "В таблицу `classes` добавьте новый класс: **12**, учитель `Ivanov K.`, кабинет **210**. Столбцы идут в порядке `class`, `teacher`, `room`.\n\nПосле запуска ниже покажется таблица `classes` — проверьте, что появилась новая строка.",
-      kk: "`classes` кестесіне жаңа сынып қосыңыз: **12**, мұғалім `Ivanov K.`, кабинет **210**. Бағандар `class`, `teacher`, `room` ретімен орналасқан.\n\nІске қосқаннан кейін төменде `classes` кестесі көрсетіледі — жаңа жолдың пайда болғанын тексеріңіз.",
+      ru: "В таблицу `classes` добавьте новый класс: **7**, учитель `Ivanov K.`, кабинет **108**. Столбцы идут в порядке `class`, `teacher`, `room`.\n\nПосле запуска ниже покажется таблица `classes` — проверьте, что появилась новая строка.",
+      kk: "`classes` кестесіне жаңа сынып қосыңыз: **7**, мұғалім `Ivanov K.`, кабинет **108**. Бағандар `class`, `teacher`, `room` ретімен орналасқан.\n\nІске қосқаннан кейін төменде `classes` кестесі көрсетіледі — жаңа жолдың пайда болғанын тексеріңіз.",
     },
     starter: "INSERT INTO classes\nVALUES ();",
     hint: {
       ru: "`INSERT INTO таблица VALUES (значение1, значение2, ...)`. Значения идут в порядке столбцов таблицы, текст — в одинарных кавычках.",
       kk: "`INSERT INTO кесте VALUES (мән1, мән2, ...)`. Мәндер кесте бағандарының ретімен жазылады, мәтін — жалғыз тырнақшада.",
     },
-    solution: "INSERT INTO classes\nVALUES (12, 'Ivanov K.', 210);",
-    check: { kind: "sql", reference: "INSERT INTO classes VALUES (12, 'Ivanov K.', 210)", checkQuery: "SELECT * FROM classes ORDER BY class" },
+    solution: "INSERT INTO classes\nVALUES (7, 'Ivanov K.', 108);",
+    check: { kind: "sql", reference: "INSERT INTO classes VALUES (7, 'Ivanov K.', 108)", checkQuery: "SELECT * FROM classes ORDER BY class" },
   },
   {
     id: "sql-20-delete",
@@ -369,15 +369,19 @@ export const TASKS: IdeTask[] = [
     skill: "db.ddl",
     title: { ru: "Удаление строк: DELETE", kk: "Жолдарды жою: DELETE" },
     prompt: {
-      ru: "Из таблицы `books` удалите книги, которые **стоят меньше 3000** или в которых **меньше 250 страниц** (`pages`).\n\nПосле запуска ниже покажется таблица `books` — проверьте, что остались только нужные строки.",
-      kk: "`books` кестесінен **бағасы 3000-нан төмен** немесе **беті 250-ден аз** (`pages`) кітаптарды жойыңыз.\n\nІске қосқаннан кейін төменде `books` кестесі көрсетіледі — тек керекті жолдардың қалғанын тексеріңіз.",
+      ru: "Библиотека списывает старые книги. Из таблицы `books` удалите книги, изданные **раньше 2020 года**, если они **стоят не больше 3000** или в них **больше 350 страниц** (`pages`).\n\nПосле запуска ниже покажется таблица `books` — проверьте, что остались только нужные строки.",
+      kk: "Кітапхана ескі кітаптарды есептен шығарады. `books` кестесінен **2020 жылға дейін** шыққан кітаптардың ішінен **бағасы 3000-нан аспайтын** немесе **беті 350-ден көп** (`pages`) кітаптарды жойыңыз.\n\nІске қосқаннан кейін төменде `books` кестесі көрсетіледі — тек керекті жолдардың қалғанын тексеріңіз.",
     },
     starter: "DELETE FROM books\nWHERE ;",
     hint: {
-      ru: "`DELETE FROM таблица WHERE условие`. Два условия соедините словом `OR`. Без `WHERE` удалятся **все** строки!",
-      kk: "`DELETE FROM кесте WHERE шарт`. Екі шартты `OR` сөзімен байланыстырыңыз. `WHERE` болмаса, **барлық** жолдар жойылады!",
+      ru: "`DELETE FROM таблица WHERE условие`. `AND` выполняется раньше `OR` — подумайте, какие условия нужно сгруппировать скобками. «Не больше» — это `<=`. Без `WHERE` удалятся **все** строки!",
+      kk: "`DELETE FROM кесте WHERE шарт`. `AND` амалы `OR` амалынан бұрын орындалады — қай шарттарды жақшамен топтау керектігін ойлаңыз. «Аспайтын» — бұл `<=`. `WHERE` болмаса, **барлық** жолдар жойылады!",
     },
-    solution: "DELETE FROM books\nWHERE price < 3000 OR pages < 250;",
-    check: { kind: "sql", reference: "DELETE FROM books WHERE price < 3000 OR pages < 250", checkQuery: "SELECT * FROM books ORDER BY id" },
+    solution: "DELETE FROM books\nWHERE year < 2020 AND (price <= 3000 OR pages > 350);",
+    check: {
+      kind: "sql",
+      reference: "DELETE FROM books WHERE year < 2020 AND (price <= 3000 OR pages > 350)",
+      checkQuery: "SELECT * FROM books ORDER BY id",
+    },
   },
 ];
