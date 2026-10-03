@@ -1,0 +1,339 @@
+@import "tailwindcss";
+
+/*
+  Дизайн-токены. Семантика цветов (правило проекта, см. CLAUDE.md):
+  - primary (голубой)  — основные действия и навигация
+  - success (зелёный)  — верно / освоено
+  - danger  (красный)  — неверно / слабая тема
+  - warning (янтарный) — в процессе / предупреждение
+  - gold    (золотой)  — XP, награды, достижения
+  - streak  (оранжевый)— серия дней
+  - ai      (фиолетовый)— всё, что делает ИИ
+*/
+:root {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f0f2f7;
+  --border: #e3e7ef;
+  --text: #1b2333;
+  --muted: #6b7487;
+
+  --primary: #1a91d6;
+  --primary-strong: #1277b3;
+  --primary-soft: #e4f3fc;
+
+  --success: #21b26f;
+  --success-strong: #17935a;
+  --success-soft: #e3f7ec;
+
+  --danger: #ec4c4c;
+  --danger-strong: #c93636;
+  --danger-soft: #fdeaea;
+
+  --warning: #f2a516;
+  --warning-strong: #c98507;
+  --warning-soft: #fff3dc;
+
+  --gold: #f0b400;
+  --gold-soft: #fff6d6;
+  --streak: #ff7a1a;
+  --streak-soft: #ffeedf;
+
+  --ai: #7656f5;
+  --ai-strong: #5d3fe0;
+  --ai-soft: #efebff;
+
+  color-scheme: light;
+}
+
+/* Тёмная тема: ручной выбор (data-theme) или системная настройка. Значения дублируются — держать в синхроне. */
+:root[data-theme="dark"] {
+  --bg: #0f1420;
+  --surface: #171d2b;
+  --surface-2: #1f2637;
+  --border: #2b3447;
+  --text: #e8ecf4;
+  --muted: #98a2b8;
+
+  --primary: #3aa9eb;
+  --primary-strong: #1e86c4;
+  --primary-soft: #142f45;
+
+  --success: #2fc480;
+  --success-strong: #1f9c63;
+  --success-soft: #133325;
+
+  --danger: #f06262;
+  --danger-strong: #c94343;
+  --danger-soft: #3a1b1f;
+
+  --warning: #f5b23a;
+  --warning-strong: #c98c1c;
+  --warning-soft: #382a12;
+
+  --gold: #f5c22e;
+  --gold-soft: #352c10;
+  --streak: #ff8c3a;
+  --streak-soft: #3a2414;
+
+  --ai: #9479ff;
+  --ai-strong: #7656f5;
+  --ai-soft: #251f45;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420;
+    --surface: #171d2b;
+    --surface-2: #1f2637;
+    --border: #2b3447;
+    --text: #e8ecf4;
+    --muted: #98a2b8;
+
+    --primary: #3aa9eb;
+    --primary-strong: #1e86c4;
+    --primary-soft: #142f45;
+
+    --success: #2fc480;
+    --success-strong: #1f9c63;
+    --success-soft: #133325;
+
+    --danger: #f06262;
+    --danger-strong: #c94343;
+    --danger-soft: #3a1b1f;
+
+    --warning: #f5b23a;
+    --warning-strong: #c98c1c;
+    --warning-soft: #382a12;
+
+    --gold: #f5c22e;
+    --gold-soft: #352c10;
+    --streak: #ff8c3a;
+    --streak-soft: #3a2414;
+
+    --ai: #9479ff;
+    --ai-strong: #7656f5;
+    --ai-soft: #251f45;
+
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-strong: var(--success-strong);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-strong: var(--warning-strong);
+  --color-warning-soft: var(--warning-soft);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-streak: var(--streak);
+  --color-streak-soft: var(--streak-soft);
+  --color-ai: var(--ai);
+  --color-ai-strong: var(--ai-strong);
+  --color-ai-soft: var(--ai-soft);
+
+  --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --animate-pop: pop 0.25s ease-out;
+  --animate-shake: shake 0.4s ease-in-out;
+  --animate-slide-up: slide-up 0.25s ease-out;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-rise-in: rise-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  --animate-ring-out: ring-out 0.5s ease-out forwards;
+}
+
+@keyframes pop {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
+  70% { box-shadow: 0 0 0 14px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Появление снизу с лесенкой (animation-delay задаёт компонент). Через opacity + translate — не конфликтует с transform у motion. */
+@keyframes rise-in {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+/* Кольцо-«вспышка» вокруг верного варианта. */
+@keyframes ring-out {
+  0% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.09); }
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* «Меньше анимаций» в профиле: гасим CSS-анимации так же, как системная настройка (JS-анимации — через MotionConfig). */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Типографика для markdown (теория, конспекты, ответы ИИ) */
+.prose-app {
+  line-height: 1.6;
+}
+.prose-app > * + * {
+  margin-top: 0.6em;
+}
+.prose-app h1 {
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+.prose-app h2 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-top: 1.1em;
+}
+.prose-app h3 {
+  font-size: 1.02rem;
+  font-weight: 800;
+  margin-top: 0.9em;
+}
+.prose-app strong {
+  font-weight: 800;
+}
+.prose-app ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-app ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.prose-app li + li {
+  margin-top: 0.25em;
+}
+.prose-app code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.1em 0.35em;
+}
+.prose-app pre {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+.prose-app pre code {
+  background: none;
+  padding: 0;
+}
+.prose-app blockquote {
+  border-left: 4px solid var(--primary);
+  background: var(--primary-soft);
+  border-radius: 0 12px 12px 0;
+  padding: 0.6rem 0.9rem;
+}
+.prose-app table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+}
+.prose-app th,
+.prose-app td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+.prose-app th {
+  background: var(--surface-2);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* Моргание маскота */
+@keyframes blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+.mascot-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 4.5s infinite;
+}
+
+/* Маскот: лёгкое «дыхание» тела и покачивание антенны. transform-box — чтобы вращение шло вокруг самого элемента. */
+@keyframes mascot-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes mascot-antenna {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(5deg); }
+  70% { transform: rotate(-5deg); }
+}
+.mascot-body {
+  animation: mascot-float 3.8s ease-in-out infinite;
+}
+.mascot-antenna {
+  transform-origin: 60px 27px;
+  animation: mascot-antenna 4.6s ease-in-out infinite;
+}
