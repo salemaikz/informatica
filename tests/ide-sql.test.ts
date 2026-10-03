@@ -112,7 +112,7 @@ describe("SQL: задачи", () => {
     expect(rows("sql-9-between")).toBe(6);
     expect(rows("sql-10-in")).toBe(2);
     expect(rows("sql-11-like-or")).toBe(3);
-    expect(rows("sql-12-distinct")).toBe(4);
+    expect(rows("sql-12-distinct")).toBe(7);
     expect(rows("sql-13-order-limit")).toBe(5);
     expect(rows("sql-14-aggregates")).toBe(1);
     expect(rows("sql-15-group-city")).toBe(4);
@@ -135,9 +135,10 @@ describe("SQL: задачи", () => {
   });
 
   it("db.order: DISTINCT, порядок, два ключа, LIMIT", () => {
-    expect(verdict("sql-12-distinct", "SELECT city FROM students ORDER BY city").ok).toBe(false);
-    expect(verdict("sql-12-distinct", "SELECT DISTINCT city FROM students ORDER BY city DESC").ok).toBe(false);
-    expect(verdict("sql-12-distinct", "SELECT city FROM students GROUP BY city ORDER BY city").ok).toBe(true);
+    expect(verdict("sql-12-distinct", "SELECT year FROM books ORDER BY year").ok).toBe(false);
+    expect(verdict("sql-12-distinct", "SELECT DISTINCT year FROM books ORDER BY year DESC").ok).toBe(false);
+    expect(verdict("sql-12-distinct", "SELECT DISTINCT year FROM books").ok).toBe(false); // без ORDER BY — порядок вставки
+    expect(verdict("sql-12-distinct", "SELECT year FROM books GROUP BY year ORDER BY year").ok).toBe(true);
     expect(verdict("sql-13-order-limit", "SELECT name, class, score FROM students ORDER BY class, score DESC").ok).toBe(false);
     expect(verdict("sql-13-order-limit", "SELECT name, class, score FROM students ORDER BY class, score LIMIT 5").ok).toBe(false);
     expect(verdict("sql-13-order-limit", "SELECT name, class, score FROM students ORDER BY score DESC, class LIMIT 5").ok).toBe(false);
@@ -151,7 +152,13 @@ describe("SQL: задачи", () => {
     expect(verdict("sql-15-group-city", "SELECT city, COUNT(id), MAX(score) FROM students GROUP BY city").ok).toBe(true);
     // без фильтра по дате и без HAVING
     expect(verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders GROUP BY student_id HAVING SUM(qty) >= 2").ok).toBe(false);
-    expect(verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE ordered >= '2026-09-05' GROUP BY student_id").ok).toBe(false);
+    expect(verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE ordered >= '2026-09-08' GROUP BY student_id").ok).toBe(false);
+    // граница даты: заказ 2026-09-08 входит
+    expect(verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE ordered > '2026-09-08' GROUP BY student_id HAVING SUM(qty) >= 2").ok).toBe(false);
+    expect(verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE ordered >= '2026-09-08' GROUP BY student_id HAVING SUM(qty) > 2").ok).toBe(false);
+    expect(
+      verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE ordered BETWEEN '2026-09-08' AND '2026-12-31' GROUP BY student_id HAVING SUM(qty) > 1").ok,
+    ).toBe(true);
     const w = verdict("sql-16-having", "SELECT student_id, SUM(qty) FROM orders WHERE SUM(qty) >= 2 GROUP BY student_id");
     expect(w.ok).toBe(false);
     expect((w.message as { ru: string }).ru).toContain("HAVING");
@@ -172,18 +179,24 @@ describe("SQL: задачи", () => {
   });
 
   it("db.ddl: INSERT и DELETE проверяются по содержимому таблицы", () => {
-    expect(verdict("sql-19-insert", "INSERT INTO classes VALUES (12, 'Ivanov K.', 210)").ok).toBe(true);
-    expect(verdict("sql-19-insert", "INSERT INTO classes (room, teacher, class) VALUES (210, 'Ivanov K.', 12)").ok).toBe(true);
-    expect(verdict("sql-19-insert", "INSERT INTO classes VALUES (12, 'Ivanov K.', 201)").ok).toBe(false);
+    expect(verdict("sql-19-insert", "INSERT INTO classes VALUES (7, 'Ivanov K.', 108)").ok).toBe(true);
+    expect(verdict("sql-19-insert", "INSERT INTO classes (room, teacher, class) VALUES (108, 'Ivanov K.', 7)").ok).toBe(true);
+    expect(verdict("sql-19-insert", "INSERT INTO classes VALUES (7, 'Ivanov K.', 180)").ok).toBe(false);
+    expect(verdict("sql-19-insert", "INSERT INTO classes VALUES (7, 'Ivanov K', 108)").ok).toBe(false);
     expect(verdict("sql-19-insert", "SELECT * FROM classes").ok).toBe(false);
     const dup = verdict("sql-19-insert", "INSERT INTO classes VALUES (11, 'Ivanov K.', 210)");
     expect(dup.ok).toBe(false);
-    expect((dup.message as { ru: string }).ru).toContain("id");
+    expect((dup.message as { ru: string; kk: string }).ru).toContain("class");
+    expect((dup.message as { ru: string; kk: string }).kk).toContain("class");
     expect(verdict("sql-20-delete", "DELETE FROM books").ok).toBe(false);
-    expect(verdict("sql-20-delete", "DELETE FROM books WHERE price < 3000 OR pages < 200").ok).toBe(false); // книги на 210 и 240 страниц остаются
-    expect(verdict("sql-20-delete", "DELETE FROM books WHERE price < 3000 AND pages < 250").ok).toBe(false);
-    expect(verdict("sql-20-delete", "DELETE FROM books WHERE price < 3000").ok).toBe(false);
-    expect(verdict("sql-20-delete", "DELETE FROM books WHERE price < 3000; DELETE FROM books WHERE pages < 250;").ok).toBe(true);
+    const del = "DELETE FROM books WHERE";
+    expect(verdict("sql-20-delete", `${del} year < 2020 AND price <= 3000 OR pages > 350`).ok).toBe(false); // без скобок
+    expect(verdict("sql-20-delete", `${del} year < 2020 AND (price < 3000 OR pages > 350)`).ok).toBe(false); // «не больше» — книга за 3000
+    expect(verdict("sql-20-delete", `${del} year < 2020 AND price <= 3000`).ok).toBe(false);
+    expect(verdict("sql-20-delete", `${del} year < 2020 AND pages > 350`).ok).toBe(false);
+    expect(verdict("sql-20-delete", `${del} price <= 3000 OR pages > 350`).ok).toBe(false); // без года
+    expect(verdict("sql-20-delete", `${del} (price <= 3000 OR pages > 350) AND year <= 2019`).ok).toBe(true);
+    expect(verdict("sql-20-delete", `${del} year < 2020 AND price <= 3000; ${del} year < 2020 AND pages > 350;`).ok).toBe(true);
   });
 
   it("баллы учеников уникальны (порядок ORDER BY однозначен)", () => {
