@@ -761,8 +761,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
               <Button variant="ai" onClick={() => setAi("explain")} icon={<Sparkles size={18} />} className="shrink-0">
                 <span className="hidden sm:inline">{t("fb.why")}</span>
                 <span className="sm:hidden">{t("fb.ai.short")}</span>
-                {/* Готовый разбор неверного варианта бесплатен — цена только когда ответит ИИ. */}
-                {!whyWrongText && <AiCost kind="explain" variant="solid" short />}
+                {/* Открыть разбор бесплатно (whyWrong / объяснение задания); цена — на кнопке «Подробнее от Бита» в шторке. */}
               </Button>
             )}
             {phase === "answering" && question?.type === "solution" && (

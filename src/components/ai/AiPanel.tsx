@@ -3,6 +3,7 @@
 import { BookmarkPlus, Lightbulb, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
+import { staticAiText } from "@/lib/ai-static";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -22,8 +23,9 @@ const TITLE: Record<Exclude<TutorMode, "chat">, DictKey> = {
 
 /**
  * Шторка с ИИ внутри урока: подсказка к заданию, разбор ошибки или вопрос по шагу + уточняющие вопросы.
- * Лестница «бесплатно → ИИ»: если у задания есть статическая подсказка (`hint`) или разбор ошибки (`whyWrong`),
- * они показываются сразу, без запроса; ИИ — только по кнопке «Ещё подсказка / Подробнее от Бита».
+ * Лестница «бесплатно → ИИ»: статическая подсказка автора (`hint`) или разбор (`whyWrong` + `explanation`)
+ * показываются сразу, одни и те же всем. ИИ запускается ТОЛЬКО по явному нажатию кнопки с ценой
+ * («Спросить Бита», «Ещё подсказка», «Подробнее от Бита») — никогда автоматически при открытии шторки.
  * В режиме «вопрос» ИИ молчит, пока ученик не спросит (своими словами или быстрой кнопкой).
  */
 export function AiPanel({
@@ -43,13 +45,11 @@ export function AiPanel({
   suggestions?: DictKey[];
 }) {
   const { t } = useT();
-  const { ask, stop, streaming, error } = useTutor();
-  // Бесплатный текст: подсказка автора или разбор неверного варианта (+ объяснение урока).
-  const [staticText] = useState(() =>
-    mode === "hint" ? task.hint : mode === "explain" && task.whyWrong ? [task.whyWrong, task.explanation].filter(Boolean).join("\n\n") : undefined,
-  );
-  const autoStart = mode !== "ask" && !staticText;
-  const [turns, setTurns] = useState<TutorTurn[]>(autoStart ? [{ role: "assistant", content: "" }] : []);
+  // Идущий запрос обрывается при закрытии шторки (размонтировании) внутри useTutor.
+  const { ask, streaming, error } = useTutor();
+  // Бесплатный текст: подсказка автора либо разбор неверного варианта + объяснение задания (оно есть всегда).
+  const [staticText] = useState(() => staticAiText(mode, task));
+  const [turns, setTurns] = useState<TutorTurn[]>([]);
   const [draft, setDraft] = useState("");
   const runId = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
@@ -62,25 +62,11 @@ export function AiPanel({
     if (text === null && isCurrent()) setTurns(history);
   };
 
-  // Первый ответ (подсказка/разбор) запрашиваем сразу при открытии.
-  useEffect(() => {
-    if (!autoStart) return;
-    let alive = true;
-    // Запрос к внешнему API при открытии панели; синхронно меняется только статус «загрузка».
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void stream([], () => alive);
-    return () => {
-      alive = false;
-      stop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
-  // «Ещё подсказка / Подробнее от Бита» — единственное, что после статики делает запрос к ИИ.
+  // «Спросить Бита / Ещё подсказка / Подробнее от Бита» — запрос к ИИ только по нажатию.
   const askMore = () => {
     if (streaming) return;
     const id = ++runId.current;
@@ -115,9 +101,14 @@ export function AiPanel({
             <Markdown>{staticText}</Markdown>
           </div>
         )}
-        {staticText && turns.length === 0 && (
-          <Button variant="ai" block icon={<Sparkles size={18} />} onClick={askMore}>
-            {t(mode === "hint" ? "ai.moreHint" : "ai.moreExplain")}
+        {mode !== "ask" && !staticText && turns.length === 0 && (
+          <p className="rounded-2xl border-2 border-border bg-surface-2 px-4 py-3 text-sm font-semibold text-muted">
+            {t(mode === "hint" ? "ai.noHint" : "ai.noExplain")}
+          </p>
+        )}
+        {mode !== "ask" && turns.length === 0 && (
+          <Button variant="ai" block icon={<Sparkles size={18} />} onClick={askMore} disabled={streaming}>
+            {t(!staticText ? "ai.askBit" : mode === "hint" ? "ai.moreHint" : "ai.moreExplain")}
             <AiCost kind={mode} variant="solid" />
           </Button>
         )}

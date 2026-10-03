@@ -1,14 +1,14 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Calculator, ChartColumn, Code2, Dumbbell, History, Library, NotebookPen, Search, Sparkles, Store, Target } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { Calculator } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
-import type { DictKey } from "@/i18n/dict";
 import { Mascot } from "@/components/mascot/Mascot";
 import { StreakChipAnimated, XpChipAnimated } from "@/components/motion/AnimatedChips";
 import { easeOut } from "@/components/motion/presets";
@@ -17,24 +17,8 @@ import { Avatar } from "./Avatar";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { ChipsChip, HeartsChip } from "@/components/economy/HeaderChips";
 import { useToolbox } from "@/components/tools/useToolbox";
-
-/** Дополнительные разделы в боковом меню компьютера (на телефоне — быстрые действия на главной и поиск в шапке). */
-const NAV_EXTRA: { href: string; key: DictKey; icon: typeof BookOpen }[] = [
-  { href: "/theory", key: "theory.title", icon: Library },
-  { href: "/exam", key: "exam.title", icon: Target },
-  { href: "/code", key: "nav.code", icon: Code2 },
-  { href: "/history", key: "history.title", icon: History },
-  { href: "/shop", key: "shop.title", icon: Store },
-  { href: "/search", key: "search.title", icon: Search },
-];
-
-const NAV: { href: string; key: DictKey; icon: typeof BookOpen; ai?: boolean }[] = [
-  { href: "/learn", key: "nav.learn", icon: BookOpen },
-  { href: "/practice", key: "nav.practice", icon: Dumbbell },
-  { href: "/tutor", key: "nav.tutor", icon: Sparkles, ai: true },
-  { href: "/notes", key: "nav.notes", icon: NotebookPen },
-  { href: "/stats", key: "nav.stats", icon: ChartColumn },
-];
+import { NAV_GROUPS, groupOf, normalizePath, subOf, underPath } from "./nav";
+import { SectionTabs, SubLink } from "./SectionTabs";
 
 /** Аватар ученика из профиля (буква, рисованный или фото). */
 function ProfileAvatar({ size = 36 }: { size?: number }) {
@@ -56,10 +40,14 @@ function Logo() {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { t } = useT();
-  const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const activeIndex = NAV.findIndex((n) => active(n.href));
+  const group = groupOf(pathname);
+  const sub = subOf(pathname);
+  const path = normalizePath(pathname);
+  // «page» — ровно эта страница; «true» — внутри группы (например, /tutor/123 или /exam/result/1).
+  const current = (href: string, on: boolean) => (path === href ? "page" : on ? "true" : undefined);
+  const activeIndex = NAV_GROUPS.findIndex((g) => g.id === group);
   // Чат и практикум кода — широкие экраны: на компьютере без правой колонки виджетов.
-  const wide = active("/tutor") || active("/code");
+  const wide = underPath(pathname, "/tutor") || underPath(pathname, "/code");
 
   return (
     <div className="min-h-dvh">
@@ -68,35 +56,47 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mb-6 px-2">
           <Logo />
         </div>
-        {NAV.map(({ href, key, icon: Icon, ai }) => (
-          <Link
-            key={href}
-            href={href}
-            className={clsx(
-              "flex h-12 items-center gap-3 rounded-2xl border-2 px-3 font-extrabold transition-colors",
-              active(href)
-                ? ai
-                  ? "border-ai/40 bg-ai-soft text-ai"
-                  : "border-primary/40 bg-primary-soft text-primary"
-                : "border-transparent text-muted hover:bg-surface-2 hover:text-text",
-            )}
-          >
-            <Icon size={22} /> {t(key)}
-          </Link>
-        ))}
-        <div className="my-2 h-0.5 rounded-full bg-border" aria-hidden />
-        {NAV_EXTRA.map(({ href, key, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={clsx(
-              "flex h-11 items-center gap-3 rounded-2xl border-2 px-3 text-[15px] font-extrabold transition-colors",
-              active(href) ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2 hover:text-text",
-            )}
-          >
-            <Icon size={20} /> {t(key)}
-          </Link>
-        ))}
+        <nav aria-label={t("nav2.mainNav")} className="flex flex-col gap-2">
+          {NAV_GROUPS.map((g) => {
+            const on = g.id === group;
+            const Icon = g.icon;
+            return (
+              <div key={g.id} className="flex flex-col gap-1">
+                <Link
+                  href={g.href}
+                  aria-current={sub ? undefined : current(g.href, on)}
+                  className={cn(
+                    "flex h-12 items-center gap-3 rounded-2xl border-2 px-3 font-extrabold transition-colors",
+                    on
+                      ? g.ai
+                        ? "border-ai/40 bg-ai-soft text-ai"
+                        : "border-primary/40 bg-primary-soft text-primary"
+                      : "border-transparent text-muted hover:bg-surface-2 hover:text-text",
+                  )}
+                >
+                  <Icon size={22} aria-hidden /> {t(g.label)}
+                </Link>
+                {/* У активной группы раскрыт список подразделов. */}
+                {on && g.subs.length > 0 && (
+                  <div className="ml-5 flex flex-col gap-0.5 border-l-2 border-border pl-2">
+                    {g.subs.map((s) => (
+                      <SubLink
+                        key={s.id}
+                        sub={s}
+                        active={s.id === sub}
+                        iconSize={18}
+                        className={cn(
+                          "flex h-10 items-center gap-2.5 rounded-xl px-3 text-sm font-extrabold transition-colors focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary",
+                          s.id === sub ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-text",
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
         <div className="flex-1" />
         <button
           type="button"
@@ -109,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           href="/profile"
           className={clsx(
             "flex h-12 items-center gap-3 rounded-2xl border-2 px-3 font-extrabold",
-            active("/profile") ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2",
+            underPath(pathname, "/profile") ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2",
           )}
         >
           <ProfileAvatar size={28} /> {t("nav.profile")}
@@ -129,25 +129,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="hidden min-[520px]:flex">
               <XpChipAnimated />
             </span>
-            <Link
-              href="/search"
-              aria-label={t("search.title")}
-              className={clsx(
-                "flex h-10 w-8 shrink-0 items-center justify-center rounded-xl hover:bg-surface-2 min-[400px]:w-10",
-                active("/search") ? "text-primary" : "text-muted",
-              )}
-            >
-              <Search size={22} />
-            </Link>
-            <ToolboxButton variant="icon" className="w-8 min-[400px]:w-10" />
-            <Link href="/profile" aria-label={t("nav.profile")} className="shrink-0">
-              <ProfileAvatar size={32} />
-            </Link>
+            <ToolboxButton variant="icon" />
           </div>
         </header>
 
         <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
           <main className={clsx("mx-auto w-full min-w-0 flex-1", wide ? "max-w-5xl" : "max-w-2xl")}>
+            <SectionTabs />
             {/* Страница мягко проявляется при каждой смене маршрута. */}
             <m.div key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: easeOut }}>
               {children}
@@ -168,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {/* Телефон: нижняя навигация. Подсветка активной вкладки — одна «таблетка», которая скользит между вкладками. */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <nav aria-label={t("nav2.mainNav")} className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
           <div className="relative mx-auto grid max-w-2xl grid-cols-5">
             <m.span
               aria-hidden
@@ -177,26 +165,27 @@ export function AppShell({ children }: { children: ReactNode }) {
               animate={{ x: `${Math.max(activeIndex, 0) * 100}%`, opacity: activeIndex >= 0 ? 1 : 0 }}
               transition={{ type: "spring", stiffness: 520, damping: 34 }}
             >
-              <span className={clsx("h-8 w-12 rounded-xl transition-colors duration-200", NAV[activeIndex]?.ai ? "bg-ai-soft" : "bg-primary-soft")} />
+              <span className={clsx("h-8 w-12 rounded-xl transition-colors duration-200", NAV_GROUPS[activeIndex]?.ai ? "bg-ai-soft" : "bg-primary-soft")} />
             </m.span>
-            {NAV.map(({ href, key, icon: Icon, ai }) => (
+            {NAV_GROUPS.map(({ id, href, label, icon: Icon, ai }) => (
               <Link
-                key={href}
+                key={id}
                 href={href}
+                aria-current={current(href, id === group)}
                 className={clsx(
                   "relative flex h-16 flex-col items-center justify-start gap-0.5 pt-[7px] text-[11px] font-extrabold transition-colors",
-                  active(href) ? (ai ? "text-ai" : "text-primary") : "text-muted",
+                  id === group ? (ai ? "text-ai" : "text-primary") : "text-muted",
                 )}
               >
                 <m.span
                   className="flex h-8 w-12 items-center justify-center"
                   initial={false}
-                  animate={active(href) ? { y: [0, -5, 0], scale: [1, 1.15, 1] } : { y: 0, scale: 1 }}
+                  animate={id === group ? { y: [0, -5, 0], scale: [1, 1.15, 1] } : { y: 0, scale: 1 }}
                   transition={{ duration: 0.32, ease: "easeOut" }}
                 >
-                  <Icon size={22} />
+                  <Icon size={22} aria-hidden />
                 </m.span>
-                <span className="max-w-full truncate px-0.5">{t(key)}</span>
+                <span className="max-w-full truncate px-0.5">{t(label)}</span>
               </Link>
             ))}
           </div>

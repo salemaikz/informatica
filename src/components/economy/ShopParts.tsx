@@ -64,12 +64,13 @@ export function IconTile({
 }
 
 /** Цена в чипах: иконка и число. */
-export function ChipPrice({ n, className }: { n: number; className?: string }) {
+export function ChipPrice({ n, className, plus }: { n: number; className?: string; plus?: boolean }) {
   return (
     <span
       className={cn("inline-flex items-center gap-1 tabular-nums", className)}
     >
       <Cpu size={16} />
+      {plus ? "+" : ""}
       {formatNum(n)}
     </span>
   );

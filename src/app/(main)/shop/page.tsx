@@ -15,7 +15,7 @@ import { useT } from "@/i18n/useT";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
 import { formatHours } from "@/components/plans/plans-helpers";
 import { AiPricing, EarnList, LedgerList } from "@/components/economy/ShopInfo";
-import { ShopBalance } from "@/components/economy/ShopBalance";
+import { ShopStatus } from "@/components/economy/ShopStatus";
 import { ShopPlanBanner } from "@/components/economy/ShopPlanBanner";
 import {
   ChipItemRow,
@@ -30,7 +30,7 @@ import {
   formatMult,
 } from "@/components/economy/shop-helpers";
 
-/** Магазин: баланс, тариф, сердечки и множитель за чипы, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
+/** Магазин: строка сердечек и бустера (баланс — в шапке), тариф, сердечки и множитель за чипы, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
 export default function ShopPage() {
   const { t, lang } = useT();
   // Что выбрал ученик — показывается в шторке «Оплата скоро» (open отдельно, чтобы текст не пропадал при закрытии).
@@ -55,7 +55,7 @@ export default function ShopPage() {
         <p className="font-semibold text-muted">{t("shop.subtitle")}</p>
       </div>
 
-      <ShopBalance />
+      <ShopStatus />
       <ShopPlanBanner />
 
       <ShopSection

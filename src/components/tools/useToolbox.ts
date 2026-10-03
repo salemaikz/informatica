@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 
-export type ToolTab = "calc" | "base" | "units" | "powers" | "scratch";
+export type ToolTab = "calc" | "base" | "units" | "cheat" | "scratch";
 /** full — все инструменты; ent — как на ЕНТ (калькулятор + черновик); off — инструментов нет. */
 export type ToolLevel = "full" | "ent" | "off";
 
-export const TOOL_TABS: ToolTab[] = ["calc", "base", "units", "powers", "scratch"];
+export const TOOL_TABS: ToolTab[] = ["calc", "base", "units", "cheat", "scratch"];
 export const ENT_TABS: ToolTab[] = ["calc", "scratch"];
 
 export function tabsFor(level: ToolLevel): ToolTab[] {

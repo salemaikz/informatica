@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ClipboardCheck, Link2, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
+import { ChevronRight, ClipboardCheck, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -83,8 +83,6 @@ export function ExamHub() {
   const [active, setActive] = useState<ExamAttempt | null>(null);
   const [now] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
-  const [shareKind, setShareKind] = useState<Extract<ExamKind, "mini" | "full">>("mini");
-  const [shared, setShared] = useState<{ url: string; how: "shared" | "copied" | "manual" } | null>(null);
 
   useEffect(() => {
     let off = false;
@@ -113,26 +111,6 @@ export function ExamHub() {
   const dateFmt = (at: number) => formatDay(at, lang, true, now);
 
   const start = (kind: ExamKind) => router.push(examLink(kind, randomSeed(), kind === "topic" ? topics : []));
-
-  const share = async () => {
-    const url = `${window.location.origin}${examLink(shareKind, randomSeed())}`;
-    try {
-      if (typeof navigator.share === "function") {
-        await navigator.share({ title: t(`exam.mode.${shareKind}` as DictKey), url });
-        setShared({ url, how: "shared" });
-        return;
-      }
-    } catch (e) {
-      // Окно «Поделиться» закрыли — это не ошибка.
-      if (e instanceof DOMException && e.name === "AbortError") return;
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setShared({ url, how: "copied" });
-    } catch {
-      setShared({ url, how: "manual" });
-    }
-  };
 
   const activeProgress = active ? active.paper.items.filter((q) => isAnswered(q, active.answers[q.key])).length : 0;
 
@@ -274,48 +252,6 @@ export function ExamHub() {
             )}
           </div>
         )}
-      </section>
-
-      {/* Вариант по ссылке */}
-      <section>
-        <SectionTitle>{t("exam.share.title")}</SectionTitle>
-        <Card className="flex flex-col gap-3">
-          <p className="text-sm font-semibold text-muted">{t("exam.share.desc")}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {(["mini", "full"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={shareKind === k}
-                onClick={() => {
-                  setShareKind(k);
-                  setShared(null);
-                }}
-                className={cn(
-                  "h-10 rounded-full border-2 px-3.5 text-sm font-extrabold",
-                  shareKind === k ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-text hover:bg-surface-2",
-                )}
-              >
-                {t(`exam.mode.${k}` as DictKey)}
-              </button>
-            ))}
-            <Button variant="secondary" size="sm" icon={<Link2 size={16} aria-hidden />} onClick={share} disabled={empty} className="ml-auto h-10">
-              {t("exam.share.button")}
-            </Button>
-          </div>
-          {shared && (
-            <div className="flex flex-col gap-1.5" role="status">
-              <p className="text-sm font-extrabold text-success-strong">{t(`exam.share.${shared.how}` as DictKey)}</p>
-              <input
-                readOnly
-                value={shared.url}
-                aria-label={t("exam.share.button")}
-                onFocus={(e) => e.currentTarget.select()}
-                className="h-11 w-full rounded-xl border-2 border-border bg-surface-2 px-3 font-mono text-xs"
-              />
-            </div>
-          )}
-        </Card>
       </section>
 
       <ButtonLink href="/practice" variant="ghost" className="self-center">

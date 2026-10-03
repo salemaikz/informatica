@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AI_COST, SHOP_ITEMS, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
-import { chipRate, dayDiff, formatClock, formatCompact, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
+import { chipRate, dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
 import { dict } from "@/i18n/dict";
 
 const view = (count: number, max = 5, extra: Partial<HeartsView> = {}): HeartsView => ({ count, max, unlimited: false, nextAt: count < max ? 1000 : null, ...extra });
@@ -184,5 +184,35 @@ describe("словарь магазина, сердечек и тарифов", 
     const { xp, n } = chipRate();
     expect(dict["shop.earn.xp"].ru.replace("{xp}", String(xp)).replace("{n}", String(n))).toBe("За опыт: 5 XP = 2 чипа");
     expect(dict["shop.earn.xp"].kk.replace("{xp}", String(xp)).replace("{n}", String(n))).toBe("Тәжірибе үшін: 5 XP = 2 чип");
+  });
+});
+
+describe("строка сердечек и бустера в магазине", () => {
+  it("обратный отсчёт часами", () => {
+    expect(formatCountdown(4 * 60_000 + 12_000)).toBe("4:12");
+    expect(formatCountdown(12 * 60_000 + 30_000)).toBe("12:30");
+    expect(formatCountdown(3_600_000 + 5 * 60_000 + 30_000)).toBe("1:05:30");
+    expect(formatCountdown(500)).toBe("0:01");
+    expect(formatCountdown(0)).toBe("0:00");
+    expect(formatCountdown(-9000)).toBe("0:00");
+  });
+  it("множитель ×1 и закончившийся бустер не показываем", () => {
+    expect(showBoostLine(null, 2, 0)).toBe(false);
+    expect(showBoostLine({ until: 5000 }, 1, 0)).toBe(false);
+    expect(showBoostLine({ until: 5000 }, 2, 6000)).toBe(false);
+    expect(showBoostLine({ until: 5000 }, 2, 1000)).toBe(true);
+    expect(showBoostLine({ until: 5000 }, 2, 0)).toBe(false); // SSR/гидратация: часов ещё нет
+  });
+  it("тексты строки состояния и цены голоса: плейсхолдеры совпадают", () => {
+    const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    for (const k of ["shop.status.heartsOf", "shop.status.next", "shop.status.boost", "shop.ai.voice.sub", "voice.startPaid"] as const) {
+      expect(ph(dict[k].kk), k).toEqual(ph(dict[k].ru));
+    }
+    expect(ph(dict["shop.status.boost"].ru)).toEqual(["mult", "time"]);
+    expect(ph(dict["voice.startPaid"].ru)).toEqual(["n"]);
+    expect(AI_COST.voice).toBe(2);
+  });
+  it("старые ключи карточки баланса удалены", () => {
+    expect(Object.keys(dict).filter((k) => k.startsWith("shop.balance"))).toEqual([]);
   });
 });

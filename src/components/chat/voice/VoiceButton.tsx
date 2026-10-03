@@ -6,7 +6,7 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
-import type { AiReceipt } from "@/lib/economy";
+import { AI_COST, type AiReceipt } from "@/lib/economy";
 import {
   formatTimer,
   isIosUserAgent,
@@ -192,7 +192,9 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
 
   const recording = state === "recording";
   const busy = state === "transcribing" || state === "starting";
-  const label = recording ? t("voice.stop") : state === "transcribing" ? t("voice.transcribing") : t("voice.start");
+  // Цена видна, пока обращение не бесплатно по тарифу: расшифровка +N к цене сообщения.
+  const paid = !quote.ok || quote.pay === "chips";
+  const label = recording ? t("voice.stop") : state === "transcribing" ? t("voice.transcribing") : paid ? t("voice.startPaid", { n: AI_COST.voice }) : t("voice.start");
 
   return (
     <div className="flex shrink-0 items-center gap-2">

@@ -105,3 +105,18 @@ export function formatClock(at: number): string {
 export function heartWaitMs(v: HeartsView, now: number): number {
   return v.nextAt === null ? 0 : Math.max(0, v.nextAt - now);
 }
+
+/** Обратный отсчёт часами: «4:12», «12:30», «1:05:30». Минус и ноль — «0:00». */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = String(s).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+/** Нужно ли показывать строку множителя: часы уже идут (now > 0, не SSR), идёт бустер и итоговый множитель больше ×1. */
+export function showBoostLine(boost: { until: number } | null, multiplier: number, now: number): boolean {
+  return now > 0 && boost !== null && boost.until > now && multiplier > 1;
+}

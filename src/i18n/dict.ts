@@ -35,6 +35,7 @@ import { chat2Dict } from "./parts/chat2";
 import { voiceDict } from "./parts/voice";
 import { navDict } from "./parts/nav";
 import { cheatDict } from "./parts/cheat";
+import { planDict } from "./parts/plan";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -47,9 +48,8 @@ const core = {
   },
 
   "nav.learn": { ru: "Учиться", kk: "Оқу" },
-  "nav.practice": { ru: "Практика", kk: "Жаттығу" },
+  "nav.practice": { ru: "Практика", kk: "Практика" },
   "nav.tutor": { ru: "ИИ-чат", kk: "ЖИ-чат" },
-  "nav.notes": { ru: "Конспекты", kk: "Конспект" },
   "nav.stats": { ru: "Прогресс", kk: "Прогресс" },
   "nav.code": { ru: "Практикум кода", kk: "Код практикумы" },
   "prac.code.desc": { ru: "Python, SQL, HTML/CSS, JavaScript и Excel прямо в браузере", kk: "Python, SQL, HTML/CSS, JavaScript және Excel — тікелей браузерде" },
@@ -415,7 +415,6 @@ const core = {
   "tools.calc": { ru: "Калькулятор", kk: "Калькулятор" },
   "tools.base": { ru: "Системы счисления", kk: "Санау жүйелері" },
   "tools.units": { ru: "Единицы", kk: "Бірліктер" },
-  "tools.powers": { ru: "Степени 2", kk: "2-нің дәрежелері" },
   "tools.scratch": { ru: "Черновик", kk: "Қаралама" },
   "tools.entOnly": {
     ru: "Как на ЕНТ: только калькулятор и черновик",
@@ -455,8 +454,6 @@ const core = {
   "tools.unitTo": { ru: "В единицу", kk: "Қай бірлікке" },
   "tools.perSecond": { ru: "/с", kk: "/с" },
   "tools.seconds": { ru: "с", kk: "с" },
-  "tools.powKb": { ru: "1 Кбайт = 2¹⁰ байт", kk: "1 Кбайт = 2¹⁰ байт" },
-  "tools.powMb": { ru: "1 Мбайт = 2²⁰ байт", kk: "1 Мбайт = 2²⁰ байт" },
   "tools.textPlaceholder": { ru: "Пиши здесь…", kk: "Осында жаз…" },
   "tools.swap": { ru: "Поменять местами", kk: "Орындарын ауыстыру" },
   "tools.backspace": { ru: "Стереть последний символ", kk: "Соңғы таңбаны өшіру" },
@@ -507,6 +504,7 @@ export const dict = {
   ...voiceDict,
   ...navDict,
   ...cheatDict,
+  ...planDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

@@ -29,7 +29,7 @@ function trackErrors(page: Page) {
   return errors;
 }
 
-const PAGES = ["/learn", "/theory", "/theory/py-1-vars", "/search", "/notes", "/exam", "/profile", "/stats", "/practice"];
+const PAGES = ["/learn", "/theory", "/theory/py-1-vars", "/search", "/notes", "/exam", "/profile", "/stats", "/practice", "/materials", "/shop"];
 
 test("новые экраны открываются без ошибок", async ({ page }) => {
   const errors = trackErrors(page);
@@ -40,6 +40,33 @@ test("новые экраны открываются без ошибок", async
   }
   // Без горизонтальной прокрутки на телефоне
   await page.goto("/learn");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  expect(errors).toEqual([]);
+});
+
+test("навигация: группы, подразделы, шпаргалка", async ({ page }) => {
+  const errors = trackErrors(page);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await seed(page);
+  await page.goto("/practice");
+  // Нижняя панель — пять групп; строка подразделов видна на главной странице подраздела.
+  const bottom = page.getByRole("navigation", { name: "Главное меню" });
+  await expect(bottom.getByRole("link")).toHaveCount(5);
+  const tabs = page.getByRole("navigation", { name: "Подразделы" });
+  await expect(tabs.getByRole("link", { name: "Пробный ЕНТ" })).toBeVisible();
+  await tabs.getByRole("link", { name: "Пробный ЕНТ" }).click();
+  await expect(page).toHaveURL(/\/exam$/);
+  await expect(tabs.getByRole("link", { name: "Пробный ЕНТ" })).toHaveAttribute("aria-current", "page");
+  // Материалы: хаб, «Шпаргалка» открывает инструменты.
+  await bottom.getByRole("link", { name: "Материалы" }).click();
+  await expect(page).toHaveURL(/\/materials$/);
+  // «Шпаргалка» есть и в строке подразделов, и карточкой хаба — жмём таблетку (точное имя).
+  await tabs.getByRole("button", { name: "Шпаргалка", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  // В шапке больше нет поиска и аватара.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("header").getByRole("link", { name: "Поиск" })).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   expect(errors).toEqual([]);

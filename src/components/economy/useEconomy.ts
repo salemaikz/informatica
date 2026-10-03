@@ -52,6 +52,39 @@ export function useNow(): number {
   );
 }
 
+// Секундные часы — только для обратных отсчётов («следующее через 4:12»); подписка живёт, пока такой компонент на экране.
+const FAST_TICK_MS = 1000;
+let fastNow = 0;
+const fastListeners = new Set<() => void>();
+let fastTimer: ReturnType<typeof setInterval> | null = null;
+
+function subscribeFast(cb: () => void) {
+  fastListeners.add(cb);
+  if (!fastTimer) {
+    fastNow = Date.now();
+    fastTimer = setInterval(() => {
+      fastNow = Date.now();
+      fastListeners.forEach((l) => l());
+    }, FAST_TICK_MS);
+  }
+  return () => {
+    fastListeners.delete(cb);
+    if (!fastListeners.size && fastTimer) {
+      clearInterval(fastTimer);
+      fastTimer = null;
+    }
+  };
+}
+
+/** Текущее время, обновляется раз в секунду (для обратного отсчёта). На сервере — 0. */
+export function useNowSeconds(): number {
+  return useSyncExternalStore(
+    subscribeFast,
+    () => fastNow || (fastNow = Date.now()),
+    () => 0,
+  );
+}
+
 /** Действующий тариф. */
 export function usePlanTier(): PlanTier {
   const plan = useApp((s) => s.plan);
@@ -73,6 +106,14 @@ export function useHearts(): HeartsView {
   const tier = usePlanTier();
   const t = useNow();
   return heartsView(hearts, tier, t, todayKey());
+}
+
+/** Сердечки с секундным обновлением — для строки с обратным отсчётом до следующего. */
+export function useHeartsLive(): { view: HeartsView; now: number } {
+  const hearts = useApp((s) => s.hearts);
+  const tier = usePlanTier();
+  const t = useNowSeconds();
+  return { view: heartsView(hearts, tier, t, todayKey()), now: t };
 }
 
 /** Чипы и множитель (тариф × бустер). */

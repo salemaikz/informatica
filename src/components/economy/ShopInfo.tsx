@@ -98,15 +98,19 @@ export function AiPricing() {
             {AI_ROWS.map((r) => (
               <li key={r.kind} className="flex items-center gap-3 px-3.5 py-2.5">
                 <r.icon size={18} className="shrink-0 text-ai" />
-                <span className="min-w-0 flex-1 text-[15px] font-bold">{t(r.key)}</span>
+                <span className="min-w-0 flex-1 text-[15px] font-bold">
+                  {t(r.key)}
+                  {r.kind === "voice" && <span className="block text-sm font-semibold text-muted">{t("shop.ai.voice.sub", { n: AI_COST.voice })}</span>}
+                </span>
                 {AI_COST[r.kind] > 0 ? (
-                  <ChipPrice n={AI_COST[r.kind]} className="font-extrabold text-warning-strong" />
+                  <ChipPrice n={AI_COST[r.kind]} plus={r.kind === "voice"} className="font-extrabold text-warning-strong" />
                 ) : (
                   <span className="text-sm font-extrabold text-success-strong">{t("shop.ai.free")}</span>
                 )}
               </li>
             ))}
           </ul>
+          <p className="px-3.5 pb-3 text-sm font-semibold text-muted">{t("shop.ai.voiceNote")}</p>
         </>
       )}
     </Card>

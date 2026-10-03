@@ -7,8 +7,8 @@ import {
   Calculator as CalculatorIcon,
   HardDrive,
   Info,
+  NotebookText,
   PenLine,
-  Superscript,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -22,14 +22,14 @@ import { tabsFor, TOOL_TABS, useToolbox, type ToolTab } from "./useToolbox";
 // Остальные вкладки подгружаются при первом открытии.
 const BaseConverter = dynamic(() => import("./BaseConverter").then((x) => x.BaseConverter));
 const UnitsTool = dynamic(() => import("./UnitsTool").then((x) => x.UnitsTool));
-const PowersTable = dynamic(() => import("./PowersTable").then((x) => x.PowersTable));
+const CheatSheet = dynamic(() => import("./CheatSheet").then((x) => x.CheatSheet));
 const Scratchpad = dynamic(() => import("./Scratchpad").then((x) => x.Scratchpad), { ssr: false });
 
 const TAB_META: Record<ToolTab, { icon: LucideIcon; label: DictKey }> = {
   calc: { icon: CalculatorIcon, label: "tools.calc" },
   base: { icon: Binary, label: "tools.base" },
   units: { icon: HardDrive, label: "tools.units" },
-  powers: { icon: Superscript, label: "tools.powers" },
+  cheat: { icon: NotebookText, label: "cheat.title" },
   scratch: { icon: PenLine, label: "tools.scratch" },
 };
 
@@ -101,7 +101,7 @@ export function ToolboxButton({ className, variant = "icon" }: { className?: str
 }
 
 /**
- * Панель «Инструменты»: калькулятор, системы счисления с шагами, единицы, степени двойки, черновик.
+ * Панель «Инструменты»: калькулятор, системы счисления с шагами, единицы, шпаргалка, черновик.
  * Телефон — шторка снизу; ≥1024px — панель справа без затемнения. Монтируется один раз (в корне приложения).
  * Требует <LazyMotion features={domAnimation}> выше по дереву (используются m-компоненты).
  */
@@ -333,7 +333,7 @@ export function Toolbox() {
                 {id === "calc" && <Calculator active={open && tab === "calc"} />}
                 {id === "base" && <BaseConverter />}
                 {id === "units" && <UnitsTool />}
-                {id === "powers" && <PowersTable />}
+                {id === "cheat" && <CheatSheet />}
                 {id === "scratch" && <Scratchpad />}
               </div>
             ))}
