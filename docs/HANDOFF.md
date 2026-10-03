@@ -68,11 +68,15 @@
   - практикум кода `/code`: Python (Pyodide, пошаговое выполнение), SQL (sql.js), HTML/CSS (iframe), JavaScript (Worker), Excel (`lib/sheet`) — 40 задач с автопроверкой (`lib/ide/*`, `components/ide/*`);
   - раздел «Старт: компьютер с нуля» (`u0`, уроки `base-1…base-8`), сцены `hardware`, `pc-inside`, `cpu-cycle`, `keyboard`, `sizes`, `files`, `layers`; шаг онбординга «С чего начнём?» (`profile.skipBasics`);
   - ИИ-чат 2.0: `/tutor` (список) и `/tutor/<id>`, режимы (`CHAT_MODE_RULE`), «Дай задачи» (`lib/chat-quiz.ts`), голос (`/api/ai/transcribe`, `lib/voice.ts`), сообщения в IndexedDB (`lib/chat-store.ts`).
+- **v0.8 (курс 2.0)** — подробно `docs/CHANGELOG.md`, решения #38–#39, ТЗ `docs/specs/{course-v2,v08-ui,ide-v2}.md`:
+  - 113 уроков (+63), задания ЕНТ 2445 — у всех статические подсказки; практикум 100 задач;
+  - контрольная по разделу (`exam` вида `unit`, `components/exam/checkpoint.ts`, `CheckpointNode`), план подготовки (`lib/plan.ts`, `/plan`);
+  - навигация из 5 групп (`components/app/nav.ts`, `SectionTabs`), «Материалы», шпаргалка (`components/tools/CheatSheet.tsx`), строка сердечек (`ShopStatus`), ИИ в шторке только по кнопке (`lib/ai-static.ts`).
 - **Тесты:** юнит (vitest) и e2e (Playwright, `e2e/*.spec.ts`) — цифры в последней записи `docs/CHANGELOG.md`.
 
 ## Чего ждём от пользователя
 1. **Приёмка этапов 1–3, v0.6 и v0.7** на телефоне: карта курса, режимы урока, теория, поиск, пробный ЕНТ, конспекты, черновик, игры; сердечки, магазин, тарифы, история тестов, школьный трек; раздел «Старт», практикум кода, новый чат.
-2. **Цены экономики v0.7** (решение #34) — подтвердить после пробы: сердечко раз в 5 ч, 5 XP = 2 чипа, цены наборов и ИИ.
+2. **Цены экономики v0.8** (решения #34, #39) — подтвердить после пробы: сердечко раз в 6 ч (Лайт 3 ч), 5 XP = 2 чипа, сердечки 20/50/75 чипов, чипы 100 = 249 ₸.
 3. **Школьная программа**: сверить темы 5–9 классов с приложением 55 к приказу № 399; нужен ли ОГН для 10–11.
 4. **Оплата**: ИП и Kaspi Pay / эквайринг — без этого кнопки тарифов остаются «скоро».
 5. **Казахский**: прогнать `npm run review:kk` по новым урокам (нужен ключ OpenAI в `.env.local`) и, если найдётся, отдать носителю.
@@ -91,9 +95,9 @@
 - Идеи из `docs/RESEARCH.md`, которые ещё не сделаны, — в `docs/ROADMAP.md`.
 
 ## Где что лежит
-- **Правила и план:** `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#37), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3, v0.6 и v0.7 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`), школьная программа — `docs/SCHOOL.md`.
+- **Правила и план:** `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#39), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3 и v0.6–v0.8 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`, `course-v2.md`, `v08-ui.md`, `ide-v2.md`), школьная программа — `docs/SCHOOL.md`.
 - **Уроки:** `src/content/lessons/*.ts`, карта — `src/content/course.ts`, навыки — `src/content/skills.ts`, темы ЕНТ — `src/content/ent-topics.ts`, задания ЕНТ — `src/content/ent/*.ts`, банки — `src/lib/bank/*.ts`.
-- **Новый урок** = 3 файла (урок, банк, задания ЕНТ) → `node scripts/register-content.mjs` (сам пропишет реестры) → `npx tsx scripts/check-content.ts <id>` → `npm test`.
+- **Новый урок** = 3 файла (урок, банк, задания ЕНТ; у заданий ЕНТ — `hint`) → `node scripts/register-content.mjs` (сам пропишет реестры; пока другие уроки пишутся — `--add=<id>`) → `npx tsx scripts/check-content.ts <id>` → `npm test`.
 - **Плеер урока:** `src/components/lesson/LessonPlayer.tsx`, шаги — `src/components/lesson/steps/*`, сцены — `src/components/scenes/*`.
 - **Логика:**
   - `src/lib/` — `evaluate`, `generators`, `bank/`, `ent`, `calc`, `mastery`, `gamification`, `store`, `feedback`, `sound`;

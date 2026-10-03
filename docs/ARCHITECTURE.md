@@ -260,3 +260,23 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Режим чата и тема уходят на сервер (`TutorRequest.chatMode`, `topic`) → `CHAT_MODE_RULE` в `server/prompts.ts`.
 - «Дай задачи» — `components/chat/quiz/ChatQuiz` (банк заданий, `evaluate`, `recordAnswer`, `finishSession({kind:"drill", mode:"chat"})`), оценка `quizGrade`.
 - Голос: `VoiceButton` → `spendAi("voice")` → `POST /api/ai/transcribe` (`MODELS.stt`); озвучка — `speechSynthesis` браузера.
+
+## v0.8: курс 2.0, группы разделов, контрольные, план, подсказки без ИИ
+
+### Навигация (решение #39)
+- Конфигурация — `src/components/app/nav.ts`: `NAV_GROUPS` (Учиться · Практика · ИИ-чат · Материалы · Прогресс) с подразделами, чистые `groupOf(path)`, `subOf(path)`, `hubGroup(path)` (тесты `tests/nav.test.ts`).
+- `AppShell`: нижняя панель телефона и боковое меню компьютера строятся из `NAV_GROUPS` (у активной группы в меню раскрыты подразделы); `SectionTabs` — строка подразделов над содержимым хаб-страниц (на телефоне), страницы её не подключают сами. Новая страница `/materials`.
+- Шпаргалка — вкладка `cheat` «Инструментов» (`components/tools/CheatSheet.tsx`, данные и таблицы считает `cheat-data.ts`); `openCheatSheet()` открывает её из «Материалов».
+
+### Подсказки без ИИ
+- Статическая подсказка есть у всех заданий уроков, банка и ЕНТ (`EntItem.hint`, `EntContextQuestion.hint`; `check-content` предупреждает о пропуске). `lib/ent-steps.ts` переносит её в шаг работы над ошибками (варианты там перемешиваются: `drill.ts` + `shuffleOptions`).
+- `lib/ai-static.ts` → `staticAiText(mode, task)`: бесплатный текст шторки (подсказка или разбор неверного варианта + объяснение). `AiPanel` сам ИИ не вызывает: только кнопка с ценой.
+
+### Контрольная по разделу и план
+- Вид пробного теста `unit` (`lib/exam.ts`): 15 заданий (10 single, 2 multi, 2 match, 1 вопрос контекста) по навыкам уроков раздела, 25 минут, `?kind=unit&unit=<id>`. `components/exam/checkpoint.ts` — `checkpointOf/ById`, ленивый пул ЕНТ (`useEntPool`), `examTitle`; на карте — `CheckpointNode` (звёзды по лучшему итогу из `exam-store`), в «Пробном ЕНТ» — список контрольных.
+- План подготовки — `lib/plan.ts` (`buildPlan`: недели до даты ЕНТ или 12, ≤ 7 уроков в неделю, контрольная после раздела, мини-ЕНТ раз в 2 недели, последние недели — повторение и полные пробники; тесты `tests/plan.test.ts`), UI — `components/plan/*`, страница `/plan`, карточка `PlanCard` на `/learn`.
+
+### Контент
+- 113 уроков (`course.ts`), регистрация частями: `node scripts/register-content.mjs --add=id1,id2` (добавляет к уже подключённым, недописанные файлы не трогает).
+- Практикум: 100 задач; движок таблиц `lib/sheet` знает текстовые функции (`СТРОЧН`, `ПРОПИСН`, `ДЛСТР`, `СЦЕПИТЬ`, `ЛЕВСИМВ`, `ПРАВСИМВ`, `&`); список задач языка группируется по навыку.
+- Магазин: `ShopStatus` (строка сердечек и бустера, часы `useNowSeconds` через `useSyncExternalStore`).
