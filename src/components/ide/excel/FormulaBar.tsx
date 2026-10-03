@@ -57,7 +57,8 @@ export function FormulaBar({ addr, value, dirty, inputRef, onChange, onFocus, on
           onChange={(e) => onChange(e.target.value)}
           onFocus={(e) => {
             onFocus();
-            e.currentTarget.select();
+            // Число или текст заменяются при наборе; в формуле курсор ставят пальцем, поэтому её не выделяем.
+            if (!e.currentTarget.value.trimStart().startsWith("=")) e.currentTarget.select();
           }}
           onBlur={onBlur}
           onKeyDown={(e) => {

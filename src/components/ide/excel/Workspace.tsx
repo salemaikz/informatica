@@ -10,6 +10,7 @@ import {
   addrOf,
   evaluateSheet,
   fillCells,
+  formatValue,
   formulaRefs,
   GRID_COLS,
   GRID_ROWS,
@@ -149,7 +150,8 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
       if (!el) return;
       el.focus();
       if (caret !== undefined) el.setSelectionRange(caret, caret);
-      else if (selectAll) el.select();
+      else if (selectAll && !el.value.trimStart().startsWith("=")) el.select();
+      else el.setSelectionRange(el.value.length, el.value.length);
     });
   };
 
@@ -176,8 +178,8 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   const insertText = (text: string, caretBack = 0) => {
     const el = inputRef.current;
-    const base = editing ? s.draft!.text : "";
     const focused = !!el && document.activeElement === el;
+    const base = focused ? barText : editing ? s.draft!.text : "";
     const a = focused ? (el.selectionStart ?? base.length) : base.length;
     const b = focused ? (el.selectionEnd ?? a) : a;
     const next = base.slice(0, a) + text + base.slice(b);
@@ -289,7 +291,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
       {shownFormula && !editing && (
         <p className="text-sm font-bold" aria-live="polite">
-          {t("idexl.result", { value: errCode ?? (typeof value === "boolean" ? (value ? "ИСТИНА" : "ЛОЖЬ") : String(value ?? "")) })}
+          {t("idexl.result", { value: formatValue(value) })}
         </p>
       )}
 
