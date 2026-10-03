@@ -154,7 +154,7 @@ const V2: IdeTask[] = [
       ru: "Дан массив `nums`. Оставьте в нём только чётные числа (`filter`), возведите каждое в квадрат (`map`) и выведите результат одной строкой через пробел (`join(\" \")`).",
       kk: "`nums` массиві берілген. Одан тек жұп сандарды қалдырыңыз (`filter`), әрқайсысын квадраттаңыз (`map`) және нәтижені бос орынмен бөліп бір жолға шығарыңыз (`join(\" \")`).",
     },
-    starter: 'const nums = [5, 12, 7, 8, 3, 10, 4];\nconst result = [];\n\n// ...\n\nconsole.log(result.join(" "));\n',
+    starter: 'const nums = [5, 12, 7, 8, 3, 10, 4];\nlet result = [];\n\n// ...\n\nconsole.log(result.join(" "));\n',
     hint: {
       ru: "Методы можно записать цепочкой: `nums.filter(x => …).map(x => …)`. В `filter` функция возвращает условие, в `map` — новое значение.",
       kk: "Әдістерді тізбектеп жазуға болады: `nums.filter(x => …).map(x => …)`. `filter` ішіндегі функция шартты, `map` ішіндегі функция жаңа мәнді қайтарады.",
@@ -171,14 +171,14 @@ const V2: IdeTask[] = [
       ru: "Допишите функцию `isPalindrome(s)`: она возвращает `yes`, если строка читается одинаково слева направо и справа налево, иначе `no`. Вызовы ниже выведут результаты.",
       kk: "`isPalindrome(s)` функциясын аяқтаңыз: жол солдан оңға да, оңнан солға да бірдей оқылса, `yes`, әйтпесе `no` қайтарсын. Төмендегі шақырулар нәтижелерді шығарады.",
     },
-    starter: 'function isPalindrome(s) {\n  // ...\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));\n',
+    starter: 'function isPalindrome(s) {\n  // ...\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));\nconsole.log(isPalindrome("alpha"));\n',
     hint: {
-      ru: "Переверните строку: `s.split(\"\").reverse().join(\"\")` — и сравните результат с самой `s` через `===`.",
-      kk: "Жолды аударыңыз: `s.split(\"\").reverse().join(\"\")` — және нәтижені `s` жолының өзімен `===` арқылы салыстырыңыз.",
+      ru: "Палиндром совпадает со своей перевёрнутой копией. У строки нет метода `reverse()`, а у массива есть: строку можно разбить на массив символов (`split`) и потом склеить обратно (`join`). Другой путь — цикл, сравнивающий `s[i]` с символом на таком же месте с конца.",
+      kk: "Палиндром өзінің кері оқылған көшірмесімен бірдей болады. Жолда `reverse()` әдісі жоқ, ал массивте бар: жолды символдар массивіне бөліп (`split`), кейін қайта біріктіруге (`join`) болады. Басқа жолы — `s[i]` символын соңынан дәл сондай орындағы символмен салыстыратын цикл.",
     },
     solution:
-      'function isPalindrome(s) {\n  const rev = s.split("").reverse().join("");\n  if (rev === s) {\n    return "yes";\n  }\n  return "no";\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));',
-    check: { kind: "js", stdout: "yes\nno\nyes" },
+      'function isPalindrome(s) {\n  const rev = s.split("").reverse().join("");\n  if (rev === s) {\n    return "yes";\n  }\n  return "no";\n}\n\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));\nconsole.log(isPalindrome("alpha"));',
+    check: { kind: "js", stdout: "yes\nno\nyes\nno" },
   },
 ];
 

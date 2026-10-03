@@ -376,6 +376,7 @@ describe("задачи HTML/CSS", () => {
     expect((await go("web-8-class", '<style>.note{background:yellow;padding:4px}</style><p class="note">x</p>')).ok).toBe(true);
     expect((await go("web-9-ol", "<H2>steps</H2><OL><LI>Open<LI>Write<LI>Save</OL>")).ok).toBe(true);
     expect((await go("web-10-links", '<a target="_blank" href="https://nct.kz/">NCT</a><a href="contacts.html">Contacts</a>')).ok).toBe(true);
+    expect((await go("web-10-links", '<a href="https://nct.kz" target="_blank">NCT</a> <a href="./contacts.html">Contacts</a>')).ok).toBe(true);
     expect((await go("web-11-colspan", '<table><tbody><tr><th colspan=2>Results<tr><td>Math<td>Info</table>')).ok).toBe(true);
     expect((await go("web-12-form", '<form><input id="name" type="text"><label for="name">Name</label><button type="submit">Send</button></form>')).ok).toBe(true);
     expect((await go("web-13-align", "<style>h1{text-align:CENTER}p{color:green}</style><h1>x</h1><p>y</p>")).ok).toBe(true);
@@ -399,6 +400,7 @@ describe("задачи HTML/CSS", () => {
     expect((await go("web-8-class", '<style>.note{background-color:yellow}</style><p class="note">x</p>')).ok).toBe(false);
     expect((await go("web-9-ol", "<h2>Steps</h2><ul><li>Open</li><li>Write</li><li>Save</li></ul>")).ok).toBe(false);
     expect((await go("web-10-links", '<a href="https://nct.kz">NCT</a><a href="contacts.html">Contacts</a>')).ok).toBe(false);
+    expect((await go("web-10-links", '<a href="https://nct.kz" target="_blank">NCT</a><a href="https://nct.kz/contacts.html">Contacts</a>')).ok).toBe(false);
     expect((await go("web-11-colspan", "<table><tr><td>Results</td></tr><tr><td>Math</td><td>Info</td></tr></table>")).ok).toBe(false);
     expect((await go("web-12-form", '<form><label>Name</label><input type="text"><button>Send</button></form>')).ok).toBe(false);
     expect((await go("web-14-box", '<style>.card{width:300px;padding:20px;border:1px solid black}</style><div class="card"><p>x</p></div>')).ok).toBe(false);

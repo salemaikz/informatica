@@ -5,7 +5,7 @@ import { SKILLS } from "@/content/skills";
 import { checkExcel, describeSheetError, matchesExpected, type ExcelCheck } from "@/lib/ide/excel/check";
 import { TASKS } from "@/lib/ide/excel/tasks";
 import { CODE_XP } from "@/lib/ide/types";
-import { evaluateSheet, fillCells, isError, isFormula, parseSheetCode, serializeSheet, type SheetCells } from "@/lib/sheet";
+import { evaluateSheet, fillCells, isError, isFormula, parseSheetCode, serializeSheet, shiftFormula, type SheetCells } from "@/lib/sheet";
 import { ideExcelDict } from "@/i18n/parts/ide-excel";
 
 const byId = (id: string) => TASKS.find((t) => t.id === id)!;
@@ -217,10 +217,13 @@ describe("задачи Excel курса 2.0: проверка", () => {
 
   it("xl-10: доля хороших оценок, разные способы записи", () => {
     const t = base("xl-10-countif");
-    expect(run("xl-10-countif", { ...t, B1: '=COUNTIF(A1:A8;">3")', B2: "=B1/COUNT(A1:A8)*100", B3: "=AVERAGE(A1:A8)" }).ok).toBe(true);
-    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A8;">=4")', B2: "=B1/8*100", B3: "=СРЗНАЧ(A1:A8)" }).ok).toBe(true);
-    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A8;">=4")', B2: "=B1/СЧЁТ(A1:A8)", B3: "=СРЗНАЧ(A1:A8)" }).ok).toBe(false); // без ×100
-    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A8;">4")', B2: "=B1/8*100", B3: "=СРЗНАЧ(A1:A8)" }).ok).toBe(false);
+    expect(run("xl-10-countif", { ...t, B1: '=COUNTIF(A1:A10;">3")', B2: "=B1/COUNT(A1:A10)*100", B3: "=AVERAGE(A1:A10)" }).ok).toBe(true);
+    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A10;">=4")', B2: "=B1/8*100", B3: "=СРЗНАЧ(A1:A10)" }).ok).toBe(true);
+    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A10;">=4")', B2: "=B1/СЧЁТ(A1:A10)", B3: "=СРЗНАЧ(A1:A10)" }).ok).toBe(false); // без ×100
+    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A10;">4")', B2: "=B1/8*100", B3: "=СРЗНАЧ(A1:A10)" }).ok).toBe(false);
+    // делят на число ячеек (с «abs»), а не на число оценок
+    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A10;">=4")', B2: "=B1/СЧЁТЗ(A1:A10)*100", B3: "=СРЗНАЧ(A1:A10)" }).ok).toBe(false);
+    expect(run("xl-10-countif", { ...t, B1: '=СЧЁТЕСЛИ(A1:A10;">=4")', B2: "=B1/10*100", B3: "=СУММ(A1:A10)/10" }).ok).toBe(false);
   });
 
   it("xl-11: вложенное ЕСЛИ — границы 85, 65, 40; ловушка порядка условий", () => {
@@ -282,19 +285,28 @@ describe("задачи Excel курса 2.0: проверка", () => {
     // значения, введённые руками, не засчитываются
     const typed = { ...t, ...Object.fromEntries(Object.entries(excel("xl-15-table").cells).map(([a, v]) => [a, String(v)])) };
     expect(run("xl-15-table", typed).ok).toBe(false);
+    // верные значения, но каждая формула набрана заново (без $) — не одна протянутая формула
+    const manual = { ...t, ...Object.fromEntries(Object.keys(excel("xl-15-table").cells).map((a) => [a, `=A${a[1]}*${a[0]}1`])) };
+    const rm = run("xl-15-table", manual);
+    expect(evaluateSheet(manual).get("E5")).toBe(45);
+    expect(rm.ok).toBe(false);
+    expect(rm.passed).toBe(rm.total - 1);
   });
 
   it("xl-16: в E5 получается 70, остальные рассуждения — нет", () => {
     const t = base("xl-16-copyval");
-    expect(run("xl-16-copyval", { ...t, G1: "70" }).ok).toBe(true);
-    for (const wrong of ["0", "30", "40", "50", "60", "80", "100"]) expect(run("xl-16-copyval", { ...t, G1: wrong }).ok, wrong).toBe(false);
+    expect(run("xl-16-copyval", { ...t, G1: "70", G2: "40" }).ok).toBe(true);
+    for (const wrong of ["0", "30", "40", "50", "60", "80", "100"]) expect(run("xl-16-copyval", { ...t, G1: wrong, G2: "40" }).ok, wrong).toBe(false);
+    // B5 — копия влево: $A5*10+B$2 = 40; без сдвига 30, с закреплённой строкой у A — 20
+    for (const wrong of ["10", "20", "30", "50", "70"]) expect(run("xl-16-copyval", { ...t, G1: "70", G2: wrong }).ok, wrong).toBe(false);
+    expect(evaluateSheet({ ...t, B5: shiftFormula(t.C3, 2, -1) }).get("B5")).toBe(40);
     // протянули C3 в E5 — действительно 70, а при другой раскладке $ получились бы иные числа
     let cells = fill(t, "C3", "right", 2);
     for (const c of ["C3", "D3", "E3"]) cells = fill(cells, c, "down", 2);
     expect(evaluateSheet(cells).get("E5")).toBe(70);
     expect(evaluateSheet(cells).get("E3")).toBe(50);
     expect(evaluateSheet(cells).get("C5")).toBe(50);
-    expect(run("xl-16-copyval", { ...t, C3: "", G1: "70" }).ok).toBe(false);
+    expect(run("xl-16-copyval", { ...t, C3: "", G1: "70", G2: "40" }).ok).toBe(false);
   });
 });
 

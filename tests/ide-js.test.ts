@@ -307,10 +307,15 @@ describe("задачи JavaScript", () => {
     const alt9 = 'const nums = [5, 12, 7, 8, 3, 10, 4];\nconst r = [];\nfor (const x of nums) { if (x % 2 === 0) r.push(x * x); }\nconsole.log(r.join(" "));';
     expect((await checkJs(chk("js-9-filter"), alt9, run)).ok).toBe(true);
     expect((await checkJs(chk("js-9-filter"), 'console.log([12, 8, 10, 4].join(" "))', run)).ok).toBe(false);
-    const alt10 =
-      'function isPalindrome(s) {\n  for (let i = 0; i < s.length / 2; i++) { if (s[i] !== s[s.length - 1 - i]) return "no"; }\n  return "yes";\n}\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));';
+    const CALLS10 = ["level", "python", "kazak", "alpha"].map((w) => `console.log(isPalindrome("${w}"));`).join("\n");
+    const alt10 = `function isPalindrome(s) {\n  for (let i = 0; i < s.length / 2; i++) { if (s[i] !== s[s.length - 1 - i]) return "no"; }\n  return "yes";\n}\n${CALLS10}`;
     expect((await checkJs(chk("js-10-palindrome"), alt10, run)).ok).toBe(true);
-    expect((await checkJs(chk("js-10-palindrome"), 'function isPalindrome(s) { return "yes"; }\nconsole.log(isPalindrome("level"));\nconsole.log(isPalindrome("python"));\nconsole.log(isPalindrome("kazak"));', run)).ok).toBe(false);
+    expect((await checkJs(chk("js-10-palindrome"), `function isPalindrome(s) { return "yes"; }\n${CALLS10}`, run)).ok).toBe(false);
+    // только первый и последний символ: «alpha» выдаёт себя за палиндром
+    expect((await checkJs(chk("js-10-palindrome"), `function isPalindrome(s) { return s[0] === s[s.length - 1] ? "yes" : "no"; }\n${CALLS10}`, run)).ok).toBe(false);
+    // в стартовом коде переменная result объявлена через let — её можно переприсвоить
+    const viaStarter = TASKS.find((x) => x.id === "js-9-filter")!.starter.replace("// ...", 'result = nums.filter((x) => x % 2 === 0).map((x) => x * x);');
+    expect((await checkJs(chk("js-9-filter"), viaStarter, run)).ok).toBe(true);
   });
 
   for (const task of TASKS) {

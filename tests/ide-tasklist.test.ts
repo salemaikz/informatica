@@ -25,6 +25,8 @@ describe("группировка списка задач по навыку", () 
     expect(shouldGroupBySkill(n(12))).toBe(false);
     expect(shouldGroupBySkill(n(13))).toBe(true);
     expect(shouldGroupBySkill([])).toBe(false);
+    // хотя бы у одной задачи нет навыка — остаются группы по уровням
+    expect(shouldGroupBySkill([...n(13), mk("x", 2)])).toBe(false);
   });
 
   it("внутри группы от A к C, группы — от простых к сложным, порядок авторов сохраняется", () => {

@@ -175,9 +175,9 @@ describe("задачи Python", () => {
     for (const [id, rules] of Object.entries(PY_FORBID)) expect(findForbidden(byId(id).solution, rules), id).toBeNull();
     for (const id of Object.keys(PY_FORBID)) expect(byId(id), id).toBeTruthy();
     const bad: Record<string, string[]> = {
-      "py-14-ops-reverse3": ["n = input()\nprint(int(n[::-1]))", "print(int(str(int(input()))[::-1]))"],
+      "py-14-ops-digit": ["n = input()\nk = int(input())\nprint(n[-k])", "print(str(5274)[1])"],
       "py-21-pat-maxpos": ["a = [1]\nprint(max(a))", "a = [1]\nprint(a.index(1))"],
-      "py-22-pat-reverse": ["print(int(str(input())[::-1]))"],
+      "py-22-pat-reverse": ["print(int(str(input())[::-1]))", "s = input()\nprint(int(s[::-1]))", "s = input()\nprint(s[2] + s[1] + s[0])"],
       "py-23-pat-gcd": ["from math import gcd\nprint(gcd(1, 2))", "import math\nprint(math.gcd(1, 2))"],
       "py-29-rec-fib": ["def fib(n):\n    for i in range(n):\n        pass", "while True:\n    pass"],
       "py-30-sort-bubble": ["a.sort()", "print(sorted(a))"],
@@ -186,6 +186,50 @@ describe("задачи Python", () => {
     for (const [id, codes] of Object.entries(bad)) for (const code of codes) expect(findForbidden(code, PY_FORBID[id]), `${id}: ${code}`).not.toBeNull();
     // слова в строках и комментариях не считаются нарушением
     expect(findForbidden('# for x in y\nprint("while sorted(a)")', PY_FORBID["py-29-rec-fib"])).toBeNull();
+    // своя функция gcd по Евклиду — разрешена
+    expect(findForbidden("def gcd(a, b):\n    return a", PY_FORBID["py-23-pat-gcd"])).toBeNull();
+  });
+
+  describe.skipIf(!hasPython)("типичные неверные решения отклоняются тестами (python3)", () => {
+    const WRONG: Record<string, string[]> = {
+      // >= вместо > — номер последнего наибольшего
+      "py-21-pat-maxpos": ["n = int(input())\na = list(map(int, input().split()))\nbest = a[0]\npos = 1\nfor i in range(1, n):\n    if a[i] >= best:\n        best = a[i]\n        pos = i + 1\nprint(best)\nprint(pos)\n"],
+      // нет проверки существования / нестрогое неравенство
+      "py-16-cond-triangle": [
+        'a = int(input())\nb = int(input())\nc = int(input())\nif a == b == c:\n    print("equilateral")\nelif a == b or b == c or a == c:\n    print("isosceles")\nelse:\n    print("scalene")\n',
+        'a = int(input())\nb = int(input())\nc = int(input())\nif not (a <= b + c and b <= a + c and c <= a + b):\n    print("no")\nelif a == b == c:\n    print("equilateral")\nelif a == b or b == c or a == c:\n    print("isosceles")\nelse:\n    print("scalene")\n',
+      ],
+      // шаги без break после находки
+      "py-31-search-binary": ["n = int(input())\na = list(map(int, input().split()))\nx = int(input())\nlo = 0\nhi = n - 1\nsteps = 0\npos = -1\nwhile lo <= hi:\n    mid = (lo + hi) // 2\n    steps += 1\n    if a[mid] == x:\n        pos = mid\n    if a[mid] < x:\n        lo = mid + 1\n    else:\n        hi = mid - 1\nprint(pos)\nprint(steps)\n"],
+      // только прямая дорога / 0 считается дорогой
+      "py-32-graph-two": [
+        "n = int(input())\na = [list(map(int, input().split())) for i in range(n)]\nprint(a[0][n - 1] if a[0][n - 1] > 0 else -1)\n",
+        "n = int(input())\na = [list(map(int, input().split())) for i in range(n)]\nbest = a[0][n - 1]\nfor k in range(1, n - 1):\n    best = min(best, a[0][k] + a[k][n - 1])\nprint(best)\n",
+      ],
+      // самая дорогая позиция — по цене, а не по стоимости
+      "py-39-cash-receipt": ["n = int(input())\ntotal = 0\nbest = 0\nbp = 0\nfor i in range(n):\n    price, qty = map(int, input().split())\n    total += price * qty\n    if price > bp:\n        bp = price\n        best = price * qty\nprint(total)\nprint(best)\n"],
+      // печатает нулевые номиналы / забыт случай без сдачи
+      "py-40-cash-change": [
+        "m = int(input())\np = int(input())\nd = m - p\nfor x in [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]:\n    print(x, d // x)\n    d %= x\n",
+        "m = int(input())\np = int(input())\nd = m - p\nfor x in [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]:\n    if d // x > 0:\n        print(x, d // x)\n    d %= x\n",
+      ],
+      // разряд: k-я цифра слева вместо справа
+      "py-14-ops-digit": ["n = int(input())\nk = int(input())\nwhile n >= 10 ** k:\n    n //= 10\nprint(n % 10)\n"],
+    };
+    for (const [id, codes] of Object.entries(WRONG)) {
+      const task = TASKS.find((x) => x.id === id)!;
+      it(`${id}: неверные решения не проходят`, () => {
+        expect(task, id).toBeTruthy();
+        if (task.check.kind !== "python") return;
+        for (const code of codes) {
+          const okAll = task.check.tests.every((test) => {
+            const r = runSystem(code, test.stdin ?? "");
+            return r.status === 0 && sameOutput(r.stdout, test.stdout);
+          });
+          expect(okAll, `${id}: ${code}`).toBe(false);
+        }
+      });
+    }
   });
 
   describe.skipIf(!hasPython)("эталоны (системный python3)", () => {

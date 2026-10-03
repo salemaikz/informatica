@@ -28,7 +28,9 @@ export function groupByLevel(tasks: readonly IdeTask[]): { level: Level; tasks: 
 /** Когда задач больше, список группируется по навыкам, а не по уровням. */
 export const SKILL_GROUP_MIN_TASKS = 12;
 
-export const shouldGroupBySkill = (tasks: readonly IdeTask[]): boolean => tasks.length > SKILL_GROUP_MIN_TASKS;
+/** По навыкам — только если задач больше порога и навык есть у каждой (иначе группа «без навыка» без заголовка). */
+export const shouldGroupBySkill = (tasks: readonly IdeTask[]): boolean =>
+  tasks.length > SKILL_GROUP_MIN_TASKS && tasks.every((t) => !!t.skill);
 
 /** Группа задач одного навыка (skill = null — у задач навыка нет). */
 export interface SkillGroup {
