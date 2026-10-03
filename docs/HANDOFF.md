@@ -75,7 +75,7 @@
 - **Контент-поток после приёмки этапа 2:** уроки раздела 1 — 8/16-ричная система, арифметика, единицы информации, кодирование. Затем логика и другие разделы в порядке `docs/ENT.md`. Писать по методике v2 (`docs/CONTENT_GUIDE.md`, образец — серия `ns-*`).
 
 ## Где что лежит
-- **Правила и план:** `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#20), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`.
+- **Правила и план:** `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#21), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`.
 - **Уроки:** `src/content/lessons/*.ts`, карта — `src/content/course.ts`, навыки — `src/content/skills.ts`.
 - **Плеер урока:** `src/components/lesson/LessonPlayer.tsx`, шаги — `src/components/lesson/steps/*`, сцены — `src/components/scenes/*`.
 - **Логика:**
@@ -86,6 +86,7 @@
   - маршруты — `src/app/api/ai/*`;
   - клиент — `src/lib/ai.ts`, `src/components/ai/*`.
 - **Инструменты:** `src/components/tools/*` (панель смонтирована в `Providers.tsx`; уровень задаётся хуком `useToolboxLevel`).
+- **Набор для приложения по математике** (друг владельца, OpenAI Codex): `docs/math-kit/` — `README.md` (начать отсюда), `AGENTS.md`, `docs/*`, `reference/` (снимок кода на 2026-10-03). В сборку и линт Informatica папка `docs/` не входит.
 - **Скрипты:** `npm run voiceover`, `npm run review:kk`, `npm run e2e`. Временные скрипты скриншотов — в `scripts/out/` (в git не попадают).
 
 ## Известные ограничения

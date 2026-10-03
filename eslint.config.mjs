@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Документы и образцы кода (docs/math-kit/reference) — не часть приложения
+    "docs/**",
   ]),
 ]);
 

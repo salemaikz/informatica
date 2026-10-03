@@ -48,6 +48,7 @@ npm run dev                  # http://localhost:3000
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — что сделано и когда
 - [docs/DECISIONS.md](docs/DECISIONS.md) — принятые решения и почему
 - [docs/MINI_GAMES.md](docs/MINI_GAMES.md) — ТЗ мини-игр
+- [docs/math-kit/](docs/math-kit/README.md) — набор правил для такого же приложения по математике (под OpenAI Codex)
 
 ## Стек
 
