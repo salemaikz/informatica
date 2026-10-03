@@ -95,7 +95,7 @@
 - Идеи из `docs/RESEARCH.md`, которые ещё не сделаны, — в `docs/ROADMAP.md`.
 
 ## Где что лежит
-- **Правила и план:** `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#39), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3 и v0.6–v0.8 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`, `course-v2.md`, `v08-ui.md`, `ide-v2.md`), школьная программа — `docs/SCHOOL.md`.
+- **Правила и план:** `docs/RULES.md` (свод правил для любого исполнителя — давать вместе с ТЗ), `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#39), `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3 и v0.6–v0.8 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`, `course-v2.md`, `v08-ui.md`, `ide-v2.md`), школьная программа — `docs/SCHOOL.md`.
 - **Уроки:** `src/content/lessons/*.ts`, карта — `src/content/course.ts`, навыки — `src/content/skills.ts`, темы ЕНТ — `src/content/ent-topics.ts`, задания ЕНТ — `src/content/ent/*.ts`, банки — `src/lib/bank/*.ts`.
 - **Новый урок** = 3 файла (урок, банк, задания ЕНТ; у заданий ЕНТ — `hint`) → `node scripts/register-content.mjs` (сам пропишет реестры; пока другие уроки пишутся — `--add=<id>`) → `npx tsx scripts/check-content.ts <id>` → `npm test`.
 - **Плеер урока:** `src/components/lesson/LessonPlayer.tsx`, шаги — `src/components/lesson/steps/*`, сцены — `src/components/scenes/*`.
