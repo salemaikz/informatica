@@ -24,6 +24,7 @@ import { KeyboardScene } from "./KeyboardScene";
 import { SizesScene } from "./SizesScene";
 import { FilesScene } from "./FilesScene";
 import { LayersScene } from "./LayersScene";
+import { VennScene } from "./VennScene";
 
 function Body({ scene }: { scene: Scene }): ReactNode {
   switch (scene.kind) {
@@ -67,12 +68,14 @@ function Body({ scene }: { scene: Scene }): ReactNode {
       return <FilesScene scene={scene} />;
     case "layers":
       return <LayersScene scene={scene} />;
+    case "venn":
+      return <VennScene scene={scene} />;
   }
 }
 
 /**
  * Рисует параметризованную сцену (двоичная запись, лесенка, лампочки, монеты, десятичное число, квест,
- * таблица, код, логическая схема, блок-схема, карточки, растр, веб-страница).
+ * таблица, код, логическая схема, блок-схема, карточки, растр, веб-страница, круги Эйлера).
  * Сцены того же вида, идущие подряд (шаги разбора), не пересоздаются: элементы стабильны и анимируют изменения флагов.
  */
 export function SceneView({ scene, className }: { scene: Scene; className?: string }) {

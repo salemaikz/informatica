@@ -23,4 +23,16 @@ export const scenesDict = {
   "scene.flow.aria": { ru: "Блок-схема", kk: "Блок-схема" },
   "scene.pixels.aria": { ru: "Растровая картинка {w}×{h} пикселей", kk: "Растрлық сурет: {w}×{h} пиксель" },
   "scene.pixels.row": { ru: "Строка {n}", kk: "{n}-жол" },
+
+  // Круги Эйлера (сцена venn): описание для экранных дикторов. После названий множеств окончаний нет (имена бывают любые).
+  "scene.venn.aria": { ru: "Круги Эйлера. Множества: {sets}.", kk: "Эйлер дөңгелектері. Жиындар: {sets}." },
+  "scene.venn.universe": { ru: "Универсум: {name}.", kk: "Әмбебап жиын: {name}." },
+  "scene.venn.values": { ru: "В областях: {list}.", kk: "Аймақтарда: {list}." },
+  "scene.venn.highlight": { ru: "Выделено: {list}.", kk: "Бөлектелгені: {list}." },
+  "scene.venn.only": { ru: "только {x}", kk: "тек {x}" },
+  "scene.venn.and2": { ru: "{a} и {b} (пересечение)", kk: "{a} және {b} (қиылысу)" },
+  "scene.venn.and3": { ru: "{a} и {b}, без {c}", kk: "{a} және {b}, {c} жоқ" },
+  "scene.venn.all3": { ru: "{a}, {b} и {c} одновременно", kk: "{a}, {b} және {c} бірден" },
+  "scene.venn.out2": { ru: "ни {a}, ни {b}", kk: "{a} емес, {b} емес" },
+  "scene.venn.out3": { ru: "ни {a}, ни {b}, ни {c}", kk: "{a} емес, {b} емес, {c} емес" },
 } satisfies Record<string, L>;

@@ -32,26 +32,15 @@ const W = {
   algo: { ru: "Алгоритм", kk: "Алгоритм" },
 } satisfies Record<string, Word>;
 
-// ---------- Круги Эйлера (сцена pixels, как в уроке) ----------
+// ---------- Круги Эйлера (сцена venn, как в уроке) ----------
 
 const VENN2: Scene = {
-  kind: "pixels",
-  rows: [
-    "....aaa..bbb....",
-    "..aaaaaxxbbbbb..",
-    "..aaaaxxxxbbbb..",
-    ".aaaaaxxxxbbbbb.",
-    ".aaaaaxxxxbbbbb.",
-    ".aaaaaxxxxbbbbb.",
-    ".aaaaaxxxxbbbbb.",
-    "..aaaaxxxxbbbb..",
-    "..aaaaaxxbbbbb..",
-    "....aaa..bbb....",
-  ],
-  palette: { ".": "#ffffff", a: "#9cc9ff", b: "#ffd98a", x: "#78d6a0" },
+  kind: "venn",
+  sets: ["A", "B"],
+  universe: "U",
   caption: {
-    ru: "Синий — только A, зелёный — и A, и B, жёлтый — только B, белое — ни A, ни B",
-    kk: "Көк — тек A, жасыл — A да, B да, сары — тек B, ақ — A да, B да емес",
+    ru: "Синий — только A, зелёный — и A, и B, жёлтый — только B, поле вне кругов — ни A, ни B",
+    kk: "Көк — тек A, жасыл — A да, B да, сары — тек B, дөңгелектерден тыс өріс — A да, B да емес",
   },
 };
 

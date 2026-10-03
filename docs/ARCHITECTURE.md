@@ -166,7 +166,7 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 - Задания ЕНТ: `EntSingle` (4 варианта), `EntMulti` (6, 2–3 верных, 2/1/0), `EntMatch` (2 пункта × 4 описания), `EntContext` (текст/программа + 5 вопросов). Общий пул — `src/content/ent/index.ts` (`ENT_POOL`).
 
 ### Сцены (`components/scenes`)
-`table` (в т. ч. `sheet` — как в Excel), `code` (подсветка, текущая строка, переменные, вывод), `circuit` (раскладка и значения — `circuit.ts`), `flow`, `cards` (иконки — `icons.ts`, имена `IconName`), `pixels`, `web` (iframe `sandbox=""`). Плюс прежние сцены двоичной системы. Валидация — `tests/validate.ts`.
+`table` (в т. ч. `sheet` — как в Excel), `code` (подсветка, текущая строка, переменные, вывод), `circuit` (раскладка и значения — `circuit.ts`), `flow`, `cards` (иконки — `icons.ts`, имена `IconName`), `pixels`, `venn` (круги Эйлера на 2–3 множества: геометрия и места чисел — `venn.ts`, области `VennRegion` в `lib/types.ts`), `web` (iframe `sandbox=""`). Плюс прежние сцены двоичной системы. Валидация — `tests/validate.ts`.
 
 ### Хранилище v2 (`lib/store.ts`, версия 2)
 - Профиль: `avatar`, `reminder`, `examDate`, `targetScore`, `weeklyLessons`. Недоверенные данные проверяются (`mergeState`, `sanitizeAvatar`).
@@ -243,6 +243,7 @@ paywall { lastShownAt, views }        shouldShowPaywall: бесплатным �
 | `sizes` | `SizesScene` | объёмы (логарифмическая шкала, Б…ТБ по 1024) |
 | `files` | `FilesScene` | дерево папок, путь `C:\…` |
 | `layers` | `LayersScene` | слои (ОС, уровни памяти) с осью |
+| `venn` | `VennScene` | круги Эйлера: `sets`, `values`, `highlight`, `universe`; области заливаются через `clipPath` |
 Проверка данных сцен — `tests/validate.ts` (`validateScene`), используется `scripts/check-content.ts`.
 
 ### Практикум кода (`/code`, решение #35)

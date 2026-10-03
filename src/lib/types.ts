@@ -149,7 +149,25 @@ export type Scene =
   /** Дерево папок и файлов; active — путь к выделенному элементу («Учёба/Информатика/урок.docx»). */
   | { kind: "files"; tree: FileNode[]; active?: string; caption?: Text }
   /** Слои (стопка): ОС между программами и железом, уровни памяти и т.п. axis — подписи шкалы сверху и снизу. */
-  | { kind: "layers"; items: { title: Text; text?: Text; icon?: IconName }[]; highlight?: number; axis?: { top: Text; bottom: Text }; caption?: Text };
+  | { kind: "layers"; items: { title: Text; text?: Text; icon?: IconName }[]; highlight?: number; axis?: { top: Text; bottom: Text }; caption?: Text }
+  /**
+   * Круги Эйлера (диаграмма Венна) на 2 или 3 множества, нарисованные в SVG.
+   * sets — названия множеств по порядку A, B, C (короткие: «A», «Футбол»);
+   * values — текст внутри области (обычно число элементов): ключ — область (VennRegion);
+   * highlight — области, залитые сильнее (остальные приглушены); universe — подпись внешнего прямоугольника
+   * (универсума); рамка рисуется, если задан universe или используется область "out" (значение или подсветка).
+   */
+  | { kind: "venn"; sets: Text[]; values?: Partial<Record<VennRegion, string>>; highlight?: VennRegion[]; universe?: Text; caption?: Text };
+
+/**
+ * Область диаграммы Эйлера для сцены venn. Область = «лежит РОВНО в этих кругах и ни в каких других»:
+ * буквы — круги, в которых элемент лежит (a — первое множество, b — второе, c — третье).
+ * Для двух множеств (a, b): "a" — только A (A без B); "b" — только B; "ab" — A ∩ B; "out" — ни A, ни B (вне кругов, внутри рамки).
+ * Для трёх (a, b, c) дополнительно: "c" — только C; "ab" — A ∩ B без C; "ac" — A ∩ C без B; "bc" — B ∩ C без A;
+ * "abc" — A ∩ B ∩ C (центр); "out" — ни в одном множестве.
+ * Области не пересекаются между собой, вместе они покрывают весь универсум. Для двух множеств ключи c, ac, bc, abc недопустимы.
+ */
+export type VennRegion = "a" | "b" | "c" | "ab" | "ac" | "bc" | "abc" | "out";
 
 /** Рисунки устройств и деталей для сцены hardware (components/scenes/hardware). */
 export type HardwareId =

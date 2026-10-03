@@ -2,6 +2,7 @@ import type { EntItem, L, Scene, Step, Text } from "@/lib/types";
 import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
 import { isKnownKey } from "@/components/scenes/keyboard";
+import { VENN_NAME_MAX, isVennRegion } from "@/components/scenes/venn";
 
 const filledL = (l: L) => !!l.ru?.trim() && !!l.kk?.trim();
 const filledText = (t: Text) => (typeof t === "string" ? !!t.trim() : filledL(t));
@@ -113,6 +114,21 @@ export function validateScene(scene: Scene): string[] {
       const count = (nodes: { name: string; children?: unknown[] }[]): number =>
         nodes.reduce((a, n) => a + 1 + (Array.isArray(n.children) ? count(n.children as { name: string; children?: unknown[] }[]) : 0), 0);
       need(scene.tree.length >= 1 && count(scene.tree) <= 14, "files: 1–14 узлов");
+      break;
+    }
+    case "venn": {
+      const n = scene.sets.length;
+      const nameLen = (x: Text) => (typeof x === "string" ? [x.length] : [x.ru.length, x.kk.length]);
+      need(n >= 2 && n <= 3, "venn: 2–3 множества");
+      need(scene.sets.every(filledText), "venn: название множества не пустое (ru и kk)");
+      need(scene.sets.every((s) => nameLen(s).every((len) => len <= VENN_NAME_MAX)), `venn: название множества длиннее ${VENN_NAME_MAX} символов (не влезет у круга)`);
+      const keys = Object.keys(scene.values ?? {});
+      need(keys.every((k) => isVennRegion(k, n)), `venn: values — недопустимая область для ${n} множеств (${keys.filter((k) => !isVennRegion(k, n)).join(", ")})`);
+      need(Object.values(scene.values ?? {}).every((v) => typeof v === "string" && v.trim() !== "" && v.length <= 12), "venn: значение области — непустая строка до 12 символов");
+      const hl = scene.highlight ?? [];
+      need(hl.every((r) => isVennRegion(r, n)), `venn: highlight — недопустимая область для ${n} множеств`);
+      need(new Set(hl).size === hl.length, "venn: highlight — повтор области");
+      need(scene.universe === undefined || filledText(scene.universe), "venn: пустая подпись универсума");
       break;
     }
     case "layers":
