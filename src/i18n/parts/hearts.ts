@@ -21,7 +21,7 @@ export const heartsDict = {
   "hearts.out.balance": { ru: "Твой баланс", kk: "Балансың" },
   "hearts.out.refill": { ru: "Полный запас", kk: "Толық қор" },
   "hearts.out.three": { ru: "+3 сердечка", kk: "+3 жүрек" },
-  "hearts.out.threeDesc": { ru: "Выгоднее, чем по одному", kk: "Біреуден алғаннан тиімді" },
+  "hearts.out.threeDesc": { ru: "Выгоднее, чем по одному", kk: "Бір-бірден алғаннан тиімді" },
   "hearts.out.refillDesc": { ru: "Все сердечки сразу", kk: "Барлық жүректі бірден" },
   "hearts.out.one": { ru: "+1 сердечко", kk: "+1 жүрек" },
   "hearts.out.oneDesc": { ru: "Чтобы продолжить прямо сейчас", kk: "Дәл қазір жалғастыру үшін" },

@@ -34,7 +34,7 @@ export const TASKS: IdeTask[] = [
     starter: "let a = 12;\nlet b = 5;\n\n// ...\n",
     hint: {
       ru: "Каждое `console.log` печатает одну строку: сначала `a + b`, затем `a - b`, затем `a * b`.",
-      kk: "Әр `console.log` бір жол басады: алдымен `a + b`, одан кейін `a - b`, сосын `a * b`.",
+      kk: "Әр `console.log` бір жол шығарады: алдымен `a + b`, одан кейін `a - b`, сосын `a * b`.",
     },
     solution: "let a = 12;\nlet b = 5;\n\nconsole.log(a + b);\nconsole.log(a - b);\nconsole.log(a * b);",
     check: { kind: "js", stdout: "17\n7\n60" },
@@ -51,7 +51,7 @@ export const TASKS: IdeTask[] = [
     starter: "function status(age) {\n  // ...\n}\n\nconsole.log(status(16));\nconsole.log(status(18));\nconsole.log(status(30));\n",
     hint: {
       ru: "Конструкция: `if (условие) { return … } else { return … }`. «Не меньше» записывается как `>=`; число 18 уже считается взрослым.",
-      kk: "Құрылымы: `if (шарт) { return … } else { return … }`. «Кем емес» дегені `>=` түрінде жазылады; 18 саны да ересек болып саналады.",
+      kk: "Құрылымы: `if (шарт) { return … } else { return … }`. «Кем емес» дегені `>=` түрінде жазылады; 18 жас та ересек болып саналады.",
     },
     solution: 'function status(age) {\n  if (age >= 18) {\n    return "adult";\n  } else {\n    return "minor";\n  }\n}\n\nconsole.log(status(16));\nconsole.log(status(18));\nconsole.log(status(30));',
     check: { kind: "js", stdout: "minor\nadult\nadult" },
@@ -102,7 +102,7 @@ export const TASKS: IdeTask[] = [
     starter: "const nums = [3, 8, 1, 6, 2];\nlet sum = 0;\n\n// ...\n\nconsole.log(sum);\n",
     hint: {
       ru: "Пройдите по массиву циклом (`for` по индексу или `for (const x of nums)`) и прибавляйте каждый элемент к `sum`.",
-      kk: "Массивті циклмен аралап (индекс бойынша `for` немесе `for (const x of nums)`) әр элементті `sum`-ға қосыңыз.",
+      kk: "Массивті циклмен аралап (индекс бойынша `for` немесе `for (const x of nums)`) әр элементті `sum` айнымалысына қосыңыз.",
     },
     solution: "const nums = [3, 8, 1, 6, 2];\nlet sum = 0;\n\nfor (const x of nums) {\n  sum += x;\n}\n\nconsole.log(sum);",
     check: { kind: "js", stdout: "20" },

@@ -50,7 +50,7 @@ const core = {
   "nav.notes": { ru: "Конспекты", kk: "Конспект" },
   "nav.stats": { ru: "Прогресс", kk: "Прогресс" },
   "nav.code": { ru: "Практикум кода", kk: "Код практикумы" },
-  "prac.code.desc": { ru: "Python, SQL, HTML/CSS, JavaScript и Excel прямо в браузере", kk: "Python, SQL, HTML/CSS, JavaScript және Excel тікелей браузерде" },
+  "prac.code.desc": { ru: "Python, SQL, HTML/CSS, JavaScript и Excel прямо в браузере", kk: "Python, SQL, HTML/CSS, JavaScript және Excel — тікелей браузерде" },
   "nav.profile": { ru: "Профиль", kk: "Профиль" },
 
   "common.continue": { ru: "Продолжить", kk: "Жалғастыру" },
@@ -96,7 +96,7 @@ const core = {
   "prof.basics.hint": { ru: "Компьютер с нуля — до тем ЕНТ", kk: "Компьютер нөлден — ҰБТ тақырыптарына дейін" },
   "onb.daily.title": { ru: "Сколько заниматься в день?", kk: "Күніне қанша уақыт оқисың?" },
   "onb.finish": { ru: "Поехали!", kk: "Кеттік!" },
-  "onb.step": { ru: "Шаг {n} из {total}", kk: "{total} қадамның {n}-і" },
+  "onb.step": { ru: "Шаг {n} из {total}", kk: "Қадам {n} / {total}" },
 
   "goal.ent": { ru: "Сдать ЕНТ на высокий балл", kk: "ҰБТ-дан жоғары балл алу" },
   "goal.school": { ru: "Подтянуть школьную информатику", kk: "Мектептегі информатиканы жақсарту" },

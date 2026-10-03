@@ -17,12 +17,10 @@ export async function POST(req: Request) {
   const client = getOpenAI();
   if (!client) return jsonError(503, "ai_not_configured");
 
-  // Заранее отсекаем заведомо большие тела, не читая их.
-  // Без числового Content-Length (chunked) тело не читаем: formData() буферизует его целиком.
-  const lenHeader = req.headers.get("content-length");
-  const declared = lenHeader === null || lenHeader.trim() === "" ? NaN : Number(lenHeader);
-  if (!Number.isFinite(declared)) return jsonError(411, "length_required");
-  if (declared > MAX_AUDIO_BYTES + FORM_OVERHEAD) return jsonError(413, "too_large");
+  // Заранее отсекаем заведомо большие тела, не читая их. Content-Length бывает не у всех запросов
+  // (HTTP/2, прокси) — тогда читаем: размер тела всё равно ограничен платформой (~4,5 МБ на Vercel).
+  const declared = Number(req.headers.get("content-length") ?? NaN);
+  if (Number.isFinite(declared) && declared > MAX_AUDIO_BYTES + FORM_OVERHEAD) return jsonError(413, "too_large");
 
   let form: FormData;
   try {

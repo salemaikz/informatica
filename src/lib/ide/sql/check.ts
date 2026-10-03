@@ -28,11 +28,11 @@ const MSG_ORDER: L = {
 };
 const MSG_TABLE: L = {
   ru: "После вашего запроса таблица отличается от ожидаемой. Проверьте условие WHERE и новые значения.",
-  kk: "Сіздің сұранысыңыздан кейін кесте күтілген нәтижеден өзгеше. WHERE шартын және жаңа мәндерді тексеріңіз.",
+  kk: "Сұранысыңыздан кейін кесте күтілгеннен өзгеше болды. WHERE шартын және жаңа мәндерді тексеріңіз.",
 };
 const MSG_RECURSIVE: L = {
   ru: "Конструкция WITH здесь не поддерживается — для этой задачи она не нужна.",
-  kk: "WITH конструкциясы мұнда қолдау таппайды — бұл есепке ол қажет емес.",
+  kk: "WITH конструкциясы мұнда жұмыс істемейді — бұл есепке ол қажет емес.",
 };
 
 const TABLES = "students, classes, books, orders";
@@ -52,7 +52,7 @@ export function explainSqlError(raw: string): L {
   if (m) {
     return {
       ru: `Такого столбца нет: ${m[1]}. Загляните в «Таблицы базы» и проверьте названия. Текст в условии пишите в одинарных кавычках: 'текст'.`,
-      kk: `Мұндай баған жоқ: ${m[1]}. «Деректер қоры кестелерін» ашып, атауларды тексеріңіз. Шарттағы мәтінді жалғыз тырнақшаға алыңыз: 'мәтін'.`,
+      kk: `Мұндай баған жоқ: ${m[1]}. «Деректер қоры кестелері» бөлімін ашып, атауларды тексеріңіз. Шарттағы мәтінді жалғыз тырнақшаға алыңыз: 'мәтін'.`,
     };
   }
   m = /ambiguous column name: (.+)/i.exec(msg);
@@ -72,19 +72,19 @@ export function explainSqlError(raw: string): L {
   if (/incomplete input/i.test(msg)) {
     return {
       ru: "Запрос не закончен: проверьте, что все скобки и кавычки закрыты и после FROM указана таблица.",
-      kk: "Сұраныс аяқталмаған: жақшалар мен тырнақшалардың жабылғанын және FROM-нан кейін кесте көрсетілгенін тексеріңіз.",
+      kk: "Сұраныс аяқталмаған: жақшалар мен тырнақшалардың жабылғанын және FROM сөзінен кейін кесте көрсетілгенін тексеріңіз.",
     };
   }
   if (/misuse of aggregate|aggregate functions are not allowed/i.test(msg)) {
     return {
       ru: "Функции COUNT, SUM, AVG, MIN, MAX нельзя использовать в WHERE. Условие по результату функции пишут в HAVING.",
-      kk: "COUNT, SUM, AVG, MIN, MAX функцияларын WHERE ішінде қолдануға болмайды. Функция нәтижесі бойынша шартты HAVING-ке жазады.",
+      kk: "COUNT, SUM, AVG, MIN, MAX функцияларын WHERE ішінде қолдануға болмайды. Функция нәтижесі бойынша шарт HAVING ішінде жазылады.",
     };
   }
   if (/UNIQUE constraint failed|PRIMARY KEY/i.test(msg)) {
     return {
       ru: "Строка с таким id уже есть — id должен быть уникальным.",
-      kk: "Мұндай id бар жол бұрыннан бар — id бірегей болуы керек.",
+      kk: "Мұндай id кестеде бұрыннан бар — id бірегей болуы керек.",
     };
   }
   if (/values for \d+ columns|has \d+ columns but \d+ values/i.test(msg)) {
@@ -146,14 +146,14 @@ export function formatSet(s: ResultSet, max = SAMPLE_ROWS): string {
 const diffMessage = (d: Exclude<Diff, "same">, got: ResultSet, want: ResultSet, reference: string): L => {
   const ref = stripSql(reference);
   const hint: L = /group\s+by/i.test(ref)
-    ? { ru: "Проверьте GROUP BY.", kk: "GROUP BY-ды тексеріңіз." }
+    ? { ru: "Проверьте GROUP BY.", kk: "GROUP BY бөлігін тексеріңіз." }
     : /\bwhere\b/i.test(ref)
       ? { ru: "Проверьте условие WHERE.", kk: "WHERE шартын тексеріңіз." }
-      : { ru: "Проверьте условие и FROM.", kk: "Шартты және FROM-ды тексеріңіз." };
+      : { ru: "Проверьте условие и FROM.", kk: "Шартты және FROM бөлігін тексеріңіз." };
   if (d === "columns") {
     return {
       ru: `Столбцов в результате: ${got.columns.length}, а нужно ${want.columns.length}. Проверьте, какие столбцы перечислены после SELECT.`,
-      kk: `Нәтижеде бағандар саны: ${got.columns.length}, ал ${want.columns.length} болуы керек. SELECT-тен кейін қандай бағандар тізілгенін тексеріңіз.`,
+      kk: `Нәтижеде бағандар саны: ${got.columns.length}, ал ${want.columns.length} болуы керек. SELECT сөзінен кейін қандай бағандар тізілгенін тексеріңіз.`,
     };
   }
   if (d === "count") {

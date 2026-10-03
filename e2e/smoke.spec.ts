@@ -1,6 +1,31 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // Дымовой тест без обращений к ИИ: онбординг → главная → начало урока → тренировка.
+
+/** Шаги онбординга до главной; на шаге «С чего начнём?» — «с нуля» или «основы знаю». */
+async function finishOnboarding(page: Page, skipBasics: boolean) {
+  const next = page.getByRole("button", { name: /Продолжить|Поехали/ });
+  while (!(await page.getByText("С чего начнём?").isVisible())) await next.click();
+  await page.getByText(skipBasics ? "Основы знаю — сразу к темам ЕНТ" : "С нуля: как устроен компьютер").click();
+  while (!page.url().includes("/plans")) {
+    await next.click();
+    await page.waitForTimeout(150);
+  }
+  // После онбординга — окно тарифов; закрываем «Продолжить бесплатно».
+  await page.waitForURL("**/plans?from=onboarding");
+  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
+  await page.waitForURL("**/learn");
+}
+
+test("новичок начинает с раздела «Старт: компьютер с нуля»", async ({ page }) => {
+  await page.goto("/onboarding");
+  await page.getByText("Русский").click();
+  await page.getByPlaceholder("Твоё имя").fill("Новичок");
+  await finishOnboarding(page, false);
+  await page.getByRole("link", { name: "Начать" }).first().click();
+  await page.waitForURL("**/lesson/base-1-computer");
+  await expect(page.locator("footer button").last()).toBeVisible();
+});
 
 test("онбординг и первые шаги урока", async ({ page }) => {
   const errors: string[] = [];
@@ -10,11 +35,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.waitForURL("**/onboarding");
   await page.getByText("Русский").click();
   await page.getByPlaceholder("Твоё имя").fill("Тест");
-  for (let i = 0; i < 6; i++) await page.getByRole("button", { name: /Продолжить|Поехали/ }).click();
-  // После онбординга — окно тарифов; закрываем «Продолжить бесплатно».
-  await page.waitForURL("**/plans?from=onboarding");
-  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
-  await page.waitForURL("**/learn");
+  await finishOnboarding(page, true);
   await expect(page.getByText("Привет, Тест!")).toBeVisible();
 
   await page.getByRole("link", { name: "Начать" }).first().click();
@@ -22,6 +43,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   // Ситуация: квест «Побег из компьютера»
   await expect(page.getByText("Побег из компьютера")).toBeVisible();
   await page.locator("footer button").last().click();
+  await page.locator("footer button").last().click(); // «Где живут биты» (системный блок) → дальше
 
   // Песочница: «Продолжить» откроется, когда ламп станет 5 (32 сигнала)
   await expect(page.locator("footer button").last()).toBeDisabled();

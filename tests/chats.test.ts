@@ -113,7 +113,7 @@ describe("components/chat/helpers", () => {
   it("название для показа: своё или режим и тема", () => {
     expect(displayTitle({ title: " Мой ", mode: "free" }, "ru", trRu)).toBe("Мой");
     expect(displayTitle({ title: "", mode: "free" }, "ru", trRu)).toBe("Свободный");
-    expect(displayTitle({ title: "", mode: "tasks", topic: "t04" }, "kk", trKk)).toBe("Есеп бер: Санау жүйелері");
+    expect(displayTitle({ title: "", mode: "tasks", topic: "t04" }, "kk", trKk)).toBe("Тапсырма бер: Санау жүйелері");
   });
 
   it("история для ИИ: последние 12, карточка итога — текстом", () => {

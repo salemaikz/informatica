@@ -19,7 +19,7 @@ export const PC_EXTRA_NAMES: Record<"fans" | "ports", L> = {
 /** Подписи для чтеца экрана. */
 export const PC_INSIDE_TEXT = {
   title: { ru: "Системный блок изнутри", kk: "Жүйелік блоктың іші" },
-  highlighted: { ru: "Выделено", kk: "Бөлектелген бөліктер" },
+  highlighted: { ru: "Выделено", kk: "Белгіленген бөліктер" },
 } satisfies Record<string, L>;
 
 export function pcPartName(part: PcPart): L {

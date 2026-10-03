@@ -33,13 +33,13 @@ export type PyRun = (code: string, stdin: string) => Promise<PyRunLike>;
 
 export const MSG_TIMEOUT: L = {
   ru: "Программа работает слишком долго — возможно, бесконечный цикл.",
-  kk: "Бағдарлама тым ұзақ жұмыс істеп тұр — мүмкін, шексіз цикл.",
+  kk: "Программа тым ұзақ жұмыс істеп тұр — мүмкін, шексіз цикл.",
 };
 export const MSG_LOAD: L = {
   ru: "Не удалось загрузить Python. Проверьте интернет и попробуйте ещё раз.",
   kk: "Python жүктелмеді. Интернетті тексеріп, қайта көріңіз.",
 };
-const MSG_EMPTY: L = { ru: "Сначала напишите программу.", kk: "Алдымен бағдарлама жазыңыз." };
+const MSG_EMPTY: L = { ru: "Сначала напишите программу.", kk: "Алдымен программа жазыңыз." };
 
 /** Запрещённая конструкция (ограничение из условия задачи): regexp по коду без комментариев и (если inStrings не задан) без строк. */
 export interface PyForbid {
@@ -108,7 +108,7 @@ export async function checkPython(check: Extract<IdeCheck, { kind: "python" }>, 
       firstFail ??= {
         message: {
           ru: `Вывод не совпал с ожидаемым (тест ${n} из ${total}).`,
-          kk: `Шығыс нәтиже күтілгенмен сәйкес келмеді (${n}-тест, барлығы ${total}).`,
+          kk: `Шығыс күтілген нәтижемен сәйкес келмеді (${n}-тест, барлығы ${total}).`,
         },
         sample: { input: stdin, expected: test.stdout, got: res.stdout },
       };
