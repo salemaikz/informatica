@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LESSONS, UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { SKILLS } from "@/content/skills";
-import { checkpointOf } from "@/components/exam/checkpoint";
+import { checkpointById, checkpointOf, examTitle } from "@/components/exam/checkpoint";
 import { EXAM_FORMAT, examLink, historyPoints, parseRunParams } from "@/components/exam/logic";
 import { checkpointSkillIds, readyLessonCount } from "@/components/learn/map";
 import {
@@ -322,5 +322,20 @@ describe("карта курса: контрольные реальных раз�
       expect(new Set(p.items.map((q) => q.key)).size).toBe(p.items.length);
       expect(buildExam({ kind: "unit", seed: 3, pool: ENT_POOL, skillIds: cp.skillIds })).toEqual(p);
     }
+  });
+
+  it("checkpointById: запуск по ссылке — только раздел с контрольной", () => {
+    expect(checkpointById(undefined, ENT_POOL)).toBeNull();
+    expect(checkpointById("nope", ENT_POOL)).toBeNull();
+    for (const unit of UNITS) expect(checkpointById(unit.id, ENT_POOL)).toEqual(checkpointOf(unit, LESSONS, SKILLS, ENT_POOL));
+  });
+
+  it("examTitle: у контрольной — название раздела, у остальных и неизвестного раздела — вид теста", () => {
+    const t = (key: string, p?: Record<string, string | number>) => (p ? `${key}:${p.unit}` : key);
+    const l = (x: unknown) => (typeof x === "string" ? x : (x as { ru: string }).ru);
+    const u = UNITS[1];
+    expect(examTitle("unit", u.id, t, l)).toBe(`exam.unit.title:${u.title.ru}`);
+    expect(examTitle("unit", "nope", t, l)).toBe("exam.mode.unit");
+    expect(examTitle("mini", u.id, t, l)).toBe("exam.mode.mini");
   });
 });
