@@ -70,6 +70,7 @@ export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL)
         options: item.options,
         correct: item.correct,
         explanation: item.explanation,
+        hint: item.hint,
         scene: item.scene,
         whyWrong: item.whyWrong,
       };
@@ -84,6 +85,7 @@ export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL)
         options: item.options,
         correct: item.correct,
         explanation: item.explanation,
+        hint: item.hint,
         scene: item.scene,
       };
       return step;
@@ -97,6 +99,7 @@ export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL)
         options: item.choices,
         correct: item.answer[n],
         explanation: item.explanation,
+        hint: item.hint,
         scene: item.scene,
       };
       return step;
@@ -111,6 +114,7 @@ export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL)
         options: q.options,
         correct: q.correct,
         explanation: q.explanation,
+        hint: q.hint,
         scene: item.scene,
       };
       return step;

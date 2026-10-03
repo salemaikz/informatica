@@ -140,12 +140,14 @@ export function validateEnt(item: EntItem): string[] {
       need(filledL(q.prompt) && filledL(q.explanation), `${q.id}: prompt/explanation ru/kk`);
       need(q.options.length === 4 && q.options.every(filledText) && uniq(q.options), `${q.id}: 4 разных варианта`);
       need(q.correct >= 0 && q.correct < 4, `${q.id}: correct 0..3`);
+      need(!q.hint || filledL(q.hint), `${q.id}: hint ru/kk`);
     }
     need(new Set(item.questions.map((q) => q.id)).size === 5, "id вопросов уникальны");
     return errors;
   }
   need(filledL(item.prompt), "prompt ru/kk");
   need(filledL(item.explanation), "explanation ru/kk");
+  need(!item.hint || filledL(item.hint), "hint ru/kk");
   switch (item.kind) {
     case "single":
       need(item.options.length === 4, "ровно 4 варианта");

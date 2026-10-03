@@ -233,33 +233,33 @@ describe("стор: сердечки и покупки", () => {
     expect(heartCount()).toBe(0);
   });
 
-  it("после первой потери виден таймер: следующее сердечко через 5 ч", () => {
+  it("после первой потери виден таймер: следующее сердечко через 6 ч", () => {
     const v = st().loseHeart();
     expect(v.nextAt).not.toBeNull();
     expect(v.nextAt!).toBeGreaterThan(Date.now());
     expect(v.nextAt).toBe(Date.now() + PLAN_FEATURES.free.regenMs);
-    expect(PLAN_FEATURES.free.regenMs).toBe(5 * 60 * MINUTE);
+    expect(PLAN_FEATURES.free.regenMs).toBe(6 * 60 * MINUTE);
   });
 
-  it("суточного пополнения нет: на следующий день сердечки возвращаются по одному за 5 ч", () => {
+  it("суточного пополнения нет: на следующий день сердечки возвращаются по одному за 6 ч", () => {
     for (let i = 0; i < 5; i++) st().loseHeart();
     expect(heartCount()).toBe(0);
     vi.setSystemTime(new Date(2027, 0, 16, 0, 0, 0)); // полночь, прошло 12 ч
     expect(todayKey()).toBe("2027-01-16");
     expect(heartCount()).toBe(2);
-    vi.setSystemTime(new Date(2027, 0, 16, 12, 0, 0)); // сутки: 24 / 5 = 4 сердечка, а не полный запас
+    vi.setSystemTime(new Date(2027, 0, 16, 12, 0, 0)); // сутки: 24 / 6 = 4 сердечка, а не полный запас
     expect(heartCount()).toBe(4);
-    vi.setSystemTime(new Date(2027, 0, 16, 17, 0, 0)); // 29 ч — запас полон
+    vi.setSystemTime(new Date(2027, 0, 16, 18, 0, 0)); // 30 ч — запас полон
     expect(heartCount()).toBe(5);
   });
 
-  it("Лайт: запас 10, сердечко возвращается за 2,5 ч", () => {
+  it("Лайт: запас 10, сердечко возвращается за 3 ч", () => {
     useApp.setState({ plan: { tier: "lite", period: "month", until: Date.now() + 30 * 86_400_000 } });
     const v = st().loseHeart();
     expect(v).toMatchObject({ count: 9, max: 10, unlimited: false });
-    expect(v.nextAt).toBe(Date.now() + 150 * MINUTE);
+    expect(v.nextAt).toBe(Date.now() + 180 * MINUTE);
     const liteCount = () => heartsView(st().hearts, "lite", Date.now(), todayKey()).count;
-    vi.setSystemTime(Date.now() + 150 * MINUTE - 1);
+    vi.setSystemTime(Date.now() + 180 * MINUTE - 1);
     expect(liteCount()).toBe(9);
     vi.setSystemTime(Date.now() + 1);
     expect(liteCount()).toBe(10);
@@ -273,25 +273,25 @@ describe("стор: сердечки и покупки", () => {
     expect(st().ledger).toHaveLength(0);
   });
 
-  it("buy heart-1: +1 сердечко за 25 чипов, запись в истории чипов", () => {
+  it("buy heart-1: +1 сердечко за 20 чипов, запись в истории чипов", () => {
     fund();
     st().loseHeart();
     st().loseHeart();
     expect(st().buy("heart-1")).toEqual({ ok: true });
     expect(heartCount()).toBe(4);
-    expect(chips()).toBe(75);
-    expect(st().wallet.spent).toBe(25);
-    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "heart-1", amount: -25 });
+    expect(chips()).toBe(80);
+    expect(st().wallet.spent).toBe(20);
+    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "heart-1", amount: -20 });
   });
 
-  it("buy hearts-3: +3 сердечка за 60 чипов, запись в истории чипов", () => {
+  it("buy hearts-3: +3 сердечка за 50 чипов, запись в истории чипов", () => {
     fund();
     for (let i = 0; i < 3; i++) st().loseHeart(); // 2 из 5: набор как раз помещается
     expect(st().buy("hearts-3")).toEqual({ ok: true });
     expect(heartCount()).toBe(5);
-    expect(chips()).toBe(40);
-    expect(st().wallet.spent).toBe(60);
-    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "hearts-3", amount: -60 });
+    expect(chips()).toBe(50);
+    expect(st().wallet.spent).toBe(50);
+    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "hearts-3", amount: -50 });
   });
 
   it("buy hearts-3: если не помещается — overflow, ничего не списывается; поштучно можно", () => {
@@ -309,16 +309,16 @@ describe("стор: сердечки и покупки", () => {
 
   it("buy hearts-3: не хватает чипов — chips; при безлимите — unlimited", () => {
     for (let i = 0; i < 3; i++) st().loseHeart();
-    expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "chips" }); // 20 < 60
+    expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "chips" }); // 20 < 50
     expect(chips()).toBe(START);
     st().startTrial();
     expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "unlimited" });
   });
 
-  it("buy hearts-full: полный запас за 90 (нужно заработать)", () => {
+  it("buy hearts-full: полный запас за 75 (нужно заработать)", () => {
     st().loseHeart();
-    expect(st().buy("hearts-full")).toEqual({ ok: false, reason: "chips" }); // 20 < 90
-    fund(90);
+    expect(st().buy("hearts-full")).toEqual({ ok: false, reason: "chips" }); // 20 < 75
+    fund(75);
     expect(st().buy("hearts-full")).toEqual({ ok: true });
     expect(heartCount()).toBe(5);
     expect(chips()).toBe(0);

@@ -182,6 +182,9 @@ async function main() {
       if (lesson && !lesson.skills.includes(it.skill)) err(`${it.id}: навык ${it.skill} не из урока`);
       if (lesson?.entTopics && !lesson.entTopics.includes(it.topic)) warn(`${it.id}: тема ${it.topic} не из entTopics урока`);
       if (it.scene) validateScene(it.scene).forEach((e) => err(`${it.id}: ${e}`));
+      // Подсказка нужна каждому заданию: в работе над ошибками она бесплатная и одна на всех (без ИИ).
+      if (it.kind === "context") it.questions.forEach((q) => !q.hint && warn(`${it.id}/${q.id}: нет hint`));
+      else if (!it.hint) warn(`${it.id}: нет hint`);
     }
     const count = (k: EntItem["kind"]) => items.filter((i) => i.kind === k).length;
     // Урок о стратегии ЕНТ сам не даёт экзаменационных заданий.

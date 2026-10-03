@@ -61,15 +61,15 @@ describe("compareRows", () => {
       { kind: "text", text: "∞" },
     ]);
   });
-  it("возврат сердечка: 5 ч / 2,5 ч / прочерк", () => {
-    expect(byId("regen").cells.free).toEqual({ kind: "text", text: "5 ч" });
-    expect(byId("regen").cells.lite).toEqual({ kind: "text", text: "2,5 ч" });
+  it("возврат сердечка: 6 ч / 3 ч / прочерк", () => {
+    expect(byId("regen").cells.free).toEqual({ kind: "text", text: "6 ч" });
+    expect(byId("regen").cells.lite).toEqual({ kind: "text", text: "3 ч" });
     expect(byId("regen").cells.unlimited).toEqual({ kind: "dash" });
   });
-  it("возврат сердечка по-казахски: 5 сағ / 2,5 сағ", () => {
+  it("возврат сердечка по-казахски: 6 сағ / 3 сағ", () => {
     const kk = compareRows("kk").find((r) => r.id === "regen")!;
-    expect(kk.cells.free).toEqual({ kind: "text", text: "5 сағ" });
-    expect(kk.cells.lite).toEqual({ kind: "text", text: "2,5 сағ" });
+    expect(kk.cells.free).toEqual({ kind: "text", text: "6 сағ" });
+    expect(kk.cells.lite).toEqual({ kind: "text", text: "3 сағ" });
   });
   it("ИИ 3 / 30 / ∞ и множитель ×1 / ×1,5 / ×2", () => {
     expect(byId("ai").cells.free).toEqual({ kind: "text", text: "3" });

@@ -41,8 +41,8 @@ export interface PlanFeatures {
 }
 
 export const PLAN_FEATURES: Record<PlanTier, PlanFeatures> = {
-  free: { maxHearts: 5, regenMs: 5 * HOUR, aiFree: 3, chipMultiplier: 1 },
-  lite: { maxHearts: 10, regenMs: 150 * MINUTE, aiFree: 30, chipMultiplier: 1.5 },
+  free: { maxHearts: 5, regenMs: 6 * HOUR, aiFree: 3, chipMultiplier: 1 },
+  lite: { maxHearts: 10, regenMs: 3 * HOUR, aiFree: 30, chipMultiplier: 1.5 },
   unlimited: { maxHearts: Infinity, regenMs: 0, aiFree: Infinity, chipMultiplier: 2 },
 };
 
@@ -323,9 +323,9 @@ export interface ShopItem {
  * 1 — 25, 3 — 60 (по 20), полный запас — 90 (по 18 у бесплатного тарифа). Бустер: 15 мин — 40, час — 120.
  */
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: "heart-1", kind: "heart", price: 25, amount: 1 },
-  { id: "hearts-3", kind: "heart", price: 60, amount: 3 },
-  { id: "hearts-full", kind: "refill", price: 90 },
+  { id: "heart-1", kind: "heart", price: 20, amount: 1 },
+  { id: "hearts-3", kind: "heart", price: 50, amount: 3 },
+  { id: "hearts-full", kind: "refill", price: 75 },
   { id: "boost-15", kind: "boost", price: 40, mult: 2, minutes: 15 },
   { id: "boost-60", kind: "boost", price: 120, mult: 2, minutes: 60 },
 ];
@@ -382,10 +382,10 @@ export interface ChipPack {
 
 /** Чипы чуть дороже сердечек; чем больше набор, тем дешевле чип (скидка — против самого маленького набора). */
 export const CHIP_PACKS: ChipPack[] = [
-  { id: "chips-100", chips: 100, bonus: 0, price: 190 },
-  { id: "chips-300", chips: 300, bonus: 0, price: 490 },
-  { id: "chips-750", chips: 750, bonus: 0, price: 990, badge: "popular" },
-  { id: "chips-2000", chips: 2000, bonus: 0, price: 1990, badge: "best" },
+  { id: "chips-100", chips: 100, bonus: 0, price: 249 },
+  { id: "chips-300", chips: 300, bonus: 0, price: 590 },
+  { id: "chips-750", chips: 750, bonus: 0, price: 1290, badge: "popular" },
+  { id: "chips-2000", chips: 2000, bonus: 0, price: 2990, badge: "best" },
 ];
 
 /** Насколько набор выгоднее самого маленького (целые проценты, 0 — у самого маленького). */
