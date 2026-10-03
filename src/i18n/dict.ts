@@ -33,6 +33,8 @@ import { ideExcelDict } from "./parts/ide-excel";
 import { basicsDict } from "./parts/basics";
 import { chat2Dict } from "./parts/chat2";
 import { voiceDict } from "./parts/voice";
+import { navDict } from "./parts/nav";
+import { cheatDict } from "./parts/cheat";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -503,6 +505,8 @@ export const dict = {
   ...basicsDict,
   ...chat2Dict,
   ...voiceDict,
+  ...navDict,
+  ...cheatDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;
