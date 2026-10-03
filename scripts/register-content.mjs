@@ -3,13 +3,25 @@
 //   src/content/lessons/generated.ts  — export const lesson     (src/content/lessons/<id>.ts)
 //   src/lib/bank/generated.ts         — export const BANKS      (src/lib/bank/<id>.ts)
 //   src/content/ent/generated.ts      — export const ITEMS      (src/content/ent/<id>.ts)
-// Аргументы: --only=id1,id2 — подключить только эти уроки (остальные новые — пропустить).
+// Аргументы: --only=id1,id2 — подключить только эти уроки (остальные новые — пропустить);
+//            --add=id1,id2 — добавить эти уроки к уже подключённым (недописанные файлы других авторов не трогать).
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7).split(",").filter(Boolean);
+// --add=id1,id2 — подключить эти уроки В ДОПОЛНЕНИЕ к уже подключённым (остальные новые файлы — пропустить).
+const add = process.argv.find((a) => a.startsWith("--add="))?.slice(6).split(",").filter(Boolean);
+
+/** id, которые уже подключены в generated.ts папки (import … from "./<id>"). */
+function registered(dir) {
+  try {
+    return [...readFileSync(join(root, dir, "generated.ts"), "utf8").matchAll(/from "\.\/([^"]+)";/g)].map((m) => m[1]);
+  } catch {
+    return [];
+  }
+}
 
 function scan(dir, exportName, skip) {
   return readdirSync(join(root, dir))
@@ -17,6 +29,7 @@ function scan(dir, exportName, skip) {
     .map((f) => f.slice(0, -3))
     .filter((id) => new RegExp(`export const ${exportName}\\b`).test(readFileSync(join(root, dir, `${id}.ts`), "utf8")))
     .filter((id) => !only || only.includes(id) || id === "ns")
+    .filter((id) => !add || add.includes(id) || registered(dir).includes(id))
     .sort();
 }
 
