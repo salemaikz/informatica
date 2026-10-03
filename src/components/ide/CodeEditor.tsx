@@ -1,9 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { EditorLanguage } from "@/lib/ide/types";
-import { cn } from "@/lib/cn";
 
-// ВРЕМЕННАЯ версия (textarea): исполнитель I0 заменит на CodeMirror 6 с теми же пропсами (docs/specs/ide.md).
+// Редактор кода на CodeMirror 6 (docs/specs/ide.md, I0). CodeMirror грузится только в браузере и отдельным куском —
+// страницы без редактора остаются лёгкими. Пропсы — контракт, которым пользуются рабочие области языков.
 export interface CodeEditorProps {
   value: string;
   onChange: (v: string) => void;
@@ -16,16 +17,16 @@ export interface CodeEditorProps {
   className?: string;
 }
 
-export function CodeEditor({ value, onChange, ariaLabel, minHeight = 200, readOnly, className }: CodeEditorProps) {
+const Editor = dynamic(() => import("./CmEditor"), {
+  ssr: false,
+  loading: () => <div aria-hidden className="w-full flex-1 animate-pulse rounded-2xl border-2 border-border bg-surface-2" />,
+});
+
+export function CodeEditor(props: CodeEditorProps) {
+  // Обёртка держит высоту, пока редактор грузится, — страница не «прыгает».
   return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={ariaLabel}
-      readOnly={readOnly}
-      spellCheck={false}
-      style={{ minHeight }}
-      className={cn("w-full rounded-2xl border-2 border-border bg-surface p-3 font-mono text-[15px] outline-none focus:border-primary", className)}
-    />
+    <div className="flex flex-col" style={{ minHeight: props.minHeight ?? 200 }}>
+      <Editor {...props} />
+    </div>
   );
 }

@@ -1,8 +1,9 @@
 import type { AnswerRecord, EntTopicId, Lang, QuestionStep, SessionResult, SkillId } from "./types";
 import type { QuizSummary } from "./chats";
 import { quizGrade } from "./chats";
-import type { StepResult } from "./evaluate";
+import type { Answer, StepResult } from "./evaluate";
 import { promptText } from "./evaluate";
+import { tx } from "./text";
 import type { LessonStat } from "./review";
 import type { SkillStat } from "./mastery";
 import { buildFromBank, smartSkills, skillsOfTopic, sortByLevel, stepKey } from "./drill";
@@ -86,6 +87,17 @@ export function answerRecord(step: QuestionStep, result: StepResult, lang: Lang,
     retry: false,
     timeMs: Math.max(0, Math.round(timeMs)),
   };
+}
+
+/** Статический разбор выбранного неверного варианта (choice / multi) или null. */
+export function wrongReasonText(step: QuestionStep, answer: Answer | null, lang: Lang): string | null {
+  if (!answer) return null;
+  let idx = -1;
+  if (step.type === "choice" && answer.type === "choice") idx = answer.index;
+  if (step.type === "multi" && answer.type === "multi") idx = answer.indices.find((i) => !step.correct.includes(i)) ?? -1;
+  if (idx < 0 || (step.type !== "choice" && step.type !== "multi")) return null;
+  const why = step.whyWrong?.[idx];
+  return why ? tx(why, lang) : null;
 }
 
 /** Средний балл (0..1) по ответам; нет ответов — 1, как в уроках. */

@@ -58,6 +58,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useT();
   const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const activeIndex = NAV.findIndex((n) => active(n.href));
+  // Чат и практикум кода — широкие экраны: на компьютере без правой колонки виджетов.
+  const wide = active("/tutor") || active("/code");
 
   return (
     <div className="min-h-dvh">
@@ -145,13 +147,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
-          <main className="mx-auto w-full min-w-0 max-w-2xl flex-1">
+          <main className={clsx("mx-auto w-full min-w-0 flex-1", wide ? "max-w-5xl" : "max-w-2xl")}>
             {/* Страница мягко проявляется при каждой смене маршрута. */}
             <m.div key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: easeOut }}>
               {children}
             </m.div>
           </main>
-          <aside className="sticky top-8 hidden h-fit w-80 shrink-0 flex-col gap-4 xl:flex">
+          <aside className={clsx("sticky top-8 hidden h-fit w-80 shrink-0 flex-col gap-4", !wide && "xl:flex")}>
             <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-1">
               <StreakChipAnimated />
               <HeartsChip />

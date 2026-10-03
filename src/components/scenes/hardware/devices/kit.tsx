@@ -23,7 +23,7 @@ export const C = {
   lit: mix("var(--primary)", 22, "var(--surface)"),
   litDeep: mix("var(--primary)", 55, "var(--surface)"),
   /** Бумага. */
-  paper: mix("var(--muted)", 4, "#ffffff"),
+  paper: mix("#ffffff", 88, "var(--surface)"),
   paperLine: mix("var(--muted)", 45, "#ffffff"),
   /** Кожа (палец). */
   skin: mix("var(--warning)", 22, "#efc9ae"),
@@ -114,4 +114,30 @@ export function Grid({ x, y, cols, rows, w, h, gx, gy, rx = 1, fill, colors }: {
     }
   }
   return <g>{cells}</g>;
+}
+
+/** Рабочий стол на экране (обои, окна, панель задач) — вписывается в прямоугольник x,y,w,h. */
+export function DesktopUI({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${+(w / 100).toFixed(4)} ${+(h / 60).toFixed(4)})`}>
+      <rect width="100" height="60" fill={C.lit} />
+      <circle cx="84" cy="12" r="5" fill={C.gold} />
+      <path d="M0 46 Q25 33 50 43 T100 38 V60 H0 Z" fill={C.success} fillOpacity={0.45} />
+      <rect x="8" y="7" width="48" height="32" rx="2.5" fill="var(--surface)" />
+      <path d="M8 13 V9.5 A2.5 2.5 0 0 1 10.5 7 H53.5 A2.5 2.5 0 0 1 56 9.5 V13 Z" fill={C.primary} />
+      <rect x="12" y="17" width="30" height="2.6" rx="1.3" fill={C.shell2} />
+      <rect x="12" y="22" width="38" height="2.6" rx="1.3" fill={C.shell2} />
+      <rect x="12" y="27" width="22" height="2.6" rx="1.3" fill={C.shell2} />
+      <rect x="38" y="27" width="14" height="9" rx="1.5" fill={C.primarySoft} />
+      <rect x="52" y="20" width="38" height="28" rx="2.5" fill="var(--surface)" />
+      <path d="M52 26 V22.5 A2.5 2.5 0 0 1 54.5 20 H87.5 A2.5 2.5 0 0 1 90 22.5 V26 Z" fill={C.ai} />
+      <rect x="58" y="36" width="5" height="8" rx="1" fill={C.success} />
+      <rect x="66" y="31" width="5" height="13" rx="1" fill={C.primary} />
+      <rect x="74" y="34" width="5" height="10" rx="1" fill={C.warning} />
+      <rect x="0" y="53" width="100" height="7" fill={C.dark} fillOpacity={0.9} />
+      <rect x="3" y="54.5" width="4" height="4" rx="1" fill={C.primary} />
+      <rect x="10" y="55" width="8" height="3" rx="1" fill={C.shell3} />
+      <rect x="21" y="55" width="8" height="3" rx="1" fill={C.shell3} />
+    </g>
+  );
 }

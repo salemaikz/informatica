@@ -1,0 +1,339 @@
+import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { TASKS } from "@/lib/ide/python/tasks";
+import { checkPython, normalizeOutput, sameOutput, type PyRun } from "@/lib/ide/python/check";
+import { changedVars, codeLine, highlightFor, outputAt, parseTrace, TRACE_STEP_LIMIT, type TraceData } from "@/lib/ide/python/trace";
+import { idePythonDict } from "@/i18n/parts/ide-python";
+import { IDE_REGISTRY } from "@/components/ide/registry";
+
+const hasPython = spawnSync("python3", ["--version"]).status === 0;
+const dir = mkdtempSync(join(tmpdir(), "ide-python-"));
+
+/** Запуск программы системным python3 (так же, как её запустил бы ученик). */
+function runSystem(code: string, stdin: string) {
+  const file = join(dir, "prog.py");
+  writeFileSync(file, code);
+  const r = spawnSync("python3", [file], { input: stdin, encoding: "utf8", timeout: 10000 });
+  return { stdout: r.stdout, stderr: r.stderr, status: r.status };
+}
+
+describe("normalizeOutput", () => {
+  it("убирает пробелы в конце строк и пустые строки в конце", () => {
+    expect(normalizeOutput("1  \n2\t\n\n\n")).toBe("1\n2");
+    expect(normalizeOutput("a\r\nb\r\n")).toBe("a\nb");
+    expect(normalizeOutput("")).toBe("");
+  });
+  it("не трогает пробелы и пустые строки внутри", () => {
+    expect(normalizeOutput("  a\n\nb")).toBe("  a\n\nb");
+  });
+  it("sameOutput игнорирует хвост, но не содержимое", () => {
+    expect(sameOutput("8\n", "8")).toBe(true);
+    expect(sameOutput("8 \n\n", "8")).toBe(true);
+    expect(sameOutput("08", "8")).toBe(false);
+    expect(sameOutput("1\n2", "1\n\n2")).toBe(false);
+  });
+});
+
+describe("checkPython (с подставным запуском)", () => {
+  const check = { kind: "python" as const, tests: [{ stdin: "1\n", stdout: "2" }, { stdin: "5\n", stdout: "10" }] };
+  const doubler: PyRun = async (_code, stdin) => ({ stdout: `${Number(stdin) * 2}\n` });
+
+  it("все тесты пройдены", async () => {
+    expect(await checkPython(check, "print()", doubler)).toEqual({ ok: true, passed: 2, total: 2 });
+  });
+  it("неверный вывод: считает пройденные и даёт пример", async () => {
+    const r = await checkPython(check, "print()", async (_c, stdin) => ({ stdout: stdin === "1\n" ? "2\n" : "99\n" }));
+    expect(r.ok).toBe(false);
+    expect(r.passed).toBe(1);
+    expect(r.total).toBe(2);
+    expect(r.sample).toEqual({ input: "5\n", expected: "10", got: "99\n" });
+    expect(typeof r.message === "object" && r.message.ru).toContain("тест 2 из 2");
+    expect(typeof r.message === "object" && r.message.kk).toContain("2-тест");
+  });
+  it("ошибка выполнения попадает в сообщение с номером строки", async () => {
+    const r = await checkPython(check, "print(x)", async () => ({ stdout: "", error: { line: 3, text: "NameError: name 'x' is not defined" } }));
+    expect(r.ok).toBe(false);
+    expect(r.passed).toBe(0);
+    const msg = r.message as { ru: string; kk: string };
+    expect(msg.ru).toContain("строка 3");
+    expect(msg.ru).toContain("NameError");
+    expect(msg.kk).toContain("3-жол");
+  });
+  it("таймаут останавливает проверку сразу", async () => {
+    let calls = 0;
+    const r = await checkPython(check, "while True: pass", async () => {
+      calls++;
+      return { stdout: "", timedOut: true };
+    });
+    expect(calls).toBe(1);
+    expect(r.ok).toBe(false);
+    expect((r.message as { ru: string }).ru).toContain("бесконечный цикл");
+  });
+  it("не загрузился Python — отдельное сообщение", async () => {
+    const r = await checkPython(check, "print()", async () => ({ stdout: "", loadFailed: true }));
+    expect(r.ok).toBe(false);
+    expect((r.message as { ru: string }).ru).toContain("загрузить Python");
+  });
+  it("пустой код не запускается", async () => {
+    let calls = 0;
+    const r = await checkPython(check, "  \n", async () => {
+      calls++;
+      return { stdout: "" };
+    });
+    expect(calls).toBe(0);
+    expect(r.ok).toBe(false);
+  });
+  it("хвостовые пробелы и пустые строки не мешают", async () => {
+    const r = await checkPython(check, "print()", async (_c, stdin) => ({ stdout: `${Number(stdin) * 2}  \n\n\n` }));
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("задачи Python", () => {
+  it("10 задач, id уникальны, уровни растут A→C", () => {
+    expect(TASKS).toHaveLength(10);
+    expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
+    const levels = TASKS.map((t) => t.level);
+    expect(levels).toEqual([...levels].sort());
+    expect(levels[0]).toBe(1);
+    expect(levels[levels.length - 1]).toBe(3);
+  });
+  it("двуязычные тексты, навыки py.*, проверка python", () => {
+    for (const task of TASKS) {
+      expect(task.lang, task.id).toBe("python");
+      expect(task.skill, task.id).toMatch(/^py\./);
+      for (const f of [task.title, task.prompt, task.hint!]) {
+        expect(f?.ru?.trim(), task.id).toBeTruthy();
+        expect(f?.kk?.trim(), task.id).toBeTruthy();
+      }
+      expect(task.starter, task.id).toBeTruthy();
+      expect(task.solution.trim(), task.id).toBeTruthy();
+      expect(task.check.kind, task.id).toBe("python");
+      if (task.check.kind === "python") expect(task.check.tests.length, task.id).toBeGreaterThanOrEqual(1);
+    }
+  });
+  it("в казахских текстах нет эмодзи и «бинарлы»", () => {
+    const all = TASKS.map((t) => `${t.title.kk} ${t.prompt.kk} ${t.hint?.kk}`).join(" ");
+    expect(all).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(all).not.toContain("бинар");
+  });
+  it("реестр подхватывает задачи", () => {
+    expect(IDE_REGISTRY.python.tasks).toBe(TASKS);
+  });
+  it("перевод в двоичную — вручную: в эталоне нет bin и format", () => {
+    const t = TASKS.find((x) => x.id === "py-10-binary")!;
+    expect(t.solution).not.toMatch(/\bbin\(|\bformat\(/);
+  });
+
+  describe.skipIf(!hasPython)("эталоны (системный python3)", () => {
+    for (const task of TASKS) {
+      if (task.check.kind !== "python") continue;
+      const tests = task.check.tests;
+      it(`${task.id}: эталон проходит все тесты`, () => {
+        tests.forEach((test, i) => {
+          const r = runSystem(task.solution, test.stdin ?? "");
+          expect(r.status, `${task.id} тест ${i + 1}: ${r.stderr}`).toBe(0);
+          expect(normalizeOutput(r.stdout), `${task.id} тест ${i + 1}`).toBe(normalizeOutput(test.stdout));
+        });
+      });
+      it(`${task.id}: заготовка не решает задачу`, () => {
+        const okAll = tests.every((test) => {
+          const r = runSystem(task.starter, test.stdin ?? "");
+          return r.status === 0 && sameOutput(r.stdout, test.stdout);
+        });
+        expect(okAll).toBe(false);
+      });
+    }
+  });
+});
+
+describe("словарь idepy", () => {
+  it("плейсхолдеры в ru и kk совпадают", () => {
+    for (const [key, v] of Object.entries(idePythonDict)) {
+      expect(key.startsWith("idepy."), key).toBe(true);
+      const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      expect(ph(v.kk), key).toEqual(ph(v.ru));
+      expect(v.kk).not.toMatch(/\}[а-яәіңғүұқөһ]/i); // после {плейсхолдера} нет падежного окончания
+    }
+  });
+});
+
+describe("трассировка (чистые помощники)", () => {
+  const trace: TraceData = {
+    steps: [
+      { line: 1, fn: null, vars: [], out: 0 },
+      { line: 2, fn: null, vars: [["x", "1"]], out: 0 },
+      { line: 3, fn: null, vars: [["x", "5"]], out: 2 },
+      { line: null, fn: null, vars: [["x", "5"]], out: 4 },
+    ],
+    truncated: false,
+    out: "5\n6\n",
+    error: null,
+  };
+  it("вывод к шагу и подсветка", () => {
+    expect(outputAt(trace, 1)).toBe("");
+    expect(outputAt(trace, 2)).toBe("5\n");
+    expect(outputAt(trace, 3)).toBe("5\n6\n");
+    expect(outputAt(trace, 9)).toBe("");
+    expect(highlightFor(trace, 2)).toBe(3);
+    expect(highlightFor(trace, 3)).toBeUndefined();
+    expect(highlightFor({ ...trace, error: { line: 7, text: "E" } }, 3)).toBe(7);
+  });
+  it("изменившиеся переменные", () => {
+    expect([...changedVars(trace, 1)]).toEqual(["x"]);
+    expect([...changedVars(trace, 2)]).toEqual(["x"]);
+    expect([...changedVars(trace, 3)]).toEqual([]);
+    expect([...changedVars(trace, 0)]).toEqual([]);
+  });
+  it("текст строки и разбор ответа", () => {
+    expect(codeLine("a = 1\n  b = 2\n", 2)).toBe("b = 2");
+    expect(codeLine("a", null)).toBe("");
+    expect(parseTrace(null)).toBeUndefined();
+    expect(parseTrace({ steps: [] })?.steps).toEqual([]);
+  });
+});
+
+// Python-часть воркера (public/ide/python-worker.js) гоняем системным python3: те же функции, что работают в Pyodide.
+describe("воркер Pyodide", () => {
+  const workerSrc = readFileSync(join(__dirname, "../public/ide/python-worker.js"), "utf8");
+
+  it("версия Pyodide и модульный воркер", () => {
+    expect(workerSrc).toMatch(/PYODIDE_VERSION = "\d+\.\d+\.\d+"/);
+    expect(workerSrc).toContain("cdn.jsdelivr.net/pyodide/v");
+    expect(workerSrc).toContain("pyodide.mjs");
+    expect(workerSrc).not.toMatch(/^\s*importScripts\(/m);
+    const runner = readFileSync(join(__dirname, "../src/lib/ide/python/runner.ts"), "utf8");
+    expect(runner).toContain('type: "module"');
+    expect(runner).toContain("terminate");
+  });
+
+  it("протокол: все типы сообщений на месте", () => {
+    for (const type of ["loading", "start", "stdout", "trace", "done", "error", "ready"]) expect(workerSrc).toContain(`type: "${type}"`);
+  });
+
+  const m = workerSrc.match(/String\.raw`([\s\S]*?)`;/);
+  it("Python-исходник вынимается", () => {
+    expect(m?.[1]).toContain("def _ide_run");
+  });
+
+  describe.skipIf(!hasPython || !m)("запуск (python3)", () => {
+    writeFileSync(join(dir, "runner.py"), m?.[1] ?? "");
+    const driver = [
+      "import json, sys",
+      "ns = {}",
+      `exec(open(${JSON.stringify(join(dir, "runner.py"))}, encoding='utf-8').read(), ns)`,
+      "p = json.load(sys.stdin)",
+      "chunks = []",
+      "res = ns['_ide_run'](p['code'], p['stdin'], p['trace'], chunks.append)",
+      "print(json.dumps({'res': json.loads(res), 'out': ''.join(chunks)}))",
+    ].join("\n");
+    writeFileSync(join(dir, "driver.py"), driver);
+
+    interface Res {
+      error: { line: number | null; text: string } | null;
+      cut: boolean;
+      trace?: TraceData;
+    }
+    function runWorkerPython(code: string, stdin = "", trace = false): { res: Res; out: string } {
+      const r = spawnSync("python3", [join(dir, "driver.py")], { input: JSON.stringify({ code, stdin, trace }), encoding: "utf8", timeout: 20000 });
+      if (r.status !== 0) throw new Error(r.stderr);
+      return JSON.parse(r.stdout);
+    }
+
+    it("print и input", () => {
+      const r = runWorkerPython("a = int(input())\nb = int(input())\nprint(a + b)\nprint('Привет')", "3\n4\n");
+      expect(r.out).toBe("7\nПривет\n");
+      expect(r.res.error).toBeNull();
+    });
+    it("input с приглашением печатает его в вывод", () => {
+      expect(runWorkerPython("x = input('n = ')\nprint(x)", "5\n").out).toBe("n = 5\n");
+    });
+    it("ошибка: номер строки и последняя строка трассировки; вывод до ошибки сохраняется", () => {
+      const r = runWorkerPython("print(1)\nprint(x)\n");
+      expect(r.out).toBe("1\n");
+      expect(r.res.error?.line).toBe(2);
+      expect(r.res.error?.text).toBe("NameError: name 'x' is not defined");
+    });
+    it("ошибка внутри функции указывает строку программы", () => {
+      const r = runWorkerPython("def f(a):\n    return a / 0\n\nprint(f(1))\n");
+      expect(r.res.error?.line).toBe(2);
+      expect(r.res.error?.text).toContain("ZeroDivisionError");
+    });
+    it("синтаксическая ошибка", () => {
+      const r = runWorkerPython("x = 1\nif x ==\n    print(x)\n");
+      expect(r.res.error?.text).toMatch(/^SyntaxError/);
+      expect(r.res.error?.line).toBeGreaterThanOrEqual(2);
+    });
+    it("не хватает входных данных — EOFError", () => {
+      const r = runWorkerPython("input()\ninput()", "1\n");
+      expect(r.res.error?.text).toMatch(/^EOFError/);
+      expect(r.res.error?.line).toBe(2);
+    });
+    it("exit() — не ошибка", () => {
+      const r = runWorkerPython("print('a')\nimport sys\nsys.exit()\nprint('b')");
+      expect(r.out).toBe("a\n");
+      expect(r.res.error).toBeNull();
+    });
+    it("каждый запуск с чистыми переменными", () => {
+      expect(runWorkerPython("print('x' in globals())").out).toBe("False\n");
+    });
+    it("очень длинный вывод обрезается", () => {
+      const r = runWorkerPython("print('x' * 300000)");
+      expect(r.res.cut).toBe(true);
+      expect(r.out.length).toBeLessThanOrEqual(100000);
+    });
+
+    it("трассировка: цикл", () => {
+      const r = runWorkerPython("x = 1\nfor i in range(3):\n    x += i\nprint(x)\n", "", true);
+      const t = r.res.trace!;
+      expect(t.truncated).toBe(false);
+      expect(t.steps[0].line).toBe(1);
+      expect(t.steps[1]).toMatchObject({ line: 2, vars: [["x", "1"]] });
+      const lines = t.steps.map((s) => s.line);
+      expect(lines.filter((l) => l === 3)).toHaveLength(3);
+      const end = t.steps[t.steps.length - 1];
+      expect(end.line).toBeNull();
+      expect(Object.fromEntries(end.vars)).toEqual({ x: "4", i: "2" });
+      expect(t.out).toBe("4\n");
+      expect(end.out).toBe(2);
+      // вывод по шагам не убывает
+      for (let i = 1; i < t.steps.length; i++) expect(t.steps[i].out).toBeGreaterThanOrEqual(t.steps[i - 1].out);
+    });
+    it("трассировка: функции и значения разных типов", () => {
+      const code = "def f(x):\n    y = x * 2\n    return y\n\nnums = [1, 2, 3]\nname = 'ab'\nflag = True\nz = 0.5\nres = f(3)\nprint(res)\n";
+      const t = runWorkerPython(code, "", true).res.trace!;
+      const inF = t.steps.filter((s) => s.fn === "f");
+      expect(inF.length).toBeGreaterThanOrEqual(2);
+      expect(Object.fromEntries(inF[inF.length - 1].vars)).toMatchObject({ x: "3", y: "6" });
+      const end = Object.fromEntries(t.steps[t.steps.length - 1].vars);
+      expect(end).toMatchObject({ nums: "[1, 2, 3]", name: "'ab'", flag: "True", z: "0.5", res: "6" });
+      expect(end).not.toHaveProperty("f"); // функции в таблице не показываем
+    });
+    it("трассировка: длинный список обрезается до 10 элементов", () => {
+      const t = runWorkerPython("a = list(range(25))\n", "", true).res.trace!;
+      const a = Object.fromEntries(t.steps[t.steps.length - 1].vars).a;
+      expect(a).toBe("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, …]");
+    });
+    it("трассировка: лимит шагов останавливает даже бесконечный цикл", () => {
+      const r = runWorkerPython("n = 0\nwhile True:\n    n += 1\n", "", true);
+      const t = r.res.trace!;
+      expect(t.truncated).toBe(true);
+      expect(t.steps).toHaveLength(TRACE_STEP_LIMIT);
+      expect(r.res.error).toBeNull();
+    });
+    it("трассировка: ошибка попадает в данные трассировки", () => {
+      const r = runWorkerPython("x = 1\ny = x / 0\n", "", true);
+      expect(r.res.error?.line).toBe(2);
+      expect(r.res.trace?.error?.text).toContain("ZeroDivisionError");
+      expect(r.res.trace?.steps.map((s) => s.line)).toEqual([1, 2, null]);
+    });
+    it("трассировка с вводом", () => {
+      const t = runWorkerPython("n = int(input())\nprint(n * 2)\n", "21\n", true).res.trace!;
+      expect(t.out).toBe("42\n");
+      expect(Object.fromEntries(t.steps[t.steps.length - 1].vars)).toEqual({ n: "21" });
+    });
+  });
+});
