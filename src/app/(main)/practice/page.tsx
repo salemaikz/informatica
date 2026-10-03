@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, ChevronDown, ChevronRight, Repeat, RotateCcw, Timer, Trophy } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
@@ -77,6 +77,21 @@ export default function PracticePage() {
 
       {/* История тестов: результаты и ошибки каждого теста. */}
       <HistoryPracticeCard />
+
+      {/* Практикум кода: Python, SQL, HTML/CSS, JavaScript, Excel прямо в браузере. */}
+      <Link
+        href="/code"
+        className="flex items-center gap-4 rounded-3xl border-2 border-primary/30 bg-primary-soft p-4 active:translate-y-0.5"
+      >
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]">
+          <Code2 size={26} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-extrabold">{t("nav.code")}</span>
+          <span className="block text-sm font-semibold text-muted">{t("prac.code.desc")}</span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-primary" />
+      </Link>
 
       {/* Повторение (разминка): тема «остывает» — повторяем по расписанию. */}
       <Link

@@ -27,7 +27,9 @@ export function findLessonRef(id: string): { unit: Unit; ref: LessonRef; unitInd
 export function useLearnData() {
   const lessons = useApp((s) => s.lessons);
   const now = useNow();
-  const recommended = useMemo(() => recommendedLesson(UNITS, lessons), [lessons]);
+  // Знает основы (выбор в онбординге) — раздел «Старт: компьютер с нуля» первым не предлагаем.
+  const skipBasics = useApp((s) => s.profile.skipBasics);
+  const recommended = useMemo(() => recommendedLesson(skipBasics ? UNITS.filter((u) => u.id !== "u0") : UNITS, lessons), [lessons, skipBasics]);
   // К повторению — только уроки, которые есть на карте курса.
   const due = useMemo(() => dueLessons(lessons, now).filter((d) => !!findLessonRef(d.id)), [lessons, now]);
   return { lessons, now, recommended, due };

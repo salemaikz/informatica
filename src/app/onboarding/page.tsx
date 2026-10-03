@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, ChevronLeft, Lightbulb, ListOrdered, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronLeft, Laptop, Rocket, Lightbulb, ListOrdered, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExplainStyle, Goal, Grade, Lang } from "@/lib/types";
@@ -17,6 +17,11 @@ const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
   { id: "ent", icon: Target, key: "goal.ent" },
   { id: "school", icon: BookOpen, key: "goal.school" },
   { id: "interest", icon: Lightbulb, key: "goal.interest" },
+];
+/** «С чего начнём?»: с нуля (раздел «Старт» первым) или сразу к темам ЕНТ (profile.skipBasics). */
+const BASICS: { skip: boolean; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
+  { skip: false, icon: Laptop, key: "onb.basics.zero", desc: "onb.basics.zero.desc" },
+  { skip: true, icon: Rocket, key: "onb.basics.know", desc: "onb.basics.know.desc" },
 ];
 const STYLES: { id: ExplainStyle; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
   { id: "short", icon: Zap, key: "style.short", desc: "style.short.desc" },
@@ -62,7 +67,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(profile.name);
 
-  const total = 6;
+  const total = 7;
   const canNext = step !== 1 || name.trim().length > 0;
 
   const next = () => {
@@ -167,6 +172,25 @@ export default function OnboardingPage() {
         {step === 4 && (
           <>
             <MascotSays mood="thinking" size={88}>
+              {t("onb.basics.title")}
+            </MascotSays>
+            <div className="flex flex-col gap-3">
+              {BASICS.map((b) => (
+                <Choice key={String(b.skip)} selected={profile.skipBasics === b.skip} onClick={() => updateProfile({ skipBasics: b.skip })}>
+                  <ChoiceIcon icon={b.icon} selected={profile.skipBasics === b.skip} />
+                  <span>
+                    <span className="block text-lg">{t(b.key)}</span>
+                    <span className="block text-sm font-semibold text-muted">{t(b.desc)}</span>
+                  </span>
+                </Choice>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 5 && (
+          <>
+            <MascotSays mood="thinking" size={88}>
               {t("onb.style.title")}
             </MascotSays>
             <div className="flex flex-col gap-3">
@@ -183,7 +207,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <>
             <MascotSays mood="happy" size={88}>
               {t("onb.daily.title")}

@@ -16,6 +16,7 @@ export const learnDict = {
   "learn2.quick.exam": { ru: "Тест ЕНТ", kk: "ҰБТ тесті" },
   "learn2.quick.theory": { ru: "Теория", kk: "Теория" },
   "learn2.quick.search": { ru: "Поиск", kk: "Іздеу" },
+  "learn2.quick.code": { ru: "Код", kk: "Код" },
 
   // ---------- Карточка «Продолжить» ----------
   "learn2.hero.next": { ru: "Следующий урок", kk: "Келесі сабақ" },

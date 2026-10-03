@@ -10,7 +10,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.waitForURL("**/onboarding");
   await page.getByText("Русский").click();
   await page.getByPlaceholder("Твоё имя").fill("Тест");
-  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: /Продолжить|Поехали/ }).click();
+  for (let i = 0; i < 6; i++) await page.getByRole("button", { name: /Продолжить|Поехали/ }).click();
   // После онбординга — окно тарифов; закрываем «Продолжить бесплатно».
   await page.waitForURL("**/plans?from=onboarding");
   await page.getByRole("button", { name: "Продолжить бесплатно" }).click();

@@ -227,3 +227,36 @@ paywall { lastShownAt, views }        shouldShowPaywall: бесплатным �
 
 ### Трек «Школьная программа»
 `profile.track: "ent" | "school"`, классы `"5"…"11"`. Данные — `content/school-program.ts` (класс → разделы → темы → id готовых уроков), логика — `lib/school.ts`, карта — `components/school/*`; переключатель трека на `/learn`. Источники программы — `docs/SCHOOL.md`.
+
+## v0.7: «Старт» с нуля, иллюстрации, практикум кода, ИИ-чат 2.0
+
+### Раздел «Старт: компьютер с нуля» (решение #36)
+Первый раздел `u0` в `src/content/course.ts` (8 уроков `base-*`, навыки `base.*` в `skills.ts`). Рекомендация «что дальше» (`components/learn/useLearn.ts`) пропускает `u0`, если `profile.skipBasics` (выбор «Основы знаю» в онбординге, переключатель в профиле → «Программа обучения»).
+
+### Сцены-иллюстрации (`components/scenes`)
+| Сцена | Компонент | Данные |
+|---|---|---|
+| `hardware` | `HardwareScene` | рисунки `HARDWARE_ART` (`scenes/hardware/`: `internals.tsx` — детали и носители, `devices.tsx` — устройства и «компьютеры вокруг нас»), названия `HARDWARE_NAMES` |
+| `pc-inside` | `PcInsideScene` | системный блок изнутри, подсветка `PcPart[]` |
+| `cpu-cycle` | `CpuCycleScene` | выборка → декодирование → выполнение → запись |
+| `keyboard` | `KeyboardScene` | подсветка клавиш сочетания |
+| `sizes` | `SizesScene` | объёмы (логарифмическая шкала, Б…ТБ по 1024) |
+| `files` | `FilesScene` | дерево папок, путь `C:\…` |
+| `layers` | `LayersScene` | слои (ОС, уровни памяти) с осью |
+Проверка данных сцен — `tests/validate.ts` (`validateScene`), используется `scripts/check-content.ts`.
+
+### Практикум кода (`/code`, решение #35)
+```
+/code → /code/<lang> (задачи | песочница) → /code/<lang>/<task>
+IdeShell (условие, подсказка, решение, итог, XP, «Объясни ошибку» — AiPanel)
+  └─ IDE_REGISTRY[lang].Workspace (лениво, только в браузере)
+       python: public/ide/python-worker.js (Pyodide с CDN, таймаут, trace) · sql: sql.js (wasm с CDN), база src/lib/ide/sql/db.ts
+       web: iframe sandbox="allow-scripts" + postMessage с nonce · js: public/ide/js-worker.js · excel: src/lib/sheet (движок формул)
+```
+Контракт — `src/lib/ide/types.ts` (`IdeTask`, `IdeCheck`, `CheckResult`, `WorkspaceProps`), задачи — `src/lib/ide/<lang>/tasks.ts`, черновики — `src/lib/ide/drafts.ts` (localStorage), прогресс — `codeTasks` и `recordCodeTask(task, ok)` в сторе.
+
+### ИИ-чат 2.0 (`/tutor`, решение #37)
+- Список — `AppState.chats: ChatMeta[]` (`lib/chats.ts`), сообщения — IndexedDB (`lib/chat-store.ts`, `informatica:chat:v1:msgs:<id>`). Старый `chat` переносится в первый чат.
+- Режим чата и тема уходят на сервер (`TutorRequest.chatMode`, `topic`) → `CHAT_MODE_RULE` в `server/prompts.ts`.
+- «Дай задачи» — `components/chat/quiz/ChatQuiz` (банк заданий, `evaluate`, `recordAnswer`, `finishSession({kind:"drill", mode:"chat"})`), оценка `quizGrade`.
+- Голос: `VoiceButton` → `spendAi("voice")` → `POST /api/ai/transcribe` (`MODELS.stt`); озвучка — `speechSynthesis` браузера.

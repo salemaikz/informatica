@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ClipboardCheck, History, Play, Search, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardCheck, Code2, History, Play, Search, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -21,6 +21,7 @@ export function QuickActions({ continueId, dueCount, firstTime }: { continueId?:
     ...(dueCount > 0 ? [{ href: "/drill?mode=review", icon: History, label: t("learn2.quick.review", { n: dueCount }), tone: "streak" as const }] : []),
     { href: "/exam", icon: ClipboardCheck, label: t("learn2.quick.exam"), tone: "primary" },
     { href: "/theory", icon: BookOpen, label: t("learn2.quick.theory"), tone: "primary" },
+    { href: "/code", icon: Code2, label: t("learn2.quick.code"), tone: "primary" },
     { href: "/search", icon: Search, label: t("learn2.quick.search"), tone: "primary" },
   ];
   return (

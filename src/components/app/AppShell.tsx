@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Calculator, ChartColumn, Dumbbell, History, Library, NotebookPen, Search, Sparkles, Store, Target } from "lucide-react";
+import { BookOpen, Calculator, ChartColumn, Code2, Dumbbell, History, Library, NotebookPen, Search, Sparkles, Store, Target } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -22,6 +22,7 @@ import { useToolbox } from "@/components/tools/useToolbox";
 const NAV_EXTRA: { href: string; key: DictKey; icon: typeof BookOpen }[] = [
   { href: "/theory", key: "theory.title", icon: Library },
   { href: "/exam", key: "exam.title", icon: Target },
+  { href: "/code", key: "nav.code", icon: Code2 },
   { href: "/history", key: "history.title", icon: History },
   { href: "/shop", key: "shop.title", icon: Store },
   { href: "/search", key: "search.title", icon: Search },
