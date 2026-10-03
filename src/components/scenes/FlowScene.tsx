@@ -7,8 +7,6 @@ import { iconFor } from "./icons";
 import { pointsAttr } from "./circuit";
 import { layoutFlow, type FlowBox, type FlowScene as FlowSceneData } from "./flow";
 
-type Node = FlowSceneData["nodes"][number];
-
 /** Контур блока по форме. Активный блок — primary, остальные нейтральные; смена подсветки плавная (~200 мс). */
 function Shape({ box, active }: { box: FlowBox; active: boolean }) {
   const l = box.cx - box.w / 2;

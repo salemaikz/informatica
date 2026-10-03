@@ -85,7 +85,7 @@ export function SceneView({ scene, className }: { scene: Scene; className?: stri
   return (
     <div data-scene={scene.kind} className={cn(scene.kind !== "quest" && "rounded-3xl bg-surface-2/60 px-3 py-5", className)}>
       <Body scene={scene} />
-      {caption && <p className="mx-auto mt-3 max-w-xl text-center text-sm leading-snug text-muted">{l(caption)}</p>}
+      {caption && <p className="mx-auto mt-3 max-w-xl text-center text-sm leading-snug text-muted [overflow-wrap:anywhere]">{l(caption)}</p>}
     </div>
   );
 }

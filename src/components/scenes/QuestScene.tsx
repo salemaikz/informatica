@@ -42,7 +42,7 @@ export function QuestSceneView({ scene }: { scene: QuestScene }) {
       >
         <Art art={scene.art} code={scene.code} />
       </m.div>
-      {scene.caption && <figcaption className="mt-2.5 text-center text-sm font-semibold leading-snug text-muted">{l(scene.caption)}</figcaption>}
+      {scene.caption && <figcaption className="mt-2.5 text-center text-sm font-semibold leading-snug text-muted [overflow-wrap:anywhere]">{l(scene.caption)}</figcaption>}
     </figure>
   );
 }
