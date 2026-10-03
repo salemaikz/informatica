@@ -48,10 +48,10 @@ const iotChain: Scene = {
   kind: "flow",
   nodes: [
     { id: "sensor", shape: "device", label: l("Датчик", "Датчик"), icon: "zap", x: 0, y: 0 },
-    { id: "gate", shape: "device", label: l("Шлюз", "Шлюз"), icon: "router", x: 2, y: 1 },
-    { id: "cloud", shape: "box", label: l("Облако: анализ", "Бұлт: талдау"), icon: "cloud", x: 2, y: 2 },
+    { id: "gate", shape: "device", label: l("Шлюз", "Шлюз"), icon: "router", x: 1, y: 1 },
+    { id: "cloud", shape: "box", label: l("Облако: анализ", "Бұлт: талдау"), icon: "cloud", x: 1, y: 2 },
     { id: "app", shape: "device", label: l("Телефон", "Телефон"), icon: "phone", x: 0, y: 3 },
-    { id: "act", shape: "device", label: l("Исполнительное устройство", "Атқарушы құрылғы"), icon: "settings", x: 4, y: 3 },
+    { id: "act", shape: "device", label: l("Устройство", "Атқарушы құрылғы"), icon: "settings", x: 2, y: 3 },
   ],
   edges: [
     { from: "sensor", to: "gate", label: l("данные", "деректер") },
@@ -59,7 +59,7 @@ const iotChain: Scene = {
     { from: "cloud", to: "app", label: l("уведомление", "хабарлама") },
     { from: "cloud", to: "act", label: l("команда", "команда") },
   ],
-  caption: l("Датчик → шлюз → облако → решение → действие", "Датчик → шлюз → бұлт → шешім → әрекет"),
+  caption: l("Датчик → шлюз → облако → решение → исполнительное устройство", "Датчик → шлюз → бұлт → шешім → атқарушы құрылғы"),
 };
 
 // ---------- Схема: цифровой двойник ----------
@@ -68,9 +68,9 @@ const twinFlow: Scene = {
   nodes: [
     { id: "obj", shape: "box", label: l("Реальный объект", "Нақты нысан"), icon: "cube", x: 0, y: 0 },
     { id: "sens", shape: "device", label: l("Датчики", "Датчиктер"), icon: "zap", x: 2, y: 0 },
-    { id: "twin", shape: "box", label: l("Цифровой двойник", "Цифрлық егіз"), icon: "laptop", x: 4, y: 0 },
-    { id: "pred", shape: "action", label: l("Прогноз", "Болжам"), icon: "chart", x: 4, y: 2 },
-    { id: "dec", shape: "action", label: l("Ремонт, настройка", "Жөндеу, баптау"), icon: "settings", x: 2, y: 2 },
+    { id: "twin", shape: "box", label: l("Цифровой двойник", "Цифрлық егіз"), icon: "laptop", x: 2, y: 1 },
+    { id: "pred", shape: "action", label: l("Прогноз", "Болжам"), icon: "chart", x: 2, y: 2 },
+    { id: "dec", shape: "action", label: l("Ремонт, настройка", "Жөндеу, баптау"), icon: "settings", x: 0, y: 2 },
   ],
   edges: [
     { from: "obj", to: "sens" },

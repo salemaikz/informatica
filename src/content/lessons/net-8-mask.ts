@@ -14,12 +14,13 @@ const l = (ru: string, kk: string): L => ({ ru, kk });
 const floorsScene: Scene = {
   kind: "flow",
   nodes: [
-    { id: "r", shape: "device", label: l("Маршрутизатор", "Маршрутизатор"), icon: "router", x: 2, y: 0 },
+    // «Роутер» и три столбца: «Маршрутизатор» и IP-адреса в пять столбцов на телефоне не помещаются.
+    { id: "r", shape: "device", label: l("Роутер", "Роутер"), icon: "router", x: 1, y: 0 },
     { id: "n1", shape: "box", label: l("Сеть 192.168.1.0", "Желі 192.168.1.0"), x: 0, y: 2 },
-    { id: "n2", shape: "box", label: l("Сеть 192.168.2.0", "Желі 192.168.2.0"), x: 4, y: 2 },
+    { id: "n2", shape: "box", label: l("Сеть 192.168.2.0", "Желі 192.168.2.0"), x: 2, y: 2 },
     { id: "a", shape: "device", label: "192.168.1.10", icon: "laptop", x: 0, y: 4 },
     { id: "b", shape: "device", label: "192.168.1.20", icon: "laptop", x: 1, y: 4 },
-    { id: "c", shape: "device", label: "192.168.2.20", icon: "laptop", x: 4, y: 4 },
+    { id: "c", shape: "device", label: "192.168.2.20", icon: "laptop", x: 2, y: 4 },
   ],
   edges: [
     { from: "r", to: "n1" },

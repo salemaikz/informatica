@@ -66,7 +66,7 @@ export const lesson: Lesson = {
         nodes: [
           { id: "s", shape: "start", label: { ru: "Начало", kk: "Басы" }, x: 2, y: 0 },
           { id: "q1", shape: "if", label: { ru: "Возраст ≥ 12?", kk: "Жасы ≥ 12 ме?" }, x: 2, y: 2 },
-          { id: "q2", shape: "if", label: { ru: "Рост ≥ 140 см?", kk: "Бойы ≥ 140 см ме?" }, x: 1, y: 4 },
+          { id: "q2", shape: "if", label: { ru: "Рост ≥ 140 см?", kk: "Бойы ≥ 140 см?" }, x: 1, y: 4 },
           { id: "ok", shape: "action", label: { ru: "Пустить", kk: "Жіберу" }, x: 1, y: 6 },
           { id: "no", shape: "action", label: { ru: "Не пускать", kk: "Жібермеу" }, x: 3, y: 6 },
         ],

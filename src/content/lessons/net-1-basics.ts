@@ -67,7 +67,8 @@ function path(stage: 1 | 2 | 3, active: string): Scene {
   ];
   const edges = [...link("pc", "sw"), ...link("sw", "pr")];
   if (stage >= 2) {
-    nodes.push(node("rt", l("Маршрутизатор", "Маршрутизатор"), "router", 1, 1));
+    // «Роутер», а не «Маршрутизатор»: длинное слово не помещается в блок при трёх столбцах на телефоне.
+    nodes.push(node("rt", l("Роутер", "Роутер"), "router", 1, 1));
     edges.push(...link("sw", "rt"));
   }
   if (stage >= 3) {

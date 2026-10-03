@@ -17,7 +17,7 @@ const machineFlow: Scene = {
   nodes: [
     { id: "cpu", shape: "device", label: w("Процессор", "Процессор"), icon: "cpu", x: 1, y: 0 },
     { id: "bus", shape: "box", label: w("Магистраль (шины)", "Магистраль (шиналар)"), x: 1, y: 1 },
-    { id: "mem", shape: "device", label: w("Память: программа и данные", "Жад: программа және деректер"), icon: "memory", x: 0, y: 2 },
+    { id: "mem", shape: "device", label: w("Память: программа и данные", "Жад: программа, деректер"), icon: "memory", x: 0, y: 2 },
     { id: "io", shape: "device", label: w("Ввод и вывод", "Енгізу және шығару"), icon: "keyboard", x: 2, y: 2 },
   ],
   edges: [

@@ -13,7 +13,7 @@ export type FlowShape = FlowScene["nodes"][number]["shape"];
 export const FLOW_PAD = 12;
 /** Просвет между соседними блоками по горизонтали. */
 const GAP_X = 14;
-const MIN_CELL_W = 56;
+const MIN_CELL_W = 44;
 const MAX_CELL_W = 150;
 /** Минимальный вертикальный просвет между рядами (место для стрелки и подписи). */
 const GAP_Y = 30;
@@ -21,6 +21,8 @@ const ARROW = 7;
 
 /** Кегли подписей блоков: пробуем от крупного к мелкому, берём самый крупный, при котором схема влезает по ширине. */
 export const FLOW_FONTS = [13, 12, 11] as const;
+/** На самом мелком кегле, если и он не влезает, ещё урезаем поля подписи на столько px (в сумме слева и справа) — перед тем как прокручивать. */
+const TIGHT_TRIM = 4;
 /** Межстрочный интервал подписи (tailwind leading-tight). */
 const LINE_RATIO = 1.25;
 /** Больше трёх строк в блоке — обрезка (line-clamp-3). */
@@ -47,6 +49,9 @@ export const LABEL_PAD_X: Record<FlowShape, number> = {
   if: 0,
   device: 10,
 };
+
+/** Поля подписи с учётом урезания trim (не меньше 4 px; у ромба полей нет). */
+const labelPadX = (shape: FlowShape, trim: number) => (shape === "if" ? 0 : Math.max(4, LABEL_PAD_X[shape] - trim));
 
 /** Высота блока по форме. */
 export const SHAPE_H: Record<FlowShape, number> = {
@@ -187,7 +192,7 @@ function diamondNeedWidth(text: string, fontPx: number): number {
 }
 
 /** Колонка текста и число строк подписи в блоке шириной w. У ромба число строк подбирается по вписанному прямоугольнику. */
-function fitLabel(shape: FlowShape, text: string, fontPx: number, w: number): { textW: number; wrapped: Wrapped } {
+function fitLabel(shape: FlowShape, text: string, fontPx: number, w: number, trim: number): { textW: number; wrapped: Wrapped } {
   if (shape === "if") {
     for (let lines = 1; lines <= MAX_LABEL_LINES; lines++) {
       const textW = diamondTextWidth(w, lines, fontPx);
@@ -197,33 +202,35 @@ function fitLabel(shape: FlowShape, text: string, fontPx: number, w: number): { 
     const textW = diamondTextWidth(w, MAX_LABEL_LINES, fontPx);
     return { textW, wrapped: wrapLabel(text, fontPx, textW) };
   }
-  const textW = w - LABEL_PAD_X[shape];
+  const textW = w - labelPadX(shape, trim);
   return { textW, wrapped: wrapLabel(text, fontPx, textW) };
 }
 
 /** Ширина ячейки, при которой подпись узла помещается без разрыва слов и больше чем в 3 строки. */
-function nodeNeedCell(node: FlowScene["nodes"][number], fontPx: number, lang: Lang): number {
+function nodeNeedCell(node: FlowScene["nodes"][number], fontPx: number, lang: Lang, trim: number): number {
   const text = tx(node.label, lang);
   if (node.shape === "if") return diamondNeedWidth(text, fontPx) + DIAMOND_GAP;
-  return minLabelWidth(text, fontPx) + LABEL_PAD_X[node.shape] + GAP_X;
+  return minLabelWidth(text, fontPx) + labelPadX(node.shape, trim) + GAP_X;
 }
 
 /** Минимальная ширина ячейки сетки для кегля fontPx: максимум по узлам. */
-export function flowRequiredCell(nodes: FlowScene["nodes"], fontPx: number, lang: Lang = "ru"): number {
-  return nodes.reduce((m, n) => Math.max(m, nodeNeedCell(n, fontPx, lang)), 0);
+export function flowRequiredCell(nodes: FlowScene["nodes"], fontPx: number, lang: Lang = "ru", trim = 0): number {
+  return nodes.reduce((m, n) => Math.max(m, nodeNeedCell(n, fontPx, lang, trim)), 0);
 }
 
 /**
  * Кегль подписей и минимальная ячейка: берём самый крупный из FLOW_FONTS, при котором вся схема
- * (cols × ячейка + поля) влезает в availW. Если не влезает даже на самом мелком — берём его, ширина схемы
- * станет больше доступной, и контейнер прокрутится по горизонтали.
+ * (cols × ячейка + поля) влезает в availW. Не влезло даже на 11 px — пробуем 11 px с урезанными полями подписи (TIGHT_TRIM);
+ * и так не влезло — берём этот вариант, ширина схемы станет больше доступной, и контейнер прокрутится по горизонтали.
  */
-export function flowFit(nodes: FlowScene["nodes"], availW: number, lang: Lang = "ru"): { fontPx: number; minCell: number; fits: boolean } {
+export function flowFit(nodes: FlowScene["nodes"], availW: number, lang: Lang = "ru"): { fontPx: number; trim: number; minCell: number; fits: boolean } {
   const { cols } = flowGrid(nodes);
-  let last = { fontPx: FLOW_FONTS[FLOW_FONTS.length - 1] as number, minCell: 0, fits: false };
-  for (const fontPx of FLOW_FONTS) {
-    const minCell = flowRequiredCell(nodes, fontPx, lang);
-    last = { fontPx, minCell, fits: cols * Math.max(minCell, MIN_CELL_W) + FLOW_PAD * 2 <= availW };
+  const smallest = FLOW_FONTS[FLOW_FONTS.length - 1];
+  const tiers: [number, number][] = [...FLOW_FONTS.map((f): [number, number] => [f, 0]), [smallest, TIGHT_TRIM]];
+  let last = { fontPx: smallest as number, trim: 0, minCell: 0, fits: false };
+  for (const [fontPx, trim] of tiers) {
+    const minCell = flowRequiredCell(nodes, fontPx, lang, trim);
+    last = { fontPx, trim, minCell, fits: cols * Math.max(minCell, MIN_CELL_W) + FLOW_PAD * 2 <= availW };
     if (last.fits) return last;
   }
   return last;
@@ -250,6 +257,13 @@ const port = (b: FlowBox, side: Side): Pt => {
       return [b.cx + b.w / 2, b.cy];
   }
 };
+
+/** Длина ломаной. */
+function polylineLength(pts: Pt[]): number {
+  let n = 0;
+  for (let i = 0; i + 1 < pts.length; i++) n += Math.abs(pts[i + 1][0] - pts[i][0]) + Math.abs(pts[i + 1][1] - pts[i][1]);
+  return n;
+}
 
 interface Candidate {
   points: Pt[];
@@ -315,6 +329,29 @@ function simplify(points: Pt[]): Pt[] {
   return out;
 }
 
+/**
+ * Позиция подписи стрелки (wd — оценка её ширины, px). По умолчанию — у начала первого отрезка: справа от вертикали
+ * или над горизонталью. Если у горизонтали подпись не влезает до следующего блока, но влезает в просвет — по центру просвета;
+ * если вертикальная подпись вылезает за правый край сцены — слева от линии; остальное прижимаем к краям сцены.
+ */
+export function placeEdgeLabel(p0: Pt, p1: Pt, wd: number, sceneW: number): { at: Pt; anchor: FlowEdgeGeom["labelAnchor"] } {
+  if (p0[0] === p1[0]) {
+    const y = p0[1] + Math.sign(p1[1] - p0[1]) * 16;
+    if (p0[0] + 6 + wd > sceneW - 2 && p0[0] - 6 - wd >= 2) return { at: [p0[0] - 6, y], anchor: "end" };
+    return { at: [p0[0] + 6, y], anchor: "start" };
+  }
+  const y = p0[1] - 7;
+  const dir = Math.sign(p1[0] - p0[0]);
+  const gap = Math.abs(p1[0] - p0[0]);
+  if (wd + 10 > gap && wd + 4 <= gap) return { at: [(p0[0] + p1[0]) / 2, y], anchor: "middle" };
+  const anchor = dir >= 0 ? "start" : "end";
+  let x = p0[0] + dir * 6;
+  const left = anchor === "start" ? x : x - wd;
+  if (left < 2) x += 2 - left;
+  else if (left + wd > sceneW - 2) x -= left + wd - (sceneW - 2);
+  return { at: [x, y], anchor };
+}
+
 function candidates(a: FlowBox, b: FlowBox, laneL: number, laneR: number): Candidate[] {
   const list: Candidate[] = [];
   const below = b.row > a.row;
@@ -361,13 +398,13 @@ function candidates(a: FlowBox, b: FlowBox, laneL: number, laneR: number): Candi
 export function layoutFlow(scene: FlowScene, availW: number, lang: Lang = "ru"): FlowLayout {
   const { minX, cols, rows } = flowGrid(scene.nodes);
   const fit = flowFit(scene.nodes, availW, lang);
-  const { fontPx } = fit;
+  const { fontPx, trim } = fit;
   // Обычно ячейка = доступная ширина / столбцы; если слова не влезли даже на мелком кегле — ячейка по слову, схема прокручивается.
   const cellW = Math.max(fit.minCell, flowCellWidth(availW, cols));
 
   const sized = scene.nodes.map((n) => {
     const w = n.shape === "if" ? cellW - DIAMOND_GAP : cellW - GAP_X;
-    const { textW, wrapped } = fitLabel(n.shape, tx(n.label, lang), fontPx, w);
+    const { textW, wrapped } = fitLabel(n.shape, tx(n.label, lang), fontPx, w, trim);
     return { n, w, textW, wrapped, h: boxHeight(n, wrapped.lines, fontPx) };
   });
   const maxH = Math.max(...sized.map((s) => s.h), 40);
@@ -389,10 +426,16 @@ export function layoutFlow(scene: FlowScene, availW: number, lang: Lang = "ru"):
       tight: wrapped.longest > textW * 0.9,
     };
   });
+  const width = cols * cellW + FLOW_PAD * 2;
   const byId = new Map(boxes.map((b) => [b.id, b]));
   const used = new Set<string>();
-  const edges: FlowEdgeGeom[] = [];
 
+  interface Routed {
+    e: FlowScene["edges"][number];
+    pts: Pt[];
+    crossings: number;
+  }
+  const routed: Routed[] = [];
   for (const e of scene.edges) {
     const a = byId.get(e.from);
     const b = byId.get(e.to);
@@ -409,34 +452,23 @@ export function layoutFlow(scene: FlowScene, availW: number, lang: Lang = "ru"):
     }
     if (!best) continue;
     used.add(`${a.id}:${best.c.startSide}`);
-    const pts = best.c.points;
-    const [p0, p1] = pts;
-    const vertical = p0[0] === p1[0];
-    let labelAt: Pt = vertical
-      ? [p0[0] + 6, p0[1] + Math.sign(p1[1] - p0[1]) * 16]
-      : [p0[0] + Math.sign(p1[0] - p0[0]) * 6, p0[1] - 7];
-    let labelAnchor: FlowEdgeGeom["labelAnchor"] = vertical || p1[0] >= p0[0] ? "start" : "end";
-    // Подпись горизонтальной стрелки у начала не помещается до следующего блока, но влезает в просвет — ставим по центру просвета.
-    if (!vertical && e.label) {
-      const gap = Math.abs(p1[0] - p0[0]);
-      const wd = estimateTextWidth(tx(e.label, lang), fontPx) * EDGE_LABEL_BOLD;
-      if (wd + 10 > gap && wd + 4 <= gap) {
-        labelAt = [(p0[0] + p1[0]) / 2, p0[1] - 7];
-        labelAnchor = "middle";
-      }
-    }
-    edges.push({
-      from: e.from,
-      to: e.to,
-      points: pts,
-      arrow: arrowHead(pts),
-      labelAt,
-      labelAnchor,
-      crossings: best.crossings,
-    });
+    routed.push({ e, pts: best.c.points, crossings: best.crossings });
   }
 
-  const width = cols * cellW + FLOW_PAD * 2;
+  // Двусторонняя связь (a→b и b→a): обе стрелки идут по более короткому из двух чистых маршрутов — получается одна линия с двумя наконечниками,
+  // а не обход «вокруг всей схемы» в одну из сторон.
+  for (const r of routed) {
+    const other = routed.find((o) => o !== r && o.e.from === r.e.to && o.e.to === r.e.from);
+    if (!other || other.crossings > 0 || r.crossings > 0) continue;
+    if (polylineLength(other.pts) < polylineLength(r.pts)) r.pts = [...other.pts].reverse();
+  }
+
+  const edges: FlowEdgeGeom[] = routed.map(({ e, pts, crossings }) => {
+    const wd = e.label ? estimateTextWidth(tx(e.label, lang), fontPx) * EDGE_LABEL_BOLD : 0;
+    const { at: labelAt, anchor: labelAnchor } = placeEdgeLabel(pts[0], pts[1], wd, width);
+    return { from: e.from, to: e.to, points: pts, arrow: arrowHead(pts), labelAt, labelAnchor, crossings };
+  });
+
   const clipped = sized.some((s) => s.wrapped.overflow || s.wrapped.lines > MAX_LABEL_LINES);
   return { width, height: rows * cellH + FLOW_PAD * 2, cols, rows, cellW, cellH, fontPx, scrolls: width > availW, clipped, boxes, edges };
 }

@@ -179,7 +179,7 @@ describe("flow", () => {
     expect(flowGrid([{ id: "a", shape: "box", label: "a", x: 0, y: 0 }, { id: "b", shape: "box", label: "b", x: 2, y: 0 }])).toEqual({ minX: 0, cols: 3, rows: 1 });
     expect(flowCellWidth(336, 5)).toBeLessThan(flowCellWidth(336, 3));
     expect(flowCellWidth(2000, 1)).toBe(150);
-    expect(flowCellWidth(100, 5)).toBe(56);
+    expect(flowCellWidth(100, 5)).toBe(44);
   });
 
   it("блоки лежат на сетке без наложений", () => {

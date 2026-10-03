@@ -29,9 +29,9 @@ export const lesson: Lesson = {
         kind: "flow",
         nodes: [
           { id: "s", shape: "start", label: { ru: "Начало", kk: "Басы" }, x: 2, y: 0 },
-          { id: "q", shape: "if", label: { ru: "Идёт дождь?", kk: "Жаңбыр жауып тұр ма?" }, x: 2, y: 2 },
+          { id: "q", shape: "if", label: { ru: "Идёт дождь?", kk: "Жаңбыр ма?" }, x: 2, y: 2 },
           { id: "a", shape: "action", label: { ru: "Взять зонт", kk: "Қолшатыр алу" }, x: 1, y: 4 },
-          { id: "b", shape: "action", label: { ru: "Идти без зонта", kk: "Қолшатырсыз жүру" }, x: 3, y: 4 },
+          { id: "b", shape: "action", label: { ru: "Идти без зонта", kk: "Онсыз жүру" }, x: 3, y: 4 },
           { id: "e", shape: "end", label: { ru: "Конец", kk: "Соңы" }, x: 2, y: 6 },
         ],
         edges: [

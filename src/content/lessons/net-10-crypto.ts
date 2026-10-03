@@ -76,12 +76,12 @@ const KEY_ROLES: Scene = {
 const HTTPS: Scene = {
   kind: "flow",
   nodes: [
-    { id: "ask", shape: "start", label: T("Браузер: запрос по HTTPS", "Браузер: HTTPS арқылы сұраныс"), icon: "laptop", x: 2, y: 0 },
-    { id: "cert", shape: "action", label: T("Сайт: сертификат + открытый ключ", "Сайт: сертификат + ашық кілт"), icon: "server", x: 2, y: 1 },
-    { id: "check", shape: "if", label: T("Сертификат верен?", "Сертификат дұрыс па?"), x: 2, y: 2 },
-    { id: "warn", shape: "end", label: T("Предупреждение браузера", "Браузер ескертуі"), x: 4, y: 2 },
-    { id: "key", shape: "action", label: T("Общий секретный ключ сеанса", "Сеанстың ортақ құпия кілті"), icon: "key", x: 2, y: 3 },
-    { id: "data", shape: "end", label: T("Данные шифруются этим ключом", "Деректер осы кілтпен шифрланады"), icon: "lock", x: 2, y: 4 },
+    { id: "ask", shape: "start", label: T("Браузер: запрос по HTTPS", "Браузер: HTTPS арқылы сұраныс"), icon: "laptop", x: 0, y: 0 },
+    { id: "cert", shape: "action", label: T("Сайт: сертификат + открытый ключ", "Сайт: сертификат + ашық кілт"), icon: "server", x: 0, y: 1 },
+    { id: "check", shape: "if", label: T("Сертификат верен?", "Сертификат дұрыс па?"), x: 0, y: 2 },
+    { id: "warn", shape: "end", label: T("Предупреждение браузера", "Браузер ескертуі"), x: 1, y: 3 },
+    { id: "key", shape: "action", label: T("Общий секретный ключ сеанса", "Сеанстың ортақ құпия кілті"), icon: "key", x: 0, y: 3 },
+    { id: "data", shape: "end", label: T("Данные шифруются этим ключом", "Деректер осы кілтпен шифрланады"), icon: "lock", x: 0, y: 4 },
   ],
   edges: [
     { from: "ask", to: "cert" },
