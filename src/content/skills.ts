@@ -104,7 +104,7 @@ export const SKILLS: Skill[] = [
   { id: "pc.devices", ent: "t01", topic: PC, title: { ru: "Устройства компьютера", kk: "Компьютердің құрылғылары" } },
   { id: "pc.cpu", ent: "t01", topic: PC, title: { ru: "Процессор и память", kk: "Процессор және жад" } },
   { id: "pc.software", ent: "t08", topic: PC, title: { ru: "Программное обеспечение", kk: "Программалық қамтамасыз ету" } },
-  { id: "pc.neumann", ent: "t01", topic: PC, title: { ru: "Принципы фон Неймана", kk: "Фон Нейман қағидалары" } },
+  { id: "pc.neumann", ent: "t01", topic: PC, title: { ru: "Принципы фон Неймана", kk: "Фон Нейман принциптері" } },
   { id: "pc.memory", ent: "t01", topic: PC, title: { ru: "Виды памяти", kk: "Жад түрлері" } },
   { id: "pc.os", ent: "t08", topic: PC, title: { ru: "ОС и файловые системы", kk: "ОЖ және файлдық жүйелер" } },
   { id: "pc.licenses", ent: "t08", topic: PC, title: { ru: "Виды ПО и лицензии", kk: "ПҚ түрлері және лицензиялар" } },
