@@ -76,7 +76,7 @@ export const SKILLS: Skill[] = [
   { id: "py.while", ent: "t06", topic: PYTHON, title: { ru: "Цикл while", kk: "while циклі" } },
   { id: "py.nested", ent: "t06", topic: PYTHON, title: { ru: "Вложенные циклы", kk: "Кірістірілген циклдер" } },
   { id: "py.patterns", ent: "t07", topic: PYTHON, title: { ru: "Типовые алгоритмы", kk: "Типтік алгоритмдер" } },
-  { id: "py.strmethods", ent: "t07", topic: PYTHON, title: { ru: "Срезы и методы строк", kk: "Жол қиындылары және әдістері" } },
+  { id: "py.strmethods", ent: "t07", topic: PYTHON, title: { ru: "Срезы и методы строк", kk: "Жол тілімдері және әдістері" } },
   { id: "py.listops", ent: "t06", topic: PYTHON, title: { ru: "Обработка списков", kk: "Тізімдерді өңдеу" } },
   { id: "py.matrix", ent: "t06", topic: PYTHON, title: { ru: "Двумерные списки", kk: "Екіөлшемді тізімдер" } },
   { id: "py.params", ent: "t07", topic: PYTHON, title: { ru: "Параметры и return", kk: "Параметрлер және return" } },

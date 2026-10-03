@@ -33,7 +33,7 @@ export const IDE_REGISTRY: Record<IdeLang, IdeLangInfo> = {
   python: {
     id: "python",
     title: { ru: "Python", kk: "Python" },
-    about: { ru: "Программы, ввод и вывод, циклы, пошаговое выполнение", kk: "Бағдарламалар, енгізу-шығару, циклдер, қадамдап орындау" },
+    about: { ru: "Программы, ввод и вывод, циклы, пошаговое выполнение", kk: "Программалар, енгізу-шығару, циклдер, қадамдап орындау" },
     icon: "python",
     tone: "primary",
     editor: "python",

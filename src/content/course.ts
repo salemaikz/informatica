@@ -105,7 +105,7 @@ export const UNITS: Unit[] = [
       { id: "py-3d-nested", title: { ru: "Вложенные циклы", kk: "Кірістірілген циклдер" }, status: "soon" },
       { id: "py-3e-patterns", title: { ru: "Типовые алгоритмы: сумма, счётчик, максимум", kk: "Типтік алгоритмдер: қосынды, санағыш, максимум" }, status: "soon" },
       { id: "py-4-strings", title: { ru: "Строки", kk: "Жолдар" }, status: "soon" },
-      { id: "py-4b-methods", title: { ru: "Срезы и методы строк", kk: "Жол қиындылары және әдістері" }, status: "soon" },
+      { id: "py-4b-methods", title: { ru: "Срезы и методы строк", kk: "Жол тілімдері және әдістері" }, status: "soon" },
       { id: "py-5-lists", title: { ru: "Списки", kk: "Тізімдер" }, status: "soon" },
       { id: "py-5b-listops", title: { ru: "Списки: методы и обработка", kk: "Тізімдер: әдістер және өңдеу" }, status: "soon" },
       { id: "py-5c-matrix", title: { ru: "Двумерные списки", kk: "Екіөлшемді тізімдер" }, status: "soon" },

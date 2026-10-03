@@ -304,7 +304,7 @@ const PRESETS: Record<AvatarPresetId, Omit<AvatarPreset, "id">> = {
   "bit-scarf": { label: { ru: "Бит в шарфе", kk: "Шарф таққан Бит" }, Component: BitScarf },
   "bit-laptop": { label: { ru: "Бит с ноутбуком", kk: "Ноутбукты Бит" }, Component: BitLaptop },
   "bit-bolt": { label: { ru: "Бит с молнией", kk: "Найзағайлы Бит" }, Component: BitBolt },
-  "owl-coder": { label: { ru: "Сова-программист", kk: "Жапалақ-бағдарламашы" }, Component: OwlCoder },
+  "owl-coder": { label: { ru: "Сова-программист", kk: "Жапалақ-программист" }, Component: OwlCoder },
   "cat-hacker": { label: { ru: "Кот-хакер", kk: "Мысық-хакер" }, Component: CatHacker },
   rocket: { label: { ru: "Ракета", kk: "Зымыран" }, Component: Rocket },
 };
