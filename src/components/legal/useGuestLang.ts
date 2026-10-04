@@ -1,25 +1,27 @@
 "use client";
 
 import { useEffect } from "react";
-import { detectLang } from "@/lib/guest-lang";
+import { GUEST_LANG_KEY, guestLangToApply, markLangChosen } from "@/lib/guest-lang";
 import { useApp } from "@/lib/store";
-
-const KEY = "informatica-lang-auto";
 
 /**
  * Гость без онбординга: язык страницы — из navigator.language (kk* → kk, иначе ru).
- * Срабатывает один раз на устройстве и только пока человек не прошёл онбординг,
- * поэтому выбор языка вручную потом не перетирается.
+ * Срабатывает один раз на устройстве, только пока человек не прошёл онбординг и не выбрал язык сам
+ * (выбор на шаге 0 онбординга ставит тот же флаг — иначе ссылка из согласия, открытая в новой вкладке,
+ * перетёрла бы выбранный язык языком браузера).
  */
 export function useGuestLang() {
   useEffect(() => {
+    let chosen: boolean;
     try {
-      if (useApp.getState().onboarded || localStorage.getItem(KEY)) return;
-      localStorage.setItem(KEY, "1");
+      chosen = !!localStorage.getItem(GUEST_LANG_KEY);
     } catch {
-      return;
+      return; // хранилище недоступно — язык не трогаем
     }
-    const lang = detectLang(navigator.language);
-    if (useApp.getState().profile.lang !== lang) useApp.getState().updateProfile({ lang });
+    const s = useApp.getState();
+    const lang = guestLangToApply({ onboarded: s.onboarded, chosen, navLang: navigator.language, current: s.profile.lang });
+    // Определение — один раз на устройстве: флаг ставим, даже если язык уже совпал.
+    if (!s.onboarded && !chosen) markLangChosen(localStorage);
+    if (lang) s.updateProfile({ lang });
   }, []);
 }

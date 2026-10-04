@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExplainStyle, Goal, Grade, Lang } from "@/lib/types";
 import { useApp } from "@/lib/store";
+import { markLangChosen } from "@/lib/guest-lang";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
@@ -85,6 +86,12 @@ export default function OnboardingPage() {
 
   const setLang = (lang: Lang) => {
     updateProfile({ lang });
+    // Язык выбран вручную: документы из согласия (новая вкладка) не должны подменять его языком браузера.
+    try {
+      markLangChosen(window.localStorage);
+    } catch {
+      // хранилище недоступно (доступ к window.localStorage бросает) — выбор остаётся только в профиле
+    }
     setStep(1);
   };
 
