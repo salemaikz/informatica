@@ -88,10 +88,10 @@ describe("weeklyPlan", () => {
   it("три самые весомые темы, когда ничего не освоено", () => {
     const plan = weeklyPlan(zero);
     expect(plan).toHaveLength(3);
-    // t06 (Python, с контекстными) — самая весомая; затем темы по 5 заданий (t01, t02), потом 4 (t03...)
+    // t06 и t07 (по 3 задания + половина контекстных) — самые весомые; затем темы по 4 задания (t03, t12)
     expect(plan[0].topic).toBe("t06");
-    expect(plan.map((p) => p.topic)).toEqual(["t06", "t01", "t02"]);
-    expect(plan[0].gain).toBeGreaterThan(plan[1].gain);
+    expect(plan.map((p) => p.topic)).toEqual(["t06", "t07", "t03"]);
+    expect(plan[1].gain).toBeGreaterThan(plan[2].gain);
   });
   it("приоритет = вес × (1 − освоение)", () => {
     const plan = weeklyPlan({ ...zero, t06: 0.75, t01: 0.5 }, 13);
