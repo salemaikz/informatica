@@ -6,7 +6,8 @@
 - Informatica — платформа подготовки школьников Казахстана к ЕНТ (ҰБТ) по информатике, на русском и казахском.
 - Короткие уроки как в Duolingo, мини-игры, статистика, ИИ-помощник «Бит» (OpenAI). Видео делаются на Remotion.
 - Стек: Next.js 16 (App Router), React 19, TS strict, Tailwind v4, Zustand (прогресс в localStorage), `motion`.
-- Репозиторий `salemaikz/informatica`. **Рабочая ветка — `claude/vibrant-carson-o5kgln`** (в неё перемотан этап 3 из `claude/sleepy-clarke-b2gj8f`). **Пока vibrant-carson не перемотана, актуальная ветка — `claude/awesome-darwin-cssc0e`**: это vibrant-carson + план v0.9 → v1.0 (#40–#52) и баллы ЕНТ от 2026-10-04. Если vibrant-carson отстаёт от неё — работай от awesome-darwin и перемотай vibrant-carson при следующей выкладке.
+- Репозиторий `salemaikz/informatica`. **Рабочая ветка — `claude/vibrant-carson-o5kgln`** (в неё перемотан этап 3 из `claude/sleepy-clarke-b2gj8f`). **Пока vibrant-carson не перемотана, актуальная ветка — `claude/awesome-darwin-cssc0e`**: это vibrant-carson + план v0.9 → v1.0 (#40–#53) и баллы ЕНТ от 2026-10-04. Если vibrant-carson отстаёт от неё — работай от awesome-darwin и перемотай vibrant-carson при следующей выкладке.
+- **Ветка по умолчанию на GitHub — старая `pensive-mendel`**, поэтому новая облачная сессия стартует с устаревшего кода. Владельцу: GitHub → Settings → General → Default branch → `claude/awesome-darwin-cssc0e` (или `vibrant-carson` после перемотки).
 - **Проверь ветку перед работой.** Облачная сессия может стартовать со старой `pensive-mendel` (так было 2026-10-04: копия отставала на 83 коммита). Сделай `git fetch` и сравни с рабочей; если отстаёт — переходи на рабочую.
 - **Выкладка (с 2026-10-02):** продакшен собирается из рабочей ветки вызовом Vercel `create_deployment` с `target: "production"` и `gitSource` (org `salemaikz`, repo `informatica`, ref — ветка, sha — коммит). Push в ветку сам по себе даёт только предпросмотр. Старая продакшен-ветка `claude/pensive-mendel-3i1uf8` устарела — в неё не пушить (её push перезапишет продакшен старой версией).
 - **Сайт: https://informatica-chi.vercel.app.** Ссылки вида `informatica-<хэш>-….vercel.app` — служебные адреса, они требуют входа в Vercel.
@@ -94,13 +95,13 @@
 - **Этап 12** — аналитика для нас и для ученика, жалобы, % курса (#47).
 - **Этап 13** — поделиться результатом, вызов другу, отчёт родителю.
 - **Этап 14** — курс 3.0: мелкие уроки, чистая практика, повторения, «забывание» (#45, #46), больше заданий по весу тем.
-- **Этап 15** — школьная программа 2.0; **этап 16** — скорость, безопасность, доступность, автопроверка ИИ.
+- **Этап 15** — школьная программа 2.0; **этап 16** — скорость, безопасность, доступность, удобство, проверка ответов ИИ алгоритмами (#53).
 - **Этап 17** — аккаунты и наша база (после юриста), лимиты по тарифу, Kaspi, английский, мини-пилот (#50, #52).
 - Постоянно: видео по 2 ролика в день после выбора стиля (#51); игры по #44.
 - Факты для ТЗ этапов 10–14 (что где в коде, риски, тесты) собраны 2026-10-04 — повторно искать не нужно: сердечки — `components/lesson/LessonPlayer.tsx`, `app/lesson/[id]/LessonScreen.tsx` (`HeartsGate`), `lib/economy.ts`; продолжение урока — состояние плеера в `useState`, сохранять в `store` (`lessonRuns`); веса — `content/ent-topics.ts`, `lib/forecast.ts`, `tests/forecast.test.ts`, `components/learn/EntMap.tsx`; волна 3B — брать файлы `git checkout origin/claude/sleepy-clarke-b2gj8f -- <файл>`, общие файлы править вручную (`useTutor.ts` под `AiReceipt`, `ExamKind` с `unit`).
 
 ## Где что лежит
-- **Правила и план:** `docs/RULES.md` (свод правил для любого исполнителя — давать вместе с ТЗ), `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#52), аудит Codex `docs/AUDIT-2026-10-04.md`, `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3 и v0.6–v0.8 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`, `course-v2.md`, `v08-ui.md`, `ide-v2.md`), школьная программа — `docs/SCHOOL.md`.
+- **Правила и план:** `docs/RULES.md` (свод правил для любого исполнителя — давать вместе с ТЗ), `CLAUDE.md`, `docs/PLAN.md`, `docs/ENT.md`, `docs/DECISIONS.md` (#1–#53), аудит Codex `docs/AUDIT-2026-10-04.md`, `docs/CONTENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, исследование `docs/RESEARCH.md`, ТЗ этапа 3 и v0.6–v0.8 — `docs/specs/` (`economy.md`, `ide.md`, `basics.md`, `chat2.md`, `course-v2.md`, `v08-ui.md`, `ide-v2.md`), школьная программа — `docs/SCHOOL.md`.
 - **Уроки:** `src/content/lessons/*.ts`, карта — `src/content/course.ts`, навыки — `src/content/skills.ts`, темы ЕНТ — `src/content/ent-topics.ts`, задания ЕНТ — `src/content/ent/*.ts`, банки — `src/lib/bank/*.ts`.
 - **Новый урок** = 3 файла (урок, банк, задания ЕНТ; у заданий ЕНТ — `hint`) → `node scripts/register-content.mjs` (сам пропишет реестры; пока другие уроки пишутся — `--add=<id>`) → `npx tsx scripts/check-content.ts <id>` → `npm test`.
 - **Плеер урока:** `src/components/lesson/LessonPlayer.tsx`, шаги — `src/components/lesson/steps/*`, сцены — `src/components/scenes/*`.
