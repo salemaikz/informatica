@@ -1,4 +1,5 @@
 import type { DictKey } from "@/i18n/dict";
+import { aiCodeKey } from "./ai-errors";
 import type { Lang } from "./types";
 
 // Голос в чате: запись вопроса (MediaRecorder → /api/ai/transcribe) и озвучка ответа (speechSynthesis).
@@ -67,11 +68,11 @@ export class VoiceError extends Error {
   }
 }
 
-/** Ключ ошибки по ответу сервера. */
+/** Ключ ошибки по ответу сервера; отказы по лимитам — общие тексты ИИ (lib/ai-errors.ts). */
 export function voiceErrorKey(status: number, code?: string): DictKey {
-  if (status === 429) return "tutor.limit";
   if (status === 413 || code === "too_large") return "voice.err.tooLong";
   if (status === 415 || code === "bad_type") return "voice.err.unsupported";
+  if (status === 429 || code === "ai_busy") return aiCodeKey(code ?? `http_${status}`);
   return "voice.err.failed";
 }
 

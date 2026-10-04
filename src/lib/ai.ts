@@ -1,5 +1,8 @@
 "use client";
 
+import type { DictKey } from "@/i18n/dict";
+import { aiCodeKey } from "./ai-errors";
+import { splitStreamTail } from "./ai-stream";
 import type {
   CheckSolutionRequest,
   CheckSolutionResponse,
@@ -14,6 +17,11 @@ export class AiError extends Error {
   }
 }
 
+/** Ключ текста ошибки для любого исключения, пойманного после вызова ИИ (коды → ключи: lib/ai-errors.ts). */
+export function aiErrorKey(e: unknown): DictKey {
+  return aiCodeKey(e instanceof AiError ? e.code : undefined);
+}
+
 async function ensureOk(res: Response) {
   if (res.ok) return;
   let code = `http_${res.status}`;
@@ -26,7 +34,11 @@ async function ensureOk(res: Response) {
   throw new AiError(code);
 }
 
-/** Потоковый ответ наставника: onDelta получает накопленный текст. */
+/**
+ * Потоковый ответ наставника: onText получает накопленный текст без служебного маркера конца.
+ * Сервер дописывает маркер, если поток оборвался или упёрся в лимит длины (lib/ai-stream.ts), — тогда AiError("stream_cut").
+ * Обрыв сети посреди чтения — тоже stream_cut. Отмена (signal) пробрасывается как есть.
+ */
 export async function streamTutor(
   req: TutorRequest,
   onText: (full: string) => void,
@@ -45,17 +57,25 @@ export async function streamTutor(
   if (!res.body) throw new AiError("no_body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let full = "";
+  let raw = "";
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    full += decoder.decode(value, { stream: true });
-    onText(full);
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      throw new AiError("stream_cut");
+    }
+    if (chunk.done) break;
+    raw += decoder.decode(chunk.value, { stream: true });
+    onText(splitStreamTail(raw).text);
   }
-  full += decoder.decode();
-  if (!full.trim()) throw new AiError("empty_answer");
-  onText(full);
-  return full;
+  raw += decoder.decode();
+  const { text, end } = splitStreamTail(raw);
+  if (end !== "ok") throw new AiError("stream_cut");
+  if (!text.trim()) throw new AiError("empty_answer");
+  onText(text);
+  return text;
 }
 
 export async function checkSolution(req: CheckSolutionRequest, signal?: AbortSignal): Promise<CheckSolutionResponse> {

@@ -1,17 +1,18 @@
 "use client";
 
-import { ArrowLeft, Ellipsis } from "lucide-react";
+import { ArrowLeft, Ellipsis, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteMessages, loadMessages, saveMessages } from "@/lib/chat-store";
 import { autoTitle, MAX_MESSAGES, type ChatMsg, type QuizSummary } from "@/lib/chats";
+import { canRetryAiError } from "@/lib/ai-errors";
 import { compressImage } from "@/lib/image";
 import { useApp } from "@/lib/store";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { useTutor } from "@/components/ai/useTutor";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
-import { ButtonLink } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { ChatQuiz } from "./quiz/ChatQuiz";
 import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
@@ -47,6 +48,8 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
   const [manage, setManage] = useState<ManageTarget | null>(null);
   const pendingRef = useRef("");
   const stoppedRef = useRef(false);
+  // Фото последнего вопроса: «Повторить» после сбоя шлёт его же заново (в ленте хранится только пометка hadImage).
+  const lastImageRef = useRef<string | undefined>(undefined);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -97,15 +100,10 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
     touchChat(id, { preview: lastPreview(trimmed, t), count: trimmed.length, title: autoTitle(firstUserText(trimmed)) });
   };
 
-  /** Ядро отправки: фото и голос передаём явно, черновик не трогаем. */
-  const send = async ({ text, image: img, voice }: { text: string; image?: string; voice?: boolean }) => {
-    const q = text.trim() || (img ? t("tutor.photoQuestion") : "");
-    if (!q || streaming || messages === null) return;
-    setVoiceError(null);
-    setLastKind(img ? "photo" : "chat");
+  /** Запрос к ИИ по ленте как есть (сообщение ученика уже в ней): ответ дописывается в ленту. */
+  const run = async (img?: string) => {
     stoppedRef.current = false;
     pendingRef.current = "";
-    commit([...msgsRef.current, { id: newId(), role: "user", content: q, hadImage: img ? true : undefined, voice: voice ? true : undefined, at: Date.now() }]);
     setPending("");
     const answer = await ask(
       { mode: "chat", messages: toHistory(msgsRef.current, lang, t), image: img, chatMode: chat.mode, topic: chat.topic },
@@ -116,8 +114,27 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
     );
     setPending(null);
     // Остановили на полуслове — оставляем уже показанную часть ответа.
+    // Сбой или обрыв ответа (answer === null без «Стоп») — ничего не сохраняем: ошибка и «Повторить» под лентой.
     const text2 = answer ?? (stoppedRef.current ? pendingRef.current.trim() : "");
     if (text2) commit([...msgsRef.current, { id: newId(), role: "assistant", content: text2, at: Date.now() }]);
+  };
+
+  /** Ядро отправки: фото и голос передаём явно, черновик не трогаем. */
+  const send = async ({ text, image: img, voice }: { text: string; image?: string; voice?: boolean }) => {
+    const q = text.trim() || (img ? t("tutor.photoQuestion") : "");
+    if (!q || streaming || messages === null) return;
+    setVoiceError(null);
+    setLastKind(img ? "photo" : "chat");
+    lastImageRef.current = img;
+    commit([...msgsRef.current, { id: newId(), role: "user", content: q, hadImage: img ? true : undefined, voice: voice ? true : undefined, at: Date.now() }]);
+    await run(img);
+  };
+
+  /** «Повторить»: тот же вопрос ещё раз, без второй копии сообщения ученика в ленте. */
+  const retry = () => {
+    if (streaming || messages === null) return;
+    setVoiceError(null);
+    void run(lastImageRef.current);
   };
 
   /** Отправка из поля ввода: берёт черновик, фото и признак голоса и очищает их. */
@@ -163,6 +180,8 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
   const list = messages ?? [];
   const lastQuizId = [...list].reverse().find((m) => m.quiz)?.id;
   const shownError = voiceError ?? error;
+  // «Повторить» — когда последний вопрос остался без ответа из-за сбоя ИИ (не голос и не лимиты).
+  const canRetry = !voiceError && canRetryAiError(error) && list[list.length - 1]?.role === "user" && !streaming;
   const empty = messages !== null && list.length === 0 && pending === null && !quizShown;
 
   return (
@@ -242,7 +261,16 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
         {shownError === "economy.noChips" ? (
           <NoChipsNotice kind={voiceError ? "voice" : lastKind} />
         ) : (
-          shownError && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-bold text-danger">{t(shownError)}</p>
+          shownError && (
+            <div className="flex flex-col items-start gap-2 rounded-xl bg-danger-soft px-3 py-2">
+              <p className="text-sm font-bold text-danger">{t(shownError)}</p>
+              {canRetry && (
+                <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retry} disabled={streaming}>
+                  {t("common.retry")}
+                </Button>
+              )}
+            </div>
+          )
         )}
         <div ref={bottom} />
       </div>
