@@ -3,6 +3,7 @@ import "@fontsource-variable/nunito";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "@/components/app/Providers";
+import { ClientErrorReporter } from "@/components/app/ClientErrorReporter";
 import { APP_NAME, ogAlt, siteDescription, siteTitle, siteUrl } from "@/lib/site-meta";
 
 // Превью ссылки (WhatsApp, Telegram, Instagram): картинка public/og.png (scripts/og-image.mjs), текст — ru и kk в одной строке.
@@ -37,6 +38,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ru" suppressHydrationWarning>
       <body className="min-h-dvh">
+        {/* Сбор ошибок с телефонов — вне Providers, чтобы ловить и сбои до гидратации стора. */}
+        <ClientErrorReporter />
         <Providers>{children}</Providers>
       </body>
     </html>

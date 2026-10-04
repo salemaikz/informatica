@@ -19,6 +19,7 @@ import { ChipsChip, HeartsChip } from "@/components/economy/HeaderChips";
 import { useToolbox } from "@/components/tools/useToolbox";
 import { NAV_GROUPS, groupOf, normalizePath, subOf, underPath } from "./nav";
 import { SectionTabs, SubLink } from "./SectionTabs";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 
 /** Аватар ученика из профиля (буква, рисованный или фото). */
 function ProfileAvatar({ size = 36 }: { size?: number }) {
@@ -114,6 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <ProfileAvatar size={28} /> {t("nav.profile")}
         </Link>
+        <LegalLinks className="gap-x-3 px-3 text-xs" />
       </aside>
 
       <div className="lg:pl-64">
