@@ -25,6 +25,8 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PlanStatusCard } from "@/components/plans/PlanStatusCard";
 import { TrackSettings } from "@/components/school/TrackSettings";
+import { useEntVisible } from "@/components/school/useEntVisible";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 
 const NAME_MAX = 30;
 const WEEKLY = [2, 3, 4, 5, 7];
@@ -47,6 +49,7 @@ function OnOff({ value, onChange, label }: { value: boolean; onChange: (v: boole
 export default function ProfilePage() {
   const router = useRouter();
   const { t, l, lang } = useT();
+  const ent = useEntVisible();
   const profile = useApp((s) => s.profile);
   const update = useApp((s) => s.updateProfile);
   const achievements = useApp((s) => s.achievements);
@@ -202,48 +205,53 @@ export default function ProfilePage() {
 
       <Card id="goals" className="scroll-mt-20 divide-y-2 divide-border py-1">
         <h2 className="py-3 text-lg font-extrabold">{t("prof2.goals.title")}</h2>
-        <Row label={t("prof2.goals.examDate")} hint={
-            daysLeft === null ? t("prof2.goals.examDate.hint") : daysLeft > 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : daysLeft === 0 ? t("goals.card.today") : t("goals.card.past")
-          }>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={profile.examDate ?? ""}
-              min={today}
-              onChange={(e) => update({ examDate: e.target.value || null })}
-              aria-label={t("prof2.goals.examDate")}
-              className="h-11 rounded-xl border-2 border-border bg-surface px-3 font-extrabold outline-none focus:border-primary"
-            />
-            {profile.examDate && (
-              <Button size="sm" variant="ghost" className="h-auto min-h-10" onClick={() => update({ examDate: null })}>
-                {t("prof2.goals.examClear")}
-              </Button>
-            )}
-          </div>
-        </Row>
-        <div className="py-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <label htmlFor="prof-target" className="font-extrabold">
-              {t("prof2.goals.target")}
-            </label>
-            <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
-          </div>
-          <input
-            id="prof-target"
-            type="range"
-            min={5}
-            max={50}
-            step={5}
-            value={profile.targetScore}
-            onChange={(e) => update({ targetScore: Number(e.target.value) })}
-            className="mt-2 h-8 w-full cursor-pointer accent-primary"
-          />
-          <div className="flex justify-between text-xs font-bold text-muted" aria-hidden="true">
-            <span>5</span>
-            <span>25</span>
-            <span>50</span>
-          </div>
-        </div>
+        {/* Дата и целевой балл — только для подготовки к ЕНТ (#52). */}
+        {ent && (
+          <>
+            <Row label={t("prof2.goals.examDate")} hint={
+                daysLeft === null ? t("prof2.goals.examDate.hint") : daysLeft > 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : daysLeft === 0 ? t("goals.card.today") : t("goals.card.past")
+              }>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={profile.examDate ?? ""}
+                  min={today}
+                  onChange={(e) => update({ examDate: e.target.value || null })}
+                  aria-label={t("prof2.goals.examDate")}
+                  className="h-11 rounded-xl border-2 border-border bg-surface px-3 font-extrabold outline-none focus:border-primary"
+                />
+                {profile.examDate && (
+                  <Button size="sm" variant="ghost" className="h-auto min-h-10" onClick={() => update({ examDate: null })}>
+                    {t("prof2.goals.examClear")}
+                  </Button>
+                )}
+              </div>
+            </Row>
+            <div className="py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor="prof-target" className="font-extrabold">
+                  {t("prof2.goals.target")}
+                </label>
+                <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
+              </div>
+              <input
+                id="prof-target"
+                type="range"
+                min={5}
+                max={50}
+                step={5}
+                value={profile.targetScore}
+                onChange={(e) => update({ targetScore: Number(e.target.value) })}
+                className="mt-2 h-8 w-full cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between text-xs font-bold text-muted" aria-hidden="true">
+                <span>5</span>
+                <span>25</span>
+                <span>50</span>
+              </div>
+            </div>
+          </>
+        )}
         <Row label={t("prof2.goals.weekly")}>
           <Segmented<number> label={t("prof2.goals.weekly")} value={profile.weeklyLessons} onChange={(weeklyLessons) => update({ weeklyLessons })} options={WEEKLY.map((n) => ({ id: n, label: String(n) }))} />
         </Row>
@@ -359,6 +367,12 @@ export default function ProfilePage() {
         <Button variant="ghost" onClick={() => setConfirm(true)} icon={<RotateCcw size={18} />} className="mt-3 text-danger">
           {t("prof.reset")}
         </Button>
+      </Card>
+
+      {/* Документы: политика, условия, «Кто мы» */}
+      <Card>
+        <h2 className="text-lg font-extrabold">{t("legal.docs.title")}</h2>
+        <LegalLinks className="mt-1" />
       </Card>
 
       <AvatarPicker open={pickAvatar} value={profile.avatar} name={profile.name} onChange={(avatar) => update({ avatar })} onClose={() => setPickAvatar(false)} />
