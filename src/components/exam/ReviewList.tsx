@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { contextQuestionOf, type ExamAnswers } from "@/lib/exam";
 import { plain } from "@/lib/text";
 import { Markdown } from "@/components/Markdown";
+import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { SceneView } from "@/components/scenes/SceneView";
 import {
   chosenIndexes,
@@ -119,6 +120,17 @@ function Detail({ row, answers }: { row: ReviewRow; answers: ExamAnswers }) {
           <Clock size={14} aria-hidden /> {t("exam.review.time", { time: formatClock(timeSec) })}
         </p>
       )}
+      {/* Нашли ошибку в задании: уходит в разбор (id задания ЕНТ вида «урок:имя», у контекстного — с номером вопроса). */}
+      <ReportIssueButton
+        className="-ml-2.5 self-start"
+        target={{
+          kind: "task",
+          where: "exam",
+          itemId: q.key,
+          lessonId: item.id.split(":")[0],
+          snippet: plain(questionPrompt(q, lang)),
+        }}
+      />
     </div>
   );
 }

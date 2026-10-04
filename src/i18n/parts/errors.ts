@@ -1,4 +1,18 @@
 import type { L } from "@/lib/types";
 
 // Страницы «не найдено» и «ошибка», сбор ошибок с телефонов (ru + kk).
-export const errorsDict = {} satisfies Record<string, L>;
+export const errorsDict = {
+  "errors.notFound.title": { ru: "Такой страницы нет", kk: "Мұндай бет жоқ" },
+  "errors.notFound.text": {
+    ru: "Возможно, ссылка устарела или в адресе опечатка.",
+    kk: "Сілтеме ескірген немесе мекенжайда қате болуы мүмкін.",
+  },
+  "errors.crash.title": { ru: "Что-то пошло не так", kk: "Бір нәрсе дұрыс болмады" },
+  "errors.crash.text": {
+    ru: "Страница не загрузилась. Попробуй ещё раз или вернись на главную.",
+    kk: "Бет ашылмады. Қайталап көр немесе басты бетке орал.",
+  },
+  "errors.retry": { ru: "Попробовать ещё раз", kk: "Қайталап көру" },
+  "errors.home": { ru: "На главную", kk: "Басты бетке" },
+  "errors.back": { ru: "Назад", kk: "Артқа" },
+} satisfies Record<string, L>;

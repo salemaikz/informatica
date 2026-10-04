@@ -31,6 +31,7 @@ import { HeartsBar, readHearts } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { AiPanel } from "@/components/ai/AiPanel";
+import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
 import { ToolboxButton } from "@/components/tools/Toolbox";
@@ -750,6 +751,17 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                     </p>
                   </>
                 )}
+                {/* Нашли ошибку в задании: маленькая нейтральная кнопка, «Продолжить» не мешает. */}
+                <ReportIssueButton
+                  className="-ml-2.5 mt-1 text-text/70 hover:text-text"
+                  target={{
+                    kind: "task",
+                    where: kind === "drill" ? "drill" : "lesson",
+                    itemId: question.id,
+                    lessonId,
+                    snippet: promptText(question, lang),
+                  }}
+                />
               </div>
             </m.div>
           )}
