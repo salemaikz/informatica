@@ -11,6 +11,7 @@ import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MascotSays } from "@/components/mascot/Mascot";
+import { LegalConsentNote } from "@/components/legal/LegalConsentNote";
 
 const GRADES: Grade[] = ["5", "6", "7", "8", "9", "10", "11", "other"];
 const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
@@ -229,6 +230,7 @@ export default function OnboardingPage() {
           {step === total - 1 ? t("onb.finish") : t("common.continue")}
         </Button>
       )}
+      {step === total - 1 && <LegalConsentNote className="mt-3" />}
     </div>
   );
 }
