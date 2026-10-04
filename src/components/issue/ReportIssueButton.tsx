@@ -16,6 +16,9 @@ import { Modal } from "@/components/ui/Modal";
 
 const SESSION_KEY = "informatica-issues-sent";
 const sent = new Set<string>();
+// Жалобы «в полёте» (отправляются прямо сейчас): общий набор по ключу жалобы. Закрыть шторку и открыть снова,
+// пока идёт отправка, — не даёт второй запрос, а новая шторка показывает «Отправляем…».
+const inflight = new Set<string>();
 const listeners = new Set<() => void>();
 let loaded = false;
 
@@ -42,6 +45,12 @@ function markSent(key: string) {
   for (const l of listeners) l();
 }
 
+function setInflight(key: string, on: boolean) {
+  if (on) inflight.add(key);
+  else inflight.delete(key);
+  for (const l of listeners) l();
+}
+
 const subscribe = (cb: () => void) => {
   listeners.add(cb);
   return () => {
@@ -56,6 +65,14 @@ function useWasSent(key: string): boolean {
       loadSent();
       return sent.has(key);
     },
+    () => false,
+  );
+}
+
+function useInFlight(key: string): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => inflight.has(key),
     () => false,
   );
 }
@@ -83,6 +100,8 @@ function IssueSheet({ target, onClose }: { target: IssueTarget; onClose: () => v
   const [status, setStatus] = useState<Status>("idle");
   const firstRef = useRef<HTMLButtonElement>(null);
   const key = issueKey(target);
+  const already = useWasSent(key);
+  const sending = useInFlight(key);
 
   // Фокус — на кнопку (не на заголовок и не на фон): Enter на кнопке не листает шаг урока под шторкой.
   useEffect(() => {
@@ -90,14 +109,22 @@ function IssueSheet({ target, onClose }: { target: IssueTarget; onClose: () => v
   }, []);
 
   const send = async () => {
-    if (!reason || status === "sending") return;
+    // Уже идёт отправка этой жалобы (в том числе из закрытой шторки) — второй запрос не шлём.
+    if (!reason || sending || inflight.has(key)) return;
     setStatus("sending");
-    const ok = await submitIssue(buildIssueBody(target, reason, comment, lang));
-    if (ok) markSent(key);
+    setInflight(key, true);
+    let ok = false;
+    try {
+      ok = await submitIssue(buildIssueBody(target, reason, comment, lang));
+      if (ok) markSent(key);
+    } finally {
+      setInflight(key, false);
+    }
     setStatus(ok ? "done" : "error");
   };
 
-  if (status === "done") {
+  // «Отправлено» — своя отправка или та, что началась в прошлом открытии шторки и закончилась, пока эта была открыта.
+  if (status === "done" || already) {
     return (
       <div className="flex flex-col items-center gap-3 text-center">
         <Mascot mood="happy" size={72} />
@@ -176,8 +203,8 @@ function IssueSheet({ target, onClose }: { target: IssueTarget; onClose: () => v
       )}
 
       {/* Во время отправки кнопка остаётся доступной (фокус не теряется), повторное нажатие игнорируется. */}
-      <Button size="lg" block disabled={!reason} aria-busy={status === "sending"} onClick={() => void send()}>
-        {status === "sending" ? t("issue.sending") : t("issue.send")}
+      <Button size="lg" block disabled={!reason} aria-busy={sending} onClick={() => void send()}>
+        {sending ? t("issue.sending") : t("issue.send")}
       </Button>
     </div>
   );
@@ -196,7 +223,8 @@ export function ReportIssueButton({ target, compact, className }: { target: Issu
   const [opened, setOpened] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const label = t(already ? "issue.sent" : "issue.button");
-  // После закрытия шторки фокус — обратно на кнопку (если она ещё доступна), а не «в никуда».
+  // После закрытия шторки фокус — обратно на кнопку, а не «в никуда». Кнопка после отправки не `disabled`,
+  // а `aria-disabled` (она остаётся в порядке фокуса), поэтому фокус на неё возвращается и после успешной отправки.
   const close = () => {
     setOpen(false);
     triggerRef.current?.focus({ preventScroll: true });
@@ -207,17 +235,18 @@ export function ReportIssueButton({ target, compact, className }: { target: Issu
       <button
         ref={triggerRef}
         type="button"
-        disabled={already}
+        aria-disabled={already ? "true" : undefined}
         aria-label={compact ? label : undefined}
         title={compact ? label : undefined}
         onClick={() => {
+          if (already) return;
           setOpened(true);
           setOpen(true);
         }}
         className={cn(
           "relative inline-flex select-none items-center justify-center gap-1.5 rounded-xl font-extrabold text-muted transition-colors after:absolute after:-inset-1.5",
           "hover:bg-surface-2 hover:text-text focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-          "disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted",
+          "aria-disabled:cursor-default aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted",
           compact ? "size-9" : "h-9 px-2.5 text-xs",
           className,
         )}

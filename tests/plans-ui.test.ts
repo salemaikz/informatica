@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOUR, MINUTE, PLAN_FEATURES, yearSaving } from "@/lib/economy";
+import { AI_DAILY_CAP, AI_UNITS, HOUR, MINUTE, PLAN_FEATURES, yearSaving } from "@/lib/economy";
 import { dict } from "@/i18n/dict";
 import { closeAction, compareRows, formatHours, formatMult, formatNumber, parseFrom, planWhat, subtitleKey, yearDiscountPercent } from "@/components/plans/plans-helpers";
 
@@ -71,10 +71,11 @@ describe("compareRows", () => {
     expect(kk.cells.free).toEqual({ kind: "text", text: "6 сағ" });
     expect(kk.cells.lite).toEqual({ kind: "text", text: "3 сағ" });
   });
-  it("ИИ 3 / 30 / ∞ и множитель ×1 / ×1,5 / ×2", () => {
+  it("ИИ 3 / 30 / 100 (у «Безлимита» — потолок из economy.ts, не ∞) и множитель ×1 / ×1,5 / ×2", () => {
     expect(byId("ai").cells.free).toEqual({ kind: "text", text: "3" });
     expect(byId("ai").cells.lite).toEqual({ kind: "text", text: "30" });
-    expect(byId("ai").cells.unlimited).toEqual({ kind: "text", text: "∞" });
+    expect(byId("ai").cells.unlimited).toEqual({ kind: "text", text: String(AI_DAILY_CAP.unlimited) });
+    expect(AI_DAILY_CAP.unlimited).toBe(100);
     expect(byId("chips").cells.lite).toEqual({ kind: "text", text: "×1,5" });
     expect(byId("chips").cells.unlimited).toEqual({ kind: "text", text: "×2" });
   });
@@ -111,5 +112,48 @@ describe("тексты тарифов без суточного пополнен
     }
     expect(dict["shop.hearts.hint"].ru).toContain("{time}");
     expect(dict["shop.hearts.hint"].kk).toContain("{time}");
+  });
+});
+
+describe("тексты про ИИ: без обещания «без ограничений» (решение #48)", () => {
+  const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  const promise = /без ограничений|без лимита|безлимитн|шектеусіз|лимитсіз|лимит жоқ/i;
+  const AI_TEXTS = [
+    "plans.sub.ai",
+    "plans.perk.unl.ai",
+    "plans.cmp.ai",
+    "plans.cmp.note",
+    "shop.plan.freeTitle",
+    "shop.plan.freeText",
+    "shop.ai.unlimited",
+    "aicost.aria.unlimited",
+    "aicost.need.earn",
+    "hearts.out.unlimitedDesc",
+  ] as const;
+
+  it("ни один текст про ИИ не обещает «без ограничений»", () => {
+    for (const k of AI_TEXTS) {
+      expect(dict[k].ru, k).not.toMatch(promise);
+      expect(dict[k].kk, k).not.toMatch(promise);
+    }
+  });
+
+  it("числа подставляются параметрами: потолок «Безлимита» — {n}/{cap}, а не вписан в текст", () => {
+    for (const k of ["plans.sub.ai", "plans.perk.unl.ai", "shop.plan.freeText", "shop.ai.unlimited", "aicost.aria.unlimited", "hearts.out.unlimitedDesc"] as const) {
+      expect(ph(dict[k].ru), k).toEqual(["n"]);
+      expect(ph(dict[k].kk), k).toEqual(["n"]);
+    }
+    expect(ph(dict["aicost.need.earn"].ru)).toEqual(["cap", "n", "xp"]);
+    expect(ph(dict["aicost.need.earn"].kk)).toEqual(["cap", "n", "xp"]);
+    // Литерал потолка в тексте не должен появляться.
+    for (const k of AI_TEXTS) expect(`${dict[k].ru}${dict[k].kk}`, k).not.toMatch(new RegExp(`\\b(${AI_DAILY_CAP.unlimited}|${AI_DAILY_CAP.lite}|${AI_DAILY_CAP.free})\\b`));
+  });
+
+  it("примечание к таблице: потолки и вес фото/голоса — из economy.ts", () => {
+    for (const lang of ["ru", "kk"] as const) expect(ph(dict["plans.cmp.note"][lang])).toEqual(["free", "lite", "photo", "voice"]);
+    expect(AI_UNITS.photo).toBe(2);
+    expect(AI_UNITS.voice).toBe(4);
+    expect(AI_DAILY_CAP.free).toBe(13);
+    expect(AI_DAILY_CAP.lite).toBe(50);
   });
 });

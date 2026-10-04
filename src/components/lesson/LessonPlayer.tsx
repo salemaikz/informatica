@@ -15,7 +15,7 @@ import { formatFactor } from "@/lib/drill";
 // В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { ignoreKey } from "@/lib/keys";
-import { checkSolution } from "@/lib/ai";
+import { aiErrorKey, checkSolution } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { plain, tx } from "@/lib/text";
 import { useT } from "@/i18n/useT";
@@ -201,10 +201,22 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
   const startedAt = useRef(0);
   const skippedRef = useRef(0);
   const stepStartedAt = useRef(0);
+  // Высота нижней панели меняется (кнопка проверки → разбор с объяснением): отступ контента подстраиваем под неё,
+  // чтобы последний вариант ответа можно было прокрутить над панелью даже на 360×640.
+  const footerRef = useRef<HTMLElement>(null);
+  const [footerH, setFooterH] = useState(0);
 
   useEffect(() => {
     startedAt.current = Date.now();
     stepStartedAt.current = Date.now();
+  }, []);
+
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setFooterH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const item = queue[pos];
@@ -382,13 +394,13 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
             expected: expectedText(question, lang),
             details,
           });
-        } catch {
+        } catch (e) {
           useApp.getState().refundAi(receipt);
           if (a.typed.trim()) {
             apply(evaluate(question, a, lang));
           } else {
             setPhase("answering");
-            setCheckError("tutor.error");
+            setCheckError(aiErrorKey(e));
           }
         }
         return;
@@ -423,6 +435,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       const taskInput = el instanceof HTMLInputElement && !el.closest("[data-toolbox]") && !!el.closest("main");
       if (ignoreKey(e) && !taskInput) return;
       if (e.key !== "Enter" || e.repeat || exitOpen || outOpen || ai || session) return;
+      // Любой открытый диалог (шторка «Сообщить об ошибке», калькулятор и т. п.): Enter при фокусе на body не листает шаг под ним.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (el instanceof HTMLTextAreaElement) return;
       if (el instanceof HTMLInputElement && el.closest("[role=dialog]")) return;
       // Кнопки вне области задания (крестик, нижняя панель) обрабатывают Enter сами — без двойного срабатывания.
@@ -554,6 +568,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       <m.main
         key={item.key}
         className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2"
+        // 24px запаса сверх панели; пока высота не измерена (или нет ResizeObserver) — запасной pb-48.
+        style={footerH > 0 ? { paddingBottom: footerH + 24 } : undefined}
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.25, ease: easeOut }}
@@ -668,7 +684,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
 
       {/* Нижняя панель: кнопка проверки или карточка обратной связи.
           Цветной фон выезжает пружиной отдельным слоем (transform), содержимое проявляется следом. */}
-      <footer className="fixed inset-x-0 bottom-0 z-30 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+      <footer ref={footerRef} className="fixed inset-x-0 bottom-0 z-30 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <div aria-hidden className="absolute inset-x-0 -bottom-6 top-0 border-t-2 border-border bg-bg" />
         <AnimatePresence initial={false}>
           {tone && (
@@ -693,47 +709,61 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
             >
               <Mascot mood={result.correct ? "happy" : result.score > 0 ? "thinking" : "sad"} size={52} className="shrink-0" />
               <div className="min-w-0 flex-1">
-                <p
-                  className={clsx(
-                    "text-xl font-extrabold",
-                    tone === "success" && "text-success-strong",
-                    tone === "danger" && "text-danger",
-                    tone === "warning" && "text-warning-strong",
-                  )}
-                >
-                  {tone && (
-                    <m.span
-                      aria-hidden
-                      className={clsx("mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full align-middle text-white", TONE_ICON[tone])}
-                      initial={{ scale: 0, rotate: -40 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ ...springBouncy, delay: 0.06 }}
-                    >
-                      {result.correct ? <Check size={18} strokeWidth={3.5} /> : result.score > 0 ? <Minus size={18} strokeWidth={3.5} /> : <X size={18} strokeWidth={3.5} />}
-                    </m.span>
-                  )}
-                  {result.correct ? t(praise) : result.score > 0 ? t("fb.partial") : t("fb.wrong")}
-                  {gain > 0 && (
-                    <m.span
-                      className="ml-2 inline-block text-base text-warning-strong"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ ...springBouncy, delay: 0.14 }}
-                    >
-                      +{gain} XP
-                    </m.span>
-                  )}
-                  {heartLost && (
-                    <m.span
-                      className="ml-2 inline-flex items-center gap-1 rounded-full bg-heart-soft px-2 py-0.5 align-middle text-sm text-heart-strong"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ ...springBouncy, delay: 0.2 }}
-                    >
-                      <Heart size={14} fill="currentColor" aria-hidden /> {t("hearts.lost")}
-                    </m.span>
-                  )}
-                </p>
+                {/* Заголовок результата + компактная кнопка «Сообщить об ошибке» справа (−my-1: высота панели не растёт). */}
+                <div className="flex items-start gap-1">
+                  <p
+                    className={clsx(
+                      "min-w-0 flex-1 text-xl font-extrabold",
+                      tone === "success" && "text-success-strong",
+                      tone === "danger" && "text-danger",
+                      tone === "warning" && "text-warning-strong",
+                    )}
+                  >
+                    {tone && (
+                      <m.span
+                        aria-hidden
+                        className={clsx("mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full align-middle text-white", TONE_ICON[tone])}
+                        initial={{ scale: 0, rotate: -40 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ ...springBouncy, delay: 0.06 }}
+                      >
+                        {result.correct ? <Check size={18} strokeWidth={3.5} /> : result.score > 0 ? <Minus size={18} strokeWidth={3.5} /> : <X size={18} strokeWidth={3.5} />}
+                      </m.span>
+                    )}
+                    {result.correct ? t(praise) : result.score > 0 ? t("fb.partial") : t("fb.wrong")}
+                    {gain > 0 && (
+                      <m.span
+                        className="ml-2 inline-block text-base text-warning-strong"
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ ...springBouncy, delay: 0.14 }}
+                      >
+                        +{gain} XP
+                      </m.span>
+                    )}
+                    {heartLost && (
+                      <m.span
+                        className="ml-2 inline-flex items-center gap-1 rounded-full bg-heart-soft px-2 py-0.5 align-middle text-sm text-heart-strong"
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ ...springBouncy, delay: 0.2 }}
+                      >
+                        <Heart size={14} fill="currentColor" aria-hidden /> {t("hearts.lost")}
+                      </m.span>
+                    )}
+                  </p>
+                  <ReportIssueButton
+                    compact
+                    className="-my-1 shrink-0 text-text/70 hover:text-text"
+                    target={{
+                      kind: "task",
+                      where: kind === "drill" ? "drill" : "lesson",
+                      itemId: question.id,
+                      lessonId,
+                      snippet: promptText(question, lang),
+                    }}
+                  />
+                </div>
                 {!result.correct && (
                   <>
                     {question.type !== "match" && question.type !== "cloze" && (
@@ -751,17 +781,6 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                     </p>
                   </>
                 )}
-                {/* Нашли ошибку в задании: маленькая нейтральная кнопка, «Продолжить» не мешает. */}
-                <ReportIssueButton
-                  className="-ml-2.5 mt-1 text-text/70 hover:text-text"
-                  target={{
-                    kind: "task",
-                    where: kind === "drill" ? "drill" : "lesson",
-                    itemId: question.id,
-                    lessonId,
-                    snippet: promptText(question, lang),
-                  }}
-                />
               </div>
             </m.div>
           )}

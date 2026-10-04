@@ -40,6 +40,14 @@ describe("фильтр чужих ошибок", () => {
     expect(isForeignError(own("boom", { stack: foreign }), ORIGIN)).toBe(true);
   });
 
+  it("хост, начинающийся с нашего адреса (informatica.kz.evil.example), — чужой; наш origin без пути — наш", () => {
+    const lookalike = `TypeError: boom\n    at f (${ORIGIN}.evil.example/w.js:1:2)\n    at g (${ORIGIN}.evil.example/w.js:3:4)`;
+    expect(isForeignError(own("boom", { stack: lookalike }), ORIGIN)).toBe(true);
+    expect(isForeignError(own("boom", { stack: `at f (${ORIGIN}-evil.example/w.js:1:2)` }), ORIGIN)).toBe(true);
+    expect(isForeignError(own("boom", { stack: `at f (${ORIGIN}/_next/a.js:1:2)` }), ORIGIN)).toBe(false);
+    expect(isForeignError(own("boom", { stack: `at f (${ORIGIN})` }), ORIGIN)).toBe(false);
+  });
+
   it("наши ошибки проходят: источник и стек с нашего адреса, стек без адресов, адрес не указан", () => {
     expect(isForeignError(own("Cannot read properties of undefined", { source: `${ORIGIN}/_next/static/chunks/app.js` }), ORIGIN)).toBe(false);
     expect(isForeignError(own("boom", { source: "/_next/static/chunks/app.js" }), ORIGIN)).toBe(false);

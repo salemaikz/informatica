@@ -39,7 +39,7 @@ export const ISSUE_LIMITS = {
   message: 500,
   stack: 1500,
   userAgent: 160,
-  /** Тело запроса целиком: больше — отказ без разбора. */
+  /** Тело запроса целиком, в байтах: больше — отказ (413), читаем потоком и обрываем на этой отметке. */
   body: 8000,
 } as const;
 
@@ -50,6 +50,12 @@ export const ISSUE_CHANNELS: Record<IssueChannel, { limit: number; windowMs: num
   issue: { limit: 20, windowMs: 10 * 60_000, list: "issues", max: 5000 },
   client_error: { limit: 30, windowMs: 10 * 60_000, list: "client-errors", max: 2000 },
 };
+
+/** Общий лимит запросов к /api/issue с одного IP: проверяется до чтения тела, считает любые запросы (в том числе мусор). */
+export const ISSUE_ANY_LIMIT = { limit: 60, windowMs: 10 * 60_000 } as const;
+
+/** Потолок на весь сайт в сутки (по Астане) — отдельно для жалоб и для ошибок клиента; сверх — 429 без записи. */
+export const ISSUE_DAY_MAX = 3000;
 
 // ---------- Тело запроса ----------
 
@@ -105,8 +111,9 @@ export type IssueRejection = "bad_body" | "bad_type" | "bad_reason" | "bad_where
 
 export type ParsedIssue = { ok: true; channel: IssueChannel; record: StoredIssue } | { ok: false; code: IssueRejection };
 
-// Управляющие символы (кроме перевода строки и табуляции) и разделители строк Юникода.
-const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u2028\u2029]/g;
+// Управляющие символы (кроме перевода строки и табуляции), C1 (U+0080–U+009F, в том числе NEL), разделители строк,
+// невидимые знаки нулевой ширины и метки направления письма (bidi): ими можно подделать вид строки в списке жалоб.
+const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2066-\u2069\uFEFF]/g;
 const ID_BAD = /[^A-Za-z0-9_:#.\-/]/g;
 
 /** Строка не длиннее max: управляющие символы убраны, края обрезаны, пара-суррогат не разорвана. Не строка — пустая. */

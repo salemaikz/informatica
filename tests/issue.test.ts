@@ -3,7 +3,9 @@ import {
   buildIssueBody,
   clip,
   clipId,
+  ISSUE_ANY_LIMIT,
   ISSUE_CHANNELS,
+  ISSUE_DAY_MAX,
   ISSUE_LIMITS,
   ISSUE_REASONS,
   issueChannel,
@@ -13,6 +15,7 @@ import {
   type IssueTarget,
 } from "@/lib/issue";
 import { dict } from "@/i18n/dict";
+import { createMemoryKv } from "@/server/kv";
 
 vi.mock("server-only", () => ({}));
 
@@ -34,6 +37,16 @@ describe("clip", () => {
     expect(clip(42, 10)).toBe("");
     expect(clip(null, 10)).toBe("");
     expect(clip("  привет\u0000\u0007 мир  ", 50)).toBe("привет мир");
+  });
+
+  it("C1, невидимые знаки нулевой ширины и bidi-метки вырезаются; обычный текст на ru и kk не страдает", () => {
+    // NEL (U+0085), U+009F, ZWSP/LRM/RLM, RLO/PDF (202A–202E), изоляты (2066–2069), BOM, разделители строк.
+    expect(clip("a\u0085b\u009Fc\u200Bd\u200Ee\u200Ff\u202Eg\u202Ah\u2066i\u2069j\uFEFFk\u2028l\u2029m", 50)).toBe("abcdefghijklm");
+    // Разворот строки (RLO) не должен остаться в записи: иначе «gnp.exe» в списке жалоб выглядит как «exe.png».
+    expect(clip("\u202Egnp.exe", 50)).toBe("gnp.exe");
+    expect(clip("Екілік жүйе: 1011₂ = 11₁₀ — қазақша мәтін и русский", 80)).toBe("Екілік жүйе: 1011₂ = 11₁₀ — қазақша мәтін и русский");
+    // Перевод строки и табуляция — по-прежнему допустимы.
+    expect(clip("раз\nдва\tтри", 50)).toBe("раз\nдва\tтри");
   });
 
   it("не длиннее max и не рвёт пару-суррогат", () => {
@@ -194,6 +207,11 @@ describe("issueChannel и лимиты потоков", () => {
     expect(ISSUE_CHANNELS.issue).toEqual({ limit: 20, windowMs: 600_000, list: "issues", max: 5000 });
     expect(ISSUE_CHANNELS.client_error).toEqual({ limit: 30, windowMs: 600_000, list: "client-errors", max: 2000 });
   });
+
+  it("общий лимит по IP — 60 за 10 минут, суточный потолок на сайт — 3000", () => {
+    expect(ISSUE_ANY_LIMIT).toEqual({ limit: 60, windowMs: 600_000 });
+    expect(ISSUE_DAY_MAX).toBe(3000);
+  });
 });
 
 describe("клиент: тело, ключ «уже отправлено», отправка", () => {
@@ -252,8 +270,11 @@ describe("словарь: тексты кнопки и страниц ошибо
 });
 
 describe("POST /api/issue", () => {
+  // Общее хранилище — настоящая память (счётчики лимитов работают), а запись в список — шпион.
+  const mem = createMemoryKv();
   const pushCapped = vi.fn(async () => {});
-  vi.doMock("@/server/kv", () => ({ getKv: () => ({ pushCapped }) }));
+  let day = "2026-10-04";
+  vi.doMock("@/server/kv", () => ({ getKv: () => ({ ...mem, pushCapped }), kzDay: () => day }));
 
   let n = 0;
   const req = (body: unknown, headers: Record<string, string> = {}) =>
@@ -316,6 +337,82 @@ describe("POST /api/issue", () => {
     const e = { type: "client_error", message: "boom" };
     for (let i = 0; i < 30; i++) expect((await POST(req(e, ip))).status).toBe(200);
     expect((await POST(req(e, ip))).status).toBe(429);
+  });
+
+  it("общий лимит по IP срабатывает до чтения тела: мусор тоже считается, тело не читается", async () => {
+    const ip = { "x-forwarded-for": "10.8.8.8" };
+    for (let i = 0; i < ISSUE_ANY_LIMIT.limit; i++) expect((await POST(req("не json", ip))).status).toBe(400);
+    // Тело — поток: если лимит проверен до чтения, поток останется нетронутым.
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(JSON.stringify(valid)));
+        c.close();
+      },
+    });
+    const r = new Request("http://localhost/api/issue", { method: "POST", body, headers: { host: "localhost", ...ip }, duplex: "half" } as RequestInit);
+    expect((await POST(r)).status).toBe(429);
+    expect(r.bodyUsed).toBe(false);
+    expect(pushCapped).not.toHaveBeenCalled();
+  });
+
+  it("тело без Content-Length читается потоком и обрывается после 8000 байт", async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const chunk = new TextEncoder().encode("x".repeat(3000));
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        // Бесконечный источник: если сервер не оборвёт чтение, тест зависнет.
+        pulled++;
+        c.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const r = new Request("http://localhost/api/issue", { method: "POST", body, headers: { host: "localhost", "x-forwarded-for": "10.7.7.7" }, duplex: "half" } as RequestInit);
+    expect(r.headers.get("content-length")).toBeNull();
+    expect((await POST(r)).status).toBe(413);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(10);
+    expect(pushCapped).not.toHaveBeenCalled();
+  });
+
+  it("объявленный Content-Length больше 8000 — 413 без чтения; пустое тело — 400, не 0 «принято»", async () => {
+    const res = await POST(req(valid, { "content-length": String(ISSUE_LIMITS.body + 1) }));
+    expect(res.status).toBe(413);
+    expect((await POST(req(""))).status).toBe(400);
+    expect(pushCapped).not.toHaveBeenCalled();
+  });
+
+  it("предел тела — в байтах, а не в символах: кириллица занимает 2 байта", async () => {
+    // 2 байта на символ: 4100 «я» — 8200 байт, больше предела, хотя «символов» меньше 8000.
+    const big = JSON.stringify({ type: "client_error", message: "m", stack: "я".repeat(4100) });
+    expect(new TextEncoder().encode(big).length).toBeGreaterThan(ISSUE_LIMITS.body);
+    expect(big.length).toBeLessThan(ISSUE_LIMITS.body);
+    expect((await POST(req(big))).status).toBe(413);
+    // Обычная жалоба на кириллице — далеко от предела.
+    expect((await POST(req({ ...valid, comment: "я".repeat(500), snippet: "ю".repeat(600) }))).status).toBe(200);
+  });
+
+  it("суточный потолок на весь сайт: жалобы и ошибки клиента — раздельно, сверх 3000 — 429 без записи", async () => {
+    day = "2026-12-01";
+    try {
+      // Копим до потолка напрямую в хранилище (3000 запросов по сети здесь не нужны).
+      await mem.incrBy(`issue-day:${day}:issue`, ISSUE_DAY_MAX, 86_400);
+      const blocked = await POST(req(valid));
+      expect(blocked.status).toBe(429);
+      expect(await blocked.json()).toEqual({ error: "daily_limit" });
+      expect(pushCapped).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+      // Ошибки клиента считаются отдельно — они ещё проходят.
+      expect((await POST(req({ type: "client_error", message: "boom" }))).status).toBe(200);
+      expect(pushCapped).toHaveBeenCalledTimes(1);
+      // Завтра счётчик новый.
+      day = "2026-12-02";
+      expect((await POST(req(valid))).status).toBe(200);
+    } finally {
+      day = "2026-10-04";
+    }
   });
 
   it("хранилище упало — ученику всё равно ok (строка в логе есть)", async () => {

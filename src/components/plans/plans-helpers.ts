@@ -1,6 +1,6 @@
 import type { DictKey } from "@/i18n/dict";
 import type { Lang } from "@/lib/types";
-import { HOUR, PAID_TIERS, PLAN_FEATURES, yearSaving, type PlanTier } from "@/lib/economy";
+import { AI_DAILY_CAP, HOUR, PAID_TIERS, PLAN_FEATURES, yearSaving, type PlanTier } from "@/lib/economy";
 
 // Чистые помощники окна тарифов (без React): разбор адреса, сравнение тарифов, форматирование.
 
@@ -83,7 +83,8 @@ export function compareRows(lang: Lang): CompareRow[] {
     {
       id: "ai",
       label: "plans.cmp.ai",
-      cells: perTier((t) => ({ kind: "text", text: Number.isFinite(PLAN_FEATURES[t].aiFree) ? String(PLAN_FEATURES[t].aiFree) : "∞" })),
+      // Обращений в день по тарифу: у «Безлимита» их бесконечно много только по цене, а число ограничено потолком (решение #48).
+      cells: perTier((t) => ({ kind: "text", text: String(Number.isFinite(PLAN_FEATURES[t].aiFree) ? PLAN_FEATURES[t].aiFree : AI_DAILY_CAP[t]) })),
     },
     { id: "chips", label: "plans.cmp.chips", cells: perTier((t) => ({ kind: "text", text: formatMult(PLAN_FEATURES[t].chipMultiplier) })) },
   ];

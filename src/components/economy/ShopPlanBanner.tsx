@@ -3,7 +3,7 @@
 import { ChevronRight, Crown } from "lucide-react";
 import Link from "next/link";
 import { useApp } from "@/lib/store";
-import { canStartTrial, TRIAL_DAYS } from "@/lib/economy";
+import { AI_DAILY_CAP, canStartTrial, TRIAL_DAYS } from "@/lib/economy";
 import { daysText } from "@/lib/goals";
 import { useT } from "@/i18n/useT";
 import { Pill } from "@/components/ui/Pill";
@@ -28,7 +28,7 @@ export function ShopPlanBanner() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-lg font-extrabold leading-tight">{t("shop.plan.freeTitle")}</span>
-          <span className="mt-0.5 block text-sm font-semibold text-muted">{t("shop.plan.freeText")}</span>
+          <span className="mt-0.5 block text-sm font-semibold text-muted">{t("shop.plan.freeText", { n: AI_DAILY_CAP.unlimited })}</span>
           {canTrial && (
             <Pill tone="gold" className="mt-2 border border-gold/60 py-1 text-[13px]">
               {t("shop.plan.trial", { days: daysText(TRIAL_DAYS, lang) })}

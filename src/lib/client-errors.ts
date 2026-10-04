@@ -40,7 +40,8 @@ export function isForeignError(raw: RawClientError, origin: string): boolean {
   const frames = raw.stack?.match(FRAME_URL) ?? [];
   if (frames.some((f) => EXTENSION.test(f))) return true;
   // В стеке есть адреса, и ни один не с нашего сайта — ошибка чужого скрипта.
-  if (frames.length > 0 && !frames.some((f) => f.startsWith(origin))) return true;
+  // Сравниваем с «origin/», а не по префиксу: https://informatica.kz.evil.example — чужой хост.
+  if (frames.length > 0 && !frames.some((f) => f === origin || f.startsWith(origin + "/"))) return true;
   return false;
 }
 

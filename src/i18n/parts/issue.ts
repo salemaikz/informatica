@@ -22,7 +22,7 @@ export const issueDict = {
 
   "issue.reason.ai.wrong": { ru: "Неверно", kk: "Қате" },
   "issue.reason.ai.unclear": { ru: "Непонятно", kk: "Түсініксіз" },
-  "issue.reason.ai.gave_solution": { ru: "Ответ выдал решение задания", kk: "Жауап тапсырманың шешімін айтып қойды" },
+  "issue.reason.ai.gave_solution": { ru: "Ответ выдал решение задания", kk: "Жауапта тапсырманың дайын шешімі берілді" },
 
   "issue.comment": { ru: "Комментарий (необязательно)", kk: "Түсініктеме (міндетті емес)" },
   "issue.comment.placeholder": { ru: "Что именно не так?", kk: "Нақты не дұрыс емес?" },
