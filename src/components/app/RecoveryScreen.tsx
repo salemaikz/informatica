@@ -49,7 +49,7 @@ export function RecoveryScreen({ onRetry }: { onRetry: () => void }) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-5 px-4 py-8 text-center">
-      <Mascot mood="sad" size={96} />
+      <Mascot mood="thinking" size={96} />
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-extrabold">{t("storage.recover.title")}</h1>
         <p className="text-sm font-semibold text-muted">{t("storage.recover.text")}</p>
