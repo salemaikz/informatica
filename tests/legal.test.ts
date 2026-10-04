@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LEGAL, LEGAL_IDS, LEGAL_PLACEHOLDERS, legalMarkdown, type LegalDoc } from "@/content/legal";
 import { dict } from "@/i18n/dict";
 import { legalDict } from "@/i18n/parts/legal";
-import { TRIAL_DAYS } from "@/lib/economy";
-import { detectLang } from "@/lib/guest-lang";
+import { BACKUP_STATE_KEYS } from "@/lib/backup";
+import { AI_DAILY_CAP, AI_UNITS, TRIAL_DAYS } from "@/lib/economy";
+import { detectLang, GUEST_LANG_KEY, guestLangToApply, markLangChosen } from "@/lib/guest-lang";
+import { ISSUE_CHANNELS, ISSUE_LIMITS } from "@/lib/issue";
 import { isPublicPath } from "@/lib/public-paths";
 import { MAX_RECORD_SEC } from "@/lib/voice";
 
@@ -90,6 +94,21 @@ describe("правовые документы", () => {
     for (const doc of docs) expect(fullText(doc, "ru").match(gendered), doc.id).toBeNull();
   });
 
+  it("без слов «сам», «сама», «самому», «самой»: пол ученика неизвестен", () => {
+    // «можно сделать самому» → «самостоятельно»: слово целиком, поэтому «самостоятельно» не совпадает.
+    const self = /(?<![а-яё])(?:сам|сама|самому|самой)(?![а-яё])/iu;
+    for (const doc of docs) expect(fullText(doc, "ru").match(self), doc.id).toBeNull();
+    expect(self.test("это можно сделать самому")).toBe(true);
+    expect(self.test("Сама аудиозапись")).toBe(true);
+    expect(self.test("это можно сделать самостоятельно")).toBe(false);
+  });
+
+  it("без слов с родом рядом с «ты»: должен, готов, согласен, рад, уверен", () => {
+    const gendered = /(?<![а-яё])ты\s+(?:уже\s+)?(?:должен|должна|готов|готова|согласен|согласна|рад|рада|уверен|уверена)(?![а-яё])/iu;
+    for (const doc of docs) expect(fullText(doc, "ru").match(gendered), doc.id).toBeNull();
+    expect(gendered.test("Ты должен прочитать")).toBe(true);
+  });
+
   it("реквизиты и контакты — в квадратных скобках, на двух языках одинаково", () => {
     for (const doc of docs) {
       for (const lang of LANGS) {
@@ -138,6 +157,135 @@ describe("правовые документы", () => {
       const text = fullText(privacy, lang);
       expect(text).toContain(`${dict["nav.profile"][lang]} → ${dict["prof.reset"][lang]}`);
       expect(text).toContain(`${dict["nav.profile"][lang]} → ${dict["prof.export"][lang]}`);
+    }
+  });
+
+  it("сообщения и отчёты об ошибках: пределы и хранение — как в коде (lib/issue.ts)", () => {
+    const items = (lang: Lang) => {
+      const text = LEGAL.privacy.sections.find((x) => x.title.ru === "Что хранится у нас на сервере")?.body[lang] ?? "";
+      const list = text.split("\n").filter((l) => l.startsWith("- "));
+      return { report: list.find((l) => l.includes(dict["issue.button"][lang])) ?? "", crash: list.find((l) => l.includes("User-Agent")) ?? "" };
+    };
+    for (const lang of LANGS) {
+      const { report, crash } = items(lang);
+      expect(report, lang).toBeTruthy();
+      expect(crash, lang).toBeTruthy();
+      // Сообщение: комментарий, фрагмент, число и срок хранения.
+      for (const n of [ISSUE_LIMITS.comment, ISSUE_LIMITS.snippet, ISSUE_CHANNELS.issue.max, 30]) expect(report, `${lang}: ${n}`).toContain(String(n));
+      // Отчёт о сбое: текст ошибки, стек и число отчётов.
+      for (const n of [ISSUE_LIMITS.message, ISSUE_LIMITS.stack, ISSUE_CHANNELS.client_error.max]) expect(crash, `${lang}: ${n}`).toContain(String(n));
+    }
+    // Страницы и браузера в сообщении об ошибке нет (в отчёте о сбое страница без параметров и User-Agent есть).
+    expect(items("ru").report).toContain("страницы и браузера в сообщении нет");
+    expect(items("ru").crash).toContain("без параметров");
+    expect(items("ru").crash).toContain("но в тексте ошибки может оказаться фрагмент страницы");
+    // Старое обещание «храним, пока разбираем» убрано.
+    expect(fullText(LEGAL.privacy, "ru")).not.toContain("пока разбираем");
+    expect(fullText(LEGAL.privacy, "kk")).not.toContain("талдап жатқанымызда");
+  });
+
+  it("«Коротко»: ИИ получает сведения о тебе, есть автоматические отчёты о сбоях", () => {
+    const brief = LEGAL.privacy.sections[0].body;
+    expect(brief.ru).toContain("имя, класс, слабые темы, память наставника и начало твоих заметок");
+    expect(brief.ru).toContain("автоматические отчёты");
+    expect(brief.kk).toContain("аты, сыныбы, әлсіз тақырыптары, тәлімгер жазбалары");
+    expect(brief.kk).toContain("автоматты есептер");
+    // Старая формулировка «на сервер уходит немногое: … и сообщения об ошибках» убрана.
+    expect(brief.ru).not.toContain("На сервер уходит немногое");
+  });
+
+  it("фото: проверка в уроке — без сведений об ученике, фото в чате — со сведениями", () => {
+    for (const lang of LANGS) {
+      const openai = LEGAL.privacy.sections.find((x) => x.title.ru === "Что уходит в OpenAI")?.body[lang] ?? "";
+      const list = openai.split("\n").filter((l) => l.startsWith("- "));
+      const lesson = list.find((l) => l.includes(lang === "ru" ? "Фото решения при проверке в уроке" : "Сабақта тексеруге жіберілетін шешім фотосы")) ?? "";
+      const chat = list.find((l) => l.includes(lang === "ru" ? "Фото в чате с Битом" : "Битпен чаттағы фото")) ?? "";
+      expect(lesson, lang).toBeTruthy();
+      expect(chat, lang).toBeTruthy();
+      expect(lesson, lang).toContain(lang === "ru" ? "кроме стиля объяснений, не добавляются" : "түсіндіру стилінен басқа");
+      // «Кроме стиля» — только про проверку в уроке.
+      expect(chat, lang).not.toContain(lang === "ru" ? "кроме стиля" : "стилінен басқа");
+      expect(chat, lang).toContain(lang === "ru" ? "со сведениями о тебе" : "өзің туралы мәліметтермен");
+    }
+  });
+
+  it("кнопки ИИ названы как в интерфейсе: «Спросить Бита», «Разбор от Бита», «Сообщить об ошибке»", () => {
+    for (const lang of LANGS) {
+      const openai = LEGAL.privacy.sections.find((x) => x.title.ru === "Что уходит в OpenAI")?.body[lang] ?? "";
+      expect(openai, lang).toContain(`«${dict["ai.askBit"][lang]}»`);
+      expect(openai, lang).toContain(`«${dict["exam.ai.title"][lang]}»`);
+      expect(fullText(LEGAL.privacy, lang)).toContain(`«${dict["issue.button"][lang]}»`);
+    }
+  });
+
+  it("копия данных: состав как в lib/backup.ts", () => {
+    for (const k of ["profile", "xp", "notebook", "wallet", "history", "chats"]) expect(BACKUP_STATE_KEYS as readonly string[], k).toContain(k);
+    for (const k of ["plan", "onboarded"]) expect(BACKUP_STATE_KEYS as readonly string[], k).not.toContain(k);
+    const device = LEGAL.privacy.sections.find((x) => x.title.ru === "Что хранится на твоём устройстве")!;
+    expect(device.body.ru).toContain("В копию входят прогресс и конспекты, чипы, история, чаты с сообщениями, фото конспектов и листы черновика");
+    expect(device.body.ru).toContain("Не входят код из практикума");
+    expect(device.body.ru).toContain("и тариф");
+    expect(device.body.kk).toContain("Практикумдағы код");
+    expect(device.body.kk).toContain("және тариф кірмейді");
+  });
+
+  it("голос: аудиозапись уходит в OpenAI, у нас не хранится", () => {
+    const voice = (lang: Lang) =>
+      LEGAL.privacy.sections
+        .find((x) => x.title.ru === "Что уходит в OpenAI")!
+        .body[lang].split("\n")
+        .find((l) => l.startsWith(`- **${lang === "ru" ? "Голос" : "Дауыс"}`)) ?? "";
+    expect(voice("ru")).toContain("аудиозапись целиком");
+    expect(voice("ru")).toContain("уходит в OpenAI");
+    expect(voice("ru")).toContain("Аудио мы не храним");
+    expect(voice("kk")).toContain("OpenAI-ға барады");
+    expect(voice("kk")).toContain("Аудионы біз сақтамаймыз");
+  });
+
+  it("кто ещё участвует: хостинг, хранилище, OpenAI и CDN движков практикума — адреса сверены с кодом", () => {
+    const who = LEGAL.privacy.sections.find((x) => x.title.ru === "Кто ещё участвует");
+    expect(who).toBeTruthy();
+    for (const lang of LANGS) {
+      for (const name of ["Vercel", "Upstash", "OpenAI", "cdn.jsdelivr.net"]) expect(who!.body[lang], `${lang}: ${name}`).toContain(name);
+    }
+    const python = readFileSync(join(__dirname, "../public/ide/python-worker.js"), "utf8");
+    const sql = readFileSync(join(__dirname, "../src/lib/ide/sql/db.ts"), "utf8");
+    expect(python).toContain("https://cdn.jsdelivr.net/");
+    expect(sql).toContain("https://cdn.jsdelivr.net/");
+    // Хранилище сервера — Upstash (src/server/kv.ts).
+    expect(readFileSync(join(__dirname, "../src/server/kv.ts"), "utf8")).toContain("Upstash");
+  });
+
+  it("«ИИ без ограничений» нигде не обещаем: у «Безлимита» — потолок в день (AI_DAILY_CAP)", () => {
+    expect(AI_DAILY_CAP.unlimited).toBeGreaterThan(0);
+    for (const doc of docs) {
+      expect(fullText(doc, "ru"), doc.id).not.toMatch(/без ограничений|без лимита|безгранично|неограниченн/i);
+      expect(fullText(doc, "kk"), doc.id).not.toMatch(/шектеусіз|лимитсіз|шексіз ЖИ/i);
+    }
+    const terms = fullText(LEGAL.terms, "ru");
+    expect(terms).toContain(`у «Лайта» — до ${AI_DAILY_CAP.lite}, у «Безлимита» — до ${AI_DAILY_CAP.unlimited}`);
+    expect(fullText(LEGAL.terms, "kk")).toContain(`«Лайтта» күніне ең көбі ${AI_DAILY_CAP.lite}, «Шексізде» — ${AI_DAILY_CAP.unlimited} жүгіну`);
+    // Вес обращений: фото и «Разбор от Бита» — одинаково, голос — дороже.
+    expect(AI_UNITS.review).toBe(AI_UNITS.photo);
+    expect(terms).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${AI_UNITS.voice}`);
+    expect(fullText(LEGAL.terms, "kk")).toContain(`${AI_UNITS.photo} жүгіну, дауыспен қойылған сұрақ ${AI_UNITS.voice} жүгіну`);
+  });
+
+  it("Бит не «решает за тебя» — написано честно; ИИ работает не только «по кнопке»", () => {
+    const about = (lang: Lang) => fullText(LEGAL.about, lang);
+    expect(about("ru")).not.toContain("не решает за тебя");
+    expect(about("ru")).toContain("В подсказках не даёт готового ответа, а в чате может показать решение, если попросить");
+    expect(about("ru")).not.toContain("Работает по кнопке");
+    expect(about("ru")).toContain("У заданий есть готовые подсказки и разборы");
+    expect(about("kk")).toContain("Кеңестерде дайын жауапты бермейді");
+    expect(fullText(LEGAL.privacy, "ru")).toContain("кроме короткого автоматического отзыва после урока и тренировки");
+  });
+
+  it("условия сверены с окном тарифов: кнопка «Выбрать» открывает «Оплата скоро появится»", () => {
+    for (const lang of LANGS) {
+      const terms = fullText(LEGAL.terms, lang);
+      expect(terms, lang).toContain(`«${dict["plans.card.choose"][lang]}»`);
+      expect(terms, lang).toContain(`«${dict["soon.title"][lang]}»`);
     }
   });
 
@@ -211,5 +359,38 @@ describe("язык гостя", () => {
     expect(detectLang("")).toBe("ru");
     expect(detectLang(undefined)).toBe("ru");
     expect(detectLang(null)).toBe("ru");
+  });
+
+  it("гостю без онбординга язык подставляется по браузеру, если не выбран", () => {
+    expect(guestLangToApply({ onboarded: false, chosen: false, navLang: "kk-KZ", current: "ru" })).toBe("kk");
+    expect(guestLangToApply({ onboarded: false, chosen: false, navLang: "ru-RU", current: "kk" })).toBe("ru");
+    expect(guestLangToApply({ onboarded: false, chosen: false, navLang: "en-US", current: "kk" })).toBe("ru");
+    // Язык уже совпал — менять нечего.
+    expect(guestLangToApply({ onboarded: false, chosen: false, navLang: "kk", current: "kk" })).toBeNull();
+  });
+
+  it("язык, выбранный вручную в онбординге (флаг стоит), не перезаписывается языком браузера", () => {
+    // Ссылка из согласия открыта в новой вкладке: язык в сохранении — ru (выбран на шаге 0), а браузер казахский.
+    expect(guestLangToApply({ onboarded: false, chosen: true, navLang: "kk-KZ", current: "ru" })).toBeNull();
+    expect(guestLangToApply({ onboarded: false, chosen: true, navLang: "ru-RU", current: "kk" })).toBeNull();
+  });
+
+  it("после онбординга язык не трогаем", () => {
+    expect(guestLangToApply({ onboarded: true, chosen: false, navLang: "kk-KZ", current: "ru" })).toBeNull();
+  });
+
+  it("выбор языка ставит флаг; хранилище недоступно — без ошибки", () => {
+    const calls: [string, string][] = [];
+    expect(markLangChosen({ setItem: (k, v) => void calls.push([k, v]) })).toBe(true);
+    expect(calls).toEqual([[GUEST_LANG_KEY, "1"]]);
+    expect(
+      markLangChosen({
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+      }),
+    ).toBe(false);
+    expect(markLangChosen(null)).toBe(false);
+    expect(GUEST_LANG_KEY).toBe("informatica-lang-auto");
   });
 });
