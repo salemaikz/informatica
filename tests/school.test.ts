@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { LESSONS } from "@/content/course";
 import { SCHOOL_PROGRAM, schoolPlan, type SchoolGradePlan } from "@/content/school-program";
+import { dict } from "@/i18n/dict";
 import {
+  ENT_ONLY_PATHS,
   SCHOOL_GRADES,
+  entVisible,
   gradeLessonIds,
   gradeProgress,
   missingGrades,
@@ -142,5 +145,33 @@ describe("toSchoolGrade", () => {
     expect(toSchoolGrade("other")).toBeNull();
     expect(toSchoolGrade(undefined)).toBeNull();
     expect(toSchoolGrade("12" as never)).toBeNull();
+  });
+});
+
+describe("entVisible — одна точка решения про ЕНТ-элементы (#52)", () => {
+  it("трек ЕНТ — показываем, школьный трек — скрываем", () => {
+    expect(entVisible({ track: "ent" })).toBe(true);
+    expect(entVisible({ track: "school" })).toBe(false);
+  });
+
+  it("профиль без трека (старое сохранение, пустой объект, null) считается треком ЕНТ", () => {
+    expect(entVisible({})).toBe(true);
+    expect(entVisible(undefined)).toBe(true);
+    expect(entVisible(null)).toBe(true);
+  });
+
+  it("ЕНТ-разделы: /exam и /plan", () => {
+    expect([...ENT_ONLY_PATHS]).toEqual(["/exam", "/plan"]);
+  });
+
+  it("тексты карточки «Этот раздел — для подготовки к ҰБТ»: оба языка, в казахском — ҰБТ, а не ЕНТ", () => {
+    for (const key of ["school.entOnly.title", "school.entOnly.text", "school.entOnly.switch", "school.entOnly.back"] as const) {
+      expect(dict[key].ru.trim(), key).toBeTruthy();
+      expect(dict[key].kk.trim(), key).toBeTruthy();
+      expect(dict[key].kk, key).not.toMatch(/ЕНТ/);
+    }
+    expect(dict["school.entOnly.title"].kk).toContain("ҰБТ");
+    expect(dict["school.entOnly.switch"].ru).toBe("Переключиться на ЕНТ");
+    expect(dict["school.entOnly.back"].ru).toBe("К школьной программе");
   });
 });

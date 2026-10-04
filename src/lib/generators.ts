@@ -22,13 +22,13 @@ export function rangeForLevel(level: Level): [number, number] {
 }
 
 /** Вариант ответа с объяснением, какую ошибку он выдаёт (для whyWrong). */
-type Distractor = { value: string; why: L };
+export type Distractor = { value: string; why: L };
 
 /**
  * Варианты ответа: правильный + уникальные отвлекающие, перемешанные.
  * whyWrong — в том же порядке, у верного null; при совпадении значений побеждает первое объяснение.
  */
-function options(
+export function options(
   rand: Rand,
   correct: string,
   distractors: Distractor[],
@@ -80,26 +80,13 @@ function genBin2Dec(rand: Rand, level: Level, seed: number): QuestionStep {
   const [lo, hi] = rangeForLevel(level);
   const n = int(rand, lo, hi);
   const bin = toBinary(n);
-  // A — выбор и лампочки, B — всё, C — только ввод.
-  const kind = pick(rand, level === 1 ? (["choice", "bits", "input"] as const) : level === 2 ? (["input", "input", "bits", "choice"] as const) : (["input"] as const));
+  // A — выбор и ввод, B — ввод и выбор, C — только ввод. «Включи биты» — направление 10 → 2, оно в genDec2Bin.
+  const kind = pick(rand, level === 1 ? (["choice", "input"] as const) : level === 2 ? (["input", "input", "choice"] as const) : (["input"] as const));
   const id = `g:ns.bin2dec:${kind}:${n}:${seed}`;
   const explanation: L = {
     ru: `Складываем веса разрядов, где стоит 1: ${weightsSum(bin)} = ${n}.`,
     kk: `1 тұрған разрядтардың салмақтарын қосамыз: ${weightsSum(bin)} = ${n}.`,
   };
-  if (kind === "bits" && n <= 255) {
-    const bits = Math.max(4, bin.length);
-    return {
-      id,
-      type: "bits",
-      skill: "ns.bin2dec",
-      prompt: { ru: `Включи биты так, чтобы получилось число ${n}`, kk: `${n} саны шығатындай биттерді қос` },
-      target: n,
-      bits,
-      explanation,
-      hint: HINT_BITS,
-    };
-  }
   if (kind === "choice") {
     const o = options(rand, String(n), [
       { value: String(n + 1), why: offBy(n, n + 1, { ru: "Проверь сложение весов: лишней единицы быть не должно.", kk: "Салмақтарды қосуды тексер: артық бірлік болмауы керек." }) },
@@ -159,13 +146,32 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
   const [lo, hi] = rangeForLevel(level);
   const n = int(rand, lo, level === 3 ? hi : Math.min(hi, 127));
   const bin = toBinary(n);
-  // A — выбор и лесенка с подсказкой, B — лесенка и ввод, C — ввод.
-  const kind = pick(rand, level === 1 ? (["choice", "ladder"] as const) : level === 2 ? (["ladder", "input"] as const) : (["input", "input", "ladder"] as const));
+  // A — выбор, лесенка и «включи биты», B — лесенка, ввод и «включи биты», C — ввод и лесенка.
+  const kind = pick(
+    rand,
+    level === 1 ? (["choice", "ladder", "bits"] as const) : level === 2 ? (["ladder", "input", "bits"] as const) : (["input", "input", "ladder"] as const),
+  );
   const id = `g:ns.dec2bin:${kind}:${n}:${seed}`;
   const explanation: L = {
     ru: `Делим ${n} на 2 и читаем остатки снизу вверх: ${sub2(bin)}. Проверка: ${weightsSum(bin)} = ${n}.`,
     kk: `${kkSuffix(n, "acc")} ${kkSuffix(2, "dat")} бөліп, қалдықтарды төменнен жоғары оқимыз: ${sub2(bin)}. Тексеру: ${weightsSum(bin)} = ${n}.`,
   };
+  if (kind === "bits") {
+    // Направление 10 → 2: по заданному числу собрать его двоичную запись (раньше вид жил в ns.bin2dec).
+    return {
+      id,
+      type: "bits",
+      skill: "ns.dec2bin",
+      prompt: { ru: `Включи биты так, чтобы получилось число ${n}`, kk: `${n} саны шығатындай биттерді қос` },
+      target: n,
+      bits: Math.max(4, bin.length),
+      explanation: {
+        ru: `Раскладываем ${n} на веса разрядов: ${weightsSum(bin)} = ${n}. Включены биты с этими весами: ${sub2(bin)}.`,
+        kk: `${n} санын разряд салмақтарына жіктейміз: ${weightsSum(bin)} = ${n}. Осы салмақтарға сәйкес биттер қосылады: ${sub2(bin)}.`,
+      },
+      hint: HINT_BITS,
+    };
+  }
   if (kind === "ladder") {
     return {
       id,
@@ -228,21 +234,40 @@ function genDec2Bin(rand: Rand, level: Level, seed: number): QuestionStep {
 }
 
 // ---------- Основание и цифры ----------
+// ns.base открыт после первого урока (двоичная система), поэтому здесь только основания 2 и 10 и общий смысл основания
+// (цифр столько, сколько основание; наибольшая цифра на 1 меньше). Цифры 8- и 16-ричной систем, буквы A–F и «не восьмеричная
+// запись» живут в ns.octhex (lib/bank/ns-octhex-digits.ts) — после урока о 2 ↔ 8 ↔ 16 (аудит C6).
+
+/** Основания для вопросов «сколько цифр»: 2 и 10 и пара «неизвестных» — смысл основания один и тот же. */
+export const BASE_DIGIT_BASES = [2, 10, 3, 5] as const;
 
 export const HINT_BASE_COUNT: L = {
   ru: "Цифры в системе начинаются с 0 и идут по порядку. Самая большая цифра на 1 меньше основания — посчитай, сколько всего цифр.",
   kk: `Жүйедегі цифрлар ${kkSuffix(0, "abl")} басталып, ретімен жүреді. Ең үлкен цифр негізден ${kkSuffix(1, "dat")} кем — барлығы неше цифр екенін санап көр.`,
 };
-const HINT_BASE_INVALID = (sys: L): L => ({
+export const HINT_BASE_INVALID = (sys: L): L => ({
   ru: `Посмотри, из каких цифр состоит каждая запись, и вспомни, какие цифры есть в ${sys.ru} системе.`,
   kk: `Әр жазба қандай цифрлардан тұратынын қарап, ${sys.kk} жүйеде қандай цифрлар бар екенін еске түсір.`,
 });
 
+/** Неверная запись в системе base (2 или 3): одна цифра заменена на лишнюю (позиция не первая). */
+function invalidRecord(rand: Rand, base: 2 | 3, level: Level): { bad: string; valid: string[]; badDigit: string } {
+  // A/B — короткие записи, C — длиннее: цифру-ловушку нужно искать глазами по всей записи.
+  const [lo, hi] = level === 3 ? [100, 1000] : [9, 60];
+  const toBase = (n: number) => n.toString(base);
+  const validSet = new Set<string>();
+  while (validSet.size < 3) validSet.add(toBase(int(rand, level === 3 ? 60 : 5, hi)));
+  const raw = toBase(int(rand, lo, hi));
+  const pos = int(rand, 1, raw.length - 1);
+  const badDigit = base === 2 ? "2" : pick(rand, ["3", "4"]);
+  return { bad: `${raw.slice(0, pos)}${badDigit}${raw.slice(pos + 1)}`, valid: [...validSet], badDigit };
+}
+
 function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
-  // A/B — «сколько цифр» и «какая запись не двоичная», C — только ловушки с записью (в т.ч. восьмеричной).
+  // A/B — «сколько цифр» и «какая запись не двоичная», C — только ловушки с записью (двоичной и троичной).
   const kind = level === 3 ? "invalid" : pick(rand, ["digits", "invalid"] as const);
   if (kind === "digits") {
-    const base = pick(rand, [2, 8, 10, 16, 5, 3]);
+    const base = pick(rand, BASE_DIGIT_BASES);
     const o = options(rand, String(base), [
       {
         value: String(base - 1),
@@ -278,57 +303,47 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
       hint: HINT_BASE_COUNT,
     };
   }
-  // C — восьмеричная система (ловушка: цифры 8 и 9), иначе — двоичная (ловушка: цифра 2).
+  // C: в половине заданий — троичная система (ловушка: цифра 3), иначе — двоичная (ловушка: цифра 2).
   if (level === 3 && rand() < 0.5) {
-    const validSet = new Set<string>();
-    while (validSet.size < 3) validSet.add(int(rand, 10, 500).toString(8));
-    const raw = int(rand, 10, 500).toString(8);
-    const pos = int(rand, 0, raw.length - 1);
-    const badDigit = pick(rand, ["8", "9"]);
-    const fixedBad = `${raw.slice(0, pos)}${badDigit}${raw.slice(pos + 1)}`;
+    const { bad, valid } = invalidRecord(rand, 3, level);
     const o = options(
       rand,
-      fixedBad,
-      [...validSet].map((v) => ({
+      bad,
+      valid.map((v) => ({
         value: v,
         why: {
-          ru: `В записи ${v} только цифры от 0 до 7 — она может быть восьмеричной.`,
-          kk: `${v} жазбасында тек ${kkSuffix(0, "abl")} ${kkSuffix(7, "dat")} дейінгі цифрлар бар — ол сегіздік сан бола алады.`,
+          ru: `В записи ${v} только цифры 0, 1 и 2 — она может быть троичной.`,
+          kk: `${v} жазбасында тек 0, 1 және 2 цифрлары бар — ол үштік сан бола алады.`,
         },
       })),
     );
     return {
-      id: `g:ns.base:invalid8:${fixedBad}:${seed}`,
+      id: `g:ns.base:invalid3:${bad}:${seed}`,
       type: "choice",
       skill: "ns.base",
       prompt: {
-        ru: "Какая запись НЕ может быть числом в восьмеричной системе?",
-        kk: "Қай жазба сегіздік жүйедегі сан бола АЛМАЙДЫ?",
+        ru: "Какая запись НЕ может быть числом в троичной системе?",
+        kk: "Қай жазба үштік жүйедегі сан бола АЛМАЙДЫ?",
       },
       ...o,
       explanation: {
-        ru: `В восьмеричной системе цифры от 0 до 7. В записи ${fixedBad} есть цифра ${badDigit}.`,
-        kk: `Сегіздік жүйеде ${kkSuffix(0, "abl")} ${kkSuffix(7, "dat")} дейінгі цифрлар бар. ${fixedBad} жазбасында ${badDigit} цифры бар.`,
+        ru: "В троичной системе три цифры: 0, 1 и 2. Цифра 3 или больше в записи невозможна.",
+        kk: "Үштік жүйеде үш цифр бар: 0, 1 және 2. Жазбада 3 немесе одан үлкен цифр болуы мүмкін емес.",
       },
-      hint: HINT_BASE_INVALID({ ru: "восьмеричной", kk: "сегіздік" }),
+      hint: HINT_BASE_INVALID({ ru: "троичной", kk: "үштік" }),
     };
   }
-  const validSet = new Set<string>();
-  while (validSet.size < 3) validSet.add(toBinary(int(rand, 5, 60)));
-  const valid = [...validSet];
-  const raw = toBinary(int(rand, 9, 60));
-  const pos = int(rand, 1, raw.length - 1);
-  const fixedBad = `${raw.slice(0, pos)}2${raw.slice(pos + 1)}`;
+  const { bad, valid } = invalidRecord(rand, 2, level);
   const o = options(
     rand,
-    fixedBad,
+    bad,
     valid.map((v) => ({
       value: v,
       why: { ru: `В записи ${v} только 0 и 1 — она может быть двоичной.`, kk: `${v} жазбасында тек 0 мен 1 бар — ол екілік сан бола алады.` },
     })),
   );
   return {
-    id: `g:ns.base:invalid:${fixedBad}:${seed}`,
+    id: `g:ns.base:invalid:${bad}:${seed}`,
     type: "choice",
     skill: "ns.base",
     prompt: {
@@ -337,8 +352,8 @@ function genBase(rand: Rand, level: Level, seed: number): QuestionStep {
     },
     ...o,
     explanation: {
-      ru: `В двоичной системе только цифры 0 и 1. В записи ${fixedBad} есть цифра 2.`,
-      kk: `Екілік жүйеде тек 0 мен 1 цифрлары бар. ${fixedBad} жазбасында 2 цифры бар.`,
+      ru: `В двоичной системе только цифры 0 и 1. В записи ${bad} есть цифра 2.`,
+      kk: `Екілік жүйеде тек 0 мен 1 цифрлары бар. ${bad} жазбасында 2 цифры бар.`,
     },
     hint: HINT_BASE_INVALID({ ru: "двоичной", kk: "екілік" }),
   };

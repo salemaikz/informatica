@@ -1,6 +1,7 @@
 import type { L, Level, QuestionStep, Scene, Text } from "../types";
 import { seeded, shuffle } from "../text";
 import type { Pair, Rand, ShortQuestion, SkillBank, Statement } from "./types";
+import { withMovedDigits } from "./ns-octhex-digits";
 
 // Банк навыка ns.octhex: перевод 2 ↔ 8 ↔ 16. Правильный ответ всегда считает код (toString/parseInt),
 // неверные варианты — типичные ошибки: группы слева, потерянные нули, обратный порядок, десятичное значение.
@@ -786,12 +787,13 @@ function makeShort(level: Level, seed: number): ShortQuestion {
   };
 }
 
+// Цифры 8/16 и буквы A–F переехали сюда из ns.base (аудит C6) — подмешиваются на уровнях A и B.
 export const BANKS: SkillBank[] = [
-  {
+  withMovedDigits({
     skill: SKILL,
     question: makeQuestion,
     statement: makeStatement,
     pair: makePair,
     short: makeShort,
-  },
+  }),
 ];

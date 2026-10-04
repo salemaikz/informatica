@@ -33,6 +33,8 @@ export interface NavSub {
   icon: LucideIcon;
   /** Какие пути считать этим подразделом (по границе сегмента: `/exam` ловит `/exam/run`). */
   match: string[];
+  /** Только для подготовки к ЕНТ: в школьном треке подраздел скрыт (lib/school.ts → entVisible, #52). */
+  ent?: boolean;
 }
 
 export interface NavGroup {
@@ -57,7 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     match: ["/practice", "/drill", "/game", "/exam", "/code", "/history"],
     subs: [
       { id: "train", href: "/practice", label: "nav2.train", icon: Dumbbell, match: ["/practice", "/drill", "/game"] },
-      { id: "exam", href: "/exam", label: "nav2.exam", icon: Target, match: ["/exam"] },
+      { id: "exam", href: "/exam", label: "nav2.exam", icon: Target, match: ["/exam"], ent: true },
       { id: "code", href: "/code", label: "nav2.code", icon: Code2, match: ["/code"] },
       { id: "history", href: "/history", label: "nav2.history", icon: History, match: ["/history"] },
     ],
@@ -108,6 +110,16 @@ export function groupOf(pathname: string): GroupId | null {
   return NAV_GROUPS.find((g) => g.match.some((m) => underPath(pathname, m)))?.id ?? null;
 }
 
+/** Подразделы группы, видимые ученику: без ЕНТ-подразделов, если ent = false (школьный трек). */
+export function visibleSubs(group: NavGroup, ent = true): NavSub[] {
+  return ent ? group.subs : group.subs.filter((s) => !s.ent);
+}
+
+/** Группы навигации для ученика: в школьном треке (ent = false) — без ЕНТ-подразделов. Без фильтра возвращает NAV_GROUPS как есть. */
+export function visibleGroups(ent = true): NavGroup[] {
+  return ent ? NAV_GROUPS : NAV_GROUPS.map((g) => ({ ...g, subs: visibleSubs(g, false) }));
+}
+
 export function groupById(id: GroupId): NavGroup {
   return NAV_GROUPS.find((g) => g.id === id)!;
 }
@@ -124,11 +136,12 @@ export function subOf(pathname: string): string | null {
  * (`/practice`, `/exam`, `/code`, `/history`, `/notes`, `/theory`, `/search`, `/materials`, `/stats`, `/shop`, `/profile`),
  * не на внутренних экранах (урок, задача кода, чат, заметка, результат теста).
  */
-export function hubGroup(pathname: string): NavGroup | null {
+export function hubGroup(pathname: string, ent = true): NavGroup | null {
   const p = normalizePath(pathname);
   for (const g of NAV_GROUPS) {
     if (!g.subs.length) continue;
-    if (p === g.href || g.subs.some((s) => s.href === p)) return g;
+    // Страница скрытого подраздела (`/exam` в школьном треке) остаётся «хабом»: оболочка рисует вкладки, карточку даёт сама страница.
+    if (p === g.href || g.subs.some((s) => s.href === p)) return ent ? g : { ...g, subs: visibleSubs(g, false) };
   }
   return null;
 }

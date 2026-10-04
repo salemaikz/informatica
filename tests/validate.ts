@@ -239,6 +239,8 @@ export function validateStep(step: Step): string[] {
       break;
     case "multi":
       need(step.options.length >= 3, "минимум 3 варианта");
+      // На ЕНТ в заданиях с несколькими ответами ровно 6 вариантов (аудит C4); правило — для шагов уроков и банков.
+      need(!step.ent || step.options.length === 6, "multi с пометкой ЕНТ: ровно 6 вариантов");
       need(step.correct.length >= 1, "нет верных");
       need(step.correct.every((i) => i >= 0 && i < step.options.length), "correct вне диапазона");
       break;

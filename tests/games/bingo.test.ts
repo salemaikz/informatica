@@ -118,10 +118,11 @@ describe("бинго: сборка карточки", () => {
     else expect(card).toBeNull();
   });
   it("9…15 пригодных ответов — карточка 3 × 3; меньше 9 — null", () => {
-    // ns.bin2dec даёт 9–15 разных коротких ответов, it.trends — меньше 9 (проверено на seed 7).
-    expect(collectCells(["ns.bin2dec"], "ru", 7).length).toBeGreaterThanOrEqual(SMALL * SMALL);
-    expect(collectCells(["ns.bin2dec"], "ru", 7).length).toBeLessThan(BIG * BIG);
-    const small = buildCard(["ns.bin2dec"], "ru", 7)!;
+    // ns.bin2dec даёт 9–15 разных коротких ответов, it.trends — меньше 9 (проверено на seed 11: после переезда вида «включи биты»
+    // в ns.dec2bin у ns.bin2dec больше заданий с выбором, и на seed 7 карточка уже 4 × 4).
+    expect(collectCells(["ns.bin2dec"], "ru", 11).length).toBeGreaterThanOrEqual(SMALL * SMALL);
+    expect(collectCells(["ns.bin2dec"], "ru", 11).length).toBeLessThan(BIG * BIG);
+    const small = buildCard(["ns.bin2dec"], "ru", 11)!;
     expect(small.size).toBe(SMALL);
     expect(small.cells).toHaveLength(SMALL * SMALL);
     expect(collectCells(["it.trends"], "ru", 7).length).toBeLessThan(SMALL * SMALL);

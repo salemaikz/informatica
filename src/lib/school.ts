@@ -11,6 +11,18 @@ export interface WithTrack {
 
 export const SCHOOL_GRADES: SchoolGrade[] = ["5", "6", "7", "8", "9", "10", "11"];
 
+/**
+ * Единая точка решения (#52): показывать ли ЕНТ-элементы — пробный ЕНТ, цель по баллу и прогноз, план подготовки,
+ * «до ЕНТ N дней». Ученик школьного трека их не видит. Профиль без трека (старое сохранение) считается «ЕНТ».
+ * Все экраны и меню спрашивают это здесь, а не сравнивают `track` у себя.
+ */
+export function entVisible(profile: { track?: Track } | null | undefined): boolean {
+  return profile?.track !== "school";
+}
+
+/** Разделы только для подготовки к ЕНТ: в школьном треке на них — карточка «Переключиться на ЕНТ» (components/school/EntOnly). */
+export const ENT_ONLY_PATHS = ["/exam", "/plan"] as const;
+
 /** Нужен только факт завершения урока — берём минимум от LessonStat, чтобы функции не зависели от стора. */
 export type LessonsDone = Record<string, { completions: number } | undefined>;
 

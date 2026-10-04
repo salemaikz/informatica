@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { NAV_GROUPS, groupOf, hubGroup, normalizePath, subOf, underPath } from "@/components/app/nav";
+import { NAV_GROUPS, groupOf, hubGroup, normalizePath, subOf, underPath, visibleGroups, visibleSubs } from "@/components/app/nav";
+import { ENT_ONLY_PATHS } from "@/lib/school";
 import { dict } from "@/i18n/dict";
 
 describe("groupOf", () => {
@@ -106,5 +107,49 @@ describe("пути", () => {
     expect(normalizePath("/")).toBe("/");
     expect(underPath("/exam/run", "/exam")).toBe(true);
     expect(underPath("/examples", "/exam")).toBe(false);
+  });
+});
+
+describe("школьный трек: ЕНТ-подразделы скрыты (#52)", () => {
+  const ids = (g: { subs: { id: string }[] }) => g.subs.map((s) => s.id);
+  const practice = NAV_GROUPS.find((g) => g.id === "practice")!;
+
+  it("трек ЕНТ: меню как было", () => {
+    expect(visibleGroups(true)).toBe(NAV_GROUPS);
+    expect(ids({ subs: visibleSubs(practice) })).toEqual(["train", "exam", "code", "history"]);
+    expect(hubGroup("/practice")).toBe(practice);
+  });
+
+  it("школьный трек: в «Практике» нет «Пробного ЕНТ», остальные подразделы на месте", () => {
+    expect(ids({ subs: visibleSubs(practice, false) })).toEqual(["train", "code", "history"]);
+    const groups = visibleGroups(false);
+    expect(groups.map((g) => g.id)).toEqual(NAV_GROUPS.map((g) => g.id));
+    expect(ids(groups.find((g) => g.id === "practice")!)).toEqual(["train", "code", "history"]);
+    // остальные группы не тронуты
+    for (const id of ["materials", "progress"] as const) expect(ids(groups.find((g) => g.id === id)!)).toEqual(ids(NAV_GROUPS.find((g) => g.id === id)!));
+  });
+
+  it("исходный NAV_GROUPS не меняется при фильтрации", () => {
+    visibleGroups(false);
+    hubGroup("/practice", false);
+    expect(ids(practice)).toEqual(["train", "exam", "code", "history"]);
+  });
+
+  it("hubGroup для школьного трека отдаёт ту же группу без ЕНТ-подраздела; страница /exam остаётся «хабом»", () => {
+    for (const p of ["/practice", "/exam", "/code", "/history"]) {
+      const g = hubGroup(p, false);
+      expect(g?.id, p).toBe("practice");
+      expect(ids(g!), p).not.toContain("exam");
+    }
+    expect(hubGroup("/learn", false)).toBeNull();
+    expect(hubGroup("/exam/run", false)).toBeNull();
+  });
+
+  it("помечены ent ровно подразделы с ЕНТ-путями (/exam, /plan) — согласовано с lib/school", () => {
+    const flagged = NAV_GROUPS.flatMap((g) => g.subs).filter((s) => s.ent);
+    expect(flagged.map((s) => s.id)).toEqual(["exam"]);
+    for (const s of flagged) expect((ENT_ONLY_PATHS as readonly string[]).includes(s.href!), s.id).toBe(true);
+    // и наоборот: подраздел с ЕНТ-путём не остался без пометки
+    for (const s of NAV_GROUPS.flatMap((g) => g.subs)) if (s.href && (ENT_ONLY_PATHS as readonly string[]).includes(s.href)) expect(s.ent, s.id).toBe(true);
   });
 });
