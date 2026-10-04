@@ -56,28 +56,41 @@ export function sanitizeMessages(raw: unknown): ChatMsg[] {
   return out;
 }
 
-export async function loadMessages(chatId: string): Promise<ChatMsg[]> {
+/**
+ * Сообщения чата и признак сбоя чтения: failed — IndexedDB есть, но прочитать не вышло, а в памяти ничего нет
+ * (значит, сообщения могли быть, но мы их не видим). Для экспорта: пустой чат при сбое — не то же, что пустой чат.
+ */
+export async function loadMessagesChecked(chatId: string): Promise<{ messages: ChatMsg[]; failed: boolean }> {
   const key = PREFIX + chatId;
   try {
     const v = await get<ChatMsg[]>(key);
     if (Array.isArray(v)) {
       memory.set(key, v);
-      return v;
+      return { messages: v, failed: false };
     }
+    return { messages: memory.get(key) ?? [], failed: false };
   } catch {
-    // IndexedDB недоступна
+    // IndexedDB недоступна или не читается
+    const mem = memory.get(key);
+    return { messages: mem ?? [], failed: mem === undefined && typeof indexedDB !== "undefined" };
   }
-  return memory.get(key) ?? [];
 }
 
-export async function saveMessages(chatId: string, messages: ChatMsg[]): Promise<void> {
+export async function loadMessages(chatId: string): Promise<ChatMsg[]> {
+  return (await loadMessagesChecked(chatId)).messages;
+}
+
+/** Сохраняет сообщения. true — записано в IndexedDB; false — осталось только в памяти (не переживёт перезагрузку). */
+export async function saveMessages(chatId: string, messages: ChatMsg[]): Promise<boolean> {
   const key = PREFIX + chatId;
   const trimmed = messages.slice(-MAX_MESSAGES);
   memory.set(key, trimmed);
   try {
     await set(key, trimmed);
+    return true;
   } catch {
     // остаётся в памяти
+    return false;
   }
 }
 

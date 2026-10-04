@@ -154,11 +154,19 @@ export function filterHistory(list: HistoryEntry[], f: HistoryFilter): HistoryEn
   }
 }
 
-/** Проверка сохранённой истории (данные из localStorage — недоверенные). */
+/** Пределы длины строк при проверке истории: файл копии и хранилище — недоверенные, свои значения короче. */
+const ID_LIMIT = 80;
+const STEP_ID_LIMIT = 120;
+const TITLE_LIMIT = 160;
+const MODE_LIMIT = 40;
+
+/** Проверка сохранённой истории (данные из localStorage и файла копии — недоверенные). */
 export function sanitizeHistory(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) return [];
-  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+  const optStr = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : undefined);
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const optNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
   const kinds: HistoryKind[] = ["lesson", "check", "drill", "exam"];
   const out: HistoryEntry[] = [];
   for (const r of raw.slice(0, MAX_HISTORY)) {
@@ -170,30 +178,31 @@ export function sanitizeHistory(raw: unknown): HistoryEntry[] {
           .filter((w): w is WrongItem => !!w && typeof w === "object" && typeof (w as WrongItem).stepId === "string")
           .slice(0, MAX_WRONG_PER_ENTRY)
           .map((w) => ({
-            stepId: w.stepId,
-            lessonId: typeof w.lessonId === "string" ? w.lessonId : undefined,
-            skill: typeof w.skill === "string" ? w.skill : undefined,
-            prompt: clip(str(w.prompt)),
-            given: clip(str(w.given)),
-            expected: clip(str(w.expected)),
+            stepId: w.stepId.slice(0, STEP_ID_LIMIT),
+            lessonId: optStr(w.lessonId, ID_LIMIT),
+            skill: optStr(w.skill, ID_LIMIT),
+            prompt: clip(str(w.prompt, TEXT_LIMIT * 2)),
+            given: clip(str(w.given, TEXT_LIMIT * 2)),
+            expected: clip(str(w.expected, TEXT_LIMIT * 2)),
           }))
       : [];
     out.push({
-      id: e.id,
+      id: e.id.slice(0, ID_LIMIT),
       at: num(e.at),
       kind: e.kind as HistoryKind,
-      mode: typeof e.mode === "string" ? e.mode : undefined,
-      title: str(e.title),
-      lessonId: typeof e.lessonId === "string" ? e.lessonId : undefined,
-      examId: typeof e.examId === "string" ? e.examId : undefined,
+      mode: optStr(e.mode, MODE_LIMIT),
+      title: str(e.title, TITLE_LIMIT),
+      lessonId: optStr(e.lessonId, ID_LIMIT),
+      examId: optStr(e.examId, ID_LIMIT),
       correct: num(e.correct),
       total: num(e.total),
-      points: typeof e.points === "number" ? e.points : undefined,
-      maxPoints: typeof e.maxPoints === "number" ? e.maxPoints : undefined,
+      points: optNum(e.points),
+      maxPoints: optNum(e.maxPoints),
       durationSec: num(e.durationSec),
       xp: num(e.xp),
       wrong,
-      fixed: Array.isArray(e.fixed) ? e.fixed.filter((x): x is string => typeof x === "string") : [],
+      // «Исправлено» — это stepId ошибок, их не больше, чем ошибок в записи.
+      fixed: Array.isArray(e.fixed) ? e.fixed.filter((x): x is string => typeof x === "string").slice(0, MAX_WRONG_PER_ENTRY).map((x) => x.slice(0, STEP_ID_LIMIT)) : [],
     });
   }
   return out;

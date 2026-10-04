@@ -14,5 +14,13 @@ export function guessLang(raw: string | null, browserLang: string | undefined): 
 
 /** Полноэкранные режимы со своими кнопками внизу: баннер хранилища там не показываем, чтобы не сдвигать и не перекрывать их. */
 export function isFocusPath(pathname: string): boolean {
-  return pathname.startsWith("/lesson/") || pathname === "/drill" || pathname === "/exam/run" || pathname.startsWith("/game/");
+  return (
+    pathname.startsWith("/lesson/") ||
+    pathname === "/drill" ||
+    pathname === "/exam/run" ||
+    pathname.startsWith("/game/") ||
+    // Знакомство и окно тарифов: баннер сдвигал кнопку «Далее».
+    pathname === "/onboarding" ||
+    pathname === "/plans"
+  );
 }
