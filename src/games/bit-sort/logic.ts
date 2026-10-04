@@ -153,7 +153,7 @@ export interface Session {
   rule: RuleId;
   skill: SkillId;
   tier: Tier;
-  /** digits: наименьшее число разрядов; base: 2 или 8; compare: порог T; иначе 0. */
+  /** digits: наименьшее число разрядов; base: 2 или 3; compare: порог T; иначе 0. */
   param: number;
   title: L;
   bins: L[];
@@ -301,14 +301,15 @@ export function badDigit(str: string, base: number): string | null {
   return null;
 }
 
+// Только 2 и 3: восьмеричная и шестнадцатеричная изучаются позже (ns.octhex), а это правило — под ns.base.
 const baseRule: RuleDef = {
   id: "base",
   skill: "ns.base",
   makeSession(rand, tier) {
-    const octal = tier >= 1 && rand() < 0.5;
+    const ternary = tier >= 1 && rand() < 0.5;
     return {
-      param: octal ? 8 : 2,
-      title: octal ? S.base8Title : S.base2Title,
+      param: ternary ? 3 : 2,
+      title: ternary ? S.base3Title : S.base2Title,
       bins: [S.binCan, S.binCannot],
     };
   },
@@ -319,7 +320,7 @@ const baseRule: RuleDef = {
     for (let i = 0; i < len; i++) digs.push(int(rand, i === 0 ? 1 : 0, base - 1));
     if (!valid) {
       const pos = int(rand, 0, len - 1);
-      digs[pos] = base === 2 ? int(rand, 2, 9) : int(rand, 8, 9);
+      digs[pos] = int(rand, base, 9);
     }
     const str = digs.join("");
     return { label: str, value: Number(str) };
@@ -327,8 +328,8 @@ const baseRule: RuleDef = {
   classify: (item, base) => (badDigit(item.label, base) === null ? 0 : 1),
   explain(item, base) {
     const d = badDigit(item.label, base);
-    if (d === null) return fillL(base === 2 ? S.explainOk2 : S.explainOk8, { s: item.label });
-    return fillL(base === 2 ? S.explainBad2 : S.explainBad8, { s: item.label, d });
+    if (d === null) return fillL(base === 2 ? S.explainOk2 : S.explainOk3, { s: item.label });
+    return fillL(base === 2 ? S.explainBad2 : S.explainBad3, { s: item.label, d });
   },
 };
 

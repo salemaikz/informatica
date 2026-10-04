@@ -15,6 +15,8 @@ import {
   redoHref,
   relativeDay,
   replayHref,
+  showExamsInHistory,
+  visibleFilters,
 } from "@/components/history/logic";
 import { buildHistoryRedo, buildMistakes, hasBank, parseDrillMode } from "@/lib/drill";
 import { entRef } from "@/lib/ent-steps";
@@ -186,5 +188,24 @@ describe("логика экрана истории", () => {
       entry({ id: "4", kind: "check" }),
     ];
     expect(filterCounts(list)).toEqual({ all: 4, lessons: 2, drills: 1, exams: 1, open: 1 });
+  });
+
+  it("фильтр «Пробный ЕНТ»: в треке ЕНТ всегда, у школьника — только если старые пробники есть", () => {
+    const none = filterCounts([entry({ id: "1" })]);
+    const some = filterCounts([entry({ id: "1" }), entry({ id: "2", kind: "exam" })]);
+    expect(showExamsInHistory(true, none)).toBe(true);
+    expect(showExamsInHistory(false, none)).toBe(false);
+    expect(showExamsInHistory(false, some)).toBe(true);
+    expect(visibleFilters(true)).toEqual(["all", "lessons", "drills", "exams", "open"]);
+    expect(visibleFilters(false)).toEqual(["all", "lessons", "drills", "open"]);
+  });
+
+  it("школьные тексты истории: оба языка, без ЕНТ/ҰБТ", () => {
+    for (const key of ["history.subtitle.school", "history.empty.text.school"] as const) {
+      expect(dict[key].ru.trim(), key).toBeTruthy();
+      expect(dict[key].kk.trim(), key).toBeTruthy();
+      expect(dict[key].ru, key).not.toMatch(/ЕНТ/);
+      expect(dict[key].kk, key).not.toMatch(/ҰБТ|ЕНТ/);
+    }
   });
 });

@@ -69,8 +69,8 @@ describe("helpers", () => {
   it("badDigit", () => {
     expect(badDigit("1021", 2)).toBe("2");
     expect(badDigit("1011", 2)).toBeNull();
-    expect(badDigit("1781", 8)).toBe("8");
-    expect(badDigit("1777", 8)).toBeNull();
+    expect(badDigit("1231", 3)).toBe("3");
+    expect(badDigit("1202", 3)).toBeNull();
   });
 });
 
@@ -164,7 +164,7 @@ describe("rule generators", () => {
       }
       expect(kinds.size).toBe(2);
     }
-    // tier 1+ gives both bases overall
+    // tier 1+ gives both bases overall: 2 и 3 (без 8 и 16 — они изучаются позже, ns.octhex)
     const params = new Set<number>();
     for (let seed = 1; seed <= 80; seed++) {
       const e = new SortEngine(seed);
@@ -172,7 +172,33 @@ describe("rule generators", () => {
       while (e.session.rule !== "base") e.startSession();
       params.add(e.session.param);
     }
-    expect(params).toEqual(new Set([2, 8]));
+    expect(params).toEqual(new Set([2, 3]));
+  });
+
+  it("base (ns.base): no octal/hex wording or digits-of-8/16 claims in titles and explanations", () => {
+    const forbidden = /восьмер|шестнадц|сегізд|он алты|A–F|основани\w* (8|16)\b|негізі (8|16)\b/i;
+    for (const tier of [0, 1, 2] as Tier[]) {
+      for (let seed = 1; seed <= 60; seed++) {
+        const e = new SortEngine(seed);
+        e.tier = tier;
+        while (e.session.rule !== "base") e.startSession();
+        expect([2, 3]).toContain(e.session.param);
+        for (const lang of ["ru", "kk"] as const) {
+          expect(e.session.title[lang]).not.toMatch(forbidden);
+          for (const b of e.session.bins) expect(b[lang]).not.toMatch(forbidden);
+        }
+        for (let i = 0; i < 8; i++) {
+          const c = e.draw();
+          expect(c.item.label).toMatch(/^\d+$/);
+          for (const lang of ["ru", "kk"] as const) expect(c.explain[lang]).not.toMatch(forbidden);
+          // правило: в троичной системе объяснение называет 0–2 (kk — «үштік»)
+          if (e.session.param === 3) {
+            expect(e.session.title.ru).toContain("троичной");
+            expect(e.session.title.kk).toContain("үштік");
+          }
+        }
+      }
+    }
   });
 
   it("compare: threshold range, never equal, tier 2 close, explanation sums", () => {

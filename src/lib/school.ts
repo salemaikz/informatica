@@ -20,8 +20,12 @@ export function entVisible(profile: { track?: Track } | null | undefined): boole
   return profile?.track !== "school";
 }
 
-/** Разделы только для подготовки к ЕНТ: в школьном треке на них — карточка «Переключиться на ЕНТ» (components/school/EntOnly). */
-export const ENT_ONLY_PATHS = ["/exam", "/plan"] as const;
+/**
+ * Разделы только для подготовки к ЕНТ: в школьном треке на них — карточка «Переключиться на ЕНТ» (components/school/EntOnly).
+ * `/exam/run` — прохождение пробного (вне оболочки приложения, страж с `fullscreen`); результаты старых попыток
+ * `/exam/result/[id]` остаются доступны. Тест tests/school-ent-ui.test.ts проверяет, что на странице каждого пути есть страж.
+ */
+export const ENT_ONLY_PATHS = ["/exam", "/plan", "/exam/run"] as const;
 
 /** Нужен только факт завершения урока — берём минимум от LessonStat, чтобы функции не зависели от стора. */
 export type LessonsDone = Record<string, { completions: number } | undefined>;

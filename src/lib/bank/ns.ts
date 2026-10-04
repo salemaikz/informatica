@@ -250,8 +250,9 @@ const base: SkillBank = {
   },
   short(level, seed): ShortQuestion {
     const rand = seeded(seed);
+    // Набор оснований широкий (без 8 и 16), чтобы у навыка хватало разных ответов — например, на карточку бинго 3 × 3.
     if (level === 1) {
-      const b = pick(rand, [2, 3, 5, 10] as const);
+      const b = pick(rand, [2, 3, 4, 5, 6, 7, 10] as const);
       return {
         id: `q:ns.base:count:${b}`,
         skill: "ns.base",
@@ -267,7 +268,7 @@ const base: SkillBank = {
       };
     }
     if (level === 2) {
-      const b = pick(rand, [2, 3, 4, 5, 6, 10] as const);
+      const b = pick(rand, [2, 3, 4, 5, 6, 7, 10] as const);
       return {
         id: `q:ns.base:max:${b}`,
         skill: "ns.base",
@@ -283,7 +284,7 @@ const base: SkillBank = {
       };
     }
     // C: обратная задача — по наибольшей цифре найти основание.
-    const k = pick(rand, [1, 2, 3, 4, 5, 9] as const);
+    const k = pick(rand, [1, 2, 3, 4, 5, 6, 9] as const);
     return {
       id: `q:ns.base:inv:${k}`,
       skill: "ns.base",

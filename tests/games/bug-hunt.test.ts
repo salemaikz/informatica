@@ -97,7 +97,7 @@ function truth(p: Puzzle, line: string, i: number): boolean {
   if ((m = line.match(/^В системе с основанием (\d+) разных цифр: (\d+)$/))) return m[1] === m[2];
   if ((m = line.match(/^Запись (\d+) может быть двоичным числом$/))) return /^[01]+$/.test(m[1]);
   if ((m = line.match(/^Запись (\d+) не может быть двоичным числом$/))) return !/^[01]+$/.test(m[1]);
-  if ((m = line.match(/^Наибольшая цифра восьмеричной системы: (\d+)$/))) return m[1] === "7";
+  if ((m = line.match(/^Наибольшая цифра троичной системы: (\d+)$/))) return m[1] === "2";
   throw new Error("unknown base line: " + line);
 }
 
@@ -204,6 +204,33 @@ describe("tier ranges", () => {
     }
   });
 
+  // ns.base открыт после первого урока, а 8 и 16 изучаются позже (ns.octhex): в утверждениях их быть не должно (аудит C6).
+  it("base (ns.base): no octal/hex wording, no base 8/16 claims, ternary instead", () => {
+    const forbidden = /восьмер|шестнадц|сегізд|он алты|A–F|основани\w* (8|16)\b|негізі (8|16)\b/i;
+    const rand = seeded(2024);
+    const types = new Set<string>();
+    let ternaryLines = 0;
+    for (let s = 0; s < 1000; s++) {
+      const p = generatePuzzle(rand, (s % 3) as Tier, "base", s % 4 !== 0);
+      expect(p.skill).toBe("ns.base");
+      const all: L[] = [p.header, ...p.lines, ...(p.fault ? [p.fault.explain, ...p.fault.fixOptions] : [])];
+      for (const l of all) {
+        expect(l.ru).not.toMatch(forbidden);
+        expect(l.kk).not.toMatch(forbidden);
+      }
+      for (const l of p.lines) {
+        if (/троичной/.test(l.ru)) {
+          ternaryLines++;
+          expect(l.kk).toContain("Үштік");
+        }
+      }
+      if (p.fault) types.add(p.fault.type);
+    }
+    expect(ternaryLines).toBeGreaterThan(0);
+    expect(types.has("max3")).toBe(true);
+    expect(types.has("max8")).toBe(false);
+  });
+
   it("mutation types are all reachable", () => {
     const seen: Record<string, Set<string>> = {};
     const rand = seeded(99);
@@ -215,7 +242,7 @@ describe("tier ranges", () => {
     expect([...seen.ladder].sort()).toEqual(["dropped", "remainder", "reversed"]);
     expect([...seen.weights].sort()).toEqual(["powerMul", "shift", "sum", "zeroCounted"]);
     expect([...seen.props].sort()).toEqual(["len", "ones", "parity", "pow", "powMinus"]);
-    expect([...seen.base].sort()).toEqual(["canBin", "cannotBin", "count", "max8", "range"]);
+    expect([...seen.base].sort()).toEqual(["canBin", "cannotBin", "count", "max3", "range"]);
   });
 
   it("tier 0 weights never use shift", () => {

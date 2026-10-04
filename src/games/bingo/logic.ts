@@ -1,9 +1,11 @@
 import type { GameMode } from "@/games/types";
-import { draw, skillsWithShape } from "@/lib/bank";
+import { draw, hasShape, skillsWithShape } from "@/lib/bank";
+import type { ShortQuestion } from "@/lib/bank";
 import { hashString, plainText, seeded, shuffle, tx } from "@/lib/text";
-import type { ChoiceStep, Lang, Level, QuestionStep, SkillId } from "@/lib/types";
+import type { ChoiceStep, InputStep, Lang, Level, QuestionStep, SkillId } from "@/lib/types";
 
-// Чистая логика «Бинго»: сборка карточки из верных ответов choice-заданий, очередь вопросов, линии, очки. Без React.
+// Чистая логика «Бинго»: сборка карточки из коротких ответов (верный вариант choice, ответ input/«короткого» вопроса),
+// очередь вопросов, линии, очки. Без React.
 
 /** Навыки по умолчанию (совпадают с GameMeta.skills в реестре). */
 export const DEFAULT_SKILLS: SkillId[] = ["ns.bin2dec", "ns.dec2bin", "ns.base", "ns.props"];
@@ -25,11 +27,14 @@ export const LINE_BONUS = 50;
 /** Бонус за полную карточку. */
 export const FULL_BONUS = 100;
 
+/** Задание, из которого сделана клетка: выбор или ввод (короткий ответ в виде числа/двоичной записи). */
+export type BingoStep = ChoiceStep | InputStep;
+
 export interface BingoCell {
   /** Короткий ответ, как на клетке. */
   answer: string;
   /** Вопрос, ответом на который эта клетка является (ровно один). */
-  step: ChoiceStep;
+  step: BingoStep;
   skill: SkillId;
   level: Level;
 }
@@ -46,14 +51,38 @@ function norm(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Верный ответ choice-задания как короткий текст клетки; null — не подходит (длинный, пустой, не choice). */
+/**
+ * Верный ответ задания как короткий текст клетки; null — не подходит. Подходят choice (верный вариант) и input
+ * с числовым или двоичным ответом. Не подходят: длинный/пустой ответ, свободный текст (у него много верных записей),
+ * интерактивные виды (bits, ladder, match…) — у них нет одного короткого ответа для клетки.
+ */
 export function cellAnswer(step: QuestionStep, lang: Lang): string | null {
-  if (step.type !== "choice") return null;
-  const raw = step.options[step.correct];
+  let raw: string | undefined;
+  if (step.type === "choice") {
+    const opt = step.options[step.correct];
+    raw = opt === undefined ? undefined : tx(opt, lang);
+  } else if (step.type === "input" && step.mode !== "text") {
+    raw = step.answers[0];
+  }
   if (raw === undefined) return null;
-  const a = plainText(tx(raw, lang)).trim();
+  const a = plainText(raw).trim();
   if (!a || a.length > MAX_ANSWER_LEN) return null;
   return a;
+}
+
+/** Короткий вопрос банка (ввод числа/двоичной записи) как input-задание — тот же вид клетки. */
+function shortAsInput(q: ShortQuestion): InputStep {
+  return {
+    type: "input",
+    id: q.id,
+    skill: q.skill,
+    level: q.level,
+    prompt: q.prompt,
+    answers: [q.answer],
+    mode: q.mode,
+    explanation: q.explanation,
+    hint: q.hint,
+  };
 }
 
 const RU_LETTER = "а-яёa-z";
@@ -75,9 +104,30 @@ export function isAmbiguousPrompt(step: QuestionStep): boolean {
   return RU_AMBIGUOUS.test(plainText(step.prompt.ru)) || KK_AMBIGUOUS.test(plainText(step.prompt.kk));
 }
 
-/** Собирает до 16 подходящих клеток (разные ответы и разные вопросы) из банка по навыкам. Порядок — от seed. */
+/** Сколько заданий каждого вида берём за один заход по навыку (лишние отсеются по ответу и повторам). */
+const DRAW_QUESTIONS = 5;
+const DRAW_SHORT = 4;
+/** Заходов по кругу навыков: предел попыток, чтобы сборка не крутилась вечно на узких навыках. */
+const MAX_ROUNDS = 30;
+
+/** Кандидаты на клетки по навыку и уровню: задания банка (choice/input) и короткие вопросы. Неподходящие отсеет вызывающий. */
+function candidates(skill: SkillId, level: Level, seed: number): BingoStep[] {
+  const out: BingoStep[] = [];
+  const items = draw("question", { skills: [skill], count: DRAW_QUESTIONS, seed, minLevel: level, maxLevel: level, ramp: false });
+  for (const s of items) if (s.type === "choice" || s.type === "input") out.push(s);
+  if (hasShape(skill, "short")) {
+    const shorts = draw("short", { skills: [skill], count: DRAW_SHORT, seed: seed + 1, minLevel: level, maxLevel: level, ramp: false });
+    for (const q of shorts) out.push(shortAsInput(q));
+  }
+  return out;
+}
+
+/**
+ * Собирает до 16 подходящих клеток (разные ответы и разные вопросы) из банка по навыкам. Порядок — от seed.
+ * Задания без короткого однозначного ответа (интерактивные bits/ladder, «что НЕ…») пропускаем и берём следующие.
+ */
 export function collectCells(skills: SkillId[], lang: Lang, seed: number): BingoCell[] {
-  const pool = skillsWithShape(skills, "question");
+  const pool = skills.filter((s) => hasShape(s, "question") || hasShape(s, "short"));
   if (!pool.length) return [];
   const order = shuffle(pool, seeded(hashString(`${seed}:order`)));
   const answers = new Set<string>();
@@ -86,21 +136,13 @@ export function collectCells(skills: SkillId[], lang: Lang, seed: number): Bingo
   const prompts = new Set<string>();
   const out: BingoCell[] = [];
   const need = BIG * BIG;
-  for (let round = 0; round < 14 && out.length < need; round++) {
+  for (let round = 0; round < MAX_ROUNDS && out.length < need; round++) {
     for (let si = 0; si < order.length && out.length < need; si++) {
       const level = (1 + ((round + si) % 3)) as Level;
-      const items = draw("question", {
-        skills: [order[si]],
-        count: 5,
-        seed: hashString(`${seed}:${round}:${si}`),
-        minLevel: level,
-        maxLevel: level,
-        ramp: false,
-      });
-      for (const s of items) {
+      for (const s of candidates(order[si], level, hashString(`${seed}:${round}:${si}`))) {
         if (out.length >= need) break;
         const a = cellAnswer(s, lang);
-        if (a === null || s.type !== "choice" || isAmbiguousPrompt(s)) continue;
+        if (a === null || isAmbiguousPrompt(s)) continue;
         const key = s.id.split("#")[0].split(":").slice(0, 4).join(":");
         const prompt = s.scene ? null : norm(plainText(s.prompt.ru));
         if (keys.has(key) || answers.has(norm(a)) || (prompt !== null && prompts.has(prompt))) continue;

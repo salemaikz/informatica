@@ -17,7 +17,7 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 import { toneOf } from "@/components/exam/logic";
 import { TONE_TEXT } from "./HistoryParts";
 import { HistoryRow } from "./HistoryRow";
-import { filterCounts, groupByDay, HISTORY_FILTERS, relativeDay } from "./logic";
+import { filterCounts, groupByDay, relativeDay, showExamsInHistory, visibleFilters } from "./logic";
 
 function Tile({ label, value, valueClass }: { label: string; value: string | number; valueClass?: string }) {
   return (
@@ -42,19 +42,21 @@ export function HistoryScreen() {
   const groups = useMemo(() => groupByDay(filterHistory(history, filter)), [history, filter]);
   const avgPercent = Math.round(totals.avgScore * 100);
   const hasHistory = history.length > 0;
+  // Школьный трек: про пробный ЕНТ — ни фильтра, ни слов в подписях (если старых пробников нет).
+  const examsShown = showExamsInHistory(ent, counts);
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-extrabold">{t("history.title")}</h1>
-        <p className="font-semibold text-muted">{t("history.subtitle")}</p>
+        <p className="font-semibold text-muted">{t(examsShown ? "history.subtitle" : "history.subtitle.school")}</p>
       </div>
 
       {!hasHistory && mistakes.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 py-8 text-center">
           <Mascot mood="thinking" size={88} />
           <p className="text-lg font-extrabold">{t("history.empty.title")}</p>
-          <p className="max-w-xs text-sm font-semibold text-muted">{t("history.empty.text")}</p>
+          <p className="max-w-xs text-sm font-semibold text-muted">{t(examsShown ? "history.empty.text" : "history.empty.text.school")}</p>
           <div className="mt-1 flex w-full max-w-xs flex-col gap-2">
             <ButtonLink href="/learn" block>
               {t("history.empty.lessons")}
@@ -99,7 +101,7 @@ export function HistoryScreen() {
             <>
               {/* Фильтры: полоса прокручивается по горизонтали, чтобы не ломать вёрстку на 360 px. */}
               <div role="group" aria-label={t("history.filter.label")} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0">
-                {HISTORY_FILTERS.map((f) => {
+                {visibleFilters(examsShown).map((f) => {
                   const active = filter === f;
                   return (
                     <button

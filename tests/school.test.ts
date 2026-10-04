@@ -160,8 +160,8 @@ describe("entVisible — одна точка решения про ЕНТ-эле
     expect(entVisible(null)).toBe(true);
   });
 
-  it("ЕНТ-разделы: /exam и /plan", () => {
-    expect([...ENT_ONLY_PATHS]).toEqual(["/exam", "/plan"]);
+  it("ЕНТ-разделы: /exam, /plan и прохождение пробного /exam/run", () => {
+    expect([...ENT_ONLY_PATHS]).toEqual(["/exam", "/plan", "/exam/run"]);
   });
 
   it("тексты карточки «Этот раздел — для подготовки к ҰБТ»: оба языка, в казахском — ҰБТ, а не ЕНТ", () => {

@@ -92,3 +92,12 @@ export function replayHref(e: HistoryEntry): string | null {
 export function filterCounts(list: HistoryEntry[]): Record<HistoryFilter, number> {
   return Object.fromEntries(HISTORY_FILTERS.map((f) => [f, filterHistory(list, f).length])) as Record<HistoryFilter, number>;
 }
+
+/**
+ * Показывать ли в истории пробный ЕНТ (фильтр и тексты про него). В треке ЕНТ — всегда; в школьном (#52) — только
+ * если старые пробники в истории уже есть: их нужно уметь найти.
+ */
+export const showExamsInHistory = (ent: boolean, counts: Record<HistoryFilter, number>): boolean => ent || counts.exams > 0;
+
+/** Фильтры для строки чипов: без «Пробный ЕНТ», если его не показываем. */
+export const visibleFilters = (showExams: boolean): readonly HistoryFilter[] => (showExams ? HISTORY_FILTERS : HISTORY_FILTERS.filter((f) => f !== "exams"));
