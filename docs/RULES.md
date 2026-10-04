@@ -319,14 +319,14 @@ try {
 
 **Сервер** (образец — `src/app/api/ai/lesson-feedback/route.ts`), по порядку:
 
-1. `sameOrigin(req)` → иначе 403;
-2. ``rateLimit(`<маршрут>:${clientIp(req)}`, n, окноМс)`` → 429;
-3. `getOpenAI()` вернул null → 503;
-4. разбор JSON → 400;
-5. обрезка всех входных полей (`sanitizeContext`, `sanitizeTask`, `sanitizeImage`, `str(v, max)`, `.slice`);
-6. строгая JSON-схема ответа, если ответ структурный;
-7. `logUsage(...)` → лог расхода токенов;
-8. ошибка → `console.error` + 502 (все ошибки — `jsonError(status, code)`);
+1. ``const g = await guardAi(req, { route: "<маршрут>", units: AI_UNITS["<вид>"] })`` (`src/server/ai-guard.ts`) → `if (!g.ok) return g.response;` — внутри: строгий `sameOrigin` (403), всплеск по устройству и IP (429 `rate_limited`), суточные лимиты устройства, IP и сайта (429 `daily_limit`, 503 `ai_busy`). Свой `rateLimit` по IP вместо стража — нельзя. Новый маршрут — новая строка в `BURST_LIMITS`;
+2. `getOpenAI()` вернул null → `g.release()` + 503;
+3. разбор JSON → 400 (+ `release()`); тело большое — сначала дешёвый `preCheckAi` до разбора;
+4. обрезка всех входных полей (`sanitizeContext`, `sanitizeTask`, `sanitizeImage`, `str(v, max)`, `.slice`);
+5. строгая JSON-схема ответа, если ответ структурный; потолок `MAX_TOKENS` и таймаут `callTimeoutMs(maxDuration)` из `src/server/openai.ts`;
+6. `logUsage(...)` → лог расхода токенов;
+7. ошибка → `console.error` + 502; `g.release()` — **только** если `openAiRejected(e, req.signal)` (модель запрос не получила); обрыв клиентом и таймаут обращение не возвращают;
+8. ответ — через `withGuardHeaders(response, g)` (cookie нового устройства); потоковый текст — с маркером конца из `lib/ai-stream.ts` (`\u0000OK` / `CUT` / `ERR`);
 9. `export const maxDuration`.
 
 - Модели — только через env-переменные и `MODELS` из `src/server/openai.ts`. Названия моделей в код не вписывать. Берётся самая дешёвая, которая справляется; сильная модель — только офлайн, никогда на запрос ученика.

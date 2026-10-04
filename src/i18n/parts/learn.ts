@@ -90,7 +90,7 @@ export const learnDict = {
   // Итоговая плитка карты: 35 обычных + 5 контекстных = 40 заданий, 50 баллов.
   "learn2.ent.total.title": { ru: "Всего на ЕНТ", kk: "ҰБТ-да барлығы" },
   "learn2.ent.total.value": { ru: "Заданий: {n} · баллов: {p}", kk: "Тапсырма: {n} · балл: {p}" },
-  "learn2.ent.total.split": { ru: "{a} по темам + {c} контекстных", kk: "{a} тақырыптар бойынша + {c} контекстік тапсырма" },
+  "learn2.ent.total.split": { ru: "{a} по темам + {c} контекстных", kk: "Тақырыптар бойынша {a} + {c} контекстік тапсырма" },
   "learn2.ent.lessons.one": { ru: "{n} урок", kk: "{n} сабақ" },
   "learn2.ent.lessons.few": { ru: "{n} урока", kk: "{n} сабақ" },
   "learn2.ent.lessons.many": { ru: "{n} уроков", kk: "{n} сабақ" },

@@ -281,3 +281,35 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - 113 уроков (`course.ts`), регистрация частями: `node scripts/register-content.mjs --add=id1,id2` (добавляет к уже подключённым, недописанные файлы не трогает).
 - Практикум: 100 задач; движок таблиц `lib/sheet` знает текстовые функции (`СТРОЧН`, `ПРОПИСН`, `ДЛСТР`, `СЦЕПИТЬ`, `ЛЕВСИМВ`, `ПРАВСИМВ`, `&`); список задач языка группируется по навыку.
 - Магазин: `ShopStatus` (строка сердечек и бустера, часы `useNowSeconds` через `useSyncExternalStore`).
+
+## v0.9: этап 10 — честные цифры и основа
+
+### Хранилище сервера (`server/kv.ts`)
+- `getKv()` — счётчики и списки для серверных маршрутов: Upstash Redis по REST (`UPSTASH_REDIS_REST_URL`/`TOKEN` или `KV_REST_API_URL`/`TOKEN` из Vercel Marketplace), иначе память процесса (в production — одно предупреждение в журнал). Сбой Upstash → память, сайт не падает. `kzDay()` — сутки по Астане (UTC+5).
+
+### Страж ИИ (`server/ai-guard.ts`, решение #54)
+- Каждый маршрут `app/api/ai/*`: `guardAi(req, { route, units })` → отказ (`403 forbidden_origin`, `429 rate_limited`/`daily_limit`, `503 ai_busy`) или `GuardOk` с `release()` и cookie нового устройства (`withGuardHeaders`).
+- Порядок: строгий `sameOrigin` (production — только с `Origin`) → устройство по подписанной cookie `inf_ai` (HMAC, `Path=/api`) → новые устройства с IP → всплеск (устройство и IP) → суточные лимиты устройства, IP и сайта. Списание атомарное (`incrBy`) до вызова модели; отказ на любом шаге откатывает уже списанное.
+- IP — `clientIp()`/`ipKey()` в `server/rate-limit.ts`: первый адрес `x-forwarded-for`, IPv6 по /64, в хранилище — хеш. `kvRateLimit` — всплеск в общем хранилище; `preCheckAi` в `tutor` — дешёвый счётчик до разбора тела.
+- `release()` — только если модель запрос не получила (`openAiRejected(e, signal)` в `server/openai.ts`: `APIError` со статусом и без обрыва клиентом). Таймаут вызова — `callTimeoutMs(maxDuration)`, потолки токенов — `MAX_TOKENS`.
+- Клиент считает те же «обращения»: `AI_UNITS` и `AI_DAILY_CAP` в `lib/economy.ts`; коды ошибок → тексты — `lib/ai-errors.ts` (`aiCodeKey`) и `aiErrorKey` в `lib/ai.ts`.
+
+### Поток ответа и кризис
+- `lib/ai-stream.ts`: ответ `tutor` заканчивается `\u0000OK` / `\u0000CUT` / `\u0000ERR`; `splitStreamTail` → `ok | cut | error | open`. `streamTutor` без `ok` бросает `AiError("stream_cut")`, `useTutor` возвращает обращение; «Повторить» — в `ChatScreen` и `AiPanel`.
+- `lib/safety.ts` `detectCrisis` (ru и kk) → ответ без модели из словаря (`ai.crisis.*`), обращение не списывается. Страховка — строка в общей части промпта.
+
+### Сообщения об ошибках (`/api/issue`, решение #56)
+- `lib/issue.ts` — типы, причины, лимиты, проверка и обрезка тела (`parseIssue`), отправка с клиента; `components/issue/ReportIssueButton.tsx` — кнопка и шторка (портал в `body`, общий набор «в полёте»). Запись — строка `[issue]` в журнал и `pushCapped` в `issues` / `client-errors`.
+- `lib/client-errors.ts` + `components/app/ClientErrorReporter.tsx` (в `app/layout.tsx`, вне `Providers`) — автоотчёты о сбоях в production; страницы `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` (язык без стора — `readStoredProfile` в `lib/client-errors.ts`).
+
+### Сохранение (`lib/safe-storage.ts`, `lib/backup*.ts`, решение #57)
+- Стор пишет через `safeStorage`: статусы `ok | memory | full` (баннер `StorageBanner`), нечитаемое сохранение → копия `informatica-v1-broken`, запись заблокирована, `Providers` показывает `RecoveryScreen` (фаза `hydrationPhase`: loading → ready | failed, таймаут 4 с).
+- Копия v3: `buildBackup` / `parseBackup` (чистая логика, `BACKUP_LIMITS`, `ECONOMY_CAPS`) и `exportBackup` / `importBackup` (IndexedDB: чаты, фото, черновик; старое удаляется только после успешной записи нового).
+- `requestPersistentStorage()` — из обработчиков нажатия (конец онбординга, импорт).
+
+### Школьный трек и правовые страницы
+- `entVisible(profile)` (`lib/school.ts`) / `useEntVisible()` — одна точка решения «показывать ЕНТ»; `visibleGroups`/`hubGroup` в `components/app/nav.ts`; `EntOnly` — карточка на `/exam`, `/exam/run`, `/plan` (`ENT_ONLY_PATHS`).
+- `/about`, `/privacy`, `/terms` — `components/legal/LegalPage.tsx`, тексты — `content/legal.ts` (ru и kk, тесты сверяют их с константами кода); язык гостя — `lib/guest-lang.ts`. Превью ссылки — `metadata` в `app/layout.tsx` (`lib/site-meta.ts`) и `public/og.png` (`scripts/og-image.mjs`).
+
+### Веса ЕНТ
+- `content/ent-topics.ts`: `examCount` по плану НЦТ, `CONTEXT_TOPICS = ["t06", "t07"]`, `topicWeight`; раскладка «Карты ЕНТ» — `components/learn/ent-grid.ts` (`fillGrid` повторяет `grid-flow-row-dense`, тест — `learn-map`).

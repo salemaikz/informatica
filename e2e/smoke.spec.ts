@@ -83,5 +83,6 @@ test("тренировка по навыку генерирует задания
   await page.goto("/practice");
   await expect(page.getByText("Ақылды жаттығу")).toBeVisible();
   await page.goto("/drill?mode=skill&skill=ns.dec2bin");
-  await expect(page.locator("main h1")).toContainText(/екілік|Екілік/);
+  // Задание 10 → 2 на казахском: перевод в екілік жүйе или «включи биты» (вид bits — навык ns.dec2bin с этапа 10).
+  await expect(page.locator("main h1")).toContainText(/екілік|Екілік|бит/);
 });
