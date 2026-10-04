@@ -1,11 +1,12 @@
 "use client";
 
-import { Download, Pencil, RotateCcw, Upload } from "lucide-react";
+import { Download, Pencil, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { exportBackup, importBackup } from "@/lib/backup-idb";
+import { brokenCopy, deleteBrokenCopy, hasBrokenCopy, requestPersistentStorage, subscribeStorage } from "@/lib/safe-storage";
 import { ACHIEVEMENTS } from "@/lib/gamification";
 import { daysText, daysUntil } from "@/lib/goals";
 import { cn } from "@/lib/cn";
@@ -65,6 +66,9 @@ export default function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [backupMsg, setBackupMsg] = useState<{ tone: "success" | "warning" | "danger"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Копия повреждённого сохранения (informatica-v1-broken): остаётся в браузере, пока ученик её не удалит.
+  const brokenExists = useSyncExternalStore(subscribeStorage, hasBrokenCopy, () => false);
+  const [confirmBroken, setConfirmBroken] = useState(false);
 
   const startEditName = () => {
     setDraft(profile.name);
@@ -82,9 +86,11 @@ export default function ProfilePage() {
     setBackupMsg(null);
     setBusy(true);
     try {
-      const { blob, droppedImages } = await exportBackup();
+      const { blob, droppedImages, unreadable } = await exportBackup();
       downloadBlob(blob, "informatica-progress.json");
-      if (droppedImages > 0) setBackupMsg({ tone: "warning", text: t("prof2.export.partial", { n: droppedImages }) });
+      // Часть IndexedDB не прочиталась — файл без этих чатов и фото не должен выглядеть полным.
+      const notes = [unreadable > 0 ? t("prof2.export.unreadable") : "", droppedImages > 0 ? t("prof2.export.partial", { n: droppedImages }) : ""].filter(Boolean);
+      if (notes.length) setBackupMsg({ tone: "warning", text: notes.join(" ") });
     } catch {
       setBackupMsg({ tone: "danger", text: t("prof2.export.error") });
     } finally {
@@ -112,13 +118,24 @@ export default function ProfilePage() {
   const confirmImport = async () => {
     if (!pending || busy) return;
     const data = pending;
+    // Просим браузер не стирать данные сайта — сразу из нажатия (до await), пока жест «свежий».
+    requestPersistentStorage();
     setBusy(true);
-    const ok = await importBackup(data);
+    const outcome = await importBackup(data);
     setBusy(false);
     setPending(null);
-    if (!ok) setBackupMsg({ tone: "danger", text: t("prof2.import.error") });
-    else if (data.skipped.length > 0 || data.droppedImages > 0) setBackupMsg({ tone: "warning", text: t("prof2.import.partial") });
-    else setBackupMsg({ tone: "success", text: t("prof2.import.ok") });
+    if (outcome === "error") setBackupMsg({ tone: "danger", text: t("prof2.import.error") });
+    else {
+      // Чаты или фото остались только в памяти вкладки — об этом важнее всего; затем — пропущенные битые поля.
+      const notes = [outcome === "partial" ? t("prof2.import.idbPartial") : "", data.skipped.length > 0 || data.droppedImages > 0 ? t("prof2.import.partial") : ""].filter(Boolean);
+      setBackupMsg(notes.length ? { tone: "warning", text: notes.join(" ") } : { tone: "success", text: t("prof2.import.ok") });
+    }
+  };
+
+  const downloadBroken = () => {
+    const raw = brokenCopy();
+    if (raw === null) return;
+    downloadBlob(new Blob([raw], { type: "application/json" }), "informatica-broken.json");
   };
 
   const summary = pending ? summarizeBackup(pending) : null;
@@ -364,6 +381,20 @@ export default function ProfilePage() {
             {backupMsg.text}
           </p>
         )}
+        {brokenExists && (
+          <div className="mt-3 rounded-2xl bg-warning-soft p-3">
+            <p className="font-extrabold text-warning-strong">{t("storage.broken.title")}</p>
+            <p className="mt-1 text-sm font-semibold text-muted">{t("storage.broken.desc")}</p>
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" variant="secondary" className="h-10" icon={<Download size={16} />} onClick={downloadBroken}>
+                {t("storage.broken.download")}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-10 text-danger" icon={<Trash2 size={16} />} onClick={() => setConfirmBroken(true)}>
+                {t("storage.broken.delete")}
+              </Button>
+            </div>
+          </div>
+        )}
         <Button variant="ghost" onClick={() => setConfirm(true)} icon={<RotateCcw size={18} />} className="mt-3 text-danger">
           {t("prof.reset")}
         </Button>
@@ -389,6 +420,25 @@ export default function ProfilePage() {
             {t("prof2.import.replace")}
           </Button>
           <Button variant="secondary" block disabled={busy} onClick={() => setPending(null)}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={confirmBroken} onClose={() => setConfirmBroken(false)} label={t("storage.broken.delete")}>
+        <div className="flex flex-col gap-4 text-center">
+          <p className="text-lg font-extrabold">{t("storage.broken.deleteConfirm")}</p>
+          <Button
+            variant="danger"
+            block
+            onClick={() => {
+              deleteBrokenCopy();
+              setConfirmBroken(false);
+            }}
+          >
+            {t("storage.broken.delete")}
+          </Button>
+          <Button variant="secondary" block onClick={() => setConfirmBroken(false)}>
             {t("common.cancel")}
           </Button>
         </div>

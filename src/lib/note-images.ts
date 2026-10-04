@@ -85,8 +85,11 @@ export async function putImage(dataUrl: string): Promise<string> {
   return id;
 }
 
-/** Кладёт картинку под заданным id (восстановление из резервной копии: в тексте записей уже есть ссылки на эти id). */
-export async function putImageWithId(id: string, dataUrl: string): Promise<void> {
+/**
+ * Кладёт картинку под заданным id (восстановление из резервной копии: в тексте записей уже есть ссылки на эти id).
+ * true — записано в IndexedDB; false — осталось только в памяти вкладки (не переживёт перезагрузку).
+ */
+export async function putImageWithId(id: string, dataUrl: string): Promise<boolean> {
   if (!/^[A-Za-z0-9_-]{4,64}$/.test(id)) throw new NoteImageError("format");
   const check = checkImageDataUrl(dataUrl);
   if (check !== "ok") throw new NoteImageError(check);
@@ -96,31 +99,40 @@ export async function putImageWithId(id: string, dataUrl: string): Promise<void>
       await set(id, dataUrl, s);
       memory.delete(id);
       remember(id, dataUrl);
-      return;
+      return true;
     } catch {
       // IndexedDB есть, но писать не даёт — запасной режим.
     }
   }
   memory.set(id, dataUrl);
+  return false;
 }
 
-/** Картинка по id; undefined — нет (другое устройство, удалена). */
-export async function getImage(id: string): Promise<string | undefined> {
+/**
+ * Картинка по id и признак сбоя чтения (для экспорта): failed — IndexedDB есть, но прочитать не вышло.
+ * url === undefined без сбоя — картинки действительно нет (другое устройство, удалена).
+ */
+export async function getImageChecked(id: string): Promise<{ url: string | undefined; failed: boolean }> {
   const mem = memory.get(id) ?? cache.get(id);
-  if (mem) return mem;
+  if (mem) return { url: mem, failed: false };
   const s = getStore();
-  if (!s) return undefined;
+  if (!s) return { url: undefined, failed: false };
   try {
     const v = await get<unknown>(id, s);
     // Данные из хранилища недоверенные — проверяем так же, как при записи.
     if (typeof v === "string" && checkImageDataUrl(v) === "ok") {
       remember(id, v);
-      return v;
+      return { url: v, failed: false };
     }
+    return { url: undefined, failed: false };
   } catch {
-    // ignore
+    return { url: undefined, failed: true };
   }
-  return undefined;
+}
+
+/** Картинка по id; undefined — нет (другое устройство, удалена). */
+export async function getImage(id: string): Promise<string | undefined> {
+  return (await getImageChecked(id)).url;
 }
 
 /** Удаляет картинки (вместе с удалённой записью). */

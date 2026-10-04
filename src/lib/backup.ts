@@ -13,7 +13,23 @@
 // битый элемент списка отбрасывается — импорт целиком не падает. Не копия Informatica (нет xp или profile) → null.
 
 import type { AppState } from "./store";
-import { sanitizeAiUsage, sanitizeBoost, sanitizeHearts, sanitizePaywall, sanitizeWallet, type ChipReason } from "./economy";
+import {
+  BOOST_PACKS,
+  HOUR,
+  MINUTE,
+  PLAN_FEATURES,
+  PRACTICE_HEART_DAILY,
+  SHOP_ITEMS,
+  sanitizeAiUsage,
+  sanitizeBoost,
+  sanitizeHearts,
+  sanitizePaywall,
+  sanitizeWallet,
+  type Boost,
+  type ChipReason,
+  type Hearts,
+  type Wallet,
+} from "./economy";
 import { sanitizeHistory } from "./history";
 import { sanitizeChats, type ChatMsg } from "./chats";
 import { NOTE_LIMITS, repairNotebook, type FolderColor, type Note, type NoteSource, type Notebook } from "./notebook";
@@ -40,6 +56,20 @@ export const BACKUP_LIMITS = {
   scratchChars: 2_000_000,
   /** Запас файла на служебные поля при расчёте бюджета фото. */
   headroomBytes: 64 * 1024,
+} as const;
+
+/**
+ * Потолки для экономики: файл копии — недоверенный, правленый вручную кошелёк или бустер не должен ломать баланс.
+ * Чипы: 0,4 чипа за XP при множителе до ×4 (тариф «Безлимит» ×2 и бустер ×2) — 1 млн чипов это ≈ 625 тыс. XP, то есть
+ * больше, чем ученик наберёт за годы занятий по 100 XP в день. Сердечки — наибольший запас среди тарифов (у «Безлимита» их нет,
+ * heartsNow при чтении всё равно обрезает запас по текущему тарифу). Бустер — самый долгий из продаваемых (пакет на 7 дней)
+ * и множитель самого сильного.
+ */
+export const ECONOMY_CAPS = {
+  chips: 1_000_000,
+  hearts: Math.max(...Object.values(PLAN_FEATURES).map((f) => f.maxHearts).filter(Number.isFinite)),
+  boostMs: Math.max(...BOOST_PACKS.map((p) => p.hours * HOUR), ...SHOP_ITEMS.map((i) => (i.minutes ?? 0) * MINUTE)),
+  boostMult: Math.max(...BOOST_PACKS.map((p) => p.mult), ...SHOP_ITEMS.map((i) => i.mult ?? 1)),
 } as const;
 
 /** Поля стора, которые попадают в копию. Нового поля нет в списке — не скомпилируется (см. BackupKeysComplete). */
@@ -181,7 +211,8 @@ function cleanExam(x: Obj) {
 function cleanLedger(x: Obj) {
   const id = str(x.id, 80);
   if (!id || !isNum(x.amount) || !(CHIP_REASONS as readonly unknown[]).includes(x.reason)) return null;
-  return { id, at: nonNeg(x.at), amount: Math.trunc(x.amount), reason: x.reason, ...(str(x.note, 40) ? { note: str(x.note, 40) } : {}) };
+  const amount = Math.max(-ECONOMY_CAPS.chips, Math.min(ECONOMY_CAPS.chips, Math.trunc(x.amount)));
+  return { id, at: nonNeg(x.at), amount, reason: x.reason, ...(str(x.note, 40) ? { note: str(x.note, 40) } : {}) };
 }
 
 function cleanChatMessage(x: Obj) {
@@ -247,6 +278,20 @@ const cleanLegacyNotes = (v: unknown) =>
     saved: (cleanList(x.saved, 100, (s) => (str(s.id, 80) && str(s.text, NOTE_LIMITS.body) ? { id: str(s.id, 80)!, text: str(s.text, NOTE_LIMITS.body)!, at: nonNeg(s.at) } : null)) ?? []),
   }));
 
+/** Кошелёк из файла: каждое число не выше потолка. */
+function capWallet(w: Wallet): Wallet {
+  const cap = ECONOMY_CAPS.chips;
+  return { chips: Math.min(cap, w.chips), earned: Math.min(cap, w.earned), spent: Math.min(cap, w.spent) };
+}
+
+/** Сердечки из файла: не больше наибольшего запаса среди тарифов. */
+const capHearts = (h: Hearts): Hearts => ({ ...h, count: Math.min(ECONOMY_CAPS.hearts, h.count) });
+
+/** Бустер из файла: множитель и срок не выше того, что можно купить (срок отсчитывается от now). */
+function capBoost(b: Boost | null, now: number): Boost | null {
+  return b ? { mult: Math.min(ECONOMY_CAPS.boostMult, b.mult), until: Math.min(b.until, now + ECONOMY_CAPS.boostMs) } : null;
+}
+
 // ---------- Состояние ----------
 
 export interface CleanState {
@@ -255,8 +300,8 @@ export interface CleanState {
   skipped: string[];
 }
 
-/** Состояние из файла → только известные поля с проверенными типами. Не копия Informatica → null. */
-export function cleanState(raw: unknown): CleanState | null {
+/** Состояние из файла → только известные поля с проверенными типами. Не копия Informatica → null. now — для срока бустера. */
+export function cleanState(raw: unknown, now: number = Date.now()): CleanState | null {
   if (!isObj(raw)) return null;
   if (!isNum(raw.xp) || raw.xp < 0 || !isObj(raw.profile)) return null;
   const state: Obj = { xp: int(raw.xp), profile: raw.profile };
@@ -283,11 +328,11 @@ export function cleanState(raw: unknown): CleanState | null {
   put("chat", cleanList(raw.chat, 120, cleanChatMessage));
   put("notebook", cleanNotebook(raw.notebook));
   put("aiUsage", isObj(raw.aiUsage) ? sanitizeAiUsage(raw.aiUsage) : undefined);
-  put("hearts", isObj(raw.hearts) ? sanitizeHearts(raw.hearts) : undefined);
-  put("wallet", isObj(raw.wallet) ? sanitizeWallet(raw.wallet) : undefined);
-  put("practiceHearts", isObj(raw.practiceHearts) && typeof raw.practiceHearts.day === "string" && isNum(raw.practiceHearts.count) ? { day: raw.practiceHearts.day.slice(0, 10), count: int(raw.practiceHearts.count, 99) } : undefined);
+  put("hearts", isObj(raw.hearts) ? capHearts(sanitizeHearts(raw.hearts)) : undefined);
+  put("wallet", isObj(raw.wallet) ? capWallet(sanitizeWallet(raw.wallet)) : undefined);
+  put("practiceHearts", isObj(raw.practiceHearts) && typeof raw.practiceHearts.day === "string" && isNum(raw.practiceHearts.count) ? { day: raw.practiceHearts.day.slice(0, 10), count: int(raw.practiceHearts.count, PRACTICE_HEART_DAILY) } : undefined);
   put("paywall", isObj(raw.paywall) ? sanitizePaywall(raw.paywall) : undefined);
-  if (raw.boost !== undefined) state.boost = sanitizeBoost(raw.boost);
+  if (raw.boost !== undefined) state.boost = capBoost(sanitizeBoost(raw.boost), now);
   put("history", Array.isArray(raw.history) ? sanitizeHistory(raw.history) : undefined);
   put("chats", Array.isArray(raw.chats) ? sanitizeChats(raw.chats).filter((c) => okKey(c.id)) : undefined);
   put("memory", typeof raw.memory === "string" ? raw.memory.slice(0, 1500) : undefined);
@@ -386,10 +431,10 @@ function unwrapPersisted(raw: unknown): unknown {
   return raw;
 }
 
-/** Файл → проверенная копия; не копия Informatica → null. Битые поля пропускаются. */
-export function parseBackup(raw: unknown): ParsedBackup | null {
+/** Файл → проверенная копия; не копия Informatica → null. Битые поля пропускаются. now — для срока бустера. */
+export function parseBackup(raw: unknown, now: number = Date.now()): ParsedBackup | null {
   const file = unwrapPersisted(raw);
-  const cleaned = cleanState(file);
+  const cleaned = cleanState(file, now);
   if (!cleaned || !isObj(file)) return null;
   const version = isNum(file.version) ? file.version : isObj(file.notebook) ? 2 : 1;
   let idb: IdbData | null = null;
@@ -403,8 +448,8 @@ export function parseBackup(raw: unknown): ParsedBackup | null {
 }
 
 /** Совместимость: проверенное состояние из копии (без данных IndexedDB). */
-export function cleanBackup(raw: unknown): Obj | null {
-  return parseBackup(raw)?.state ?? null;
+export function cleanBackup(raw: unknown, now: number = Date.now()): Obj | null {
+  return parseBackup(raw, now)?.state ?? null;
 }
 
 export interface BackupSummary {
@@ -443,7 +488,7 @@ const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
 export function buildBackup(state: object, snapshot: IdbSnapshot, now: number): BuiltBackup {
   const picked: Obj = {};
   for (const k of BACKUP_STATE_KEYS) if (has(state, k)) picked[k] = (state as Obj)[k];
-  const cleaned = cleanState({ ...picked, version: BACKUP_VERSION });
+  const cleaned = cleanState({ ...picked, version: BACKUP_VERSION }, now);
   if (!cleaned) throw new Error("backup: состояние не похоже на прогресс");
   const { version: _version, ...fields } = cleaned.state;
   void _version;

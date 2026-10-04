@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BACKUP_LIMITS,
   BACKUP_STATE_KEYS,
@@ -6,6 +6,7 @@ import {
   cleanBackup,
   cleanIdb,
   cleanState,
+  ECONOMY_CAPS,
   noteImageIds,
   parseBackup,
   summarizeBackup,
@@ -17,6 +18,27 @@ import { MAX_MESSAGES } from "@/lib/chats";
 import { deleteImages, getImage } from "@/lib/note-images";
 import { loadScratch, saveScratch } from "@/lib/scratch";
 import { useApp } from "@/lib/store";
+import { sanitizeHistory } from "@/lib/history";
+
+// Поддельная IndexedDB (idb-keyval): данные в Map, чтение и запись можно «сломать».
+const fakeIdb = vi.hoisted(() => ({ data: new Map<string, unknown>(), ctl: { failSet: false, failGet: false } }));
+vi.mock("idb-keyval", () => {
+  const k = (key: unknown, store?: { name: string }) => `${store?.name ?? "default"}:${String(key)}`;
+  return {
+    createStore: (name: string) => ({ name }),
+    get: async (key: unknown, store?: { name: string }) => {
+      if (fakeIdb.ctl.failGet) throw new Error("read failed");
+      return fakeIdb.data.get(k(key, store));
+    },
+    set: async (key: unknown, value: unknown, store?: { name: string }) => {
+      if (fakeIdb.ctl.failSet) throw new Error("quota");
+      fakeIdb.data.set(k(key, store), value);
+    },
+    del: async (key: unknown, store?: { name: string }) => void fakeIdb.data.delete(k(key, store)),
+    delMany: async (keys: unknown[], store?: { name: string }) => void keys.forEach((key) => fakeIdb.data.delete(k(key, store))),
+  };
+});
+vi.stubGlobal("indexedDB", {});
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const JPG = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
@@ -45,7 +67,7 @@ const state = () => ({
   hearts: { count: 3, updatedAt: 99, day: "2026-10-03" },
   wallet: { chips: 77, earned: 120, spent: 43 },
   ledger: [{ id: "l1", at: 1, amount: 5, reason: "xp" }],
-  boost: { mult: 2, until: 5e12 },
+  boost: { mult: 2, until: 3_601_000 },
   practiceHearts: { day: "2026-10-03", count: 1 },
   paywall: { lastShownAt: 8, views: 2 },
   history: [{ id: "h1", at: 1, kind: "lesson", title: "Урок", correct: 3, total: 4, durationSec: 60, xp: 10, wrong: [], fixed: [] }],
@@ -111,7 +133,7 @@ describe("buildBackup: полная копия v3", () => {
     expect((file.chats as { id: string }[])[0].id).toBe("chat1");
     expect(file.codeTasks).toEqual({ "py-1": { solved: true, attempts: 2, at: 4 } });
     expect(file.hearts).toEqual({ count: 3, updatedAt: 99, day: "2026-10-03" });
-    expect(file.boost).toEqual({ mult: 2, until: 5e12 });
+    expect(file.boost).toEqual({ mult: 2, until: 3_601_000 });
   });
 
   it("компактный JSON: без отступов (штрихи черновика иначе раздули бы файл втрое)", () => {
@@ -411,7 +433,12 @@ describe("importProgress в сторе: что восстанавливаетс�
   });
 });
 
-describe("полная копия и IndexedDB (в тестах — запасной режим в памяти)", () => {
+describe("полная копия и IndexedDB (в тестах — поддельная IndexedDB)", () => {
+  afterEach(() => {
+    fakeIdb.ctl.failSet = false;
+    fakeIdb.ctl.failGet = false;
+  });
+
   it("экспорт → очистка → импорт: чаты, фото и черновик возвращаются, лишнее старое убирается, тариф не меняется", async () => {
     // Ученик на «старом» устройстве.
     useApp.getState().resetProgress();
@@ -439,7 +466,7 @@ describe("полная копия и IndexedDB (в тестах — запасн
     expect(await getImage("iabc123")).toBeUndefined();
 
     const parsed = parseBackup(file)!;
-    expect(await importBackup(parsed)).toBe(true);
+    expect(await importBackup(parsed)).toBe("ok");
 
     const s = useApp.getState();
     expect(s.wallet.chips).toBe(77);
@@ -456,7 +483,125 @@ describe("полная копия и IndexedDB (в тестах — запасн
     await saveMessages("chat1", [{ id: "keep", role: "user", content: "осталось", at: 1 }]);
     const parsed = parseBackup(viaFile({ ...state(), version: 2 }))!;
     expect(parsed.idb).toBeNull();
-    expect(await importBackup(parsed)).toBe(true);
+    expect(await importBackup(parsed)).toBe("ok");
     expect((await loadMessages("chat1")).map((m) => m.content)).toEqual(["осталось"]);
+  });
+  /** «Старое» устройство: свой чат и своё фото лежат в IndexedDB и в прогрессе. */
+  async function oldDevice() {
+    useApp.getState().resetProgress();
+    useApp.getState().createChat("free", "Старый чат");
+    const oldChat = useApp.getState().chats[0].id;
+    await saveMessages(oldChat, [{ id: "o", role: "user", content: "старый", at: 1 }]);
+    const { putImageWithId } = await import("@/lib/note-images");
+    await putImageWithId("iold0001", PNG);
+    useApp.setState({
+      notebook: { folders: [], notes: [{ id: "nold", folderId: "sys-general", title: "Старая", body: "![](note-img:iold0001)", source: "own", images: ["iold0001"], createdAt: 1, updatedAt: 1 }] } as never,
+    });
+    return oldChat;
+  }
+
+  it("сбой записи в IndexedDB при импорте: прогресс загружен, итог partial, старые чаты и фото НЕ удаляются", async () => {
+    const oldChat = await oldDevice();
+    const parsed = parseBackup(viaFile(buildBackup(state(), snapshot(), 1).file))!;
+    fakeIdb.ctl.failSet = true;
+    expect(await importBackup(parsed)).toBe("partial");
+    fakeIdb.ctl.failSet = false;
+    expect(useApp.getState().wallet.chips).toBe(77); // состояние загружено
+    expect((await loadMessages(oldChat)).map((m) => m.content)).toEqual(["старый"]); // чата больше нет в прогрессе, но сообщения целы
+    expect(fakeIdb.data.has(`default:informatica:chat:v1:msgs:${oldChat}`)).toBe(true);
+    expect(await getImage("iold0001")).toBe(PNG);
+    expect(fakeIdb.data.has("informatica-notes:iold0001")).toBe(true);
+  });
+
+  it("запись удалась — старое, на что новый прогресс не ссылается, убирается (итог ok)", async () => {
+    const oldChat = await oldDevice();
+    const parsed = parseBackup(viaFile(buildBackup(state(), snapshot(), 1).file))!;
+    expect(await importBackup(parsed)).toBe("ok");
+    expect(fakeIdb.data.has(`default:informatica:chat:v1:msgs:${oldChat}`)).toBe(false);
+    expect(fakeIdb.data.has("informatica-notes:iold0001")).toBe(false);
+    expect(await getImage("iabc123")).toBe(PNG);
+  });
+
+  it("сбой чтения IndexedDB при экспорте: unreadable > 0, а не тихо пустые чаты и фото", async () => {
+    const chatId = "chat-unread";
+    const imgId = "iunread1";
+    useApp.getState().resetProgress();
+    useApp.getState().importProgress({
+      ...state(),
+      chats: [{ id: chatId, title: "Вопрос", mode: "free", createdAt: 1, updatedAt: 2, preview: "привет", count: 1 }],
+      notebook: { folders: [], notes: [{ id: "n1", folderId: "sys-general", title: "Т", body: `![](note-img:${imgId})`, source: "own", images: [imgId], createdAt: 1, updatedAt: 2 }] },
+    });
+    fakeIdb.data.set(`default:informatica:chat:v1:msgs:${chatId}`, [{ id: "m1", role: "user", content: "привет", at: 1 }]);
+    fakeIdb.data.set(`informatica-notes:${imgId}`, PNG);
+
+    fakeIdb.ctl.failGet = true;
+    const broken = await exportBackup();
+    expect(broken.unreadable).toBeGreaterThanOrEqual(2); // чат и фото
+    fakeIdb.ctl.failGet = false;
+
+    const good = await exportBackup();
+    expect(good.unreadable).toBe(0);
+    const idb = (JSON.parse(await good.blob.text()) as { idb: { chats: Record<string, unknown[]>; images: Record<string, string> } }).idb;
+    expect(idb.chats[chatId]).toHaveLength(1);
+    expect(idb.images[imgId]).toBe(PNG);
+  });
+});
+
+describe("недоверенный файл: потолки экономики и обрезка истории", () => {
+  const NOW = 1_800_000_000_000;
+  const parse = (extra: Record<string, unknown>) => parseBackup({ xp: 1, profile: {}, ...extra }, NOW)!.state;
+
+  it("кошелёк и журнал чипов зажаты потолком", () => {
+    const s = parse({ wallet: { chips: 9e15, earned: 5e9, spent: 2_000_000 }, ledger: [{ id: "l", at: 1, amount: 9e12, reason: "xp" }, { id: "m", at: 1, amount: -9e12, reason: "buy" }] });
+    expect(s.wallet).toEqual({ chips: ECONOMY_CAPS.chips, earned: ECONOMY_CAPS.chips, spent: ECONOMY_CAPS.chips });
+    expect((s.ledger as { amount: number }[]).map((e) => e.amount)).toEqual([ECONOMY_CAPS.chips, -ECONOMY_CAPS.chips]);
+    expect(parse({ wallet: { chips: 500, earned: 900, spent: 400 } }).wallet).toEqual({ chips: 500, earned: 900, spent: 400 });
+  });
+
+  it("бустер: срок не дальше самого долгого из продаваемых, множитель не выше самого сильного", () => {
+    expect(ECONOMY_CAPS.boostMs).toBe(7 * 24 * 3600_000);
+    expect(ECONOMY_CAPS.boostMult).toBe(2);
+    expect(parse({ boost: { mult: 3, until: NOW + 365 * 24 * 3600_000 } }).boost).toEqual({ mult: 2, until: NOW + ECONOMY_CAPS.boostMs });
+    expect(parse({ boost: { mult: 2, until: NOW + 3600_000 } }).boost).toEqual({ mult: 2, until: NOW + 3600_000 });
+    expect(parse({ boost: { mult: 2, until: 5e12 } }).boost).toEqual({ mult: 2, until: NOW + ECONOMY_CAPS.boostMs });
+    expect(parse({ boost: "много" }).boost).toBeNull();
+  });
+
+  it("сердечки — не больше наибольшего запаса среди тарифов, тренировки в день — не больше дневного предела", () => {
+    expect(ECONOMY_CAPS.hearts).toBe(10);
+    expect(parse({ hearts: { count: 99, updatedAt: 5, day: "2026-10-03" } }).hearts).toEqual({ count: 10, updatedAt: 5, day: "2026-10-03" });
+    expect(parse({ hearts: { count: 4, updatedAt: 5, day: "2026-10-03" } }).hearts).toMatchObject({ count: 4 });
+    expect(parse({ practiceHearts: { day: "2026-10-03", count: 99 } }).practiceHearts).toEqual({ day: "2026-10-03", count: 5 });
+  });
+
+  it("buildBackup: бустер в копии не дальше потолка от момента экспорта", () => {
+    const { file } = buildBackup({ ...state(), boost: { mult: 2, until: 9e12 } }, snapshot(), NOW);
+    expect(file.boost).toEqual({ mult: 2, until: NOW + ECONOMY_CAPS.boostMs });
+  });
+
+  it("история: длинные строки обрезаются, бесконечные баллы пропадают", () => {
+    const long = "я".repeat(5000);
+    // 1e999 в JSON читается как Infinity.
+    const raw = JSON.parse(
+      `[{"id":"${long}","at":1,"kind":"exam","mode":"${long}","title":"${long}","lessonId":"${long}","examId":"${long}","correct":1,"total":2,"points":1e999,"maxPoints":-1e999,"durationSec":5,"xp":3,` +
+        `"wrong":[{"stepId":"${long}","lessonId":"${long}","skill":"${long}","prompt":"${long}","given":"${long}","expected":"${long}"}],"fixed":["${long}",5,${JSON.stringify(Array.from({ length: 40 }, (_, i) => `s${i}`)).slice(1, -1)}]}]`,
+    );
+    const [e] = sanitizeHistory(raw);
+    expect(e.id).toHaveLength(80);
+    expect(e.title).toHaveLength(160);
+    expect(e.mode).toHaveLength(40);
+    expect(e.lessonId).toHaveLength(80);
+    expect(e.examId).toHaveLength(80);
+    expect(e.points).toBeUndefined();
+    expect(e.maxPoints).toBeUndefined();
+    expect(e.wrong[0].stepId).toHaveLength(120);
+    expect(e.wrong[0].skill).toHaveLength(80);
+    expect(e.wrong[0].prompt.length).toBeLessThanOrEqual(400);
+    expect(e.fixed.length).toBeLessThanOrEqual(25);
+    expect(e.fixed[0]).toHaveLength(120);
+    expect(e.fixed.every((x) => typeof x === "string")).toBe(true);
+    // Обычная запись проходит как есть.
+    const ok = { id: "h1", at: 1, kind: "exam", title: "Пробный", points: 30, maxPoints: 50, correct: 1, total: 2, durationSec: 3, xp: 4, wrong: [], fixed: ["a"] };
+    expect(sanitizeHistory([ok])[0]).toMatchObject({ id: "h1", title: "Пробный", points: 30, maxPoints: 50, fixed: ["a"] });
   });
 });

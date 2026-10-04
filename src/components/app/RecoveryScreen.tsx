@@ -20,18 +20,31 @@ export function RecoveryScreen({ onRetry }: { onRetry: () => void }) {
   const [lang] = useState<Lang>(() => guessLang(rawForDownload(), typeof navigator === "undefined" ? undefined : navigator.language));
   const [noData, setNoData] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  // Копию в браузере сохранить не удалось (нет места): ничего не стёрто, пока ученик не скачает файл.
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
+  // Сохранение не прочиталось совсем (копировать нечего): честно говорим, что копии не будет.
+  const [noCopy, setNoCopy] = useState(false);
   const t = (key: DictKey) => translate(lang, key);
 
   const download = () => {
     const raw = rawForDownload();
     setNoData(raw === null);
-    if (raw !== null) downloadBlob(new Blob([raw], { type: "application/json" }), "informatica-broken.json");
+    if (raw !== null) {
+      downloadBlob(new Blob([raw], { type: "application/json" }), "informatica-broken.json");
+      setDownloaded(true);
+    }
   };
 
   const startOver = () => {
     // Копия остаётся в informatica-v1-broken; основное сохранение очищается, страница грузится с нуля.
-    discardSaved();
-    window.location.reload();
+    // Не вышло положить копию — ничего не стираем и не перезагружаем (скачанный файл — тоже копия, тогда можно).
+    if (discardSaved({ downloaded })) {
+      window.location.reload();
+      return;
+    }
+    setConfirm(false);
+    setCopyFailed(true);
   };
 
   return (
@@ -48,7 +61,15 @@ export function RecoveryScreen({ onRetry }: { onRetry: () => void }) {
         <Button block variant="secondary" icon={<RefreshCw size={18} />} onClick={onRetry}>
           {t("storage.recover.retry")}
         </Button>
-        <Button block variant="ghost" className="text-danger" onClick={() => setConfirm(true)}>
+        <Button
+          block
+          variant="ghost"
+          className="text-danger"
+          onClick={() => {
+            setNoCopy(rawForDownload() === null);
+            setConfirm(true);
+          }}
+        >
           {t("storage.recover.reset")}
         </Button>
       </div>
@@ -57,10 +78,18 @@ export function RecoveryScreen({ onRetry }: { onRetry: () => void }) {
           {t("storage.recover.noData")}
         </p>
       )}
+      {copyFailed && (
+        <div role="alert" className="flex w-full flex-col gap-3 rounded-2xl bg-danger-soft p-4">
+          <p className="text-sm font-bold text-danger">{t("storage.recover.copyFailed")}</p>
+          <Button block variant="secondary" icon={<Download size={18} />} onClick={download}>
+            {t("storage.recover.download")}
+          </Button>
+        </div>
+      )}
 
-      <Modal open={confirm} onClose={() => setConfirm(false)} label={t("storage.recover.reset")}>
+      <Modal open={confirm} onClose={() => setConfirm(false)} label={t("storage.recover.reset")} closeLabel={t("common.close")}>
         <div className="flex flex-col gap-4 text-center">
-          <p className="text-lg font-extrabold">{t("storage.recover.confirm")}</p>
+          <p className="text-lg font-extrabold">{t(noCopy || copyFailed ? "storage.recover.confirmNoCopy" : "storage.recover.confirm")}</p>
           <Button variant="danger" block onClick={startOver}>
             {t("storage.recover.reset")}
           </Button>

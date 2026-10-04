@@ -31,12 +31,15 @@ export function Modal({
   children,
   className,
   label,
+  closeLabel,
 }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
   className?: string;
   label?: string;
+  /** Подпись подложки-«закрыть» (для экранов, где язык взят не из стора, — экран восстановления). */
+  closeLabel?: string;
 }) {
   const desktop = useIsDesktop();
   const { t } = useT();
@@ -64,7 +67,7 @@ export function Modal({
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={label}>
           <m.button
-            aria-label={t("common.close")}
+            aria-label={closeLabel ?? t("common.close")}
             className="absolute inset-0 bg-black/40"
             onClick={onClose}
             initial={{ opacity: 0 }}

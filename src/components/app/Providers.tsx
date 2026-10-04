@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
 import { isPublicPath } from "@/lib/public-paths";
-import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, requestPersistentStorage, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
+import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
@@ -77,11 +77,6 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (needsOnboarding) router.replace("/onboarding");
   }, [needsOnboarding, router]);
-
-  // После онбординга (и импорта копии) просим браузер не стирать данные сайта. Один раз за сессию, молча.
-  useEffect(() => {
-    if (hydrated && onboarded) requestPersistentStorage();
-  }, [hydrated, onboarded]);
 
   if (phase === "failed") {
     return (

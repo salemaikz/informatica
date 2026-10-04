@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { ExplainStyle, Goal, Grade, Lang } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { markLangChosen } from "@/lib/guest-lang";
+import { requestPersistentStorage } from "@/lib/safe-storage";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
@@ -78,6 +79,8 @@ export default function OnboardingPage() {
     else {
       // Цель «школа» — школьный трек, остальные — подготовка к ЕНТ.
       completeOnboarding({ name: name.trim().slice(0, 30), track: profile.goal === "school" ? "school" : "ent" });
+      // Просим браузер не стирать данные сайта — из нажатия кнопки, иначе Firefox на компьютере покажет окно «из ниоткуда».
+      requestPersistentStorage();
       // Сразу после онбординга — окно тарифов (один показ учитывается в статистике).
       useApp.getState().notePaywallShown();
       router.replace("/plans?from=onboarding");

@@ -22,6 +22,8 @@ export interface ScratchPage {
 
 /** Запасное хранилище, если IndexedDB недоступна. */
 let memory: ScratchPage[] = [];
+/** В memory — актуальные листы (их читали из IndexedDB или сохраняли), а не пустой начальный список. */
+let inMemoryTrusted = false;
 
 const copy = (pages: ScratchPage[]): ScratchPage[] => pages.map((p) => ({ ...p }));
 
@@ -79,21 +81,32 @@ export function removePage(pages: ScratchPage[], index: number): ScratchPage[] {
   return pages.filter((_, i) => i !== index);
 }
 
-export async function loadScratch(): Promise<ScratchPage[]> {
+/** Листы и признак сбоя чтения: failed — IndexedDB есть, но прочитать не вышло, а в памяти ничего не было загружено или сохранено. */
+export async function loadScratchChecked(): Promise<{ pages: ScratchPage[]; failed: boolean }> {
   try {
     const raw = await get(KEY);
     if (raw !== undefined) memory = sanitizePages(raw);
+    inMemoryTrusted = true;
+    return { pages: copy(memory), failed: false };
   } catch {
     // IndexedDB недоступна — отдаём то, что есть в памяти.
+    return { pages: copy(memory), failed: !inMemoryTrusted && typeof indexedDB !== "undefined" };
   }
-  return copy(memory);
 }
 
-export async function saveScratch(pages: ScratchPage[]): Promise<void> {
+export async function loadScratch(): Promise<ScratchPage[]> {
+  return (await loadScratchChecked()).pages;
+}
+
+/** Сохраняет листы. true — записано в IndexedDB; false — осталось только в памяти. */
+export async function saveScratch(pages: ScratchPage[]): Promise<boolean> {
   memory = copy(pages.slice(0, MAX_SCRATCH_PAGES));
+  inMemoryTrusted = true;
   try {
     await set(KEY, memory);
+    return true;
   } catch {
     // Не страшно: данные остаются в памяти.
+    return false;
   }
 }
