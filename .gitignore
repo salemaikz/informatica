@@ -33,3 +33,6 @@ screenshots/
 
 # отчёты скриптов
 scripts/out/
+
+# рабочие копии исполнителей Claude Code (git worktree)
+.claude/worktrees/
