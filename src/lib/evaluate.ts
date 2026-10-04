@@ -130,6 +130,8 @@ export function evaluate(step: QuestionStep, a: Answer, lang: Lang): StepResult 
     return right.every((r, i) => r === a.remainders[i]) ? ok(given) : fail(given);
   }
   if (step.type === "match" && a.type === "match") {
+    // Шаг урока — самопроверка: пары ищут до конца, каждый промах снижает оценку на четверть.
+    // Это не формат ЕНТ (2 пункта × ~4 описания, баллы 2/1/0 — matchPoints в ent.ts), поэтому ent: true у match не ставим.
     const score = Math.max(0, 1 - 0.25 * a.wrong);
     const given = a.wrong ? (lang === "kk" ? `қате: ${a.wrong}` : `ошибок: ${a.wrong}`) : "";
     return { correct: a.wrong === 0, score, given, expected };

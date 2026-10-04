@@ -1,5 +1,5 @@
 import { CONTEXT_TOPIC, ENT_TOPICS } from "@/content/ent-topics";
-import { multiPoints } from "./ent";
+import { matchPoints, multiPoints } from "./ent";
 import { hashString, seeded, shuffle } from "./text";
 import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Level, Text } from "./types";
 
@@ -591,12 +591,9 @@ export function scoreQuestion(q: ExamQuestion, a: ExamAnswer | undefined): Quest
       case "multi":
         points = multiPoints(item.correct, idxList(a.multi, item.options.length));
         break;
-      case "match": {
-        const m = Array.isArray(a.match) ? a.match : [];
-        const right = item.answer.filter((x, i) => m[i] === x).length;
-        points = right === item.answer.length ? 2 : right > 0 ? 1 : 0;
+      case "match":
+        points = matchPoints(item.answer, Array.isArray(a.match) ? a.match : []);
         break;
-      }
     }
   }
   return { points, max: q.maxPoints, correct: points === q.maxPoints };

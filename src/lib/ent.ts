@@ -24,6 +24,16 @@ export function multiPoints(correct: number[], chosen: number[]): 0 | 1 | 2 {
   return entPoints(right.size, c, w);
 }
 
+/**
+ * Баллы ЕНТ за «соответствие»: каждому пункту (A, B) нужно подобрать одно описание.
+ * Все пункты верно — 2, хотя бы один — 1, ни одного — 0 (п. 18: два пункта = два верных ответа).
+ */
+export function matchPoints(answer: readonly number[], given: readonly unknown[]): 0 | 1 | 2 {
+  const right = answer.filter((x, i) => given[i] === x).length;
+  if (answer.length > 0 && right === answer.length) return 2;
+  return right > 0 ? 1 : 0;
+}
+
 /** Уровень сложности по освоению навыка: новичку — A, уверенному — C. */
 export function levelFromMastery(mastery: number): Level {
   if (mastery < 0.5) return 1;

@@ -115,6 +115,7 @@ npm run typecheck && npm run lint && npm test && npm run build
 
 ## Окружение разработки
 
+- **Перед работой проверь ветку:** рабочая ветка указана в `docs/HANDOFF.md`. Облачная сессия может стартовать со старой ветки (2026-10-04 копия отставала на 83 коммита) — `git fetch` и сравни; если отстаёт, переходи на рабочую. В `claude/pensive-mendel-3i1uf8` не пушить: её push перезаписывает сайт старой версией.
 - В облачной среде Claude Code исходящие запросы идут через прокси: dev-сервер запускать с `NODE_USE_ENV_PROXY=1`, иначе серверный `fetch` к OpenAI не пройдёт. На обычном компьютере/хостинге не нужно.
 - Chromium для скриншотов/e2e: `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (в облачной среде).
 - e2e: `npm run build`, затем `npx next start -p 3100` и `PW_CHROMIUM_PATH=… npx playwright test`. Старый сервер останавливать по PID процесса `next-server` (убийство обёртки `npx` оставляет его жить и отдавать старую сборку).

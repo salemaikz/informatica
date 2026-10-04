@@ -587,10 +587,10 @@ describe("ns-4-traps: ответы", () => {
     expect(s.explanation.ru).toMatch(/лишняя галочка стоит балла/i);
   });
 
-  it("match (ЕНТ): число ↔ длина двоичной записи", () => {
+  it("match: число ↔ длина двоичной записи (самопроверка, не формат ЕНТ — решение #42)", () => {
     const s = byId(lessonTraps, "traps-q-ent-match");
     if (s.type !== "match") throw new Error("match");
-    expect(s.ent).toBe(true);
+    expect(s.ent).toBeUndefined();
     expect(s.pairs.length).toBeGreaterThanOrEqual(3);
     for (const p of s.pairs) {
       const n = Number(p.left);

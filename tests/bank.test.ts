@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { draw, hasShape, rampLevel, skillsWithShape } from "@/lib/bank";
 import { NS_BANKS, LEVELS } from "@/lib/bank/ns";
 import { buildDrill, generateLeveled } from "@/lib/generators";
-import { entPoints, levelFromMastery, multiPoints } from "@/lib/ent";
+import { entPoints, levelFromMastery, matchPoints, multiPoints } from "@/lib/ent";
 import { evaluate } from "@/lib/evaluate";
-import type { MultiStep } from "@/lib/types";
+import type { MatchStep, MultiStep } from "@/lib/types";
 import { kkSuffix, type KkCase } from "@/lib/kk";
 import { validateStep } from "./validate";
 
@@ -48,6 +48,30 @@ describe("ЕНТ: баллы за несколько ответов", () => {
     expect(evaluate(step, { type: "multi", indices: [0, 2] }, "ru")).toMatchObject({ correct: true, score: 1 });
     expect(evaluate(step, { type: "multi", indices: [0] }, "ru")).toMatchObject({ correct: false, score: 0.5, partial: true });
     expect(evaluate(step, { type: "multi", indices: [1, 3] }, "ru")).toMatchObject({ correct: false, score: 0 });
+  });
+
+  it("соответствие ЕНТ (2 пункта): оба верно — 2, один — 1, ни одного — 0", () => {
+    expect(matchPoints([2, 0], [2, 0])).toBe(2);
+    expect(matchPoints([2, 0], [2, 3])).toBe(1);
+    expect(matchPoints([2, 0], [1, 3])).toBe(0);
+    expect(matchPoints([2, 0], [])).toBe(0);
+    expect(matchPoints([], [])).toBe(0);
+  });
+
+  it("соответствие в уроке — самопроверка: каждый промах снижает оценку на четверть", () => {
+    const step: MatchStep = {
+      id: "mt",
+      type: "match",
+      prompt: { ru: "?", kk: "?" },
+      pairs: [
+        { left: "a", right: "1" },
+        { left: "b", right: "2" },
+      ],
+      explanation: { ru: "", kk: "" },
+    };
+    expect(evaluate(step, { type: "match", done: true, wrong: 0 }, "ru")).toMatchObject({ correct: true, score: 1 });
+    expect(evaluate(step, { type: "match", done: true, wrong: 1 }, "ru")).toMatchObject({ correct: false, score: 0.75 });
+    expect(evaluate(step, { type: "match", done: true, wrong: 5 }, "ru")).toMatchObject({ correct: false, score: 0 });
   });
 });
 
