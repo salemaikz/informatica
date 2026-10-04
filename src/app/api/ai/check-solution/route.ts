@@ -1,12 +1,13 @@
 import type { CheckSolutionResponse } from "@/lib/ai-types";
-import { getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
 import { lang as parseLang, sanitizeContext, sanitizeImage } from "@/server/context";
 import { checkSolutionPrompt } from "@/server/prompts";
 
 // Проверка развёрнутого решения по фото/рисунку. Ответ — строгий JSON по схеме.
-// Страж лимитов (server/ai-guard.ts): вес как у фото (AI_UNITS.photo = 2); ошибка до вызова модели возвращает обращения.
+// Страж лимитов (server/ai-guard.ts): вес как у фото (AI_UNITS.photo = 2). Обращения возвращаются, только если модель
+// точно не получила запрос: ошибка до вызова или HTTP-ошибка OpenAI; обрыв клиентом, таймаут и сеть — не возвращают.
 
 export const maxDuration = 60;
 
@@ -80,11 +81,12 @@ export async function POST(req: Request) {
           },
         ],
       },
-      { signal: req.signal },
+      { signal: req.signal, timeout: callTimeoutMs(maxDuration) },
     );
   } catch (e) {
     console.error("[check-solution] openai error", e instanceof Error ? e.message : e);
-    return reject(502, "ai_failed");
+    if (openAiRejected(e, req.signal)) return reject(502, "ai_failed");
+    return withGuardHeaders(jsonError(502, "ai_failed"), g);
   }
 
   // Модель ответила (токены потрачены): дальше обращение не возвращаем, даже если разбор ответа не удался.

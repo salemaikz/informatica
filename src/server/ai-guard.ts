@@ -10,15 +10,19 @@ import { clientIp, kvRateLimit } from "@/server/rate-limit";
 //   const g = await guardAi(req, { route: "tutor", units: 1 });
 //   if (!g.ok) return g.response;          // 403 / 429 / 503
 //   ... вызов модели ...
-//   g.release();                           // модель не вызывалась (ошибка до запроса, ответ из кэша, кризисный ответ)
+//   g.release();                           // модель точно не получила запрос (см. ниже)
 //   return withGuardHeaders(response, g);  // Set-Cookie нового устройства
 //
 // Что проверяется (сутки по Астане, kzDay):
 // - запрос с нашего сайта (sameOrigin: в production Origin обязателен);
 // - устройство: подписанная cookie `inf_ai` (HMAC), без неё или с чужой подписью выдаётся новое устройство;
-//   новых устройств с одного IP — не больше AI_NEW_DEVICES_PER_IP в сутки (обход через удаление cookie);
-// - потолки в «обращениях»: устройство, IP, весь сайт; всплеск — окно 10 минут по IP.
-// Обращения списываются ДО вызова модели и возвращаются release(). Счётчики — в общем хранилище (server/kv.ts).
+//   новых устройств с одного IP — не больше AI_NEW_DEVICES_PER_IP (300) в сутки (обход через удаление cookie;
+//   общий IP школы или мобильного оператора вмещает много учеников, расход ограничивает суточный потолок IP);
+// - потолки в «обращениях»: устройство, IP, весь сайт; всплеск — окно 10 минут отдельно по устройству и по IP.
+// IP — ключ ipKey (rate-limit.ts): IPv6 учитывается по сети /64.
+// Обращения списываются ДО вызова модели. release() — только когда модель точно не получила запрос: ошибка до вызова,
+// ответ из кэша, кризисный ответ, HTTP-ошибка OpenAI (openAiRejected в server/openai.ts). Обрыв клиентом, таймаут и
+// сетевой сбой после начала вызова обращение не возвращают. Счётчики — в общем хранилище (server/kv.ts).
 // В логах нет IP и полного id устройства.
 
 // ---------- Числа (env с дефолтами) ----------
@@ -30,8 +34,8 @@ export const AI_LIMIT_DEFAULTS = {
   ipDaily: 1000,
   /** Обращений в сутки на весь сайт: общий бюджет, сверх — 503 ai_busy. */
   siteDaily: 3000,
-  /** Новых устройств в сутки с одного IP. */
-  newDevicesPerIp: 30,
+  /** Новых устройств в сутки с одного IP (школьный Wi-Fi, CGNAT оператора): расход всё равно ограничен ipDaily. */
+  newDevicesPerIp: 300,
   /** Бесплатных для устройства запросов (отзыв после урока) в сутки на устройство. */
   freeDeviceDaily: 30,
 };
@@ -57,10 +61,23 @@ export function readLimits(env: Record<string, string | undefined> = process.env
   };
 }
 
-/** Всплеск: запросов к маршруту с одного IP за BURST_WINDOW_MS (как было до этапа 10). */
+/**
+ * Всплеск: запросов к маршруту за BURST_WINDOW_MS — отдельно с одного устройства и со всего IP
+ * (класс за одним адресом пишет больше одного ученика). Отказ по любому — 429 rate_limited.
+ */
 export const BURST_WINDOW_MS = 10 * 60_000;
-export const BURST_LIMITS: Record<string, number> = { tutor: 40, check: 15, feedback: 20, stt: 20 };
-const BURST_DEFAULT = 30;
+export interface BurstLimit {
+  device: number;
+  ip: number;
+}
+export const BURST_LIMITS: Record<string, BurstLimit> = {
+  tutor: { device: 20, ip: 120 },
+  check: { device: 8, ip: 45 },
+  feedback: { device: 10, ip: 60 },
+  stt: { device: 10, ip: 60 },
+};
+const BURST_DEFAULT: BurstLimit = { device: 15, ip: 60 };
+const burstFor = (route: string): BurstLimit => BURST_LIMITS[route] ?? BURST_DEFAULT;
 
 /** Верхняя граница units одного вызова: защита от опечатки в коде маршрута. */
 const MAX_UNITS = 20;
@@ -133,7 +150,7 @@ export interface GuardOk {
   units: number;
   /** Set-Cookie нового устройства; null — устройство уже известно. */
   setCookie: string | null;
-  /** Вернуть списанное: модель не вызывалась. Повторный вызов ничего не делает. */
+  /** Вернуть списанное: модель точно не получила запрос (не после обрыва, таймаута и сетевого сбоя). Повторный вызов ничего не делает. */
   release: () => Promise<void>;
 }
 
@@ -150,9 +167,15 @@ export interface GuardOptions {
   /**
    * Вес запроса в обращениях (lib/economy.ts → AI_UNITS): 1 — чат, подсказка; 2 — фото; 4 — голос.
    * 0 — бесплатный для устройства (отзыв после урока): у устройства свой потолок AI_FREE_DEVICE_DAILY,
-   * IP не считается, с сайта списывается 1.
+   * IP не считается, с сайта списывается 1. Ноль — только явный; отрицательное, дробное и NaN считаются как 1.
    */
   units: number;
+}
+
+/** Вес запроса: целое ≥ 0 (не больше MAX_UNITS); любое другое значение — ошибка в коде маршрута, считаем как 1, а не как 0. */
+export function normalizeUnits(units: number): number {
+  if (!Number.isInteger(units) || units < 0) return 1;
+  return units === 0 ? 0 : Math.min(MAX_UNITS, units); // 0 — явный ноль (и -0 тоже)
 }
 
 function deny(status: number, code: string, cookie: string | null): GuardDenied {
@@ -175,18 +198,36 @@ export function withGuardHeaders(res: Response, g: GuardOk): Response {
   }
 }
 
+/** IP в ключах хранилища — только хеш (clientIp уже приведён к ipKey: IPv6 по /64): в Redis нет сырых адресов. */
+function ipHash(req: Request, secret: string = deviceSecret()): string {
+  return createHmac("sha256", secret).update(`ip:${clientIp(req)}`).digest("hex").slice(0, 20);
+}
+
+/**
+ * Дешёвый счётчик ДО разбора тела запроса (tutor читает JSON до стража — кризисный текст отвечает без лимитов):
+ * общий всплеск по IP, как в страже, но отдельный ключ `ai:<route>-pre:<ip>`. false — слишком часто (429 rate_limited).
+ * Хранилище недоступно — пропускаем (как страж).
+ */
+export async function preCheckAi(req: Request, route: string): Promise<boolean> {
+  try {
+    return await kvRateLimit(`ai:${route}-pre:${ipHash(req)}`, burstFor(route).ip, BURST_WINDOW_MS);
+  } catch (e) {
+    console.error("[ai-guard] pre-check kv error, request not counted", e instanceof Error ? e.message : e);
+    return true;
+  }
+}
+
 export async function guardAi(req: Request, opts: GuardOptions): Promise<Guard> {
   if (!sameOrigin(req)) return deny(403, "forbidden_origin", null);
 
   const lim = readLimits();
   const secret = deviceSecret();
-  const units = Number.isFinite(opts.units) ? Math.min(MAX_UNITS, Math.max(0, Math.floor(opts.units))) : 1;
+  const units = normalizeUnits(opts.units);
   const free = units === 0;
   const siteUnits = free ? 1 : units;
   const now = Date.now();
   const day = kzDay(now);
-  // IP хранится в ключах только хешем: в Redis нет сырых адресов.
-  const ip = createHmac("sha256", secret).update(`ip:${clientIp(req)}`).digest("hex").slice(0, 20);
+  const ip = ipHash(req, secret);
 
   let id = readDeviceId(req, secret);
   let cookie: string | null = null;
@@ -213,10 +254,11 @@ export async function guardAi(req: Request, opts: GuardOptions): Promise<Guard> 
     };
     const devUnits = free ? 1 : units;
     const devCap = free ? lim.freeDeviceDaily : lim.deviceDaily;
-    const burstLimit = BURST_LIMITS[opts.route] ?? BURST_DEFAULT;
+    const burst = burstFor(opts.route);
 
-    const [burstOk, devN, ipN, siteN] = await Promise.all([
-      kvRateLimit(`ai:${opts.route}:${ip}`, burstLimit, BURST_WINDOW_MS, now),
+    const [burstDevOk, burstIpOk, devN, ipN, siteN] = await Promise.all([
+      kvRateLimit(`ai:${opts.route}:d:${id}`, burst.device, BURST_WINDOW_MS, now),
+      kvRateLimit(`ai:${opts.route}:${ip}`, burst.ip, BURST_WINDOW_MS, now),
       kv.incrBy(keys.dev, devUnits, DAY_TTL),
       free ? Promise.resolve(0) : kv.incrBy(keys.ip, units, DAY_TTL),
       kv.incrBy(keys.site, siteUnits, DAY_TTL),
@@ -238,7 +280,7 @@ export async function guardAi(req: Request, opts: GuardOptions): Promise<Guard> 
       }
     };
 
-    if (overDev || overIp || overSite || !burstOk) {
+    if (overDev || overIp || overSite || !burstDevOk || !burstIpOk) {
       await undo();
       // Важнее для ученика: лимит дня (завтра снова), затем общий запас сайта, затем «подожди пару минут».
       if (overDev || overIp) return deny(429, "daily_limit", cookie);

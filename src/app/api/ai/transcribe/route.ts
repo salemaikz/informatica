@@ -1,12 +1,13 @@
 import { toFile } from "openai";
 import { audioExt, baseAudioType, MAX_AUDIO_BYTES, MAX_TRANSCRIPT_LEN } from "@/lib/voice";
-import { getOpenAI, jsonError, MODELS } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, jsonError, MODELS, openAiRejected } from "@/server/openai";
 import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
 import { lang as parseLang } from "@/server/context";
 
 // Расшифровка голосового вопроса для ИИ-чата: multipart (audio, lang) → { text }. Оплата на клиенте — spendAi("voice").
-// Страж лимитов (server/ai-guard.ts): голос весит AI_UNITS.voice = 4 обращения; ошибка до вызова модели возвращает их.
+// Страж лимитов (server/ai-guard.ts): голос весит AI_UNITS.voice = 4 обращения. Возврат — только если модель точно не
+// получила запрос: ошибка до вызова или HTTP-ошибка OpenAI; обрыв клиентом, таймаут и сеть — не возвращают.
 
 export const maxDuration = 30;
 
@@ -44,17 +45,29 @@ export async function POST(req: Request) {
   if (!type.startsWith("audio/") || !ext) return reject(415, "bad_type");
   const lang = parseLang(form.get("lang"));
 
+  // Подготовка файла — до вызова модели: сбой здесь возвращает обращения.
+  let file;
   try {
     const bytes = new Uint8Array(await audio.arrayBuffer());
-    const file = await toFile(bytes, `voice.${ext}`, { type });
-    const res = await client.audio.transcriptions.create({ file, model: MODELS.stt, language: lang });
+    file = await toFile(bytes, `voice.${ext}`, { type });
+  } catch (e) {
+    console.error("[ai] route=transcribe prepare error", e instanceof Error ? e.message : e);
+    return reject(502, "stt_failed");
+  }
+
+  try {
+    const res = await client.audio.transcriptions.create(
+      { file, model: MODELS.stt, language: lang },
+      { signal: req.signal, timeout: callTimeoutMs(maxDuration) },
+    );
     const u = (res as { usage?: { type?: string; input_tokens?: number; output_tokens?: number } }).usage;
     const tok = u?.type === "tokens";
     console.info(`[ai] route=transcribe model=${MODELS.stt} in=${tok ? (u?.input_tokens ?? 0) : 0} out=${tok ? (u?.output_tokens ?? 0) : 0} bytes=${audio.size}`);
     return withGuardHeaders(Response.json({ text: (res.text ?? "").trim().slice(0, MAX_TRANSCRIPT_LEN) }), g);
   } catch (e) {
     console.error("[ai] route=transcribe error", e instanceof Error ? e.message : e);
-    // Расшифровка не получена — обращения возвращаются.
-    return reject(502, "stt_failed");
+    // Обращения возвращаются, только если OpenAI ответил HTTP-ошибкой; таймаут и обрыв сети — модель могла получить файл.
+    if (openAiRejected(e, req.signal)) return reject(502, "stt_failed");
+    return withGuardHeaders(jsonError(502, "stt_failed"), g);
   }
 }

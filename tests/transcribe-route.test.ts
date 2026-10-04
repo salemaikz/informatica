@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -5,13 +6,16 @@ vi.mock("server-only", () => ({}));
 // OpenAI не вызывается: клиент подменён, проверяем порядок защит и проверку входа.
 const create = vi.fn();
 const state = { client: true };
-vi.mock("@/server/openai", () => ({
-  MODELS: { stt: "test-stt" },
-  getOpenAI: () => (state.client ? { audio: { transcriptions: { create } } } : null),
-  jsonError: (status: number, code: string) => Response.json({ error: code }, { status }),
-}));
+vi.mock("@/server/openai", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/openai")>();
+  return {
+    ...real,
+    MODELS: { ...real.MODELS, stt: "test-stt" },
+    getOpenAI: () => (state.client ? { audio: { transcriptions: { create } } } : null),
+  };
+});
 
-const { POST } = await import("@/app/api/ai/transcribe/route");
+const { POST, maxDuration } = await import("@/app/api/ai/transcribe/route");
 const { getKv, kzDay } = await import("@/server/kv");
 
 // Сколько обращений списано с сайта сегодня (страж лимитов, server/ai-guard.ts).
@@ -60,14 +64,29 @@ describe("POST /api/ai/transcribe — вход", () => {
     expect(await code(res)).toBe("ai_not_configured");
   });
 
-  it("лимит: 21-й запрос за 10 минут с одного IP — 429", async () => {
+  it("всплеск: 11-й запрос за 10 минут с одного устройства — 429 rate_limited", async () => {
     const ip = "10.99.99.99";
-    for (let i = 0; i < 20; i++) {
+    const first = await POST(req({ audio: audio("audio/webm", 10) }, { "x-forwarded-for": ip }));
+    expect(first.status).toBe(200);
+    const cookie = (first.headers.get("set-cookie") ?? "").split(";")[0];
+    for (let i = 1; i < 10; i++) {
+      const r = await POST(req({ audio: audio("audio/webm", 10) }, { "x-forwarded-for": ip, cookie }));
+      expect(r.status).toBe(200);
+    }
+    const res = await POST(req({ audio: audio() }, { "x-forwarded-for": ip, cookie }));
+    expect(res.status).toBe(429);
+    expect(await code(res)).toBe("rate_limited");
+  });
+
+  it("всплеск по IP: 61-й запрос за 10 минут с одного IP (у каждого запроса новое устройство) — 429 rate_limited", async () => {
+    const ip = "10.99.99.98";
+    for (let i = 0; i < 60; i++) {
       const r = await POST(req({ audio: audio("audio/webm", 10) }, { "x-forwarded-for": ip }));
       expect(r.status).toBe(200);
     }
     const res = await POST(req({ audio: audio() }, { "x-forwarded-for": ip }));
     expect(res.status).toBe(429);
+    expect(await code(res)).toBe("rate_limited");
   });
 
   it("не multipart — 400 bad_form", async () => {
@@ -153,6 +172,14 @@ describe("POST /api/ai/transcribe — успех и сбои", () => {
     expect(res.status).toBe(502);
     expect(await code(res)).toBe("stt_failed");
   });
+
+  it("таймаут вызова короче maxDuration маршрута", async () => {
+    create.mockResolvedValue({ text: "ок" });
+    await POST(req({ audio: audio() }));
+    const opts = create.mock.calls[0][1] as { timeout: number };
+    expect(opts.timeout).toBe((maxDuration - 5) * 1000);
+    expect(opts.timeout).toBeLessThan(maxDuration * 1000);
+  });
 });
 
 describe("POST /api/ai/transcribe — страж лимитов (решение #48)", () => {
@@ -185,12 +212,40 @@ describe("POST /api/ai/transcribe — страж лимитов (решение 
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("сбой расшифровки (502) возвращает обращения", async () => {
-    create.mockRejectedValue(new Error("upstream"));
+  it("HTTP-ошибка OpenAI (502) возвращает обращения", async () => {
+    for (const status of [400, 429, 500]) {
+      create.mockRejectedValueOnce(new OpenAI.APIError(status, { message: "rejected" }, "rejected", new Headers()));
+      const before = await siteUnits();
+      const res = await POST(req({ audio: audio() }));
+      expect(res.status).toBe(502);
+      expect(await code(res)).toBe("stt_failed");
+      expect(await siteUnits()).toBe(before);
+    }
+  });
+
+  it("сетевой сбой и таймаут после начала вызова обращения НЕ возвращают (все 4)", async () => {
+    for (const err of [new Error("upstream"), new OpenAI.APIConnectionError({ message: "reset" }), new OpenAI.APIConnectionTimeoutError()]) {
+      create.mockRejectedValueOnce(err);
+      const before = await siteUnits();
+      const res = await POST(req({ audio: audio() }));
+      expect(res.status).toBe(502);
+      expect(await code(res)).toBe("stt_failed");
+      expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=/);
+      expect((await siteUnits()) - before).toBe(4);
+    }
+  });
+
+  it("обрыв клиентом во время расшифровки: обращения не возвращаются", async () => {
+    const ctrl = new AbortController();
+    create.mockImplementationOnce(async () => {
+      ctrl.abort();
+      throw new OpenAI.APIUserAbortError();
+    });
+    const form = new FormData();
+    form.append("audio", audio("audio/webm", 1500), "voice.webm");
     const before = await siteUnits();
-    const res = await POST(req({ audio: audio() }));
-    expect(res.status).toBe(502);
-    expect(await siteUnits()).toBe(before);
+    await POST(new Request("http://localhost/api/ai/transcribe", { method: "POST", body: form, headers: { "x-forwarded-for": nextIp(), host: "localhost" }, signal: ctrl.signal }));
+    expect((await siteUnits()) - before).toBe(4);
   });
 
   it("лимит устройства: голос весит 4, потолок AI_DEVICE_DAILY_UNITS = 6 пускает один запрос, второй — 429 daily_limit", async () => {

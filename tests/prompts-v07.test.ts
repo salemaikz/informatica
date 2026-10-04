@@ -52,3 +52,22 @@ describe("режимы ИИ-чата 2.0", () => {
     expect(tutorSystemPrompt(ctx, "chat", undefined, { chatMode: "free" })).not.toContain("ЧАТ «");
   });
 });
+
+describe("строка-страховка про безопасность (этап 10)", () => {
+  const SAFETY = "Безопасность важнее учёбы";
+
+  it("есть в каждом режиме, в нейтральном кэшируемом промпте и в чате с режимом", () => {
+    for (const mode of ["chat", "hint", "ask", "explain"] as const) {
+      expect(tutorSystemPrompt(ctx, mode, { prompt: "x" })).toContain(SAFETY);
+    }
+    expect(tutorSystemPrompt(ctx, "hint", { prompt: "x" }, { neutral: true, noLeak: true })).toContain(SAFETY);
+    expect(tutorSystemPrompt(ctx, "chat", undefined, { chatMode: "ent" })).toContain(SAFETY);
+  });
+
+  it("называет 150, 111, 112 и взрослого; без глаголов с родом", () => {
+    const rule = tutorSystemPrompt(ctx, "chat").split("\n").find((l) => l.includes(SAFETY)) ?? "";
+    for (const n of ["150", "111", "112"]) expect(rule).toContain(n);
+    expect(rule).toContain("взрослым");
+    expect(rule).not.toMatch(/сделал|сказал|написал|почувствовал|смог|решил/);
+  });
+});

@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -31,11 +32,26 @@ vi.mock("@/server/openai", async (importOriginal) => {
   return { ...real, getOpenAI: () => (state.client ? { chat: { completions: { create } } } : null) };
 });
 
+// Промпт можно сломать: проверка «сбой до вызова модели возвращает обращение».
+const promptState = vi.hoisted(() => ({ throws: false }));
+vi.mock("@/server/prompts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/prompts")>();
+  return {
+    ...real,
+    tutorSystemPrompt: (...args: Parameters<typeof real.tutorSystemPrompt>) => {
+      if (promptState.throws) throw new Error("prompt bug");
+      return real.tutorSystemPrompt(...args);
+    },
+  };
+});
+
 const { createMemoryKv, kzDay } = await import("@/server/kv");
 const { POST } = await import("@/app/api/ai/tutor/route");
 const { crisisReply } = await import("@/lib/safety");
-const { STREAM_CUT_MARK, STREAM_ERROR_MARK, splitStreamTail } = await import("@/lib/ai-stream");
+const { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, splitStreamTail } = await import("@/lib/ai-stream");
 const { MAX_TOKENS } = await import("@/server/openai");
+const { maxDuration } = await import("@/app/api/ai/tutor/route");
+const { aiDict } = await import("@/i18n/parts/ai");
 
 let ipN = 0;
 const freshIp = () => `10.2.${Math.floor(++ipN / 250)}.${ipN % 250}`;
@@ -68,11 +84,27 @@ function fakeStream(parts: string[], finish: string | null = "stop", opts: { fai
 
 const site = async () => holder.kv!.get(`ai:site:${kzDay()}`);
 
+/** Ответ маршрута: текст без маркера и признак конца. */
+const read = async (res: Response) => splitStreamTail(await res.text());
+
+/** Ошибка OpenAI с HTTP-статусом: запрос отклонён, модель его не обработала. */
+const apiError = (status: number) => new OpenAI.APIError(status, { message: "rejected" }, "rejected", new Headers());
+
+/** Запрос с сигналом отмены (клиент может оборвать соединение). */
+const postWithSignal = (body: unknown, signal: AbortSignal) =>
+  new Request("http://localhost/api/ai/tutor", {
+    method: "POST",
+    headers: { "content-type": "application/json", host: "localhost", "x-forwarded-for": freshIp() },
+    body: JSON.stringify(body),
+    signal,
+  });
+
 beforeEach(() => {
   holder.kv = createMemoryKv();
   cacheStore.clear();
   create.mockReset();
   state.client = true;
+  promptState.throws = false;
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -88,17 +120,18 @@ describe("кризисный ответ: без модели, без лимит�
     expect(res.status).toBe(200);
     expect(res.headers.get("X-AI-Crisis")).toBe("self_harm");
     expect(res.headers.get("X-AI-Cache")).toBe("hit");
-    expect(await res.text()).toBe(crisisReply("self_harm", "ru"));
+    // кризисный текст заканчивается маркером OK, как любой ответ маршрута
+    expect(await read(res)).toEqual({ text: crisisReply("self_harm", "ru"), end: "ok" });
     expect(create).not.toHaveBeenCalled();
     expect(await site()).toBe(0);
   });
 
   it("казахские буквы — ответ по-казахски; насилие — свой текст", async () => {
     const kk = await POST(post(chatBody("өлгім келеді")));
-    expect(await kk.text()).toBe(crisisReply("self_harm", "kk"));
+    expect((await read(kk)).text).toBe(crisisReply("self_harm", "kk"));
     const abuse = await POST(post(chatBody("меня бьет отец")));
     expect(abuse.headers.get("X-AI-Crisis")).toBe("abuse");
-    expect(await abuse.text()).toBe(crisisReply("abuse", "ru"));
+    expect((await read(abuse)).text).toBe(crisisReply("abuse", "ru"));
   });
 
   it("работает без ключа ИИ и при исчерпанном общем запасе сайта", async () => {
@@ -122,19 +155,19 @@ describe("кризисный ответ: без модели, без лимит�
       post({ ...chatBody(""), messages: [{ role: "user", content: "хочу умереть" }, { role: "assistant", content: "…" }, { role: "user", content: "как убить процесс в linux" }] }),
     );
     expect(old.headers.get("X-AI-Crisis")).toBeNull();
-    expect(await old.text()).toBe("ок");
+    expect(await read(old)).toEqual({ text: "ок", end: "ok" });
   });
 });
 
 describe("поток: конец ответа", () => {
-  it("нормальный ответ: чистый текст без маркера, Set-Cookie нового устройства, списано 1", async () => {
+  it("нормальный ответ: текст и положительный маркер OK в конце, Set-Cookie нового устройства, списано 1", async () => {
     create.mockImplementation(() => fakeStream(["При", "вет"]));
     const res = await POST(post(chatBody("Привет")));
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=/);
     const text = await res.text();
-    expect(text).toBe("Привет");
-    expect(splitStreamTail(text).end).toBe("ok");
+    expect(text).toBe(`Привет${STREAM_OK_MARK}`);
+    expect(splitStreamTail(text)).toEqual({ text: "Привет", end: "ok" });
     expect(await site()).toBe(1);
   });
 
@@ -166,17 +199,105 @@ describe("поток: конец ответа", () => {
   it("служебный символ в тексте модели вырезается: маркер нельзя подделать содержимым ответа", async () => {
     create.mockImplementation(() => fakeStream(["Хитрый \u0000CUT", " ответ\u0000ERR"], "stop"));
     const text = await (await POST(post(chatBody("Привет")))).text();
-    expect(text).toBe("Хитрый CUT ответERR");
-    expect(splitStreamTail(text).end).toBe("ok");
+    expect(text).toBe(`Хитрый CUT ответERR${STREAM_OK_MARK}`);
+    expect(splitStreamTail(text)).toEqual({ text: "Хитрый CUT ответERR", end: "ok" });
+    // служебный символ в ответе ровно один — настоящий маркер конца
+    expect(text.split("\u0000")).toHaveLength(2);
   });
 
-  it("сбой при создании потока: 502, обращение возвращено, cookie устройства выдана", async () => {
-    create.mockRejectedValue(new Error("openai down"));
+  it("OpenAI ответил HTTP-ошибкой (400/401/429/5xx): 502, обращение возвращено, cookie устройства выдана", async () => {
+    for (const status of [400, 401, 429, 500, 503]) {
+      create.mockRejectedValue(apiError(status));
+      const res = await POST(post(chatBody("Привет")));
+      expect(res.status).toBe(502);
+      expect((await res.json()).error).toBe("ai_failed");
+      expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=/);
+      expect(await site()).toBe(0);
+    }
+  });
+});
+
+describe("возврат обращения: только если модель точно не получила запрос", () => {
+  it("сетевой сбой и таймаут после начала вызова: 502, обращение НЕ возвращено", async () => {
+    for (const err of [new Error("openai down"), new OpenAI.APIConnectionError({ message: "reset" }), new OpenAI.APIConnectionTimeoutError()]) {
+      create.mockRejectedValueOnce(err);
+      const res = await POST(post(chatBody("Привет")));
+      expect(res.status).toBe(502);
+    }
+    expect(await site()).toBe(3);
+  });
+
+  it("обрыв клиентом (req.signal.aborted) во время вызова: обращение не возвращается, даже если ошибка пришла с HTTP-статусом", async () => {
+    const ctrl = new AbortController();
+    create.mockImplementation(async () => {
+      ctrl.abort();
+      throw new OpenAI.APIUserAbortError();
+    });
+    await POST(postWithSignal(chatBody("Привет"), ctrl.signal));
+    expect(await site()).toBe(1);
+    // гонка: отмена и HTTP-ошибка одновременно — всё равно не возвращаем
+    const ctrl2 = new AbortController();
+    create.mockImplementation(async () => {
+      ctrl2.abort();
+      throw apiError(500);
+    });
+    await POST(postWithSignal(chatBody("Привет"), ctrl2.signal));
+    expect(await site()).toBe(2);
+  });
+
+  it("сбой до вызова модели (код маршрута упал при сборке запроса): обращение возвращено, модель не вызвана", async () => {
+    promptState.throws = true;
     const res = await POST(post(chatBody("Привет")));
     expect(res.status).toBe(502);
-    expect((await res.json()).error).toBe("ai_failed");
-    expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=/);
+    expect(create).not.toHaveBeenCalled();
     expect(await site()).toBe(0);
+  });
+
+  it("ученик ушёл посреди потока: ничего не возвращается и маркер не пишется", async () => {
+    const ctrl = new AbortController();
+    async function* gen() {
+      yield { choices: [{ delta: { content: "Начало" }, finish_reason: null }] };
+      ctrl.abort();
+      throw new OpenAI.APIUserAbortError();
+    }
+    create.mockImplementation(() => Object.assign(gen(), { controller: { abort: vi.fn() } }));
+    const res = await POST(postWithSignal(chatBody("Привет"), ctrl.signal));
+    expect(splitStreamTail(await res.text()).end).toBe("open");
+    expect(await site()).toBe(1);
+  });
+
+  it("кэшируемый запрос: сетевой сбой — не возвращаем, HTTP-ошибка OpenAI — возвращаем, пустой ответ модели — не возвращаем", async () => {
+    const body = (n: string) => ({ mode: "explain", messages: [], context: { lang: "ru" }, task: { prompt: `Что такое ${n}?`, options: ["а", "б"], correct: "а", given: "б" } });
+    create.mockRejectedValueOnce(new OpenAI.APIConnectionTimeoutError());
+    expect((await POST(post(body("x1")))).status).toBe(502);
+    expect(await site()).toBe(1);
+    create.mockRejectedValueOnce(apiError(429));
+    expect((await POST(post(body("x2")))).status).toBe(502);
+    expect(await site()).toBe(1);
+    create.mockResolvedValueOnce({ choices: [{ message: { content: "   " }, finish_reason: "stop" }], usage: {} });
+    expect((await POST(post(body("x3")))).status).toBe(502);
+    expect(await site()).toBe(2);
+  });
+});
+
+describe("вызов OpenAI: таймаут короче maxDuration, без повторов потока", () => {
+  it("поток: timeout = maxDuration − 5 с, maxRetries 0, сигнал связан с запросом", async () => {
+    create.mockImplementation(() => fakeStream(["ок"]));
+    const ctrl = new AbortController();
+    await (await POST(postWithSignal(chatBody("Привет"), ctrl.signal))).text();
+    const opts = create.mock.calls[0][1] as { timeout: number; maxRetries: number; signal: AbortSignal };
+    expect(opts.timeout).toBe((maxDuration - 5) * 1000);
+    expect(opts.timeout).toBeLessThan(maxDuration * 1000);
+    expect(opts.maxRetries).toBe(0);
+    expect(opts.signal.aborted).toBe(false);
+    ctrl.abort();
+    expect(opts.signal.aborted).toBe(true);
+  });
+
+  it("кэшируемый вызов тоже с таймаутом короче maxDuration", async () => {
+    create.mockResolvedValue({ choices: [{ message: { content: "текст" }, finish_reason: "stop" }], usage: {} });
+    await POST(post({ mode: "explain", messages: [], context: { lang: "ru" }, task: { prompt: "Сколько будет 2+2?", options: ["3", "4"], correct: "4", given: "3" } }));
+    expect((create.mock.calls[0][1] as { timeout: number }).timeout).toBeLessThan(maxDuration * 1000);
   });
 });
 
@@ -189,7 +310,15 @@ describe("токены и вес запроса", () => {
     await (await POST(post({ ...chatBody("г"), mode: "hint" }))).text();
     const caps = create.mock.calls.map((c) => c[0].max_completion_tokens);
     expect(caps).toEqual([MAX_TOKENS.chat, MAX_TOKENS.chatLong, MAX_TOKENS.chatLong, MAX_TOKENS.hint]);
-    expect(MAX_TOKENS).toMatchObject({ hint: 250, chat: 800, cached: 500 });
+    expect(MAX_TOKENS).toMatchObject({ hint: 250, chat: 800, chatPhoto: 1200, cached: 600 });
+  });
+
+  it("чат с фото: потолок 1200 (размышление low съедает часть), режим «ЕНТ» с фото — тоже 1200", async () => {
+    create.mockImplementation(() => fakeStream(["ок"]));
+    const image = `data:image/png;base64,${"A".repeat(40)}`;
+    await (await POST(post(chatBody("Проверь", { image })))).text();
+    await (await POST(post(chatBody("Проверь", { image, chatMode: "ent" })))).text();
+    expect(create.mock.calls.map((c) => c[0].max_completion_tokens)).toEqual([1200, 1200]);
   });
 
   it("чат с фото стоит 2 обращения и идёт на модель с изображением", async () => {
@@ -240,6 +369,21 @@ describe("защиты на входе", () => {
     expect((await POST(post({ mode: "chat", messages: [], context: {} }))).status).toBe(400);
   });
 
+  it("дешёвый счётчик по IP до разбора тела: 120 запросов за 10 минут проходят (даже мусор — 400), 121-й — 429 rate_limited", async () => {
+    const ip = freshIp();
+    const bad = () => new Request("http://localhost/api/ai/tutor", { method: "POST", body: "{", headers: { host: "localhost", "x-forwarded-for": ip } });
+    for (let i = 0; i < 120; i++) expect((await POST(bad())).status).toBe(400);
+    const over = await POST(bad());
+    expect(over.status).toBe(429);
+    expect((await over.json()).error).toBe("rate_limited");
+    // кризисный путь тоже под счётчиком
+    const crisis = await POST(post(chatBody("хочу умереть"), { "x-forwarded-for": ip }));
+    expect(crisis.status).toBe(429);
+    // другой IP не задет
+    expect((await POST(post(chatBody("хочу умереть")))).status).toBe(200);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("лимит устройства: сверх потолка — 429 daily_limit, модель второй раз не вызывается (всплеск и сайт — в ai-guard.test.ts)", async () => {
     create.mockImplementation(() => fakeStream(["ок"]));
     vi.stubEnv("AI_DEVICE_DAILY_UNITS", "1");
@@ -263,20 +407,21 @@ describe("кэшируемые ответы (подсказка, разбор)",
     create.mockResolvedValue(answer("Складываем двойки."));
     const miss = await POST(post(hintBody("2")));
     expect(miss.headers.get("X-AI-Cache")).toBe("miss");
-    expect(await miss.text()).toBe("Складываем двойки.");
+    expect(await read(miss)).toEqual({ text: "Складываем двойки.", end: "ok" });
     expect(await site()).toBe(1);
     const hit = await POST(post(hintBody("2")));
     expect(hit.headers.get("X-AI-Cache")).toBe("hit");
-    expect(await hit.text()).toBe("Складываем двойки.");
+    // ответ из кэша тоже заканчивается маркером OK
+    expect(await read(hit)).toEqual({ text: "Складываем двойки.", end: "ok" });
     expect(create).toHaveBeenCalledTimes(1);
     // кэш-hit не списывает: счётчик сайта остался от первого запроса
     expect(await site()).toBe(1);
   });
 
-  it("потолок токенов кэшируемого ответа: разбор 500, подсказка 250", async () => {
+  it("потолок токенов кэшируемого ответа: разбор 600, подсказка 250", async () => {
     create.mockResolvedValue(answer("текст"));
     await POST(post(hintBody("7")));
-    expect(create.mock.calls[0][0].max_completion_tokens).toBe(500);
+    expect(create.mock.calls[0][0].max_completion_tokens).toBe(600);
     await POST(post({ mode: "hint", messages: [], context: { lang: "ru" }, task: { prompt: "Сколько будет 8 + 1?", options: ["9", "8"], correct: "9" } }));
     expect(create.mock.calls[1][0].max_completion_tokens).toBe(250);
   });
@@ -292,12 +437,21 @@ describe("кэшируемые ответы (подсказка, разбор)",
     create.mockResolvedValueOnce(answer("Целый разбор."));
     const again = await POST(post(hintBody("9")));
     expect(again.headers.get("X-AI-Cache")).toBe("miss");
-    expect(await again.text()).toBe("Целый разбор.");
+    expect(await read(again)).toEqual({ text: "Целый разбор.", end: "ok" });
     expect(create).toHaveBeenCalledTimes(2);
   });
 
-  it("сбой модели в кэшируемом запросе: 502 и обращение возвращено", async () => {
-    create.mockRejectedValue(new Error("down"));
+  it("подсказка выдала ответ дважды: заглушка из словаря с маркером OK, в кэш не попадает", async () => {
+    create.mockResolvedValue(answer("Ответ: 1011"));
+    const res = await POST(
+      post({ mode: "hint", messages: [], context: { lang: "ru" }, task: { prompt: "Переведи число 11 в двоичную систему", options: ["1011", "1101", "1110"], correct: "1011" } }),
+    );
+    expect(res.headers.get("X-AI-Cache")).toBe("skip");
+    expect(await read(res)).toEqual({ text: aiDict["ai.hintFallback"].ru, end: "ok" });
+  });
+
+  it("HTTP-ошибка OpenAI в кэшируемом запросе: 502 и обращение возвращено", async () => {
+    create.mockRejectedValue(apiError(500));
     const res = await POST(post(hintBody("11")));
     expect(res.status).toBe(502);
     expect(await site()).toBe(0);

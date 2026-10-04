@@ -355,6 +355,18 @@ describe("POST /api/issue", () => {
     expect(pushCapped).not.toHaveBeenCalled();
   });
 
+  it("IPv6: лимит общий на всю сеть /64 — смена адреса внутри неё не даёт новых запросов; другая /64 не задета", async () => {
+    const from = (i: number) => ({ "x-forwarded-for": `2001:db8:77:1:${i.toString(16)}::${i.toString(16)}` });
+    for (let i = 1; i <= ISSUE_ANY_LIMIT.limit; i++) expect((await POST(req("не json", from(i)))).status).toBe(400);
+    expect((await POST(req("не json", from(999)))).status).toBe(429);
+    // другая сеть /64
+    expect((await POST(req("не json", { "x-forwarded-for": "2001:db8:77:2::1" }))).status).toBe(400);
+    // IPv4-mapped тот же адрес, что и IPv4
+    const v4 = { "x-forwarded-for": "198.51.100.5" };
+    for (let i = 0; i < ISSUE_ANY_LIMIT.limit; i++) expect((await POST(req("не json", i % 2 ? { "x-forwarded-for": "::ffff:198.51.100.5" } : v4))).status).toBe(400);
+    expect((await POST(req("не json", v4))).status).toBe(429);
+  });
+
   it("тело без Content-Length читается потоком и обрывается после 8000 байт", async () => {
     let pulled = 0;
     let cancelled = false;

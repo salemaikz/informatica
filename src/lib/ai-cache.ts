@@ -7,8 +7,12 @@ import { hashString } from "./text";
 // и клиентский LRU в localStorage. Серверная часть (sha256, Data Cache) — в src/server/ai-cache.ts.
 // Кэшируем только НЕперсональные ответы: подсказку/разбор на первый запрос и быстрые вопросы-кнопки.
 
-/** Версия промпта в ключе кэша: меняем при любой правке промптов — старые ответы перестают подходить. */
-export const PROMPT_VERSION = 1;
+/**
+ * Версия в ключе кэша ответов (серверный Data Cache и клиент): меняем при любой правке промптов или потолков токенов —
+ * старые ответы перестают подходить. 2 — этап 10: ответы, обрезанные потолком токенов и закэшированные раньше, больше не выдаются.
+ * Клиентский ключ хранилища (CLIENT_CACHE_KEY) меняется вместе с ней.
+ */
+export const PROMPT_VERSION = 2;
 
 const STYLE_KEYS = ["short", "examples", "steps"] as const;
 
@@ -142,13 +146,16 @@ export function leaksAnswer(
 
 // ---------- Клиентский кэш (localStorage, LRU) ----------
 
-export const CLIENT_CACHE_KEY = "informatica:ai-cache:v1";
+export const CLIENT_CACHE_KEY = "informatica:ai-cache:v2";
+/** Прежние ключи хранилища: записи в них больше не читаются, при записи в новый ключ их стираем (место в localStorage). */
+const LEGACY_CLIENT_CACHE_KEYS = ["informatica:ai-cache:v1"];
 export const CLIENT_CACHE_MAX = 150;
 
 /** Минимальный интерфейс хранилища (Storage в браузере, заглушка в тестах). */
 export interface KV {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 /** Ключ клиентского кэша: хеш + длина канонического JSON (sha на клиенте не нужен). */
@@ -200,6 +207,8 @@ export function clientCachePut(key: string, text: string, store: KV | null = def
     const items = load(store).filter((e) => e[0] !== key);
     items.push([key, text]);
     while (items.length > max) items.shift();
+    // Сначала освобождаем место, занятое прежними ключами, потом пишем в новый.
+    for (const old of LEGACY_CLIENT_CACHE_KEYS) store.removeItem?.(old);
     store.setItem(CLIENT_CACHE_KEY, JSON.stringify(items));
   } catch {
     // приватный режим / переполнение хранилища — кэш просто не работает
