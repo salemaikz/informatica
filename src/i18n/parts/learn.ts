@@ -89,7 +89,7 @@ export const learnDict = {
   "learn2.ent.items.link.many": { ru: "≈{n} заданий + контекстные вместе с Python", kk: "≈{n} тапсырма + Python-мен бірге контекстік тапсырмалар" },
   // Итоговая плитка карты: 35 обычных + 5 контекстных = 40 заданий, 50 баллов.
   "learn2.ent.total.title": { ru: "Всего на ЕНТ", kk: "ҰБТ-да барлығы" },
-  "learn2.ent.total.value": { ru: "{n} заданий · {p} баллов", kk: "{n} тапсырма · {p} балл" },
+  "learn2.ent.total.value": { ru: "Заданий: {n} · баллов: {p}", kk: "Тапсырма: {n} · балл: {p}" },
   "learn2.ent.total.split": { ru: "{a} по темам + {c} контекстных", kk: "{a} тақырыптар бойынша + {c} контекстік тапсырма" },
   "learn2.ent.lessons.one": { ru: "{n} урок", kk: "{n} сабақ" },
   "learn2.ent.lessons.few": { ru: "{n} урока", kk: "{n} сабақ" },
