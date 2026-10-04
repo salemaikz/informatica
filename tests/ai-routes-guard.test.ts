@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -32,6 +33,18 @@ const post = (url: string, body: unknown, headers: Record<string, string> = {}) 
 const site = () => holder.kv!.get(`ai:site:${kzDay()}`);
 const code = async (r: Response) => (await r.json()).error as string;
 
+/** Ошибка OpenAI с HTTP-статусом: запрос отклонён, модель его не обработала. */
+const apiError = (status: number) => new OpenAI.APIError(status, { message: "rejected" }, "rejected", new Headers());
+
+/** Запрос, который клиент может оборвать. */
+const postWithSignal = (url: string, body: unknown, signal: AbortSignal) =>
+  new Request(`http://localhost${url}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", host: "localhost", "x-forwarded-for": freshIp() },
+    body: JSON.stringify(body),
+    signal,
+  });
+
 const reply = (content: string) => ({ choices: [{ message: { content } }], usage: { prompt_tokens: 5, completion_tokens: 5 } });
 
 beforeEach(() => {
@@ -59,19 +72,54 @@ describe("POST /api/ai/check-solution — страж лимитов", () => {
     expect(await site()).toBe(2);
     expect(create.mock.calls[0][0].max_completion_tokens).toBe(MAX_TOKENS.check);
     expect(MAX_TOKENS.check).toBeLessThan(2500);
+    // таймаут вызова короче maxDuration маршрута
+    expect((create.mock.calls[0][1] as { timeout: number }).timeout).toBe((check.maxDuration - 5) * 1000);
   });
 
-  it("ошибка до вызова модели возвращает обращения: битый JSON, нет условия, ИИ не настроен, сбой запроса", async () => {
+  it("ошибка до вызова модели возвращает обращения: битый JSON, нет условия, ИИ не настроен", async () => {
     expect((await check.POST(post("/api/ai/check-solution", "{"))).status).toBe(400);
     expect((await check.POST(post("/api/ai/check-solution", { ...body, task: { prompt: "" } }))).status).toBe(400);
     state.client = false;
     expect((await check.POST(post("/api/ai/check-solution", body))).status).toBe(503);
-    state.client = true;
-    create.mockRejectedValue(new Error("down"));
-    const res = await check.POST(post("/api/ai/check-solution", body));
-    expect(res.status).toBe(502);
-    expect(await code(res)).toBe("ai_failed");
     expect(await site()).toBe(0);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("HTTP-ошибка OpenAI (модель запрос не обработала) возвращает обращения", async () => {
+    for (const status of [400, 401, 429, 500, 503]) {
+      create.mockRejectedValueOnce(apiError(status));
+      const res = await check.POST(post("/api/ai/check-solution", body));
+      expect(res.status).toBe(502);
+      expect(await code(res)).toBe("ai_failed");
+      expect(await site()).toBe(0);
+    }
+  });
+
+  it("сетевой сбой и таймаут после начала вызова обращения НЕ возвращают", async () => {
+    for (const err of [new Error("down"), new OpenAI.APIConnectionError({ message: "reset" }), new OpenAI.APIConnectionTimeoutError()]) {
+      create.mockRejectedValueOnce(err);
+      const res = await check.POST(post("/api/ai/check-solution", body));
+      expect(res.status).toBe(502);
+      expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=/);
+    }
+    expect(await site()).toBe(6);
+  });
+
+  it("обрыв клиентом во время вызова: обращения не возвращаются, даже при ошибке с HTTP-статусом", async () => {
+    const ctrl = new AbortController();
+    create.mockImplementationOnce(async () => {
+      ctrl.abort();
+      throw new OpenAI.APIUserAbortError();
+    });
+    await check.POST(postWithSignal("/api/ai/check-solution", body, ctrl.signal));
+    expect(await site()).toBe(2);
+    const ctrl2 = new AbortController();
+    create.mockImplementationOnce(async () => {
+      ctrl2.abort();
+      throw apiError(500);
+    });
+    await check.POST(postWithSignal("/api/ai/check-solution", body, ctrl2.signal));
+    expect(await site()).toBe(4);
   });
 
   it("модель ответила, но ответ не разобрать (токены потрачены): 502, обращения не возвращаются", async () => {
@@ -122,13 +170,30 @@ describe("POST /api/ai/lesson-feedback — бесплатно для устро�
     expect(create.mock.calls[0][0].max_completion_tokens).toBe(MAX_TOKENS.feedback);
   });
 
-  it("ошибка до вызова модели и сбой запроса возвращают счёт", async () => {
+  it("ошибка до вызова модели и HTTP-ошибка OpenAI возвращают счёт", async () => {
     expect((await feedback.POST(post("/api/ai/lesson-feedback", "{"))).status).toBe(400);
     state.client = false;
     expect((await feedback.POST(post("/api/ai/lesson-feedback", body))).status).toBe(503);
     state.client = true;
-    create.mockRejectedValue(new Error("down"));
+    create.mockRejectedValue(apiError(500));
     expect((await feedback.POST(post("/api/ai/lesson-feedback", body))).status).toBe(502);
     expect(await site()).toBe(0);
+  });
+
+  it("сетевой сбой и обрыв клиентом счёт не возвращают; таймаут вызова короче maxDuration", async () => {
+    create.mockRejectedValueOnce(new Error("down"));
+    expect((await feedback.POST(post("/api/ai/lesson-feedback", body))).status).toBe(502);
+    expect(await site()).toBe(1);
+    const ctrl = new AbortController();
+    create.mockImplementationOnce(async () => {
+      ctrl.abort();
+      throw new OpenAI.APIUserAbortError();
+    });
+    await feedback.POST(postWithSignal("/api/ai/lesson-feedback", body, ctrl.signal));
+    expect(await site()).toBe(2);
+    create.mockResolvedValueOnce(reply(good));
+    await feedback.POST(post("/api/ai/lesson-feedback", body));
+    expect((create.mock.calls[2][1] as { timeout: number }).timeout).toBe((feedback.maxDuration - 5) * 1000);
+    expect((feedback.maxDuration - 5) * 1000).toBeLessThan(feedback.maxDuration * 1000);
   });
 });

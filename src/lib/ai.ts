@@ -36,7 +36,8 @@ async function ensureOk(res: Response) {
 
 /**
  * Потоковый ответ наставника: onText получает накопленный текст без служебного маркера конца.
- * Сервер дописывает маркер, если поток оборвался или упёрся в лимит длины (lib/ai-stream.ts), — тогда AiError("stream_cut").
+ * Целый ответ заканчивается маркером OK (lib/ai-stream.ts). Ответ без него (соединение закрыли раньше времени,
+ * сервер упал, платформа оборвала по таймауту) или с маркером сбоя/обрезки по длине — AiError("stream_cut").
  * Обрыв сети посреди чтения — тоже stream_cut. Отмена (signal) пробрасывается как есть.
  */
 export async function streamTutor(
@@ -72,6 +73,7 @@ export async function streamTutor(
   }
   raw += decoder.decode();
   const { text, end } = splitStreamTail(raw);
+  // Только положительный маркер «OK» значит «дошло целиком»: «open» — поток закрылся без маркера.
   if (end !== "ok") throw new AiError("stream_cut");
   if (!text.trim()) throw new AiError("empty_answer");
   onText(text);

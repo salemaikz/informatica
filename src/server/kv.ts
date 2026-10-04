@@ -121,6 +121,10 @@ export function getKv(): Kv {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   const memory = createMemoryKv();
   shared = url && token ? createUpstashKv(url, token, memory) : memory;
+  // Без Upstash в production счётчики у каждой копии сервера свои: потолок расходов ИИ становится «на копию». Один раз за жизнь копии.
+  if (shared.kind === "memory" && process.env.NODE_ENV === "production") {
+    console.warn("[kv] memory store in production: AI limits are per instance");
+  }
   return shared;
 }
 

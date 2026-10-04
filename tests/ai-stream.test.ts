@@ -1,14 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { STREAM_CUT_MARK, STREAM_ERROR_MARK, splitStreamTail, stripStreamMark } from "@/lib/ai-stream";
+import { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, splitStreamTail, stripStreamMark, withStreamEnd } from "@/lib/ai-stream";
 import { aiCodeKey, canRetryAiError } from "@/lib/ai-errors";
 import { AiError, aiErrorKey, streamTutor } from "@/lib/ai";
 import type { TutorRequest } from "@/lib/ai-types";
 import { dict } from "@/i18n/dict";
 
 describe("маркеры конца потока", () => {
-  it("обычный ответ — без маркера", () => {
-    expect(splitStreamTail("Привет, Бит")).toEqual({ text: "Привет, Бит", end: "ok" });
-    expect(splitStreamTail("")).toEqual({ text: "", end: "ok" });
+  it("целый ответ заканчивается маркером OK: текст до него и признак ok", () => {
+    expect(splitStreamTail(`Привет, Бит${STREAM_OK_MARK}`)).toEqual({ text: "Привет, Бит", end: "ok" });
+    expect(splitStreamTail(STREAM_OK_MARK)).toEqual({ text: "", end: "ok" });
+  });
+
+  it("нет маркера — «open»: поток ещё идёт или закрыт без конца (обрыв), но не «ok»", () => {
+    expect(splitStreamTail("Привет, Бит")).toEqual({ text: "Привет, Бит", end: "open" });
+    expect(splitStreamTail("")).toEqual({ text: "", end: "open" });
+  });
+
+  it("недописанный OK («\u0000», «\u0000O») — не ok", () => {
+    expect(splitStreamTail("abc\u0000O")).toEqual({ text: "abc", end: "error" });
+    expect(splitStreamTail("abc\u0000K")).toEqual({ text: "abc", end: "error" });
+  });
+
+  it("withStreamEnd: дописывает OK, а готовый маркер (CUT, ERR, OK) не трогает", () => {
+    expect(withStreamEnd("Ответ")).toBe(`Ответ${STREAM_OK_MARK}`);
+    expect(withStreamEnd(`Ответ${STREAM_CUT_MARK}`)).toBe(`Ответ${STREAM_CUT_MARK}`);
+    expect(withStreamEnd(`Ответ${STREAM_ERROR_MARK}`)).toBe(`Ответ${STREAM_ERROR_MARK}`);
+    expect(withStreamEnd(`Ответ${STREAM_OK_MARK}`)).toBe(`Ответ${STREAM_OK_MARK}`);
+    expect(splitStreamTail(withStreamEnd("Текст")).end).toBe("ok");
   });
 
   it("сбой потока: текст до маркера и признак error", () => {
@@ -28,11 +46,14 @@ describe("маркеры конца потока", () => {
 
   it("всё после первого служебного символа отбрасывается", () => {
     expect(splitStreamTail("a\u0000ERRb\u0000CUT")).toEqual({ text: "a", end: "error" });
+    expect(splitStreamTail("a\u0000CUTb\u0000OK")).toEqual({ text: "a", end: "cut" });
   });
 
   it("stripStreamMark вырезает служебный символ из текста модели: маркер нельзя подделать", () => {
     expect(stripStreamMark("a\u0000CUTb")).toBe("aCUTb");
-    expect(splitStreamTail(stripStreamMark("ответ\u0000ERR")).end).toBe("ok");
+    // подделанный «OK» посреди ответа не делает оборванный ответ целым: без настоящего маркера конца — «open»
+    expect(splitStreamTail(stripStreamMark("ответ\u0000OK")).end).toBe("open");
+    expect(splitStreamTail(stripStreamMark("ответ\u0000ERR")).end).toBe("open");
     expect(stripStreamMark("чисто")).toBe("чисто");
   });
 });
@@ -112,13 +133,34 @@ const reply = (chunks: string[], init: { failAfter?: number; headers?: Record<st
   new Response(streamOf(chunks, init.failAfter), { status: 200, headers: init.headers });
 
 describe("streamTutor: конец ответа", () => {
-  it("целый ответ: onText получает накопленный текст, результат — полный текст", async () => {
-    fetchMock.mockResolvedValue(reply(["При", "вет, ", "Бит"]));
+  it("целый ответ: onText получает накопленный текст, результат — полный текст, маркер OK не виден", async () => {
+    fetchMock.mockResolvedValue(reply(["При", "вет, ", "Бит", STREAM_OK_MARK]));
     const seen: string[] = [];
     const text = await streamTutor(req, (t) => seen.push(t));
     expect(text).toBe("Привет, Бит");
     expect(seen[0]).toBe("При");
     expect(seen[seen.length - 1]).toBe("Привет, Бит");
+    for (const s of seen) expect(s).not.toContain("\u0000");
+  });
+
+  it("маркер OK, разорванный границей кусков, всё равно не виден и ответ целый", async () => {
+    fetchMock.mockResolvedValue(reply(["Текст\u0000", "O", "K"]));
+    const seen: string[] = [];
+    expect(await streamTutor(req, (t) => seen.push(t))).toBe("Текст");
+    for (const s of seen) expect(s).toBe("Текст");
+  });
+
+  it("ответ без маркера OK — оборван (соединение закрыли раньше времени): stream_cut, показанный текст не сохраняется как готовый", async () => {
+    fetchMock.mockResolvedValue(reply(["Ответ почти ", "готов"]));
+    const err = await streamTutor(req, () => {}).catch((e) => e);
+    expect(err).toBeInstanceOf(AiError);
+    expect(err.code).toBe("stream_cut");
+    expect(aiErrorKey(err)).toBe("ai.err.cut");
+  });
+
+  it("поток закончился на недописанном OK — stream_cut", async () => {
+    fetchMock.mockResolvedValue(reply(["Текст\u0000O"]));
+    await expect(streamTutor(req, () => {})).rejects.toMatchObject({ code: "stream_cut" });
   });
 
   it("маркер обрезки по длине: AiError stream_cut, маркер ученику не показывается", async () => {
@@ -175,15 +217,15 @@ describe("streamTutor: конец ответа", () => {
     await expect(streamTutor(req, () => {}, ctrl.signal)).rejects.toBe(abortErr);
   });
 
-  it("пустой ответ без маркера — empty_answer (общая ошибка)", async () => {
-    fetchMock.mockResolvedValue(reply(["   "]));
+  it("пустой ответ с маркером OK — empty_answer (общая ошибка)", async () => {
+    fetchMock.mockResolvedValue(reply(["   ", STREAM_OK_MARK]));
     const err = await streamTutor(req, () => {}).catch((e) => e);
     expect(err.code).toBe("empty_answer");
     expect(aiErrorKey(err)).toBe("tutor.error");
   });
 
   it("кризисный и кэшированный ответы: заголовок X-AI-Cache доходит до колбэка", async () => {
-    fetchMock.mockResolvedValue(reply(["Ответ"], { headers: { "X-AI-Cache": "hit" } }));
+    fetchMock.mockResolvedValue(reply(["Ответ", STREAM_OK_MARK], { headers: { "X-AI-Cache": "hit" } }));
     const statuses: (string | null)[] = [];
     await streamTutor(req, () => {}, undefined, (s) => statuses.push(s));
     expect(statuses).toEqual(["hit"]);

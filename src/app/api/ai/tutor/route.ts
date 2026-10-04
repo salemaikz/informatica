@@ -2,11 +2,11 @@ import type OpenAI from "openai";
 import type { StudentContext, TaskContext, TutorMode } from "@/lib/ai-types";
 import { aiDict } from "@/i18n/parts/ai";
 import { cacheableRequest, cacheKeyPayload, cacheStyle, cacheTask, leaksAnswer } from "@/lib/ai-cache";
-import { STREAM_CUT_MARK, STREAM_ERROR_MARK, stripStreamMark } from "@/lib/ai-stream";
+import { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, stripStreamMark, withStreamEnd } from "@/lib/ai-stream";
 import { AI_UNITS } from "@/lib/economy";
 import { crisisLang, crisisReply, detectCrisis } from "@/lib/safety";
-import { getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS } from "@/server/openai";
-import { guardAi, withGuardHeaders, type GuardOk } from "@/server/ai-guard";
+import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
+import { guardAi, preCheckAi, withGuardHeaders, type GuardOk } from "@/server/ai-guard";
 import { sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
@@ -15,9 +15,11 @@ import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import type { EntTopicId } from "@/lib/types";
 
 // Чат с ИИ-наставником: свободный диалог, подсказка к заданию, разбор ошибки. Ответ — потоковый текст.
-// Защиты по порядку: origin → разбор тела → кризисная тема (ответ без модели, без лимитов) → ключ ИИ → страж лимитов
-// (server/ai-guard.ts: устройство, IP, сайт, всплеск; обращение списывается до вызова модели).
-// Конец потока: при сбое или обрезке по длине последним куском идёт маркер (lib/ai-stream.ts), клиент покажет «оборвалось».
+// Защиты по порядку: origin → размер тела → дешёвый счётчик по IP (до разбора тела) → разбор тела → кризисная тема
+// (ответ без модели, без лимитов) → ключ ИИ → страж лимитов (server/ai-guard.ts: устройство, IP, сайт, всплеск;
+// обращение списывается до вызова модели; возвращается, только если модель точно не получила запрос).
+// Конец ответа: каждый текстовый ответ заканчивается маркером (lib/ai-stream.ts): OK — дошёл целиком, ERR — сбой потока,
+// CUT — обрезка по длине. Ответ без маркера OK клиент покажет как «оборвалось». Маркер ученику не виден.
 
 export const maxDuration = 60;
 
@@ -32,6 +34,8 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return jsonError(403, "forbidden_origin");
   const declared = Number(req.headers.get("content-length") ?? NaN);
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return jsonError(413, "too_large");
+  // Дешёвый счётчик по IP до чтения тела: крупные мусорные запросы и кризисный путь (он без стража) тоже под лимитом.
+  if (!(await preCheckAi(req, "tutor"))) return jsonError(429, "rate_limited");
 
   let body: Record<string, unknown>;
   try {
@@ -60,7 +64,7 @@ export async function POST(req: Request) {
   const crisis = last?.role === "user" ? detectCrisis(last.content) : null;
   if (last && crisis) {
     console.info(`[ai] route=tutor crisis=${crisis}`);
-    return new Response(crisisReply(crisis, crisisLang(last.content, ctx.lang)), {
+    return new Response(withStreamEnd(crisisReply(crisis, crisisLang(last.content, ctx.lang))), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
@@ -105,16 +109,33 @@ export async function POST(req: Request) {
   // Неперсональные запросы (подсказка/разбор на первый запрос, быстрые вопросы) — через общий кэш.
   const cacheReq = cacheableRequest(mode, history, task, !!image);
   if (cacheReq && task) {
-    return withGuardHeaders(await cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns() }, g), g);
+    return withGuardHeaders(
+      await cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns() }, g, req.signal),
+      g,
+    );
   }
 
-  const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
-  const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task, { chatMode, topic }) }, ...userTurns()];
   const route = `tutor:${mode}`;
   const model = image ? MODELS.vision : MODELS.tutor;
-  const maxTokens = mode === "hint" ? MAX_TOKENS.hint : chatMode === "explain" || chatMode === "ent" ? MAX_TOKENS.chatLong : MAX_TOKENS.chat;
+  // Фото: модель размышляет (reasoning low), и часть лимита уходит на размышление — запас больше.
+  const maxTokens = image
+    ? MAX_TOKENS.chatPhoto
+    : mode === "hint"
+      ? MAX_TOKENS.hint
+      : chatMode === "explain" || chatMode === "ent"
+        ? MAX_TOKENS.chatLong
+        : MAX_TOKENS.chat;
 
+  // true — запрос мог дойти до модели: с этого момента обращение возвращается только при HTTP-ошибке OpenAI.
+  let sent = false;
   try {
+    const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
+    const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task, { chatMode, topic }) }, ...userTurns()];
+    // Тело потока SDK таймаутом не покрывает (только ожидание заголовков): общий срок — свой сигнал, чтобы сами
+    // закрыть ответ маркером ERR до того, как платформа оборвёт функцию по maxDuration.
+    const timeoutMs = callTimeoutMs(maxDuration);
+    const signal = AbortSignal.any([req.signal, AbortSignal.timeout(timeoutMs)]);
+    sent = true;
     const stream = await client.chat.completions.create(
       {
         model,
@@ -124,7 +145,8 @@ export async function POST(req: Request) {
         reasoning_effort: image ? "low" : "none",
         max_completion_tokens: maxTokens,
       },
-      { signal: req.signal },
+      // maxRetries 0: повтор потока после обрыва — второй платный вызов за одно обращение, да и время на него вышло бы.
+      { signal, timeout: timeoutMs, maxRetries: 0 },
     );
     const encoder = new TextEncoder();
     const out = new ReadableStream<Uint8Array>({
@@ -153,6 +175,8 @@ export async function POST(req: Request) {
           } else if (finish === "length") {
             mark = STREAM_CUT_MARK;
             console.info(`[ai] route=${route} cut=1`);
+          } else {
+            mark = STREAM_OK_MARK;
           }
         }
         try {
@@ -171,9 +195,10 @@ export async function POST(req: Request) {
       g,
     );
   } catch (e) {
-    // Модель не ответила — обращение возвращаем.
     console.error("[tutor] openai error", e instanceof Error ? e.message : e);
-    await g.release();
+    // Возврат — только если модель точно не получила запрос: сбой до вызова или HTTP-ошибка OpenAI.
+    // Обрыв клиентом, таймаут и сетевой сбой после начала вызова не возвращают обращение.
+    if (!sent || openAiRejected(e, req.signal)) await g.release();
     return withGuardHeaders(jsonError(502, "ai_failed"), g);
   }
 }
@@ -182,12 +207,14 @@ const FALLBACK_HINT = aiDict["ai.hintFallback"];
 
 /**
  * Ответ из кэша или одна генерация целиком (не потоком): короткие неперсональные ответы. Ответ из кэша — обращение
- * возвращается (g.release). Set-Cookie добавляет вызывающий (withGuardHeaders).
+ * возвращается (g.release); при сбое — только если OpenAI ответил HTTP-ошибкой. Каждый ответ заканчивается маркером
+ * конца (OK, а у обрезанного — CUT). Set-Cookie добавляет вызывающий (withGuardHeaders).
  */
 async function cachedTutor(
   client: OpenAI,
   a: { mode: TutorMode; ctx: StudentContext; task: TaskContext; question?: string; turns: Msg[] },
   g: GuardOk,
+  signal: AbortSignal,
 ): Promise<Response> {
   const { mode, ctx, question, turns } = a;
   const task = cacheTask(mode, a.task);
@@ -197,12 +224,16 @@ async function cachedTutor(
   const neutralCtx = { ...ctx, style: cacheStyle(ctx.style) };
 
   const generate = async (noLeak: boolean): Promise<{ text: string; cut: boolean }> => {
-    const res = await client.chat.completions.create({
-      model,
-      messages: [{ role: "system", content: tutorSystemPrompt(neutralCtx, mode, task, { neutral: true, noLeak }) }, ...turns],
-      reasoning_effort: "none",
-      max_completion_tokens: mode === "hint" ? MAX_TOKENS.hint : MAX_TOKENS.cached,
-    });
+    // Генерация общая для одинаковых запросов и кладётся в кэш — к сигналу одного запроса не привязана.
+    const res = await client.chat.completions.create(
+      {
+        model,
+        messages: [{ role: "system", content: tutorSystemPrompt(neutralCtx, mode, task, { neutral: true, noLeak }) }, ...turns],
+        reasoning_effort: "none",
+        max_completion_tokens: mode === "hint" ? MAX_TOKENS.hint : MAX_TOKENS.cached,
+      },
+      { timeout: callTimeoutMs(maxDuration) },
+    );
     logCache(route, "miss", model, res.usage);
     const choice = res.choices[0];
     return { text: stripStreamMark(choice?.message?.content?.trim() ?? ""), cut: choice?.finish_reason === "length" };
@@ -236,7 +267,9 @@ async function cachedTutor(
       logCache(route, "hit");
       await g.release(); // модель не вызывалась
     }
-    return new Response(r.text, {
+    // Из кэша и свежая генерация — без служебного символа (его вырезали до кэша), добавляем OK; обрезанный (CUT) и
+    // заглушка не кэшируются: у обрезанного маркер уже есть, у заглушки — добавится OK.
+    return new Response(r.cacheable ? stripStreamMark(r.text) + STREAM_OK_MARK : withStreamEnd(r.text), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
@@ -245,7 +278,8 @@ async function cachedTutor(
     });
   } catch (e) {
     console.error("[tutor] cached answer error", e instanceof Error ? e.message : e);
-    await g.release();
+    // Пустой ответ и прочие сбои после вызова модели обращение не возвращают; HTTP-ошибка OpenAI — возвращает.
+    if (openAiRejected(e, signal)) await g.release();
     return jsonError(502, "ai_failed");
   }
 }

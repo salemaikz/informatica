@@ -10,6 +10,7 @@ import {
   clientCachePut,
   isQuickQuestion,
   leaksAnswer,
+  PROMPT_VERSION,
   type KV,
 } from "@/lib/ai-cache";
 import { dict } from "@/i18n/dict";
@@ -252,7 +253,26 @@ describe("клиентский кэш (LRU)", () => {
     const s = memStore();
     clientCachePut("a", "   ", s);
     expect(s.raw()).toBeNull();
-    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v1");
+    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v2");
+  });
+
+  it("v2: записи старого ключа v1 (с обрезанными ответами этапа ≤ 9) не читаются и стираются при первой записи", () => {
+    const store = new Map<string, string>([["informatica:ai-cache:v1", JSON.stringify([["k", "Обрезанный отв"]])]]);
+    const s = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    expect(clientCacheGet("k", s)).toBeNull();
+    clientCachePut("n", "Новый ответ", s);
+    expect(store.has("informatica:ai-cache:v1")).toBe(false);
+    expect(clientCacheGet("n", s)).toBe("Новый ответ");
+    expect(clientCacheGet("k", s)).toBeNull();
+  });
+
+  it("версия в ключе кэша ответов поднята: ключи прежних версий не совпадают", () => {
+    expect(PROMPT_VERSION).toBeGreaterThanOrEqual(2);
+    expect(JSON.parse(cacheKeyPayload({ mode: "hint", lang: "ru", style: "short", task: { prompt: "x" } })).v).toBe(PROMPT_VERSION);
   });
 });
 

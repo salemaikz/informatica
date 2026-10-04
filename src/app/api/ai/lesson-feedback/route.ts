@@ -1,5 +1,5 @@
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
-import { getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
 import { sanitizeContext } from "@/server/context";
@@ -7,6 +7,7 @@ import { lessonFeedbackPrompt } from "@/server/prompts";
 
 // Отзыв после урока + обновление «памяти наставника» об ученике. Дешёвая модель.
 // Страж лимитов (server/ai-guard.ts): для устройства бесплатно (AI_UNITS.feedback = 0, свой потолок в сутки), с сайта списывается 1.
+// Возврат — только если модель точно не получила запрос (ошибка до вызова, HTTP-ошибка OpenAI); обрыв и таймаут не возвращают.
 
 export const maxDuration = 30;
 
@@ -71,11 +72,12 @@ export async function POST(req: Request) {
           { role: "user", content: summary },
         ],
       },
-      { signal: req.signal },
+      { signal: req.signal, timeout: callTimeoutMs(maxDuration) },
     );
   } catch (e) {
     console.error("[lesson-feedback] openai error", e instanceof Error ? e.message : e);
-    return reject(502, "ai_failed");
+    if (openAiRejected(e, req.signal)) return reject(502, "ai_failed");
+    return withGuardHeaders(jsonError(502, "ai_failed"), g);
   }
 
   // Модель ответила (токены потрачены): дальше обращение не возвращаем.

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -55,5 +55,52 @@ describe("сутки по Казахстану", () => {
   it("полночь по Астане (UTC+5)", () => {
     expect(kzDay(Date.UTC(2026, 9, 4, 18, 59))).toBe("2026-10-04");
     expect(kzDay(Date.UTC(2026, 9, 4, 19, 0))).toBe("2026-10-05");
+  });
+});
+
+describe("getKv: предупреждение про память в production", () => {
+  const load = async () => {
+    vi.resetModules();
+    return await import("@/server/kv");
+  };
+  const noRedis = () => {
+    for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) vi.stubEnv(k, "");
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("production без Upstash: один раз за жизнь копии — «memory store in production: AI limits are per instance»", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    noRedis();
+    vi.stubEnv("NODE_ENV", "production");
+    const { getKv } = await load();
+    expect(getKv().kind).toBe("memory");
+    getKv();
+    getKv();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[kv] memory store in production: AI limits are per instance");
+  });
+
+  it("не production — без предупреждения", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    noRedis();
+    vi.stubEnv("NODE_ENV", "development");
+    const { getKv } = await load();
+    expect(getKv().kind).toBe("memory");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("production с Upstash — без предупреждения", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    noRedis();
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://x.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "tok");
+    vi.stubEnv("NODE_ENV", "production");
+    const { getKv } = await load();
+    expect(getKv().kind).toBe("upstash");
+    expect(warn).not.toHaveBeenCalled();
   });
 });
