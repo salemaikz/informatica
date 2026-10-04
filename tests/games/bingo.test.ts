@@ -21,7 +21,7 @@ import {
   type BingoCard,
 } from "@/games/bingo/logic";
 import { plainText } from "@/lib/text";
-import type { ChoiceStep } from "@/lib/types";
+import type { BitsStep, ChoiceStep, InputStep, SkillId } from "@/lib/types";
 
 const choice = (correctText: string): ChoiceStep => ({
   id: "t:x:1:1",
@@ -29,6 +29,15 @@ const choice = (correctText: string): ChoiceStep => ({
   prompt: { ru: "q", kk: "q" },
   options: [correctText, "z"],
   correct: 0,
+  explanation: { ru: "e", kk: "e" },
+});
+
+const input = (answers: string[], mode: InputStep["mode"] = "binary"): InputStep => ({
+  id: "t:x:2:1",
+  type: "input",
+  prompt: { ru: "q", kk: "q" },
+  answers,
+  mode,
   explanation: { ru: "e", kk: "e" },
 });
 
@@ -49,8 +58,18 @@ describe("бинго: клетки", () => {
     expect(cellAnswer(choice("x".repeat(MAX_ANSWER_LEN)), "ru")).not.toBeNull();
     expect(cellAnswer(choice("  "), "ru")).toBeNull();
   });
-  it("не choice-задание не годится", () => {
-    expect(cellAnswer({ ...choice("1"), type: "input" } as never, "ru")).toBeNull();
+  it("input с числом или двоичной записью годится: клетка — канонический ответ", () => {
+    expect(cellAnswer(input(["1101"]), "ru")).toBe("1101");
+    expect(cellAnswer(input(["1101", "01101"]), "kk")).toBe("1101");
+    expect(cellAnswer(input(["13"], "number"), "ru")).toBe("13");
+    expect(cellAnswer(input(["1".repeat(MAX_ANSWER_LEN + 1)]), "ru")).toBeNull();
+    expect(cellAnswer(input([]), "ru")).toBeNull();
+  });
+  it("свободный текст и интерактивные виды (bits, ladder, match…) не годятся: нет одного короткого ответа", () => {
+    expect(cellAnswer(input(["принтер"], "text"), "ru")).toBeNull();
+    const bits: BitsStep = { id: "g:ns.dec2bin:bits:7:1", type: "bits", prompt: { ru: "q", kk: "q" }, target: 7, bits: 4, explanation: { ru: "e", kk: "e" } };
+    expect(cellAnswer(bits, "ru")).toBeNull();
+    expect(cellAnswer({ id: "g:ns.dec2bin:ladder:7:1", type: "ladder", prompt: { ru: "q", kk: "q" }, number: 7 } as never, "ru")).toBeNull();
   });
 });
 
@@ -117,16 +136,52 @@ describe("бинго: сборка карточки", () => {
     if (card) expect(card.cells.length).toBeGreaterThanOrEqual(SMALL * SMALL);
     else expect(card).toBeNull();
   });
-  it("9…15 пригодных ответов — карточка 3 × 3; меньше 9 — null", () => {
-    // ns.bin2dec даёт 9–15 разных коротких ответов, it.trends — меньше 9 (проверено на seed 11: после переезда вида «включи биты»
-    // в ns.dec2bin у ns.bin2dec больше заданий с выбором, и на seed 7 карточка уже 4 × 4).
-    expect(collectCells(["ns.bin2dec"], "ru", 11).length).toBeGreaterThanOrEqual(SMALL * SMALL);
-    expect(collectCells(["ns.bin2dec"], "ru", 11).length).toBeLessThan(BIG * BIG);
-    const small = buildCard(["ns.bin2dec"], "ru", 11)!;
-    expect(small.size).toBe(SMALL);
-    expect(small.cells).toHaveLength(SMALL * SMALL);
-    expect(collectCells(["it.trends"], "ru", 7).length).toBeLessThan(SMALL * SMALL);
-    expect(buildCard(["it.trends"], "ru", 7)).toBeNull();
+  it("узкий навык (мало разных коротких ответов) — карточки нет, а не пустая сетка", () => {
+    // it.trends даёт меньше 9 разных коротких ответов
+    for (const seed of [1, 7, 11, 23]) {
+      expect(collectCells(["it.trends"], "ru", seed).length).toBeLessThan(SMALL * SMALL);
+      expect(buildCard(["it.trends"], "ru", seed)).toBeNull();
+    }
+  });
+  it("размер карточки всегда по числу клеток: 16 → 4 × 4, 9…15 → 3 × 3", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const cells = collectCells(SKILLS, "ru", seed).length;
+      const card = buildCard(SKILLS, "ru", seed);
+      expect(card?.size).toBe(cells >= BIG * BIG ? BIG : cells >= SMALL * SMALL ? SMALL : undefined);
+    }
+  });
+  // Карточка должна собираться почти всегда, а не только на удачных seed. Раньше короткие ответы давал только вид choice,
+  // и после переезда «включи биты» в ns.dec2bin (остались bits, ladder, input) карточка собиралась лишь на 4 seed из 60.
+  const RANGE = 60;
+  const NEED = Math.ceil(RANGE * 0.95);
+  for (const skill of ["ns.bin2dec", "ns.dec2bin", "ns.base"] as SkillId[]) {
+    for (const lang of ["ru", "kk"] as const) {
+      it(`${skill} (${lang}): карточка 9–16 клеток собирается ≥ 95% из ${RANGE} seed`, () => {
+        let built = 0;
+        for (let seed = 1; seed <= RANGE; seed++) {
+          const card = buildCard([skill], lang, seed);
+          if (!card) continue;
+          built++;
+          expect(card.cells.length).toBeGreaterThanOrEqual(SMALL * SMALL);
+          expect(card.cells.length).toBeLessThanOrEqual(BIG * BIG);
+          expect(card.cells).toHaveLength(card.size * card.size);
+          const answers = card.cells.map((c) => c.answer.toLowerCase());
+          expect(new Set(answers).size, `${skill} seed ${seed}`).toBe(answers.length);
+          for (const c of card.cells) {
+            expect(cellAnswer(c.step, lang)).toBe(c.answer);
+            expect(c.skill).toBe(skill);
+          }
+        }
+        expect(built, `${skill}: собралось ${built} из ${RANGE}`).toBeGreaterThanOrEqual(NEED);
+      });
+    }
+  }
+  it("в карточку попадают и choice, и input; интерактивных bits/ladder нет", () => {
+    const kinds = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const c of collectCells(["ns.dec2bin"], "ru", seed)) kinds.add(c.step.type);
+    }
+    expect([...kinds].sort()).toEqual(["choice", "input"]);
   });
   it("одинаковые условия без сцены не повторяются на одной карточке", () => {
     for (const seed of [1, 2, 3]) {

@@ -13,7 +13,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { useGoalData } from "./useGoalData";
+import { useGoalData, useWeekData } from "./useGoalData";
 
 /** Высота области столбиков и подписей графика пробников, px. */
 const CHART_H = 96;
@@ -46,12 +46,62 @@ function ForecastScale({ low, high, score, target }: { low: number; high: number
 }
 
 /**
- * Панель целей для страницы «Прогресс»: отсчёт до ЕНТ, прогноз с интервалом против цели,
- * неделя, план недели (3 темы) и история пробников.
+ * Карточка «Неделя»: уроков за неделю против цели из профиля, точки по дням. Не про ЕНТ: в треке ЕНТ она — часть
+ * панели целей, в школьном (#52) — вся панель на «Прогрессе» (`showEdit` добавляет ссылку на цель в профиле).
+ */
+export function WeekCard({ showEdit = false, className }: { showEdit?: boolean; className?: string }) {
+  const { t } = useT();
+  const week = useWeekData();
+  const dayLabels = t("stats.days").split(",");
+  const left = Math.max(0, week.goal - week.done);
+  return (
+    <Card className={className}>
+      <SectionHead
+        icon={<CalendarDays size={22} />}
+        title={t("goals.week.title")}
+        action={
+          showEdit ? (
+            <ButtonLink href="/profile#goals" variant="ghost" size="sm" className="h-10">
+              {t("goals.panel.edit")}
+            </ButtonLink>
+          ) : undefined
+        }
+      />
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-2xl font-extrabold">{t("goals.week.progress", { done: week.done, goal: week.goal })}</p>
+        <p className={cn("text-sm font-extrabold", week.reached ? "text-success-strong" : "text-muted")}>
+          {week.reached ? t("goals.week.reached") : t("goals.week.left", { n: left })}
+        </p>
+      </div>
+      <ProgressBar value={week.ratio} color={week.reached ? "var(--success)" : "var(--primary)"} height={12} className="mt-2" label={t("goals.week.title")} />
+      <ul className="mt-4 grid grid-cols-7 gap-1.5">
+        {week.days.map((d, i) => (
+          <li key={d.key} className="flex flex-col items-center gap-1">
+            <span className={cn("text-xs font-extrabold", d.today ? "text-primary" : "text-muted")}>{dayLabels[i]}</span>
+            <span
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-extrabold",
+                d.lessons > 0 ? "border-primary bg-primary text-white" : d.today ? "border-primary text-primary" : "border-border text-muted",
+                d.future && "opacity-50",
+              )}
+              aria-label={`${dayLabels[i]}: ${d.lessons}`}
+            >
+              {d.lessons > 0 ? d.lessons : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/**
+ * Панель целей для страницы «Прогресс» (только трек ЕНТ): отсчёт до ЕНТ, прогноз с интервалом против цели,
+ * неделя, план недели (3 темы) и история пробников. Школьному треку — только `WeekCard`.
  */
 export function GoalsPanel({ className }: { className?: string }) {
   const { t, l, lang } = useT();
-  const { daysLeft, examDate, forecast, goal, week, targetScore } = useGoalData();
+  const { daysLeft, examDate, forecast, goal, targetScore } = useGoalData();
   const lessons = useApp((s) => s.lessons);
   const exams = useApp((s) => s.exams);
 
@@ -65,8 +115,6 @@ export function GoalsPanel({ className }: { className?: string }) {
 
   const dateText = examDate ? formatExamDate(examDate, lang) : "";
   const noData = forecast.basis === "none";
-  const dayLabels = t("stats.days").split(",");
-  const left = Math.max(0, week.goal - week.done);
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -125,33 +173,7 @@ export function GoalsPanel({ className }: { className?: string }) {
       </Card>
 
       {/* Неделя */}
-      <Card>
-        <SectionHead icon={<CalendarDays size={22} />} title={t("goals.week.title")} />
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-2xl font-extrabold">{t("goals.week.progress", { done: week.done, goal: week.goal })}</p>
-          <p className={cn("text-sm font-extrabold", week.reached ? "text-success-strong" : "text-muted")}>
-            {week.reached ? t("goals.week.reached") : t("goals.week.left", { n: left })}
-          </p>
-        </div>
-        <ProgressBar value={week.ratio} color={week.reached ? "var(--success)" : "var(--primary)"} height={12} className="mt-2" label={t("goals.week.title")} />
-        <ul className="mt-4 grid grid-cols-7 gap-1.5">
-          {week.days.map((d, i) => (
-            <li key={d.key} className="flex flex-col items-center gap-1">
-              <span className={cn("text-xs font-extrabold", d.today ? "text-primary" : "text-muted")}>{dayLabels[i]}</span>
-              <span
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-extrabold",
-                  d.lessons > 0 ? "border-primary bg-primary text-white" : d.today ? "border-primary text-primary" : "border-border text-muted",
-                  d.future && "opacity-50",
-                )}
-                aria-label={`${dayLabels[i]}: ${d.lessons}`}
-              >
-                {d.lessons > 0 ? d.lessons : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <WeekCard />
 
       {/* План недели */}
       <Card>

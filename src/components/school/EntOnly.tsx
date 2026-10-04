@@ -10,13 +10,23 @@ import { MascotSays } from "@/components/mascot/Mascot";
 import { useEntVisible } from "./useEntVisible";
 
 /**
- * Страж разделов «только для подготовки к ЕНТ» (/exam, /plan). Трек ЕНТ — показывает страницу как есть;
+ * Страж разделов «только для подготовки к ЕНТ» (/exam, /plan, /exam/run). Трек ЕНТ — показывает страницу как есть;
  * школьный трек — карточку с выходом: переключиться на ЕНТ (трек меняет действие стора, страница тут же открывается)
  * или вернуться к школьной программе. Не 404 и не пустой экран.
+ * `fullscreen` — для маршрутов вне оболочки приложения (`/exam/run`): карточка в спокойном каркасе на весь экран.
  */
-export function EntOnly({ children }: { children: ReactNode }) {
+export function EntOnly({ children, fullscreen = false }: { children: ReactNode; fullscreen?: boolean }) {
   const ent = useEntVisible();
   if (ent) return <>{children}</>;
+  if (fullscreen) {
+    return (
+      <div className="min-h-dvh bg-bg">
+        <div className="mx-auto w-full max-w-xl px-4 pb-10 pt-[max(1.5rem,env(safe-area-inset-top))]">
+          <EntOnlyNotice />
+        </div>
+      </div>
+    );
+  }
   return <EntOnlyNotice />;
 }
 

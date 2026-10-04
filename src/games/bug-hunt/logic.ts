@@ -318,7 +318,8 @@ interface Claim {
   mutate: () => Mutation;
 }
 
-const BASES = [2, 3, 5, 8, 10];
+// без 8 и 16: они изучаются позже (ns.octhex), а эти утверждения — под навыком ns.base
+const BASES = [2, 3, 4, 5, 10];
 
 function randomBits(rand: Rand): string {
   const len = rint(rand, 4, 6);
@@ -395,14 +396,14 @@ function claimPool(rand: Rand): Claim[] {
     },
   });
   pool.push({
-    key: "max8",
-    line: mk(S.lMax8, { d: 7 }),
+    key: "max3",
+    line: mk(S.lMax3, { d: 2 }),
     mutate: () => ({
       line: 0,
-      type: "max8",
-      shown: mk(S.lMax8, { d: 8 }),
-      others: [mk(S.lMax8, { d: 6 })],
-      explain: mk(S.eMax8),
+      type: "max3",
+      shown: mk(S.lMax3, { d: 3 }),
+      others: [mk(S.lMax3, { d: 1 })],
+      explain: mk(S.eMax3),
     }),
   });
   return pool;
