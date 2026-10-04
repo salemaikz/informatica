@@ -13,6 +13,7 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { filterHistory, historyTotals, type HistoryFilter } from "@/lib/history";
 import { useApp } from "@/lib/store";
+import { useEntVisible } from "@/components/school/useEntVisible";
 import { toneOf } from "@/components/exam/logic";
 import { TONE_TEXT } from "./HistoryParts";
 import { HistoryRow } from "./HistoryRow";
@@ -30,6 +31,7 @@ function Tile({ label, value, valueClass }: { label: string; value: string | num
 /** Содержимое страницы «История тестов»: итоги, работа над ошибками, фильтры, список по дням. */
 export function HistoryScreen() {
   const { t, lang } = useT();
+  const ent = useEntVisible();
   const history = useApp((s) => s.history);
   const mistakes = useApp((s) => s.mistakes);
   const now = useNow();
@@ -57,9 +59,11 @@ export function HistoryScreen() {
             <ButtonLink href="/learn" block>
               {t("history.empty.lessons")}
             </ButtonLink>
-            <ButtonLink href="/exam" variant="secondary" block>
-              {t("history.empty.exam")}
-            </ButtonLink>
+            {ent && (
+              <ButtonLink href="/exam" variant="secondary" block>
+                {t("history.empty.exam")}
+              </ButtonLink>
+            )}
           </div>
         </Card>
       ) : (

@@ -17,7 +17,8 @@ import { Avatar } from "./Avatar";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { ChipsChip, HeartsChip } from "@/components/economy/HeaderChips";
 import { useToolbox } from "@/components/tools/useToolbox";
-import { NAV_GROUPS, groupOf, normalizePath, subOf, underPath } from "./nav";
+import { NAV_GROUPS, groupOf, normalizePath, subOf, underPath, visibleGroups } from "./nav";
+import { useEntVisible } from "@/components/school/useEntVisible";
 import { SectionTabs, SubLink } from "./SectionTabs";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 
@@ -47,6 +48,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // «page» — ровно эта страница; «true» — внутри группы (например, /tutor/123 или /exam/result/1).
   const current = (href: string, on: boolean) => (path === href ? "page" : on ? "true" : undefined);
   const activeIndex = NAV_GROUPS.findIndex((g) => g.id === group);
+  // Школьный трек: без ЕНТ-подразделов в меню (#52).
+  const groups = visibleGroups(useEntVisible());
   // Чат и практикум кода — широкие экраны: на компьютере без правой колонки виджетов.
   const wide = underPath(pathname, "/tutor") || underPath(pathname, "/code");
 
@@ -58,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Logo />
         </div>
         <nav aria-label={t("nav2.mainNav")} className="flex flex-col gap-2">
-          {NAV_GROUPS.map((g) => {
+          {groups.map((g) => {
             const on = g.id === group;
             const Icon = g.icon;
             return (

@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { useToolbox } from "@/components/tools/useToolbox";
 import { hubGroup, subOf, type NavSub } from "./nav";
+import { useEntVisible } from "@/components/school/useEntVisible";
 
 /** Открыть «Инструменты» на вкладке «Шпаргалка». Уровень инструментов экрана не трогаем. */
 export function openCheatSheet() {
@@ -47,7 +48,7 @@ export function SubLink({ sub, active, className, iconSize = 18 }: { sub: NavSub
 export function SectionTabs() {
   const pathname = usePathname();
   const { t } = useT();
-  const group = hubGroup(pathname);
+  const group = hubGroup(pathname, useEntVisible());
   const current = subOf(pathname);
   const scroller = useRef<HTMLDivElement>(null);
 
