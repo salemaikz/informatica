@@ -2,9 +2,10 @@
 
 import { Download, Pencil, RotateCcw, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
+import { exportBackup, importBackup } from "@/lib/backup-idb";
 import { ACHIEVEMENTS } from "@/lib/gamification";
 import { daysText, daysUntil } from "@/lib/goals";
 import { cn } from "@/lib/cn";
@@ -15,7 +16,7 @@ import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
-import { cleanBackup, downloadBlob } from "@/components/goals/backup";
+import { BACKUP_LIMITS, downloadBlob, parseBackup, summarizeBackup, type ParsedBackup } from "@/components/goals/backup";
 import { Row, Segmented } from "@/components/goals/controls";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
@@ -26,8 +27,6 @@ import { PlanStatusCard } from "@/components/plans/PlanStatusCard";
 import { TrackSettings } from "@/components/school/TrackSettings";
 
 const NAME_MAX = 30;
-/** Больше этого файл копии не читаем: настоящая копия — десятки килобайт, фото аватара — до ~45 КБ. */
-const IMPORT_MAX_BYTES = 8 * 1024 * 1024;
 const WEEKLY = [2, 3, 4, 5, 7];
 
 function OnOff({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -52,7 +51,6 @@ export default function ProfilePage() {
   const update = useApp((s) => s.updateProfile);
   const achievements = useApp((s) => s.achievements);
   const reset = useApp((s) => s.resetProgress);
-  const importProgress = useApp((s) => s.importProgress);
   const now = useMinuteClock();
   const today = todayKey(new Date(now));
 
@@ -60,14 +58,10 @@ export default function ProfilePage() {
   const [pickAvatar, setPickAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<unknown>(null);
-  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, setPending] = useState<ParsedBackup | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<{ tone: "success" | "warning" | "danger"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Просим браузер не стирать данные при нехватке места (Safari иначе чистит localStorage через 7 дней без визитов).
-  useEffect(() => {
-    Promise.resolve(navigator.storage?.persist?.()).catch(() => {});
-  }, []);
 
   const startEditName = () => {
     setDraft(profile.name);
@@ -80,32 +74,51 @@ export default function ProfilePage() {
     setEditingName(false);
   };
 
-  const exportData = () => {
-    downloadBlob(new Blob([JSON.stringify({ ...useApp.getState(), version: 2 }, null, 2)], { type: "application/json" }), "informatica-progress.json");
+  // Полная копия v3: прогресс, чипы, история, чаты (с сообщениями), фото конспектов, листы черновика. Тариф не входит.
+  const exportData = async () => {
+    setBackupMsg(null);
+    setBusy(true);
+    try {
+      const { blob, droppedImages } = await exportBackup();
+      downloadBlob(blob, "informatica-progress.json");
+      if (droppedImages > 0) setBackupMsg({ tone: "warning", text: t("prof2.export.partial", { n: droppedImages }) });
+    } catch {
+      setBackupMsg({ tone: "danger", text: t("prof2.export.error") });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const pickFile = async (file: File | undefined) => {
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
-    setImportMsg(null);
-    if (file.size > IMPORT_MAX_BYTES) {
-      setImportMsg({ ok: false, text: t("prof2.import.big") });
+    setBackupMsg(null);
+    if (file.size > BACKUP_LIMITS.fileBytes) {
+      setBackupMsg({ tone: "danger", text: t("prof2.import.big", { mb: BACKUP_LIMITS.fileBytes / (1024 * 1024) }) });
       return;
     }
     try {
-      const data = cleanBackup(JSON.parse(await file.text()));
+      const data = parseBackup(JSON.parse(await file.text()));
       if (!data) throw new Error("not a backup");
       setPending(data);
     } catch {
-      setImportMsg({ ok: false, text: t("prof2.import.bad") });
+      setBackupMsg({ tone: "danger", text: t("prof2.import.bad") });
     }
   };
 
-  const confirmImport = () => {
-    const ok = importProgress(pending);
+  const confirmImport = async () => {
+    if (!pending || busy) return;
+    const data = pending;
+    setBusy(true);
+    const ok = await importBackup(data);
+    setBusy(false);
     setPending(null);
-    setImportMsg(ok ? { ok: true, text: t("prof2.import.ok") } : { ok: false, text: t("prof2.import.bad") });
+    if (!ok) setBackupMsg({ tone: "danger", text: t("prof2.import.error") });
+    else if (data.skipped.length > 0 || data.droppedImages > 0) setBackupMsg({ tone: "warning", text: t("prof2.import.partial") });
+    else setBackupMsg({ tone: "success", text: t("prof2.import.ok") });
   };
+
+  const summary = pending ? summarizeBackup(pending) : null;
 
   const daysLeft = daysUntil(profile.examDate, today);
 
@@ -322,17 +335,25 @@ export default function ProfilePage() {
         <h2 className="text-lg font-extrabold">{t("prof2.backup.title")}</h2>
         <p className="mb-3 mt-1 text-sm font-semibold text-muted">{t("prof2.backup.desc")}</p>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button variant="secondary" onClick={exportData} icon={<Download size={18} />}>
+          <Button variant="secondary" onClick={() => void exportData()} disabled={busy} icon={<Download size={18} />}>
             {t("prof.export")}
           </Button>
-          <Button variant="secondary" onClick={() => fileRef.current?.click()} icon={<Upload size={18} />}>
+          <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy} icon={<Upload size={18} />}>
             {t("prof2.import")}
           </Button>
           <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => void pickFile(e.target.files?.[0])} />
         </div>
-        {importMsg && (
-          <p role="status" className={cn("mt-3 rounded-xl px-3 py-2 text-sm font-bold", importMsg.ok ? "bg-success-soft text-success-strong" : "bg-danger-soft text-danger")}>
-            {importMsg.text}
+        {backupMsg && (
+          <p
+            role="status"
+            className={cn(
+              "mt-3 rounded-xl px-3 py-2 text-sm font-bold",
+              backupMsg.tone === "success" && "bg-success-soft text-success-strong",
+              backupMsg.tone === "warning" && "bg-warning-soft text-warning-strong",
+              backupMsg.tone === "danger" && "bg-danger-soft text-danger",
+            )}
+          >
+            {backupMsg.text}
           </p>
         )}
         <Button variant="ghost" onClick={() => setConfirm(true)} icon={<RotateCcw size={18} />} className="mt-3 text-danger">
@@ -342,13 +363,18 @@ export default function ProfilePage() {
 
       <AvatarPicker open={pickAvatar} value={profile.avatar} name={profile.name} onChange={(avatar) => update({ avatar })} onClose={() => setPickAvatar(false)} />
 
-      <Modal open={pending !== null} onClose={() => setPending(null)} label={t("prof2.import")}>
+      <Modal open={pending !== null} onClose={() => !busy && setPending(null)} label={t("prof2.import")}>
         <div className="flex flex-col gap-4 text-center">
           <p className="text-lg font-extrabold">{t("prof2.import.confirm")}</p>
-          <Button variant="danger" block onClick={confirmImport}>
+          {summary && (
+            <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm font-bold text-muted">
+              {t("prof2.import.summary", { xp: summary.xp, lessons: summary.lessons, chats: summary.chats, images: summary.images })}
+            </p>
+          )}
+          <Button variant="danger" block disabled={busy} onClick={() => void confirmImport()}>
             {t("prof2.import.replace")}
           </Button>
-          <Button variant="secondary" block onClick={() => setPending(null)}>
+          <Button variant="secondary" block disabled={busy} onClick={() => setPending(null)}>
             {t("common.cancel")}
           </Button>
         </div>

@@ -80,6 +80,8 @@ import {
 import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
 import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
 import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
+import { parseBackup } from "./backup";
+import { beginHydration, finishHydration, safeStorage, STORAGE_KEY } from "./safe-storage";
 
 export type { LessonStat } from "./review";
 export type { HistoryEntry, WrongItem } from "./history";
@@ -466,17 +468,49 @@ function nextLessonStat(prev: LessonStat | undefined, via: LessonVia, accuracy: 
 }
 
 const GRADES: Grade[] = ["5", "6", "7", "8", "9", "10", "11", "other"];
+const LANGS: Lang[] = ["ru", "kk"];
+const GOALS: Goal[] = ["ent", "school", "interest"];
+const STYLES: ExplainStyle[] = ["short", "examples", "steps"];
+const THEMES: Theme[] = ["system", "light", "dark"];
+const GAME_MODES: GameMode[] = ["calm", "normal", "blitz"];
+const NAME_MAX = 30;
 
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** Профиль из хранилища или файла копии — недоверенный: у каждого поля проверяется тип, лишнего не остаётся. */
 function cleanProfile(raw: unknown): Profile {
-  const p = (raw ?? {}) as Partial<Profile>;
-  const grade = GRADES.includes(p.grade as Grade) ? (p.grade as Grade) : defaultProfile.grade;
+  const p = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const d = defaultProfile;
+  const pick = <T extends string>(v: unknown, list: readonly T[], def: T): T => (list.includes(v as T) ? (v as T) : def);
+  const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
+  const rem = (p.reminder && typeof p.reminder === "object" && !Array.isArray(p.reminder) ? p.reminder : {}) as Record<string, unknown>;
+  const reminder: ReminderSettings = {
+    enabled: bool(rem.enabled, d.reminder.enabled),
+    time: typeof rem.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(rem.time) ? rem.time : d.reminder.time,
+    push: bool(rem.push, d.reminder.push),
+  };
   const track: Track = p.track === "school" || p.track === "ent" ? p.track : p.goal === "school" ? "school" : "ent";
-  const reminder = { ...defaultProfile.reminder, ...(p.reminder ?? {}) };
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(reminder.time)) reminder.time = defaultProfile.reminder.time;
-  const targetScore = typeof p.targetScore === "number" && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : defaultProfile.targetScore;
-  const weeklyLessons = typeof p.weeklyLessons === "number" && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : defaultProfile.weeklyLessons;
-  const examDate = typeof p.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate) ? p.examDate : null;
-  return { ...defaultProfile, ...p, avatar: sanitizeAvatar(p.avatar), reminder, targetScore, weeklyLessons, examDate, grade, track, skipBasics: p.skipBasics === true };
+  return {
+    name: typeof p.name === "string" ? p.name.slice(0, NAME_MAX) : d.name,
+    lang: pick(p.lang, LANGS, d.lang),
+    grade: pick(p.grade, GRADES, d.grade),
+    goal: pick(p.goal, GOALS, d.goal),
+    style: pick(p.style, STYLES, d.style),
+    dailyGoalXp: isNum(p.dailyGoalXp) && p.dailyGoalXp >= 0 && p.dailyGoalXp <= 1000 ? Math.round(p.dailyGoalXp) : d.dailyGoalXp,
+    theme: pick(p.theme, THEMES, d.theme),
+    sound: bool(p.sound, d.sound),
+    vibration: bool(p.vibration, d.vibration),
+    reduceMotion: bool(p.reduceMotion, d.reduceMotion),
+    gameMode: pick(p.gameMode, GAME_MODES, d.gameMode),
+    createdAt: isNum(p.createdAt) && p.createdAt >= 0 ? p.createdAt : d.createdAt,
+    avatar: sanitizeAvatar(p.avatar),
+    reminder,
+    examDate: typeof p.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate) ? p.examDate : null,
+    targetScore: isNum(p.targetScore) && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : d.targetScore,
+    weeklyLessons: isNum(p.weeklyLessons) && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : d.weeklyLessons,
+    track,
+    skipBasics: p.skipBasics === true,
+  };
 }
 
 /** Миграции сохранений: v1 (конспекты по ключу урока) → v2 (папки и записи). */
@@ -1014,11 +1048,12 @@ export const useApp = create<AppState & AppActions>()(
         }),
 
       importProgress: (raw) => {
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-        const data = raw as Record<string, unknown>;
-        // Минимальная проверка, что это наш экспорт.
-        if (typeof data.xp !== "number" || !data.profile || typeof data.profile !== "object") return false;
-        const migrated = migrateState(data, typeof data.version === "number" ? data.version : data.notebook ? 2 : 1);
+        // Файл — недоверенные данные: parseBackup оставляет только известные поля нужных типов (lib/backup.ts).
+        const parsed = parseBackup(raw);
+        if (!parsed) return false;
+        const { version: _version, ...fields } = parsed.state;
+        void _version;
+        const migrated = migrateState(fields, parsed.version);
         // Тариф из файла не берём: он привязан к устройству (позже — к аккаунту).
         set((s) => ({ ...mergeState({ ...initialState, ...migrated, onboarded: true }, s), plan: s.plan }));
         return true;
@@ -1028,9 +1063,16 @@ export const useApp = create<AppState & AppActions>()(
       resetProgress: () => set((s) => ({ ...initialState, notebook: emptyNotebook(Date.now()), plan: s.plan })),
     }),
     {
-      name: "informatica-v1",
+      name: STORAGE_KEY,
       version: 2,
-      storage: createJSONStorage(() => localStorage),
+      // Безопасное хранилище (lib/safe-storage.ts): не бросает при запрете localStorage и переполнении,
+      // а нечитаемое сохранение откладывает в копию вместо молчаливой потери. Поэтому useApp.persist есть всегда.
+      storage: createJSONStorage(() => safeStorage),
+      // Сбой чтения, миграции или слияния не «вешает» приложение: Providers покажет экран восстановления.
+      onRehydrateStorage: () => {
+        beginHydration();
+        return (_state, error) => finishHydration(error);
+      },
       migrate: (persisted, version) => migrateState(persisted, version) as AppState & AppActions,
       // Новые поля получают значения по умолчанию у старых сохранений; данные проверяются как недоверенные.
       merge: (persisted, current) => mergeState(persisted, current),

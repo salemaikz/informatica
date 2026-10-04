@@ -167,7 +167,8 @@ describe("даты без Intl (kk-KZ есть не везде)", () => {
 });
 
 describe("cleanBackup: файл копии — недоверенные данные", () => {
-  const ok = { version: 2, xp: 120, profile: { name: "А" }, lessons: { "ns-1-bits": { best: 1 } }, days: {}, exams: [], streak: { current: 1 }, onboarded: false, junk: 1 };
+  const lesson = { completions: 1, bestAccuracy: 1, lastAt: 5, totalXp: 20 };
+  const ok = { version: 2, xp: 120, profile: { name: "А" }, lessons: { "ns-1-bits": lesson }, days: {}, exams: [], streak: { current: 1 }, onboarded: false, junk: 1 };
   it("пропускает свою копию и отбрасывает лишние поля", () => {
     const c = cleanBackup(ok)!;
     expect(c).not.toBeNull();
@@ -177,16 +178,16 @@ describe("cleanBackup: файл копии — недоверенные данн
     expect("junk" in c).toBe(false);
     expect("onboarded" in c).toBe(false);
   });
-  it("отклоняет не копию и битые поля", () => {
+  it("не копия — null; битое поле пропускается, а не роняет импорт (подробно — tests/backup.test.ts)", () => {
     expect(cleanBackup(null)).toBeNull();
     expect(cleanBackup([])).toBeNull();
     expect(cleanBackup({ xp: "1", profile: {} })).toBeNull();
     expect(cleanBackup({ xp: -5, profile: {} })).toBeNull();
     expect(cleanBackup({ xp: 1, profile: null })).toBeNull();
-    expect(cleanBackup({ ...ok, lessons: null })).toBeNull();
-    expect(cleanBackup({ ...ok, lessons: { a: 5 } })).toBeNull();
-    expect(cleanBackup({ ...ok, exams: {} })).toBeNull();
-    expect(cleanBackup({ ...ok, streak: [] })).toBeNull();
+    expect(cleanBackup({ ...ok, lessons: null })!.lessons).toBeUndefined();
+    expect(cleanBackup({ ...ok, lessons: { a: 5 } })!.lessons).toEqual({});
+    expect(cleanBackup({ ...ok, exams: {} })!.exams).toBeUndefined();
+    expect(cleanBackup({ ...ok, streak: [] })!.streak).toBeUndefined();
   });
   it("старая копия без version и новых полей проходит", () => {
     expect(cleanBackup({ xp: 10, profile: { lang: "kk" }, notes: { "ns-1-bits": { text: "x" } } })).not.toBeNull();

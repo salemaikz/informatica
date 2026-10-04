@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
 import { isPublicPath } from "@/lib/public-paths";
+import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, requestPersistentStorage, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
@@ -11,22 +12,47 @@ import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
 import { SwRegister } from "@/components/app/SwRegister";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
+import { StorageBanner } from "@/components/app/StorageBanner";
+import { RecoveryScreen } from "@/components/app/RecoveryScreen";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
 
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    (cb) => useApp.persist.onFinishHydration(cb),
-    () => useApp.persist.hasHydrated(),
-    () => false,
-  );
+function subscribeHydration(cb: () => void): () => void {
+  const offs = [useApp.persist.onHydrate(cb), useApp.persist.onFinishHydration(cb), subscribeStorage(cb)];
+  return () => offs.forEach((off) => off());
+}
+
+/**
+ * Где мы в загрузке прогресса: ждём, готово или не открылось (ошибка чтения, миграции, слияния
+ * либо не закончилось за HYDRATION_TIMEOUT_MS). retry — повторная попытка прочитать сохранение.
+ */
+function useHydration(): { phase: HydrationPhase; retry: () => void } {
+  const hydrated = useSyncExternalStore(subscribeHydration, () => useApp.persist.hasHydrated(), () => false);
+  const failed = useSyncExternalStore(subscribeHydration, hydrationFailed, () => false);
+  const [timedOut, setTimedOut] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (hydrated || failed) return;
+    const id = window.setTimeout(() => setTimedOut(true), HYDRATION_TIMEOUT_MS);
+    return () => window.clearTimeout(id);
+  }, [hydrated, failed, attempt]);
+
+  const retry = () => {
+    setTimedOut(false);
+    setAttempt((n) => n + 1);
+    void useApp.persist.rehydrate();
+  };
+  return { phase: hydrationPhase(hydrated, failed, timedOut), retry };
 }
 
 /**
  * Прогресс хранится в localStorage, поэтому интерфейс рисуем только после гидратации стора.
+ * Не открылось — экран восстановления (скачать копию, начать заново, повторить), а не вечный маскот.
  * Здесь же: тема, язык документа и редирект на онбординг.
  */
 export function Providers({ children }: { children: ReactNode }) {
-  const hydrated = useHydrated();
+  const { phase, retry } = useHydration();
+  const hydrated = phase === "ready";
   const onboarded = useApp((s) => s.onboarded);
   const theme = useApp((s) => s.profile.theme);
   const lang = useApp((s) => s.profile.lang);
@@ -52,6 +78,18 @@ export function Providers({ children }: { children: ReactNode }) {
     if (needsOnboarding) router.replace("/onboarding");
   }, [needsOnboarding, router]);
 
+  // После онбординга (и импорта копии) просим браузер не стирать данные сайта. Один раз за сессию, молча.
+  useEffect(() => {
+    if (hydrated && onboarded) requestPersistentStorage();
+  }, [hydrated, onboarded]);
+
+  if (phase === "failed") {
+    return (
+      <MotionProvider>
+        <RecoveryScreen onRetry={retry} />
+      </MotionProvider>
+    );
+  }
   if (!hydrated || needsOnboarding) {
     return (
       <MotionProvider>
@@ -66,6 +104,8 @@ export function Providers({ children }: { children: ReactNode }) {
       {/* Офлайн: кэш сервис-воркера (только production) и полоса «Нет интернета». */}
       <SwRegister />
       <OfflineBanner />
+      {/* Браузер не сохраняет прогресс (приватный режим, память заполнена) — полоса с крестиком. */}
+      <StorageBanner />
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />
