@@ -1,5 +1,5 @@
 import { SKILLS } from "@/content/skills";
-import { ENT_TOPICS, topicWeight } from "@/content/ent-topics";
+import { ENT_POINTS, ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import type { ExamKind } from "./exam";
 import type { SkillStat } from "./mastery";
 import type { EntTopicId } from "./types";
@@ -37,7 +37,7 @@ export interface Forecast {
   byTopic: Record<EntTopicId, number>;
 }
 
-export const MAX_SCORE = 50;
+export const MAX_SCORE = ENT_POINTS;
 /** Доля пробников в итоговом прогнозе, если есть и они, и навыки. */
 export const EXAM_SHARE = 0.6;
 const EXAMS_USED = 3;

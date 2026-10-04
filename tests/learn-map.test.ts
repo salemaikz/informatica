@@ -4,7 +4,8 @@ import type { LessonStat } from "@/lib/review";
 import { DAY_MS } from "@/lib/review";
 import { UNITS, LESSONS } from "@/content/course";
 import { SKILLS } from "@/content/skills";
-import { ENT_TOPICS } from "@/content/ent-topics";
+import { ENT_TOPICS, topicTaskShare } from "@/content/ent-topics";
+import { fillGrid, tileSpan, type TileSpan } from "@/components/learn/ent-grid";
 import {
   averageMastery,
   bestPercent,
@@ -199,5 +200,52 @@ describe("недоверенные данные и цвета", () => {
     expect(isDarkColor("oops")).toBe(false);
     // На реальном курсе тёмный только последний раздел (ЕНТ).
     expect(UNITS.filter((u) => isDarkColor(u.color)).map((u) => u.id)).toEqual(["u9"]);
+  });
+});
+
+describe("Карта ЕНТ: размеры плиток и сетка без дыр (#43)", () => {
+  const one: TileSpan = { cols: 1, rows: 1 };
+  const area = (s: TileSpan) => s.cols * s.rows;
+  // Как в EntMap: плитки тем по весу + итоговая плитка 1×1 в конце. Колонки: 2 на телефоне, 3 от 640px.
+  const spans = [...ENT_TOPICS.map((t) => tileSpan(topicTaskShare(t.id))), one];
+
+  it("размер плитки по заданиям темы: ≥ 5 — на всю ширину, ≥ 4 — двойной высоты", () => {
+    expect(tileSpan(5.5)).toEqual({ cols: 2, rows: 1 });
+    expect(tileSpan(5)).toEqual({ cols: 2, rows: 1 });
+    expect(tileSpan(4)).toEqual({ cols: 1, rows: 2 });
+    expect(tileSpan(3)).toEqual(one);
+    expect(tileSpan(1)).toEqual(one);
+  });
+
+  it("Python и алгоритмы (3 + 2,5 контекстных) — на всю ширину, темы из 4 заданий — высокие, остальные 1×1", () => {
+    const by = Object.fromEntries(ENT_TOPICS.map((t) => [t.id, tileSpan(topicTaskShare(t.id))]));
+    expect(by.t06).toEqual({ cols: 2, rows: 1 });
+    expect(by.t07).toEqual({ cols: 2, rows: 1 });
+    expect(by.t03).toEqual({ cols: 1, rows: 2 });
+    expect(by.t12).toEqual({ cols: 1, rows: 2 });
+    for (const id of ["t01", "t02", "t04", "t05", "t08", "t09", "t10", "t11", "t13"]) expect(by[id], id).toEqual(one);
+  });
+
+  it("плитка не меньше плитки более лёгкой темы", () => {
+    for (const a of ENT_TOPICS) for (const b of ENT_TOPICS) {
+      if (topicTaskShare(a.id) >= topicTaskShare(b.id)) {
+        expect(area(tileSpan(topicTaskShare(a.id))), `${a.id} против ${b.id}`).toBeGreaterThanOrEqual(area(tileSpan(topicTaskShare(b.id))));
+      }
+    }
+  });
+
+  it("сетка на телефоне (2 колонки): без дыр", () => {
+    expect(fillGrid(spans, 2)).toEqual({ rows: 9, holes: 0 });
+  });
+
+  it("сетка от 640px (3 колонки): без дыр", () => {
+    expect(fillGrid(spans, 3)).toEqual({ rows: 6, holes: 0 });
+  });
+
+  it("fillGrid видит дыры и заполняет их по правилам dense", () => {
+    expect(fillGrid([one, one, one], 2)).toEqual({ rows: 2, holes: 1 });
+    expect(fillGrid([one, { cols: 2, rows: 1 }, one], 2)).toEqual({ rows: 2, holes: 0 }); // третья плитка заполняет дыру (dense)
+    expect(fillGrid([{ cols: 2, rows: 1 }, { cols: 1, rows: 2 }], 3)).toEqual({ rows: 2, holes: 2 });
+    expect(fillGrid([], 3)).toEqual({ rows: 0, holes: 0 });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENT_TOPICS } from "@/content/ent-topics";
+import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_POINTS, ENT_TOPICS, ORDINARY_COUNT, topicTaskShare, topicWeight } from "@/content/ent-topics";
 import { SKILLS } from "@/content/skills";
 import { forecastMargin, forecastScore, topicMastery, type ForecastExam } from "@/lib/forecast";
 import type { SkillStat } from "@/lib/mastery";
@@ -13,6 +13,45 @@ const byTopic = (ratio: number): Record<EntTopicId, { points: number; max: numbe
   Object.fromEntries(ENT_TOPICS.map((t) => [t.id, { points: ratio * 10, max: 10 }])) as never;
 const exam = (points: number, daysAgo = 1, extra: Partial<ForecastExam> = {}): ForecastExam => ({
   at: NOW - daysAgo * DAY, points, maxPoints: 50, byTopic: byTopic(points / 50), ...extra,
+});
+
+describe("веса тем (#43): план теста НЦТ 4 / 10 / 11 / 1 / 7 / 7", () => {
+  const count = (ids: string[]) => ids.reduce((s, id) => s + ENT_TOPICS.find((t) => t.id === id)!.examCount, 0);
+
+  it("examCount t01–t13 и сумма 35 обычных заданий", () => {
+    expect(ENT_TOPICS.map((t) => t.examCount)).toEqual([2, 2, 4, 3, 3, 3, 3, 1, 2, 3, 2, 4, 3]);
+    expect(ORDINARY_COUNT).toBe(35);
+    expect(ORDINARY_COUNT + CONTEXT_COUNT).toBe(40);
+  });
+
+  it("суммы по разделам совпадают с официальным планом НЦТ (контекстные — в разделе 03)", () => {
+    expect(count(["t01", "t02"])).toBe(4);
+    expect(count(["t03", "t04", "t05"])).toBe(10);
+    expect(count(["t06", "t07"]) + CONTEXT_COUNT).toBe(11);
+    expect(count(["t08"])).toBe(1);
+    expect(count(["t09", "t10", "t11"])).toBe(7);
+    expect(count(["t12", "t13"])).toBe(7);
+  });
+
+  it("контекстные — из t06 и t07, баллы между ними поровну", () => {
+    expect(CONTEXT_TOPICS).toEqual(["t06", "t07"]);
+    expect(topicWeight("t06")).toBeCloseTo(topicWeight("t07"), 10);
+    expect(topicTaskShare("t06")).toBe(5.5);
+    expect(topicTaskShare("t07")).toBe(5.5);
+    expect(topicTaskShare("t03")).toBe(4);
+  });
+
+  it("сумма весов всех тем — 1, в баллах — 50; вес растёт с числом заданий", () => {
+    const sum = ENT_TOPICS.reduce((s, t) => s + topicWeight(t.id), 0);
+    expect(sum).toBeCloseTo(1, 10);
+    expect(sum * ENT_POINTS).toBeCloseTo(50, 8);
+    // 45 баллов на 35 заданий: тема из 4 заданий весит вдвое больше темы из 2.
+    expect(topicWeight("t03")).toBeCloseTo(2 * topicWeight("t01"), 10);
+    expect(topicWeight("t08")).toBeCloseTo(topicWeight("t01") / 2, 10);
+    // Python и алгоритмы — самые тяжёлые темы (3 задания + 2,5 контекстных балла).
+    const heaviest = [...ENT_TOPICS].sort((a, b) => topicWeight(b.id) - topicWeight(a.id)).slice(0, 2).map((t) => t.id);
+    expect(heaviest.sort()).toEqual(["t06", "t07"]);
+  });
 });
 
 describe("forecastScore", () => {
@@ -43,11 +82,17 @@ describe("forecastScore", () => {
     expect(m.t01).toBe(0);
   });
 
-  it("вес темы: освоена только t01 — доля её веса", () => {
+  it("вес темы: освоена только t01 — доля её веса (2 из 35 обычных заданий)", () => {
     const skills = Object.fromEntries(SKILLS.filter((s) => s.ent === "t01").map((s) => [s.id, stat(1)]));
     const f = forecastScore({ skills, exams: [], now: NOW });
     expect(f.byTopic.t01).toBe(1);
-    expect(f.score).toBe(Math.round((5 / 35) * 45)); // 6
+    expect(f.score).toBe(Math.round((2 / 35) * 45)); // 3
+  });
+
+  it("вес темы: освоена только t06 — её обычные задания и половина контекстных", () => {
+    const skills = Object.fromEntries(SKILLS.filter((s) => s.ent === "t06").map((s) => [s.id, stat(1)]));
+    const f = forecastScore({ skills, exams: [], now: NOW });
+    expect(f.score).toBe(Math.round((3 / 35) * 45 + 2.5)); // 6
   });
 
   it("только пробники: свежее весомее", () => {
