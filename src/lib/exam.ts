@@ -1,4 +1,4 @@
-import { CONTEXT_TOPIC, ENT_TOPICS } from "@/content/ent-topics";
+import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_TOPICS } from "@/content/ent-topics";
 import { matchPoints, multiPoints } from "./ent";
 import { hashString, seeded, shuffle } from "./text";
 import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Level, Text } from "./types";
@@ -23,7 +23,7 @@ export const EXAM_TIME_LIMIT_SEC: Record<ExamKind, number> = { full: 80 * 60, mi
 /** Доли уровней A/B/C в варианте: 50/30/20. */
 const LEVEL_SHARE: readonly [number, number, number] = [0.5, 0.3, 0.2];
 /** Вопросов в контекстном задании. */
-const CONTEXT_QUESTIONS = 5;
+const CONTEXT_QUESTIONS = CONTEXT_COUNT;
 
 /** Запись о том, чего не хватило в банке (не молчим). */
 export interface ExamNote {
@@ -497,26 +497,34 @@ export function buildExam(opts: BuildExamOpts): ExamPaper {
   }
   notes.push(...noteMap.values());
 
-  // 4. Контекстное задание (только в полном).
+  // 4. Контекстное задание (только в полном): группа из t06 или t07 — какая тема, решает seed;
+  // нет подходящей группы у одной темы — берём у другой.
   let context: EntContext | null = null;
   if (kind === "full") {
     const ctxs = pool.filter((i): i is EntContext => i.kind === "context" && i.questions.length > 0).sort(byId);
     const enough = (c: EntContext) => c.questions.length >= CONTEXT_QUESTIONS;
-    const own = (c: EntContext) => c.topic === CONTEXT_TOPIC;
-    // Сначала Python с полными 5 вопросами, затем Python, затем любые полные, затем любые.
-    const tiers = [ctxs.filter((c) => own(c) && enough(c)), ctxs.filter(own), ctxs.filter(enough), ctxs];
+    const topics = shuffle(CONTEXT_TOPICS, rand);
+    const own = (c: EntContext) => topics.includes(c.topic);
+    // Сначала полные группы (5 вопросов) своих тем в порядке seed, затем неполные своих,
+    // затем полные любых тем, затем любые.
+    const tiers = [
+      ...topics.map((t) => ctxs.filter((c) => c.topic === t && enough(c))),
+      ...topics.map((t) => ctxs.filter((c) => c.topic === t)),
+      ctxs.filter(enough),
+      ctxs,
+    ];
     const from = tiers.find((t) => t.length) ?? [];
     if (from.length) {
       const picked = from[Math.floor(rand() * from.length)];
       if (!own(picked)) {
-        notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: 1, filledFrom: [picked.topic], unfilled: 0 });
+        notes.push({ topic: CONTEXT_TOPICS[0], kind: "context", missing: 1, filledFrom: [picked.topic], unfilled: 0 });
       }
       const short = CONTEXT_QUESTIONS - picked.questions.length;
       if (short > 0) notes.push({ topic: picked.topic, kind: "context", missing: short, filledFrom: [], unfilled: short });
       // Лишние вопросы не берём: в ЕНТ ровно 5 вопросов к контексту.
       context = { ...picked, questions: picked.questions.slice(0, CONTEXT_QUESTIONS) };
     } else {
-      notes.push({ topic: CONTEXT_TOPIC, kind: "context", missing: 1, filledFrom: [], unfilled: 1 });
+      notes.push({ topic: CONTEXT_TOPICS[0], kind: "context", missing: 1, filledFrom: [], unfilled: 1 });
     }
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ENT_TOPICS } from "@/content/ent-topics";
+import { ENT_POOL } from "@/content/ent";
+import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_TOPICS } from "@/content/ent-topics";
 import {
   buildExam,
   examAdvice,
@@ -27,14 +28,14 @@ function multi(id: string, topic: EntTopicId, level: Level): EntMulti {
 function match(id: string, topic: EntTopicId, level: Level): EntMatch {
   return { id, kind: "match", topic, skill: "ns.base", level, prompt: L(id), explanation: L("e"), items: ["A", "B"], choices: ["w", "x", "y", "z"], answer: [3, 0] };
 }
-function context(id: string): EntContext {
+function context(id: string, topic: EntTopicId = "t06"): EntContext {
   return {
-    id, kind: "context", topic: "t06", skill: "py.trace", level: 2, text: L("prog"),
+    id, kind: "context", topic, skill: "py.trace", level: 2, text: L("prog"),
     questions: [0, 1, 2, 3, 4].map((i) => ({ id: `${id}.${i}`, prompt: L("q"), options: ["a", "b", "c", "d"], correct: i % 4, explanation: L("e") })),
   };
 }
 
-/** Богатый пул: по 8 single, 4 multi, 4 match на тему + 2 контекстных. */
+/** Богатый пул: по 8 single, 4 multi, 4 match на тему + 2 контекстных (по одному в t06 и t07). */
 function richPool(): EntItem[] {
   const out: EntItem[] = [];
   for (const t of TOPICS) {
@@ -42,7 +43,7 @@ function richPool(): EntItem[] {
     for (let i = 0; i < 4; i++) out.push(multi(`${t}:m${i}`, t, ((i % 3) + 1) as Level));
     for (let i = 0; i < 4; i++) out.push(match(`${t}:x${i}`, t, ((i % 3) + 1) as Level));
   }
-  out.push(context("ctx1"), context("ctx2"));
+  out.push(context("ctx1", "t06"), context("ctx2", "t07"));
   return out;
 }
 
@@ -63,13 +64,57 @@ describe("buildExam: состав", () => {
     expect(new Set(p.items.map((q) => q.key)).size).toBe(40);
   });
 
-  it("full: контекст из темы t06, остальные задания без повторов", () => {
+  it("full: контекст из темы t06 или t07, остальные задания без повторов", () => {
     const p = buildExam({ kind: "full", seed: 7, pool: richPool() });
     const ctx = p.items.filter((q) => q.item.kind === "context");
-    expect(ctx.every((q) => q.item.topic === "t06")).toBe(true);
+    expect(ctx).toHaveLength(CONTEXT_COUNT);
+    expect(ctx.every((q) => CONTEXT_TOPICS.includes(q.item.topic))).toBe(true);
+    expect(new Set(ctx.map((q) => q.item.id)).size).toBe(1); // все 5 вопросов — к одной программе
     expect(ctx.map((q) => q.sub)).toEqual([0, 1, 2, 3, 4]);
     const ids = p.items.filter((q) => q.item.kind !== "context").map((q) => q.item.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("full: по темам ровно 2/2/4/3/3/3/3/1/2/3/2/4/3 обычных заданий + 5 контекстных", () => {
+    for (const seed of [1, 2, 3, 11, 29]) {
+      const p = buildExam({ kind: "full", seed, pool: richPool() });
+      const per = ENT_TOPICS.map((t) => p.items.filter((q) => q.item.kind !== "context" && q.item.topic === t.id).length);
+      expect(per, `seed ${seed}`).toEqual([2, 2, 4, 3, 3, 3, 3, 1, 2, 3, 2, 4, 3]);
+      expect(p.items.filter((q) => q.item.kind === "context")).toHaveLength(5);
+      expect(p.items).toHaveLength(40);
+    }
+  });
+
+  it("full: контекстная группа берётся то из t06, то из t07 — по seed", () => {
+    const pool = richPool();
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const p = buildExam({ kind: "full", seed, pool });
+      seen.add(p.items.find((q) => q.item.kind === "context")!.item.topic);
+      expect(p.notes).toEqual([]);
+    }
+    expect([...seen].sort()).toEqual(["t06", "t07"]);
+  });
+
+  it("full: у одной из двух тем контекстных групп нет — берётся другая, без записи в notes", () => {
+    const base = richPool().filter((i) => i.kind !== "context");
+    for (const only of CONTEXT_TOPICS) {
+      const pool = [...base, context("only", only)];
+      for (let seed = 1; seed <= 10; seed++) {
+        const p = buildExam({ kind: "full", seed, pool });
+        const ctx = p.items.filter((q) => q.item.kind === "context");
+        expect(ctx).toHaveLength(5);
+        expect(ctx.every((q) => q.item.topic === only)).toBe(true);
+        expect(p.notes).toEqual([]);
+      }
+    }
+  });
+
+  it("full: контекстных групп нет ни в t06, ни в t07 — берём любую и пишем в notes", () => {
+    const base = richPool().filter((i) => i.kind !== "context");
+    const p = buildExam({ kind: "full", seed: 1, pool: [...base, context("far", "t05")] });
+    expect(p.items.filter((q) => q.item.kind === "context")).toHaveLength(5);
+    expect(p.notes).toContainEqual({ topic: "t06", kind: "context", missing: 1, filledFrom: ["t05"], unfilled: 0 });
   });
 
   it("full: темы пропорциональны examCount (single + multi + match на тему)", () => {
@@ -448,5 +493,45 @@ describe("ревью: граничные случаи", () => {
     const b = perfectAnswers(paper, 90_000);
     for (const q of paper.items) if (q.item.topic === "t03") delete b[q.key];
     expect(examAdvice(scoreExam(paper, b)).tips).toContain("check-units");
+  });
+});
+
+describe("реальный банк ЕНТ: хватает заданий на веса тем (#43)", () => {
+  const countOf = (topic: EntTopicId, kind: EntItem["kind"]) => ENT_POOL.filter((i) => i.topic === topic && i.kind === kind).length;
+
+  // Худший случай `planFull`: все examCount заданий темы выпали одного вида (single, multi или match),
+  // поэтому в пуле каждого вида должно быть не меньше examCount. Не хватит — банк тянется к весу темы (этап 14).
+  for (const t of ENT_TOPICS) {
+    it(`${t.id}: single, multi и match — не меньше ${t.examCount}`, () => {
+      for (const kind of ["single", "multi", "match"] as const) {
+        const n = countOf(t.id, kind);
+        expect(n, `в теме ${t.id} заданий «${kind}» ${n}, а в полном варианте их может быть ${t.examCount}`).toBeGreaterThanOrEqual(t.examCount);
+      }
+    });
+  }
+
+  it("контекстные: в t06 и в t07 есть группы из 5 вопросов", () => {
+    for (const topic of CONTEXT_TOPICS) {
+      const groups = ENT_POOL.filter((i): i is EntContext => i.kind === "context" && i.topic === topic && i.questions.length >= CONTEXT_COUNT);
+      expect(groups.length, `в теме ${topic} нет контекстной группы из ${CONTEXT_COUNT} вопросов`).toBeGreaterThan(0);
+    }
+  });
+
+  it("полный вариант по 60 seed: 40 заданий, по темам ровно examCount, без нехватки, контекст и из t06, и из t07", () => {
+    const ctxTopics = new Set<string>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const p = buildExam({ kind: "full", seed, pool: ENT_POOL });
+      expect(p.items, `seed ${seed}`).toHaveLength(40);
+      expect(p.maxPoints).toBe(50);
+      expect(p.notes, `seed ${seed}`).toEqual([]);
+      for (const t of ENT_TOPICS) {
+        const n = p.items.filter((q) => q.item.kind !== "context" && q.item.topic === t.id).length;
+        expect(n, `seed ${seed}, ${t.id}`).toBe(t.examCount);
+      }
+      const ctx = p.items.filter((q) => q.item.kind === "context");
+      expect(ctx).toHaveLength(5);
+      ctxTopics.add(ctx[0].item.topic);
+    }
+    expect([...ctxTopics].sort()).toEqual(["t06", "t07"]);
   });
 });
