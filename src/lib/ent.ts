@@ -2,7 +2,7 @@ import type { Level } from "./types";
 
 // Правила оценивания ЕНТ (Правила проведения ЕНТ, п. 18; подробности — docs/ENT.md).
 
-/** Баллы за задание «один или несколько верных» / «соответствие» (максимум 2, верных — не больше трёх). */
+/** Баллы за задание «один или несколько верных» (максимум 2, верных — не больше трёх). «Соответствие» — matchPoints. */
 export function entPoints(totalCorrect: number, chosenCorrect: number, chosenWrong: number): 0 | 1 | 2 {
   if (chosenWrong >= 2 || chosenCorrect === 0) return 0;
   if (chosenCorrect === totalCorrect && chosenWrong === 0) return 2;
@@ -27,6 +27,7 @@ export function multiPoints(correct: number[], chosen: number[]): 0 | 1 | 2 {
 /**
  * Баллы ЕНТ за «соответствие»: каждому пункту (A, B) нужно подобрать одно описание.
  * Все пункты верно — 2, хотя бы один — 1, ни одного — 0 (п. 18: два пункта = два верных ответа).
+ * Пустой ключ ответа — 0 (раньше пробный ЕНТ давал за него 2; в пуле таких заданий нет).
  */
 export function matchPoints(answer: readonly number[], given: readonly unknown[]): 0 | 1 | 2 {
   const right = answer.filter((x, i) => given[i] === x).length;
