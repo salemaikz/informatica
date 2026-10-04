@@ -36,6 +36,10 @@ import { voiceDict } from "./parts/voice";
 import { navDict } from "./parts/nav";
 import { cheatDict } from "./parts/cheat";
 import { planDict } from "./parts/plan";
+import { issueDict } from "./parts/issue";
+import { errorsDict } from "./parts/errors";
+import { storageDict } from "./parts/storage";
+import { metaDict } from "./parts/meta";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -505,6 +509,10 @@ export const dict = {
   ...navDict,
   ...cheatDict,
   ...planDict,
+  ...issueDict,
+  ...errorsDict,
+  ...storageDict,
+  ...metaDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;
