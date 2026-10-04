@@ -7,7 +7,7 @@ import { createStore, del, delMany, get, set, type UseStore } from "idb-keyval";
 /** Предел размера картинки (по декодированным байтам). */
 export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
-const DATA_URL_HEAD = /^data:image\/(png|jpeg);base64,/;
+const DATA_URL_HEAD = /^data:image\/(png|jpeg|webp);base64,/;
 const BASE64_BODY = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /** Размер данных base64 в байтах. */
@@ -18,7 +18,7 @@ function base64Bytes(b64: string): number {
 
 export type ImageCheck = "ok" | "format" | "size";
 
-/** Проверка dataURL: только png/jpeg в base64 и не больше MAX_IMAGE_BYTES. */
+/** Проверка dataURL: только png/jpeg/webp в base64 и не больше MAX_IMAGE_BYTES. */
 export function checkImageDataUrl(dataUrl: unknown): ImageCheck {
   if (typeof dataUrl !== "string") return "format";
   const head = DATA_URL_HEAD.exec(dataUrl);
@@ -83,6 +83,25 @@ export async function putImage(dataUrl: string): Promise<string> {
   }
   memory.set(id, dataUrl);
   return id;
+}
+
+/** Кладёт картинку под заданным id (восстановление из резервной копии: в тексте записей уже есть ссылки на эти id). */
+export async function putImageWithId(id: string, dataUrl: string): Promise<void> {
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(id)) throw new NoteImageError("format");
+  const check = checkImageDataUrl(dataUrl);
+  if (check !== "ok") throw new NoteImageError(check);
+  const s = getStore();
+  if (s) {
+    try {
+      await set(id, dataUrl, s);
+      memory.delete(id);
+      remember(id, dataUrl);
+      return;
+    } catch {
+      // IndexedDB есть, но писать не даёт — запасной режим.
+    }
+  }
+  memory.set(id, dataUrl);
 }
 
 /** Картинка по id; undefined — нет (другое устройство, удалена). */
