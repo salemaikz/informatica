@@ -16,6 +16,7 @@ import { WeekChart } from "@/components/app/WeekChart";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { GoalsPanel } from "@/components/goals/GoalsPanel";
 import { HistoryStatsCard } from "@/components/history/HistoryCards";
+import { useEntVisible } from "@/components/school/useEntVisible";
 
 function Tile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string | number; sub?: string }) {
   return (
@@ -48,6 +49,8 @@ export default function StatsPage() {
   const { xp, level } = useLevel();
   const { current, best } = useStreak();
   const freezes = useApp((s) => s.streak.freezes ?? 0);
+  // Цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52).
+  const ent = useEntVisible();
 
   const totals = Object.values(days).reduce((a, d) => ({ answers: a.answers + d.answers, correct: a.correct + d.correct, seconds: a.seconds + d.seconds }), { answers: 0, correct: 0, seconds: 0 });
   const accuracy = totals.answers ? Math.round((totals.correct / totals.answers) * 100) : 0;
@@ -57,7 +60,7 @@ export default function StatsPage() {
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
-      <GoalsPanel />
+      {ent && <GoalsPanel />}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Tile icon={<Zap size={14} className="text-gold" />} label={t("stats.totalXp")} value={xp} />

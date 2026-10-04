@@ -93,6 +93,61 @@ describe("генераторы", () => {
         }
   });
 
+  it("«включи биты» — направление 10 → 2: вид живёт в ns.dec2bin, а не в ns.bin2dec (аудит)", () => {
+    const kinds = (skill: string, level: 1 | 2 | 3) => {
+      const set = new Set<string>();
+      for (let seed = 1; seed < 300; seed++) set.add(generateLeveled(skill, level, seed).type);
+      return set;
+    };
+    for (const level of [1, 2, 3] as const) expect(kinds("ns.bin2dec", level).has("bits"), `bin2dec L${level}`).toBe(false);
+    // в A у bin2dec остаются выбор и ввод
+    expect([...kinds("ns.bin2dec", 1)].sort()).toEqual(["choice", "input"]);
+    expect(kinds("ns.dec2bin", 1).has("bits")).toBe(true);
+    expect(kinds("ns.dec2bin", 2).has("bits")).toBe(true);
+    for (let seed = 1; seed < 300; seed++) {
+      for (const level of [1, 2, 3] as const) {
+        const step = generateLeveled("ns.dec2bin", level, seed);
+        if (step.type !== "bits") continue;
+        const n = Number(step.id.split(":")[3]);
+        expect(step.id.startsWith("g:ns.dec2bin:bits:"), step.id).toBe(true);
+        expect(step.skill).toBe("ns.dec2bin");
+        expect(step.target).toBe(n);
+        // число помещается в выбранное число битов; двоичная запись из объяснения совпадает с целью
+        expect(step.bits).toBeGreaterThanOrEqual(toBinary(n).length);
+        expect(n).toBeLessThan(2 ** step.bits);
+        expect(step.explanation.ru.includes(`${toBinary(n)}₂`), step.id).toBe(true);
+      }
+    }
+  });
+
+  it("ns.base спрашивает только про 2 и 10 и общий смысл основания: без 8/16, A–F и восьмеричных записей (аудит C6)", () => {
+    const MENTION = /восьмерич|шестнадцатерич|сегіздік|он алтылық|A–F|₈|₁₆/;
+    for (const level of [1, 2, 3] as const)
+      for (let seed = 1; seed < 300; seed++) {
+        const step = generateLeveled("ns.base", level, seed);
+        const [, , kind, arg] = step.id.split(":");
+        expect(["digits", "invalid", "invalid3"], step.id).toContain(kind);
+        if (kind === "digits") expect([2, 3, 5, 10], step.id).toContain(Number(arg));
+        const text = JSON.stringify({ ...step, id: "" });
+        expect(MENTION.test(text), step.id).toBe(false);
+      }
+  });
+
+  it("ns.base: верный вариант «не двоичной/не троичной» записи содержит лишнюю цифру, остальные — нет", () => {
+    for (let seed = 1; seed < 300; seed++) {
+      for (const level of [1, 2, 3] as const) {
+        const step = generateLeveled("ns.base", level, seed);
+        if (step.type !== "choice" || !step.id.includes(":invalid")) continue;
+        const max = step.id.includes(":invalid3:") ? 2 : 1;
+        const digitsOf = (t: unknown) => String(t).split("").map(Number);
+        step.options.forEach((o, i) => {
+          const hasBad = digitsOf(o).some((d) => d > max);
+          expect(hasBad, `${step.id}: вариант ${i}`).toBe(i === step.correct);
+        });
+      }
+    }
+  });
+
   it("детерминированы по seed", () => {
     expect(generateStep("ns.dec2bin", 0.3, 42)).toEqual(generateStep("ns.dec2bin", 0.3, 42));
   });

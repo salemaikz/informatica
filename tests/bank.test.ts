@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draw, hasShape, rampLevel, skillsWithShape } from "@/lib/bank";
+import { bankFor, draw, hasShape, rampLevel, skillsWithShape } from "@/lib/bank";
 import { NS_BANKS, LEVELS } from "@/lib/bank/ns";
 import { buildDrill, generateLeveled } from "@/lib/generators";
 import { entPoints, levelFromMastery, matchPoints, multiPoints } from "@/lib/ent";
@@ -176,5 +176,119 @@ describe("банк заданий", () => {
     const st = draw("statement", { skills: SKILLS, count: 30, seed: 3 });
     expect(new Set(st.map((s) => s.text.ru)).size).toBe(st.length);
     expect(draw("pair", { skills: ["unknown"], count: 5, seed: 1 })).toEqual([]);
+  });
+});
+
+describe("цифры 8/16 и буквы A–F: ns.base → ns.octhex (аудит C6)", () => {
+  const MENTION = /восьмерич|шестнадцатерич|сегіздік|он алтылық|A–F|₈|₁₆/;
+  const base = bankFor("ns.base")!;
+  const octhex = bankFor("ns.octhex")!;
+  const text = (x: string | { ru: string; kk: string }) => (typeof x === "string" ? x : x.ru);
+
+  it("ns.base: ни одного задания про 8/16, A–F и восьмеричные записи во всех формах", () => {
+    for (const level of LEVELS)
+      for (let seed = 1; seed < 300; seed++) {
+        for (const item of [base.question(level, seed), base.statement!(level, seed), base.pair!(level, seed), base.short!(level, seed)]) {
+          // id содержит seed, поэтому сверяем содержимое без id
+          expect(MENTION.test(JSON.stringify({ ...item, id: "" })), item.id).toBe(false);
+        }
+      }
+  });
+
+  it("ns.base: утверждения, пары и короткие вопросы вычислены верно", () => {
+    for (const level of LEVELS)
+      for (let seed = 1; seed < 300; seed++) {
+        const st = base.statement!(level, seed);
+        const t = st.text.ru;
+        let m: RegExpMatchArray | null;
+        if ((m = t.match(/основанием (\d+) используется цифр: (\d+)/))) expect(st.value, t).toBe(m[1] === m[2]);
+        else if ((m = t.match(/основанием (\d+) наибольшая цифра — (\d+)/))) expect(st.value, t).toBe(Number(m[2]) === Number(m[1]) - 1);
+        else if ((m = t.match(/Запись (\d+) может быть числом в (двоичной|троичной) системе/))) {
+          const limit = m[2] === "двоичной" ? 2 : 3;
+          expect(st.value, t).toBe(m[1].split("").every((d) => Number(d) < limit));
+        } else throw new Error(`неизвестное утверждение: ${t}`);
+
+        const p = base.pair!(level, seed);
+        const left = text(p.left);
+        const right = text(p.right);
+        if ((m = left.match(/^Основание (\d+)$/))) {
+          const b = Number(m[1]);
+          expect(right, p.id).toBe(b === 2 ? "0, 1" : `0–${b - 1}`);
+        } else if ((m = left.match(/^Наибольшая цифра (\d+)$/))) expect(right, p.id).toBe(`Основание ${Number(m[1]) + 1}`);
+        else throw new Error(`неизвестная пара: ${p.id}`);
+
+        const q = base.short!(level, seed);
+        if ((m = q.prompt.ru.match(/основанием (\d+)\?$/)) && q.id.includes(":count:")) expect(Number(q.answer), q.id).toBe(Number(m[1]));
+        else if (q.id.includes(":max:")) expect(Number(q.answer), q.id).toBe(Number(q.prompt.ru.match(/основанием (\d+)\?$/)![1]) - 1);
+        else if (q.id.includes(":inv:")) expect(Number(q.answer), q.id).toBe(Number(q.prompt.ru.match(/цифра — (\d+)\./)![1]) + 1);
+        else throw new Error(`неизвестный вопрос: ${q.id}`);
+      }
+  });
+
+  it("ns.octhex: цифры 8/16 и A–F подмешаны на уровнях A и B, на уровне C их нет", () => {
+    const moved = (id: string) => /^(g:ns\.octhex:(digits|invalid8)|s:ns\.octhex:(count|hex|valid8)|p:ns\.octhex:(sys|letter)|q:ns\.octhex:(count|letter)):/.test(id);
+    const seen: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
+    const own: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
+    for (const level of LEVELS)
+      for (let seed = 1; seed < 300; seed++)
+        for (const item of [octhex.question(level, seed), octhex.statement!(level, seed), octhex.pair!(level, seed), octhex.short!(level, seed)]) {
+          expect(item.skill).toBe("ns.octhex");
+          if (moved(item.id)) seen[level]++;
+          else own[level]++;
+        }
+    expect(seen[1]).toBeGreaterThan(100);
+    expect(seen[2]).toBeGreaterThan(30);
+    expect(seen[3]).toBe(0);
+    // собственные задания урока не вытеснены: на A и B они всё ещё большинство, на C — все
+    expect(own[1]).toBeGreaterThan(seen[1]);
+    expect(own[2]).toBeGreaterThan(seen[2]);
+    expect(own[3]).toBe(4 * 299);
+  });
+
+  it("ns.octhex: перенесённые задания верны и проходят проверку", () => {
+    for (const level of [1, 2] as const)
+      for (let seed = 1; seed < 400; seed++) {
+        const q = octhex.question(level, seed);
+        if (q.type === "choice" && q.id.startsWith("g:ns.octhex:digits:")) {
+          expect(validateStep(q), q.id).toEqual([]);
+          expect(Number(q.options[q.correct])).toBe(Number(q.id.split(":")[3]));
+          expect([8, 16]).toContain(Number(q.id.split(":")[3]));
+        }
+        if (q.type === "choice" && q.id.startsWith("g:ns.octhex:invalid8:")) {
+          expect(validateStep(q), q.id).toEqual([]);
+          q.options.forEach((o, i) => expect(/[89]/.test(String(o)), `${q.id}: вариант ${i}`).toBe(i === q.correct));
+        }
+        const st = octhex.statement!(level, seed);
+        let m: RegExpMatchArray | null;
+        if ((m = st.text.ru.match(/цифра ([A-F]) означает (\d+)/))) expect(st.value, st.text.ru).toBe(parseInt(m[1], 16) === Number(m[2]));
+        if ((m = st.text.ru.match(/Запись (\d+) может быть числом в восьмеричной системе/))) expect(st.value, st.text.ru).toBe(m[1].split("").every((d) => Number(d) < 8));
+        if ((m = st.text.ru.match(/основанием (\d+) используется цифр: (\d+)/))) {
+          expect([8, 16]).toContain(Number(m[1]));
+          expect(st.value, st.text.ru).toBe(m[1] === m[2]);
+        }
+        const p = octhex.pair!(level, seed);
+        if (p.id.startsWith("p:ns.octhex:letter:")) expect(parseInt(String(p.left)[0], 16)).toBe(Number(p.right));
+        const sh = octhex.short!(level, seed);
+        if (sh.id.startsWith("q:ns.octhex:letter:")) expect(parseInt(sh.prompt.ru[0], 16)).toBe(Number(sh.answer));
+        if (sh.id.startsWith("q:ns.octhex:count:")) expect(Number(sh.answer)).toBe(Number(sh.id.split(":")[3]));
+        // у перенесённых заданий подсказка есть (как была в ns.base)
+        if (/^q:ns\.octhex:(letter|count):/.test(sh.id)) expect(sh.hint?.ru && sh.hint?.kk, sh.id).toBeTruthy();
+        if (/^s:ns\.octhex:(hex|count|valid8):/.test(st.id)) expect(st.hint?.ru && st.hint?.kk, st.id).toBeTruthy();
+      }
+  });
+
+  it("ns.octhex: задания по-казахски без неверных окончаний после чисел", () => {
+    const CASES: KkCase[] = ["acc", "dat", "loc", "abl", "gen", "ins"];
+    for (const level of [1, 2] as const)
+      for (let seed = 1; seed < 200; seed++) {
+        const q = octhex.question(level, seed);
+        const st = octhex.statement!(level, seed);
+        const texts = [q.prompt.kk, q.hint?.kk ?? "", "explanation" in q ? q.explanation.kk : "", st.text.kk, st.explanation.kk, st.hint?.kk ?? ""];
+        for (const t of texts)
+          for (const m of t.matchAll(/(\d+)-([а-яәіңғүұқөһ]+)/g)) {
+            const ok = CASES.map((c) => kkSuffix(Number(m[1]), c).split("-")[1]);
+            expect(ok.includes(m[2]), `${q.id} / ${st.id}: «${m[0]}»`).toBe(true);
+          }
+      }
   });
 });

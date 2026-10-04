@@ -4,8 +4,10 @@ import { BookOpen, ClipboardCheck, Code2, History, Play, Search, type LucideIcon
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
+import { useEntVisible } from "@/components/school/useEntVisible";
 
 // Быстрые действия: горизонтальный ряд крупных чипов (на телефоне прокручивается).
+// «Пробный ЕНТ» — только в треке ЕНТ (в школьном его нет, #52).
 
 interface Action {
   href: string;
@@ -16,10 +18,11 @@ interface Action {
 
 export function QuickActions({ continueId, dueCount, firstTime }: { continueId?: string; dueCount: number; firstTime?: boolean }) {
   const { t } = useT();
+  const ent = useEntVisible();
   const actions: Action[] = [
     ...(continueId ? [{ href: `/lesson/${continueId}`, icon: Play, label: firstTime ? t("learn2.hero.start") : t("learn2.quick.continue"), tone: "main" as const }] : []),
     ...(dueCount > 0 ? [{ href: "/drill?mode=review", icon: History, label: t("learn2.quick.review", { n: dueCount }), tone: "streak" as const }] : []),
-    { href: "/exam", icon: ClipboardCheck, label: t("learn2.quick.exam"), tone: "primary" },
+    ...(ent ? [{ href: "/exam", icon: ClipboardCheck, label: t("learn2.quick.exam"), tone: "primary" as const }] : []),
     { href: "/theory", icon: BookOpen, label: t("learn2.quick.theory"), tone: "primary" },
     { href: "/code", icon: Code2, label: t("learn2.quick.code"), tone: "primary" },
     { href: "/search", icon: Search, label: t("learn2.quick.search"), tone: "primary" },

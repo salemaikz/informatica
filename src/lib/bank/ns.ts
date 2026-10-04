@@ -1,6 +1,7 @@
 import type { L, Level } from "../types";
 import { toBinary } from "../check";
 import {
+  BASE_DIGIT_BASES,
   HINT_BASE_COUNT,
   HINT_DIV,
   HINT_LENGTH,
@@ -138,18 +139,20 @@ const dec2bin: SkillBank = {
 };
 
 // ---------- Основание и цифры ----------
+// Только основания 2 и 10 и общий смысл основания: навык открыт после первого урока. Цифры 8- и 16-ричной систем,
+// буквы A–F и «восьмеричная запись» — в ns.octhex (bank/ns-octhex-digits.ts), см. аудит C6.
 
 const SYSTEM_NAME: Record<number, L> = {
   2: { ru: "двоичной", kk: "екілік" },
-  8: { ru: "восьмеричной", kk: "сегіздік" },
-  10: { ru: "десятичной", kk: "ондық" },
-  16: { ru: "шестнадцатеричной", kk: "он алтылық" },
+  3: { ru: "троичной", kk: "үштік" },
 };
-const SYSTEM_DIGITS: Record<number, string> = { 2: "0, 1", 8: "0–7", 10: "0–9", 16: "0–9, A–F" };
-const HEX_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
-const HINT_HEX: L = {
-  ru: "В шестнадцатеричной системе после цифры 9 цифры продолжаются буквами по порядку: A — следующая за 9. Отсчитай по порядку.",
-  kk: `Он алтылық жүйеде ${kkSuffix(9, "abl")} кейін цифрлар әріптермен жалғасады: A — 9 цифрынан кейінгі цифр. Ретімен санап көр.`,
+const SYSTEM_DIGITS: Record<number, string> = { 2: "0, 1", 3: "0–2" };
+/** Описание набора цифр системы: «0, 1», «0–2», «0–9». */
+const digitsRange = (b: number) => (b === 2 ? "0, 1" : `0–${b - 1}`);
+
+const HINT_BASE_MAX: L = {
+  ru: "Цифры начинаются с 0 и идут по порядку, а цифр столько же, сколько основание. Какая по счёту цифра — последняя?",
+  kk: `Цифрлар ${kkSuffix(0, "abl")} басталып, ретімен жүреді, ал цифрлар саны негізге тең. Соңғы цифр нешінші?`,
 };
 
 const base: SkillBank = {
@@ -158,7 +161,7 @@ const base: SkillBank = {
   statement(level, seed): Statement {
     const rand = seeded(seed);
     if (level === 1) {
-      const b = pick(rand, [2, 8, 10, 16, 5, 3]);
+      const b = pick(rand, BASE_DIGIT_BASES);
       const value = rand() < 0.5;
       const k = value ? b : pick(rand, [b - 1, b + 1]);
       return {
@@ -178,33 +181,33 @@ const base: SkillBank = {
       };
     }
     if (level === 2) {
-      const i = int(rand, 0, 5);
-      const letter = HEX_LETTERS[i];
+      // Наибольшая цифра на 1 меньше основания (ловушка: «наибольшая цифра равна основанию»).
+      const b = pick(rand, [2, 3, 5, 10] as const);
       const value = rand() < 0.5;
-      const claim = value ? 10 + i : 10 + i + pick(rand, [-1, 1]);
+      const k = value ? b - 1 : pick(rand, [b, b - 2]);
       return {
-        id: `s:ns.base:hex:${letter}:${claim}`,
+        id: `s:ns.base:max:${b}:${k}`,
         skill: "ns.base",
         level,
         text: {
-          ru: `В шестнадцатеричной системе цифра ${letter} означает ${claim}`,
-          kk: `Он алтылық жүйеде ${letter} цифры ${claim} санын білдіреді`,
+          ru: `В системе счисления с основанием ${b} наибольшая цифра — ${k}`,
+          kk: `Негізі ${b} санау жүйесіндегі ең үлкен цифр — ${k}`,
         },
-        hint: HINT_HEX,
         value,
         explanation: {
-          ru: `A = 10, B = 11, C = 12, D = 13, E = 14, F = 15. Значит, ${letter} = ${10 + i}.`,
-          kk: `A = 10, B = 11, C = 12, D = 13, E = 14, F = 15. Демек, ${letter} = ${10 + i}.`,
+          ru: `Цифры идут от 0 до ${b - 1}: наибольшая из них — ${b - 1}.`,
+          kk: `Цифрлар ${kkSuffix(0, "abl")} ${kkSuffix(b - 1, "dat")} дейін: олардың ең үлкені — ${b - 1}.`,
         },
+        hint: HINT_BASE_MAX,
       };
     }
-    // C: может ли запись быть числом в системе (ловушки: цифра 2 в двоичной, 8 и 9 — в восьмеричной).
-    const b = pick(rand, [2, 8] as const);
+    // C: может ли запись быть числом в системе (ловушки: цифра 2 в двоичной, цифры 3 и больше — в троичной).
+    const b = pick(rand, [2, 3] as const);
     const value = rand() < 0.5;
-    let rec = b === 2 ? toBinary(int(rand, 9, 120)) : int(rand, 10, 500).toString(8);
+    let rec = b === 2 ? toBinary(int(rand, 9, 120)) : int(rand, 10, 500).toString(3);
     if (!value) {
       const pos = int(rand, 1, rec.length - 1);
-      rec = `${rec.slice(0, pos)}${b === 2 ? "2" : pick(rand, ["8", "9"])}${rec.slice(pos + 1)}`;
+      rec = `${rec.slice(0, pos)}${b === 2 ? "2" : pick(rand, ["3", "4"])}${rec.slice(pos + 1)}`;
     }
     const sys = SYSTEM_NAME[b];
     return {
@@ -226,23 +229,29 @@ const base: SkillBank = {
   pair(level, seed): Pair {
     const rand = seeded(seed);
     if (level === 1) {
-      const b = pick(rand, [2, 8, 10, 16] as const);
-      const name = SYSTEM_NAME[b];
+      const b = pick(rand, [2, 3, 4, 5, 6, 10] as const);
       return {
         id: `p:ns.base:sys:${b}`,
         skill: "ns.base",
         level,
-        left: { ru: `${name.ru[0].toUpperCase()}${name.ru.slice(1).replace(/ой$/, "ая")}`, kk: `${name.kk[0].toUpperCase()}${name.kk.slice(1)}` },
-        right: SYSTEM_DIGITS[b],
+        left: { ru: `Основание ${b}`, kk: `Негізі ${b}` },
+        right: digitsRange(b),
       };
     }
-    const i = int(rand, 0, 5);
-    return { id: `p:ns.base:hex:${i}`, skill: "ns.base", level, left: `${HEX_LETTERS[i]}₁₆`, right: String(10 + i) };
+    // B/C: «наибольшая цифра k» ↔ «основание k + 1» (цифр на одну больше, чем наибольшая цифра).
+    const k = pick(rand, [1, 2, 3, 4, 5, 9] as const);
+    return {
+      id: `p:ns.base:max:${k}`,
+      skill: "ns.base",
+      level,
+      left: { ru: `Наибольшая цифра ${k}`, kk: `Ең үлкен цифр ${k}` },
+      right: { ru: `Основание ${k + 1}`, kk: `Негізі ${k + 1}` },
+    };
   },
   short(level, seed): ShortQuestion {
     const rand = seeded(seed);
     if (level === 1) {
-      const b = pick(rand, [2, 3, 5, 8, 10, 16]);
+      const b = pick(rand, [2, 3, 5, 10] as const);
       return {
         id: `q:ns.base:count:${b}`,
         skill: "ns.base",
@@ -257,16 +266,39 @@ const base: SkillBank = {
         hint: HINT_BASE_COUNT,
       };
     }
-    const i = int(rand, 0, 5);
+    if (level === 2) {
+      const b = pick(rand, [2, 3, 4, 5, 6, 10] as const);
+      return {
+        id: `q:ns.base:max:${b}`,
+        skill: "ns.base",
+        level,
+        prompt: {
+          ru: `Какая наибольшая цифра в системе счисления с основанием ${b}?`,
+          kk: `Негізі ${b} санау жүйесіндегі ең үлкен цифр қандай?`,
+        },
+        answer: String(b - 1),
+        mode: "number",
+        explanation: { ru: `Цифры идут от 0 до ${b - 1}: наибольшая — ${b - 1}.`, kk: `Цифрлар ${kkSuffix(0, "abl")} ${kkSuffix(b - 1, "dat")} дейін: ең үлкені — ${b - 1}.` },
+        hint: HINT_BASE_MAX,
+      };
+    }
+    // C: обратная задача — по наибольшей цифре найти основание.
+    const k = pick(rand, [1, 2, 3, 4, 5, 9] as const);
     return {
-      id: `q:ns.base:hex:${i}`,
+      id: `q:ns.base:inv:${k}`,
       skill: "ns.base",
       level,
-      prompt: same(`${HEX_LETTERS[i]}₁₆ = ?₁₀`),
-      answer: String(10 + i),
+      prompt: {
+        ru: `В системе счисления наибольшая цифра — ${k}. Чему равно основание?`,
+        kk: `Санау жүйесіндегі ең үлкен цифр — ${k}. Негізі неге тең?`,
+      },
+      answer: String(k + 1),
       mode: "number",
-      explanation: same("A = 10, B = 11, C = 12, D = 13, E = 14, F = 15"),
-      hint: HINT_HEX,
+      explanation: {
+        ru: `Цифры идут от 0 до ${k}, значит их ${k + 1}. Цифр столько, сколько основание, поэтому основание — ${k + 1}.`,
+        kk: `Цифрлар ${kkSuffix(0, "abl")} ${kkSuffix(k, "dat")} дейін, демек олар ${k + 1}. Цифрлар саны негізге тең, сондықтан негіз — ${k + 1}.`,
+      },
+      hint: HINT_BASE_MAX,
     };
   },
 };

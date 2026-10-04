@@ -18,6 +18,7 @@ import { LessonSheet } from "@/components/learn/LessonSheet";
 import { MasteryLegend } from "@/components/learn/MasteryLegend";
 import { TrackSwitch } from "@/components/school/TrackSwitch";
 import { SchoolMap } from "@/components/school/SchoolMap";
+import { useEntVisible } from "@/components/school/useEntVisible";
 import { InstallPrompt } from "@/components/app/InstallPrompt";
 import { findLessonRef, useLearnData } from "@/components/learn/useLearn";
 
@@ -47,7 +48,8 @@ function MiniExamCard() {
 export default function LearnPage() {
   const { t } = useT();
   const name = useApp((s) => s.profile.name);
-  const track = useApp((s) => s.profile.track);
+  // Одна точка решения (lib/school.ts → entVisible): школьный трек — без целей, плана, пробного ЕНТ и карты ЕНТ (#52).
+  const ent = useEntVisible();
   const { lessons, now, recommended, due } = useLearnData();
   const [sheet, setSheet] = useState<string | null>(null);
   const [view, setView] = useMapView();
@@ -70,11 +72,11 @@ export default function LearnPage() {
 
       <StreakReminder />
       {/* Цель (дата ЕНТ, балл) — для трека ЕНТ; у школьной программы своя карточка прогресса класса. */}
-      {track !== "school" && <GoalSummaryCard />}
+      {ent && <GoalSummaryCard />}
 
-      <QuickActions continueId={track === "school" ? undefined : recommended?.ref.id} dueCount={due.length} firstTime={firstTime} />
+      <QuickActions continueId={ent ? recommended?.ref.id : undefined} dueCount={due.length} firstTime={firstTime} />
 
-      {track === "school" ? (
+      {!ent ? (
         <SchoolMap />
       ) : (
         <>
