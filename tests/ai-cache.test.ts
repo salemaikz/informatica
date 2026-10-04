@@ -259,9 +259,24 @@ describe("клиентский кэш (LRU)", () => {
 describe("sameOrigin", () => {
   const req = (headers: Record<string, string>) => new Request("https://app.example/api/ai/tutor", { method: "POST", headers });
 
-  it("без Origin — пропускаем", async () => {
+  it("без Origin вне production — пропускаем (curl, тесты), в production — отказ", async () => {
     const { sameOrigin } = await import("@/server/context");
     expect(sameOrigin(req({ host: "app.example" }))).toBe(true);
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(sameOrigin(req({ host: "app.example" }))).toBe(false);
+      expect(sameOrigin(req({ origin: "https://app.example", host: "app.example" }))).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("Sec-Fetch-Site, если есть, должен быть same-origin", async () => {
+    const { sameOrigin } = await import("@/server/context");
+    const base = { origin: "https://app.example", host: "app.example" };
+    expect(sameOrigin(req({ ...base, "sec-fetch-site": "same-origin" }))).toBe(true);
+    for (const site of ["cross-site", "same-site", "none"]) expect(sameOrigin(req({ ...base, "sec-fetch-site": site }))).toBe(false);
+    expect(sameOrigin(req({ host: "app.example", "sec-fetch-site": "cross-site" }))).toBe(false);
   });
 
   it("Origin совпадает с Host или x-forwarded-host", async () => {

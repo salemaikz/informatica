@@ -1,9 +1,11 @@
 "use client";
 
-import { BookmarkPlus, Lightbulb, Send, Sparkles } from "lucide-react";
+import { BookmarkPlus, Lightbulb, RotateCcw, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { staticAiText } from "@/lib/ai-static";
+import { canRetryAiError } from "@/lib/ai-errors";
+import { isCrisisReply } from "@/lib/safety";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -12,6 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { AiCost } from "@/components/economy/AiCost";
+import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { useTutor, type TutorTurn } from "./useTutor";
 
@@ -51,15 +54,19 @@ export function AiPanel({
   const [staticText] = useState(() => staticAiText(mode, task));
   const [turns, setTurns] = useState<TutorTurn[]>([]);
   const [draft, setDraft] = useState("");
+  // Последний запрос к ИИ, который не удался: «Повторить» шлёт ту же историю заново, не дублируя сообщение ученика.
+  const [retry, setRetry] = useState<TutorTurn[] | null>(null);
   const runId = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
 
   // isCurrent — защита от ответов отменённых запусков (например, при двойном монтировании в dev).
   const stream = async (history: TutorTurn[], isCurrent: () => boolean) => {
+    setRetry(history);
     const text = await ask({ mode, task, messages: history }, (full) => {
       if (isCurrent()) setTurns([...history, { role: "assistant", content: full }]);
     });
     if (text === null && isCurrent()) setTurns(history);
+    if (text !== null && isCurrent()) setRetry(null);
   };
 
   useEffect(() => {
@@ -72,6 +79,14 @@ export function AiPanel({
     const id = ++runId.current;
     setTurns([{ role: "assistant", content: "" }]);
     void stream([], () => id === runId.current);
+  };
+
+  // «Повторить» после сбоя или оборванного ответа: та же история, сообщение ученика второй раз не добавляется.
+  const retryLast = () => {
+    if (streaming || !retry) return;
+    const id = ++runId.current;
+    setTurns([...retry, { role: "assistant", content: "" }]);
+    void stream(retry, () => id === runId.current);
   };
 
   const send = (text?: string) => {
@@ -121,17 +136,31 @@ export function AiPanel({
             <div key={i} className="rounded-2xl rounded-bl-md border-2 border-ai/25 bg-ai-soft px-4 py-3">
               {m.content ? <Markdown>{m.content}</Markdown> : <span className="animate-pulse font-semibold text-ai">{t("common.loading")}</span>}
               {m.content && !(streaming && i === turns.length - 1) && (
-                <button
-                  type="button"
-                  // Открываем шторку выбора папки — молча в конспект не сохраняем.
-                  onClick={() =>
-                    useSaveToNotes.getState().open({ source: "ai", text: m.content, lessonId: noteKey === "general" ? undefined : noteKey })
-                  }
-                  className="mt-1 flex min-h-10 items-center gap-1 text-xs font-extrabold text-ai"
-                >
-                  <BookmarkPlus size={14} />
-                  {t("tutor.saveNote")}
-                </button>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3">
+                  <button
+                    type="button"
+                    // Открываем шторку выбора папки — молча в конспект не сохраняем.
+                    onClick={() =>
+                      useSaveToNotes.getState().open({ source: "ai", text: m.content, lessonId: noteKey === "general" ? undefined : noteKey })
+                    }
+                    className="flex min-h-10 items-center gap-1 text-xs font-extrabold text-ai"
+                  >
+                    <BookmarkPlus size={14} />
+                    {t("tutor.saveNote")}
+                  </button>
+                  {!isCrisisReply(m.content) && (
+                    <ReportIssueButton
+                      compact
+                      target={{
+                        kind: "ai",
+                        where: "panel",
+                        itemId: task.stepKey || undefined,
+                        lessonId: noteKey === "general" ? undefined : noteKey,
+                        snippet: m.content,
+                      }}
+                    />
+                  )}
+                </div>
               )}
             </div>
           ),
@@ -153,7 +182,16 @@ export function AiPanel({
         {error === "economy.noChips" ? (
           <NoChipsNotice kind={mode} />
         ) : (
-          error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-semibold text-danger">{t(error)}</p>
+          error && (
+            <div className="flex flex-col items-start gap-2 rounded-xl bg-danger-soft px-3 py-2">
+              <p className="text-sm font-semibold text-danger">{t(error)}</p>
+              {retry && canRetryAiError(error) && (
+                <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retryLast} disabled={streaming}>
+                  {t("common.retry")}
+                </Button>
+              )}
+            </div>
+          )
         )}
         <div ref={bottom} />
       </div>

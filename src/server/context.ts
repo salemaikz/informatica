@@ -15,13 +15,17 @@ export function lang(v: unknown): Lang {
 }
 
 /**
- * Запрос пришёл с нашего же сайта? Если заголовок Origin есть, его хост должен совпасть с Host
- * (или x-forwarded-host за прокси). Нет Origin — пропускаем (старые клиенты, curl в dev).
- * Закрывает использование нашего ИИ чужими сайтами.
+ * Запрос пришёл с нашего же сайта? В production заголовок Origin обязателен и его хост должен совпасть с Host
+ * (или x-forwarded-host за прокси); если есть Sec-Fetch-Site, он должен быть same-origin.
+ * Вне production (dev, тесты) запрос без Origin пропускаем — curl и тесты маршрутов.
+ * Закрывает использование нашего ИИ чужими сайтами; подделать заголовки из curl можно, от этого защищает
+ * потолок расходов (server/ai-guard.ts).
  */
 export function sameOrigin(req: Request): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site.toLowerCase() !== "same-origin") return false;
   const origin = req.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) return process.env.NODE_ENV !== "production";
   let host: string;
   try {
     host = new URL(origin).host.toLowerCase();
@@ -32,6 +36,35 @@ export function sameOrigin(req: Request): boolean {
     .map((h) => h?.trim().toLowerCase())
     .filter((h): h is string => !!h);
   return allowed.includes(host);
+}
+
+/** Сколько последних сообщений чата берём, сколько символов в каждом и во всей истории (старые отбрасываются). */
+export const HISTORY_MAX_MESSAGES = 12;
+export const HISTORY_MAX_MESSAGE_CHARS = 2000;
+export const HISTORY_MAX_CHARS = 8000;
+
+export interface HistoryMsg {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** История чата с клиента: только user/assistant с непустым текстом, каждое до 2000 символов, всего до 8000 (с конца). */
+export function sanitizeHistory(raw: unknown): HistoryMsg[] {
+  const msgs = (Array.isArray(raw) ? raw : [])
+    .slice(-HISTORY_MAX_MESSAGES)
+    .filter(
+      (m): m is HistoryMsg =>
+        !!m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim() !== "",
+    )
+    .map((m) => ({ role: m.role, content: m.content.slice(0, HISTORY_MAX_MESSAGE_CHARS) }));
+  const out: HistoryMsg[] = [];
+  let total = 0;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    total += msgs[i].content.length;
+    if (total > HISTORY_MAX_CHARS) break;
+    out.unshift(msgs[i]);
+  }
+  return out;
 }
 
 /** Текст про стиль объяснений для промпта (по умолчанию — коротко). */

@@ -432,14 +432,23 @@ export type AiKind = "hint" | "explain" | "ask" | "chat" | "photo" | "review" | 
 /** Цена сверх бесплатных обращений, чипов (решение #34). */
 export const AI_COST: Record<AiKind, number> = { hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, review: 15, voice: 2, feedback: 0 };
 
-/** Потолок обращений в день по тарифу — защита от перерасхода (в том числе при безлимите). */
-export const AI_DAILY_CAP: Record<PlanTier, number> = { free: 60, lite: 150, unlimited: 300 };
+/**
+ * Вес вида обращения в «обращениях» дневного потолка (решение #48): фото — 2, голос — 4, отзыв после урока — 0
+ * (у него свой потолок на сервере). Те же числа использует серверный страж (server/ai-guard.ts).
+ */
+export const AI_UNITS: Record<AiKind, number> = { hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 };
+
+/**
+ * Потолок в обращениях в день по тарифу — защита от перерасхода (в том числе при безлимите; решение #48).
+ * Бесплатно: 3 бесплатных + до 10 за чипы. Серверный потолок устройства (100) совпадает с «Безлимитом».
+ */
+export const AI_DAILY_CAP: Record<PlanTier, number> = { free: 13, lite: 50, unlimited: 100 };
 
 export interface AiUsage {
   day: string;
-  /** Всего обращений за день. */
+  /** Обращений за день в «обращениях» (вес вида — AI_UNITS: фото 2, голос 4). */
   count: number;
-  /** Из них бесплатных по тарифу. */
+  /** Из них бесплатных по тарифу (считаются штуками). */
   free: number;
 }
 
@@ -471,7 +480,7 @@ export function aiFreeLeft(tier: PlanTier, u: AiUsage | undefined, today: string
 /** Как будет оплачено обращение (без изменения состояния). */
 export function quoteAi(kind: AiKind, tier: PlanTier, usage: AiUsage | undefined, chips: number, today: string): AiReceipt {
   const u = usageToday(usage, today);
-  if (u.count >= AI_DAILY_CAP[tier]) return { ok: false, kind, day: today, cost: 0, reason: "cap" };
+  if (u.count + AI_UNITS[kind] > AI_DAILY_CAP[tier]) return { ok: false, kind, day: today, cost: 0, reason: "cap" };
   if (kind === "feedback") return { ok: true, kind, day: today, pay: "free", cost: 0 };
   if (tier === "unlimited") return { ok: true, kind, day: today, pay: "plan", cost: 0 };
   if (aiFreeLeft(tier, u, today) > 0) return { ok: true, kind, day: today, pay: "free", cost: 0 };
@@ -485,7 +494,7 @@ export function applyAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
   const cur = usageToday(u, r.day);
   if (!r.ok) return cur;
   const usesFree = r.pay === "free" && r.kind !== "feedback";
-  return { day: r.day, count: cur.count + 1, free: cur.free + (usesFree ? 1 : 0) };
+  return { day: r.day, count: cur.count + AI_UNITS[r.kind], free: cur.free + (usesFree ? 1 : 0) };
 }
 
 /** Возврат обращения по квитанции (тот же день). */
@@ -494,7 +503,7 @@ export function refundAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
   // Неудачная квитанция ничего не списывала; за другой день не возвращаем.
   if (!r.ok || base.day !== r.day) return base;
   const usesFree = r.pay === "free" && r.kind !== "feedback";
-  return { day: r.day, count: Math.max(0, base.count - 1), free: Math.max(0, base.free - (usesFree ? 1 : 0)) };
+  return { day: r.day, count: Math.max(0, base.count - AI_UNITS[r.kind]), free: Math.max(0, base.free - (usesFree ? 1 : 0)) };
 }
 
 export function sanitizeAiUsage(raw: unknown): AiUsage {

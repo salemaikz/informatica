@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AI_COST,
   AI_DAILY_CAP,
+  AI_UNITS,
   BOOST_PACKS,
   CHIPS_PER_XP,
   CHIP_PACKS,
@@ -631,8 +632,8 @@ describe("ИИ: quoteAi", () => {
     expect(quoteAi("voice", "free", usage(3), 1, TODAY)).toEqual({ ok: false, kind: "voice", day: TODAY, cost: 2, reason: "chips" });
     expect(quoteAi("voice", "free", usage(0), 0, TODAY)).toMatchObject({ ok: true, pay: "free", cost: 0 });
     expect(quoteAi("voice", "unlimited", usage(500, 10), 0, TODAY)).toMatchObject({ ok: true, pay: "plan", cost: 0 });
-    // голос съедает бесплатный лимит как обычное обращение
-    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 1, free: 1 });
+    // голос съедает бесплатный лимит как одно обращение, а в дневной потолок идёт за 4 (AI_UNITS)
+    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 4, free: 1 });
   });
 
   it("не хватает чипов — причина chips и цена", () => {
@@ -655,11 +656,30 @@ describe("ИИ: quoteAi", () => {
     expect(AI_COST.feedback).toBe(0);
   });
 
-  it("потолок дня: для любого тарифа, в том числе для отзыва", () => {
+  it("вес обращений в потолке дня: чат, подсказка, разбор, вопрос — 1; фото и разбор пробника — 2; голос — 4; отзыв — 0", () => {
+    expect(AI_UNITS).toEqual({ hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 });
+  });
+
+  it("потолок дня (решение #48): бесплатно 13 (3 + 10 за чипы), Лайт 50, Безлимит 100", () => {
+    expect(AI_DAILY_CAP).toEqual({ free: 13, lite: 50, unlimited: 100 });
+  });
+
+  it("потолок дня: отказ, если count + вес обращения > потолка; для любого тарифа", () => {
     expect(quoteAi("hint", "free", usage(0, AI_DAILY_CAP.free), 999, TODAY)).toMatchObject({ ok: false, reason: "cap", cost: 0 });
     expect(quoteAi("hint", "unlimited", usage(0, AI_DAILY_CAP.unlimited), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
-    expect(quoteAi("feedback", "lite", usage(0, AI_DAILY_CAP.lite), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
     expect(quoteAi("hint", "free", usage(0, AI_DAILY_CAP.free - 1), 0, TODAY).ok).toBe(true);
+    // фото весит 2: на 12-м обращении ещё можно, на 13-м — уже нельзя
+    expect(quoteAi("photo", "free", usage(0, 11), 999, TODAY).ok).toBe(true);
+    expect(quoteAi("photo", "free", usage(0, 12), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+    // голос весит 4
+    expect(quoteAi("voice", "lite", usage(0, 46), 999, TODAY).ok).toBe(true);
+    expect(quoteAi("voice", "lite", usage(0, 47), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+    expect(quoteAi("voice", "unlimited", usage(0, 97), 0, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+  });
+
+  it("отзыв после урока весит 0: не упирается в потолок, пока он не превышен", () => {
+    expect(quoteAi("feedback", "lite", usage(0, AI_DAILY_CAP.lite), 999, TODAY)).toMatchObject({ ok: true, pay: "free" });
+    expect(quoteAi("feedback", "lite", usage(0, AI_DAILY_CAP.lite + 1), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
   });
 
   it("использование за вчера не считается", () => {
@@ -688,8 +708,20 @@ describe("ИИ: applyAiUsage / refundAiUsage", () => {
     expect(applyAiUsage({ day: TODAY, count: 0, free: 0 }, rc({ pay: "plan" }))).toEqual({ day: TODAY, count: 1, free: 0 });
   });
 
-  it("отзыв: идёт в count, но не съедает бесплатный лимит", () => {
-    expect(applyAiUsage(undefined, rc({ kind: "feedback" }))).toEqual({ day: TODAY, count: 1, free: 0 });
+  it("отзыв: вес 0 — в count не идёт и бесплатный лимит не съедает", () => {
+    expect(applyAiUsage(undefined, rc({ kind: "feedback" }))).toEqual({ day: TODAY, count: 0, free: 0 });
+  });
+
+  it("вес обращения в count: фото +2, голос +4, подсказка +1; бесплатные — штуками", () => {
+    expect(applyAiUsage(undefined, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 2, free: 1 });
+    expect(applyAiUsage(undefined, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 4, free: 0 });
+    expect(applyAiUsage({ day: TODAY, count: 5, free: 3 }, rc({ kind: "review", pay: "plan" }))).toEqual({ day: TODAY, count: 7, free: 3 });
+  });
+
+  it("возврат вычитает тот же вес, не уходя ниже нуля", () => {
+    const u: AiUsage = { day: TODAY, count: 6, free: 1 };
+    expect(refundAiUsage(u, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 2, free: 1 });
+    expect(refundAiUsage({ day: TODAY, count: 1, free: 1 }, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 0, free: 0 });
   });
 
   it("неудачная квитанция ничего не меняет", () => {

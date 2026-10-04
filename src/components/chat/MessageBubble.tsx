@@ -2,8 +2,10 @@
 
 import { BookmarkPlus, Camera, Mic } from "lucide-react";
 import type { ChatMsg } from "@/lib/chats";
+import { isCrisisReply } from "@/lib/safety";
 import { useT } from "@/i18n/useT";
 import { Markdown } from "@/components/Markdown";
+import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { SpeakButton } from "./voice/SpeakButton";
 
@@ -19,7 +21,7 @@ export function UserBubble({ msg }: { msg: ChatMsg }) {
   );
 }
 
-/** Ответ Бита (слева, фиолетовая рамка ИИ): «В конспект» и «Озвучить». */
+/** Ответ Бита (слева, фиолетовая рамка ИИ): «В конспект», «Озвучить» и «Сообщить об ошибке» (кроме кризисного ответа). */
 export function BitBubble({ msg }: { msg: ChatMsg }) {
   const { t } = useT();
   return (
@@ -36,6 +38,7 @@ export function BitBubble({ msg }: { msg: ChatMsg }) {
           {t("tutor.saveNote")}
         </button>
         <SpeakButton text={msg.content} />
+        {!isCrisisReply(msg.content) && <ReportIssueButton compact target={{ kind: "ai", where: "chat", snippet: msg.content }} />}
       </div>
     </div>
   );

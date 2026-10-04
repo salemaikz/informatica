@@ -8,7 +8,7 @@ import { entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
-import { lessonFeedback } from "@/lib/ai";
+import { aiErrorKey, lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
 import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from "@/lib/exam";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
@@ -36,8 +36,8 @@ const TONE_COLOR: Record<Tone, string> = {
 };
 const KIND_ROWS = ["single", "multi", "match", "context"] as const;
 
-// chips — не хватает чипов на разбор; limit — потолок обращений за день.
-type AiState = { status: "idle" | "loading" | "failed" | "limit" | "chips" };
+// chips — не хватает чипов на разбор; limit — потолок обращений за день; key — особая причина сбоя (всплеск, общий запас сайта).
+type AiState = { status: "idle" | "loading" | "failed" | "limit" | "chips"; key?: DictKey };
 
 function Bar({ label, points, max, hint }: { label: string; points: number; max: number; hint?: string }) {
   const ratio = ratioOf(points, max);
@@ -206,9 +206,11 @@ export function ExamResult({ id }: { id: string }) {
       await saveAttemptState({ ...state, review });
       setLoaded({ done: true, attempt: { ...attempt, review } });
       setAi({ status: "idle" });
-    } catch {
+    } catch (e) {
       useApp.getState().refundAi(receipt);
-      setAi({ status: "failed" });
+      // Общая ошибка — прежний текст раздела; отказ сервера по лимитам — свой текст (lib/ai.ts → aiErrorKey).
+      const key = aiErrorKey(e);
+      setAi({ status: "failed", key: key === "tutor.error" ? undefined : key });
     }
   };
 
@@ -394,7 +396,7 @@ export function ExamResult({ id }: { id: string }) {
                   {ai.status === "loading" ? t("exam.ai.loading") : t("exam.ai.button")}
                   {ai.status !== "loading" && <AiCost kind="review" variant="solid" />}
                 </Button>
-                {ai.status === "failed" && <p className="text-sm font-bold text-danger">{t("exam.ai.failed")}</p>}
+                {ai.status === "failed" && <p className="text-sm font-bold text-danger">{t(ai.key ?? "exam.ai.failed")}</p>}
                 {ai.status === "limit" && <p className="text-sm font-bold text-warning-strong">{t("exam.ai.limit")}</p>}
                 {ai.status === "chips" && <NoChipsNotice kind="review" />}
               </div>

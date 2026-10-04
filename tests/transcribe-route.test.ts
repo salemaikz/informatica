@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -12,6 +12,10 @@ vi.mock("@/server/openai", () => ({
 }));
 
 const { POST } = await import("@/app/api/ai/transcribe/route");
+const { getKv, kzDay } = await import("@/server/kv");
+
+// Сколько обращений списано с сайта сегодня (страж лимитов, server/ai-guard.ts).
+const siteUnits = () => getKv().get(`ai:site:${kzDay()}`);
 
 let n = 0;
 const nextIp = () => `10.0.0.${++n}`;
@@ -148,5 +152,64 @@ describe("POST /api/ai/transcribe — успех и сбои", () => {
     const res = await POST(req({ audio: audio() }));
     expect(res.status).toBe(502);
     expect(await code(res)).toBe("stt_failed");
+  });
+});
+
+describe("POST /api/ai/transcribe — страж лимитов (решение #48)", () => {
+  beforeEach(() => {
+    create.mockReset();
+    state.client = true;
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("успешная расшифровка списывает 4 обращения и выдаёт cookie устройства", async () => {
+    create.mockResolvedValue({ text: "ок" });
+    const before = await siteUnits();
+    const res = await POST(req({ audio: audio("audio/webm", 1500) }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toMatch(/^inf_ai=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}; HttpOnly; SameSite=Lax; Path=\/api/);
+    expect((await siteUnits()) - before).toBe(4);
+  });
+
+  it("ошибка до вызова модели возвращает обращения: нет файла, не аудио, слишком большой, не multipart, ИИ не настроен", async () => {
+    const before = await siteUnits();
+    expect((await POST(req({ audio: null }))).status).toBe(400);
+    expect((await POST(req({ audio: audio("video/mp4", 100) }))).status).toBe(415);
+    expect((await POST(req({ audio: audio("audio/webm", MAX + 1) }))).status).toBe(413);
+    state.client = false;
+    expect((await POST(req({ audio: audio() }))).status).toBe(503);
+    state.client = true;
+    expect(await siteUnits()).toBe(before);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("сбой расшифровки (502) возвращает обращения", async () => {
+    create.mockRejectedValue(new Error("upstream"));
+    const before = await siteUnits();
+    const res = await POST(req({ audio: audio() }));
+    expect(res.status).toBe(502);
+    expect(await siteUnits()).toBe(before);
+  });
+
+  it("лимит устройства: голос весит 4, потолок AI_DEVICE_DAILY_UNITS = 6 пускает один запрос, второй — 429 daily_limit", async () => {
+    vi.stubEnv("AI_DEVICE_DAILY_UNITS", "6");
+    create.mockResolvedValue({ text: "ок" });
+    const ip = "10.77.0.1";
+    const first = await POST(req({ audio: audio() }, { "x-forwarded-for": ip }));
+    expect(first.status).toBe(200);
+    const cookie = (first.headers.get("set-cookie") ?? "").split(";")[0];
+    const second = await POST(req({ audio: audio() }, { "x-forwarded-for": ip, cookie }));
+    expect(second.status).toBe(429);
+    expect(await code(second)).toBe("daily_limit");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("в production без Origin — 403 forbidden_origin", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const res = await POST(req({ audio: audio() }));
+    expect(res.status).toBe(403);
+    expect(await code(res)).toBe("forbidden_origin");
   });
 });

@@ -57,7 +57,10 @@ describe("формат записи", () => {
 
 describe("ошибки сервера → ключи словаря", () => {
   it("маппинг статусов", () => {
-    expect(voiceErrorKey(429)).toBe("tutor.limit");
+    expect(voiceErrorKey(429)).toBe("ai.err.burst");
+    expect(voiceErrorKey(429, "rate_limited")).toBe("ai.err.burst");
+    expect(voiceErrorKey(429, "daily_limit")).toBe("tutor.limit");
+    expect(voiceErrorKey(503, "ai_busy")).toBe("ai.err.busy");
     expect(voiceErrorKey(413)).toBe("voice.err.tooLong");
     expect(voiceErrorKey(400, "too_large")).toBe("voice.err.tooLong");
     expect(voiceErrorKey(415)).toBe("voice.err.unsupported");
@@ -89,7 +92,11 @@ describe("transcribe (клиент)", () => {
 
   it("ошибки сервера и сети — VoiceError с ключом", async () => {
     fetchMock.mockResolvedValue(Response.json({ error: "rate_limited" }, { status: 429 }));
+    await expect(transcribe(new Blob(["a"], { type: "audio/mp4" }), "ru")).rejects.toMatchObject({ key: "ai.err.burst" });
+    fetchMock.mockResolvedValue(Response.json({ error: "daily_limit" }, { status: 429 }));
     await expect(transcribe(new Blob(["a"], { type: "audio/mp4" }), "ru")).rejects.toMatchObject({ key: "tutor.limit" });
+    fetchMock.mockResolvedValue(Response.json({ error: "ai_busy" }, { status: 503 }));
+    await expect(transcribe(new Blob(["a"], { type: "audio/mp4" }), "ru")).rejects.toMatchObject({ key: "ai.err.busy" });
     fetchMock.mockResolvedValue(new Response("oops", { status: 502 }));
     await expect(transcribe(new Blob(["a"], { type: "audio/mp4" }), "ru")).rejects.toBeInstanceOf(VoiceError);
     fetchMock.mockRejectedValue(new TypeError("network"));

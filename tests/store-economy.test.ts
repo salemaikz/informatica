@@ -425,6 +425,27 @@ describe("стор: ИИ за чипы", () => {
     expect(chips()).toBe(START);
   });
 
+  it("потолок дня считается в обращениях: фото весит 2, голос — 4, возврат возвращает тот же вес", () => {
+    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 } });
+    const photo = st().spendAi("photo");
+    expect(st().aiUsage.count).toBe(2);
+    const voice = st().spendAi("voice");
+    expect(st().aiUsage.count).toBe(6);
+    st().refundAi(voice);
+    expect(st().aiUsage.count).toBe(2);
+    st().refundAi(photo);
+    expect(st().aiUsage.count).toBe(0);
+  });
+
+  it("потолок бесплатного тарифа — 13 обращений: фото на 13-м уже не помещается, подсказка помещается; чипы при отказе целы", () => {
+    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 }, aiUsage: { day: todayKey(), count: 12, free: 3 } });
+    expect(st().spendAi("photo")).toMatchObject({ ok: false, reason: "cap" });
+    expect(chips()).toBe(999);
+    expect(st().aiUsage.count).toBe(12);
+    expect(st().spendAi("hint")).toMatchObject({ ok: true, pay: "chips", cost: 3 });
+    expect(st().spendAi("hint")).toMatchObject({ ok: false, reason: "cap" });
+  });
+
   it("refundAi неудачной квитанции ничего не делает", () => {
     useApp.setState({ wallet: { chips: 0, earned: 0, spent: 0 }, aiUsage: { day: todayKey(), count: 3, free: 3 } });
     const r = st().spendAi("hint");
