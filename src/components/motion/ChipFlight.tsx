@@ -9,11 +9,20 @@ import { useReduceMotion } from "./useReduceMotion";
 const COUNT = 5;
 
 /**
- * Чипы «летят» из места, где стоит компонент, в счётчик чипов шапки (`[data-tour="hdr-chips"]`).
+ * Чипы «летят» из места, где стоит компонент, в счётчик по `targetSelector` (по умолчанию шапка `[data-tour="hdr-chips"]`; на итогах урока шапки нет — ставим `data-chip-target` на число чипов и `targetSelector="[data-chip-target]"`).
+ * Задержка 1.1 с — после фанфары и лесенки плиток.
  * Играет звук `chips`. Срабатывает один раз при показе, если `amount > 0`; без шапки на экране — только звук.
  * Родитель должен быть `relative`; элемент не ловит клики. При «Меньше анимаций» — только звук.
  */
-export function ChipFlight({ amount, delay = 0.5 }: { amount: number; delay?: number }) {
+export function ChipFlight({
+  amount,
+  delay = 1.1,
+  targetSelector = '[data-tour="hdr-chips"]',
+}: {
+  amount: number;
+  delay?: number;
+  targetSelector?: string;
+}) {
   const reduce = useReduceMotion();
   const ref = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<{ x: number; y: number } | null>(null);
@@ -23,13 +32,15 @@ export function ChipFlight({ amount, delay = 0.5 }: { amount: number; delay?: nu
     const id = setTimeout(() => {
       feedback("chips");
       const from = ref.current?.getBoundingClientRect();
-      const to = document.querySelector<HTMLElement>('[data-tour="hdr-chips"]')?.getBoundingClientRect();
-      if (!reduce && from && to) {
+      // Первый видимый элемент (скрытые копии счётчика, display:none, пропускаем).
+      const el = Array.from(document.querySelectorAll<HTMLElement>(targetSelector)).find((e) => e.getClientRects().length > 0);
+      const to = el?.getBoundingClientRect();
+      if (!reduce && from && to && to.width + to.height > 0) {
         setTarget({ x: to.left + to.width / 2 - (from.left + from.width / 2), y: to.top + to.height / 2 - (from.top + from.height / 2) });
       }
     }, delay * 1000);
     return () => clearTimeout(id);
-  }, [amount, delay, reduce]);
+  }, [amount, delay, reduce, targetSelector]);
 
   if (amount <= 0) return null;
   return (

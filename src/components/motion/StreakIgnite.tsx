@@ -14,7 +14,7 @@ import { springBouncy } from "./presets";
  * Итоги первого за день занятия: «Огонь загорелся — серия N дней».
  * Показывается один раз: если на старте занятия день не был засчитан, а теперь засчитан (снимок берёт само занятие).
  */
-export function StreakIgnite() {
+export function StreakIgnite({ sound = true, delay = 0.55 }: { sound?: boolean; delay?: number }) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const { current, activeToday } = useStreak();
@@ -23,10 +23,11 @@ export function StreakIgnite() {
   useEffect(() => {
     if (!show) return;
     clearStreakStart();
-    // Звук «огонь загорелся» — в такт со вспышкой пламени.
-    const id = setTimeout(() => feedback("streak"), 550);
+    // Звук «огонь загорелся» — в такт со вспышкой пламени; на итогах экзамена без звука.
+    if (!sound) return;
+    const id = setTimeout(() => feedback("streak"), delay * 1000);
     return () => clearTimeout(id);
-  }, [show]);
+  }, [show, sound, delay]);
   if (!show) return null;
   return (
     <m.div

@@ -19,10 +19,10 @@ const PATTERNS: Partial<Record<FeedbackKind, number[]>> = {
   caseReveal: [25, 40, 60],
 };
 
-export function feedback(kind: FeedbackKind, opts?: { combo?: number }) {
+export function feedback(kind: FeedbackKind, opts?: { step?: number; combo?: number }) {
   try {
     const { profile } = useApp.getState();
-    if (profile.sound) playSound(kind, { step: opts?.combo });
+    if (profile.sound) playSound(kind, { step: opts?.step ?? opts?.combo });
     const pattern = PATTERNS[kind];
     if (pattern && profile.vibration && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(pattern);

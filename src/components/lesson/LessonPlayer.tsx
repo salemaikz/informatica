@@ -363,7 +363,8 @@ export function LessonPlayer({
       if (doneEvent) track(doneEvent);
       const achievements = useApp.getState().consumeNewAchievements();
       const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
-      giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : "complete");
+      // Идеальный урок — своя фанфара вместо обычной (Results её не повторяет).
+      giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : result.accuracy >= 1 ? "perfect" : "complete");
       setSession({ result, bonusXp, achievements, chips, heart });
       requestLessonFeedback(result, setFeedback);
     },
@@ -752,19 +753,20 @@ export function LessonPlayer({
           >
             <X size={24} />
           </button>
-          <m.div
-            key={comboTier(combo) > 0 && phase === "feedback" ? `glow-${records.length}` : "calm"}
-            className="min-w-0 flex-1 rounded-full"
-            initial={false}
-            animate={
-              comboTier(combo) > 0 && phase === "feedback" && result?.correct && !reduceMotion && !testMode
-                ? { boxShadow: ["0 0 0 0 rgba(0,0,0,0)", "0 0 14px 3px var(--streak)", "0 0 0 0 rgba(0,0,0,0)"] }
-                : undefined
-            }
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
+          <div className="relative min-w-0 flex-1 rounded-full">
             <ProgressBar value={progress} label={title} />
-          </m.div>
+            {/* Свечение на комбо — отдельный слой поверх полосы: сама полоса не перемонтируется. */}
+            {comboTier(combo) > 0 && phase === "feedback" && result?.correct && !reduceMotion && !testMode && (
+              <m.span
+                key={`glow-${records.length}`}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_14px_3px_var(--streak)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+              />
+            )}
+          </div>
           <StreakFlame />
           {(entryCost > 0 || prepaid !== undefined) && (
             <span data-tour="lesson-hearts" className="flex">
