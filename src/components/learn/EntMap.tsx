@@ -16,6 +16,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { tileSpan } from "./ent-grid";
 import { nodeState, pluralForm, topicLessons, topicMastery, topicSkillIds, type NodeState, type TopicLevel } from "./map";
 import { unitVars } from "./useLearn";
@@ -95,7 +96,7 @@ function TopicSheet({
 }) {
   const { t, l } = useT();
   const itemsLabel = useItemsLabel();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
   const [shown, setShown] = useState(topicId);
   if (topicId && topicId !== shown) setShown(topicId);
@@ -224,7 +225,7 @@ function TotalTile({ index }: { index: number }) {
 export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string | undefined; now: number; onLesson: (lessonId: string) => void }) {
   const { t, l, lang } = useT();
   const itemsLabel = useItemsLabel();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const [topic, setTopic] = useState<EntTopicId | null>(null);
   const tiles = useMemo(
     () =>

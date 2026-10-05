@@ -8,6 +8,7 @@ import { evaluate, isReady, type Answer, type StepResult } from "@/lib/evaluate"
 import { activeMs } from "@/lib/active-clock";
 import { xpForAnswer } from "@/lib/gamification";
 import { feedback as giveFeedback } from "@/lib/feedback";
+import { decaySkills } from "@/lib/mastery";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import {
@@ -54,7 +55,9 @@ const PRAISE = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"] 
 /** Свежий набор заданий: освоение и пройденные уроки берём из прогресса ученика. */
 function makeSteps(topic: EntTopicId | undefined, count: number): QuestionStep[] {
   const s = useApp.getState();
-  return buildQuiz({ topic, count, lessons: s.lessons, stats: s.skills, seed: Date.now() });
+  const now = Date.now();
+  // Выбор заданий — по освоению с затуханием (#45, #80): давние и слабые выпадают чаще.
+  return buildQuiz({ topic, count, lessons: s.lessons, stats: decaySkills(s.skills, now), seed: now });
 }
 
 /**

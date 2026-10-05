@@ -13,13 +13,13 @@ import { Mascot, type Mood } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { SceneView } from "@/components/scenes/SceneView";
 import { Button } from "@/components/ui/Button";
+import { liveSkills } from "@/games/live-mastery";
 import type { GameProps } from "@/games/types";
 import type { TowerStep } from "@/games/tower/logic";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { evaluate, expectedText, isReady, type Answer, type StepResult } from "@/lib/evaluate";
 import { feedback } from "@/lib/feedback";
-import { useApp } from "@/lib/store";
 import { fmt, tx } from "@/lib/text";
 import type { EntTopicId, SkillId } from "@/lib/types";
 import {
@@ -472,7 +472,7 @@ export default function Game(props: GameProps) {
   const pick = (kind: BossKind) => {
     const rand = (Date.now() ^ Math.floor(Math.random() * 2 ** 32)) >>> 0;
     const seed = kind === "big" ? weekNumber() : rand;
-    const skills = kind === "big" ? all : pickWeakSkills(all, useApp.getState().skills, rand);
+    const skills = kind === "big" ? all : pickWeakSkills(all, liveSkills(), rand);
     const first = drawNext(initialState(kind), skills, seed);
     if (!first) {
       setEmpty(true);

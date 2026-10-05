@@ -2,12 +2,12 @@
 
 import { Check, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { liveMastery } from "@/games/live-mastery";
 import type { GameAttempt, GameProps } from "@/games/types";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { ignoreKey } from "@/lib/keys";
-import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
 import { fmt, tx } from "@/lib/text";
 import type { SkillId } from "@/lib/types";
@@ -46,7 +46,7 @@ interface Feedback {
 
 type Phase = "play" | "feedback";
 
-const masteryOf = (skill: SkillId) => useApp.getState().skills[skill]?.mastery ?? 0.3;
+const masteryOf = (skill: SkillId) => liveMastery(skill) ?? 0.3;
 
 export default function Game({ lang, sound, mode, onFinish }: GameProps) {
   const { t } = useT();

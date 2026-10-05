@@ -18,6 +18,7 @@ import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { HistoryPracticeCard } from "@/components/history/HistoryCards";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { iconFor } from "@/components/scenes/icons";
 import { GAMES } from "@/games/registry";
 import { useEntVisible } from "@/components/school/useEntVisible";
@@ -28,7 +29,7 @@ const GROUPS = skillsByUnit();
 export default function PracticePage() {
   const { t, l } = useT();
   const ent = useEntVisible();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
   const mistakes = useApp((s) => s.mistakes);
   const games = useApp((s) => s.games);

@@ -11,6 +11,7 @@ import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { useNow } from "@/components/economy/useEconomy";
 import { percent } from "./format";
+import { useSkillStats } from "./useSkillStats";
 import { REASON_KEY, REASON_ROW } from "./weak-tone";
 
 /**
@@ -20,7 +21,7 @@ import { REASON_KEY, REASON_ROW } from "./weak-tone";
  */
 export function WeakTopicsRail() {
   const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const skillDays = useApp((s) => s.skillDays);
   const now = useNow();
   const spots = useMemo(() => weakSpots({ skills, skillDays, now }, 3), [skills, skillDays, now]);

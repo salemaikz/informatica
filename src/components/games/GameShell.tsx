@@ -205,6 +205,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
                     <span className="min-w-0">
                       <span className={cn("block font-extrabold", on && "text-primary")}>{t(m.title)}</span>
                       <span className="block text-xs font-semibold text-muted">{t(m.desc)}</span>
+                      {m.id === "calm" && <span className="mt-0.5 block text-[11px] font-bold text-muted">{t("game.mode.calm.mastery")}</span>}
                     </span>
                   </button>
                 );

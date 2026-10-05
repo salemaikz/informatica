@@ -5,13 +5,13 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Button } from "@/components/ui/Button";
+import { liveMastery } from "@/games/live-mastery";
 import type { GameProps } from "@/games/types";
 import { useT } from "@/i18n/useT";
 import { checkInput } from "@/lib/check";
 import { cn } from "@/lib/cn";
 import { ignoreKey } from "@/lib/keys";
 import { playSound } from "@/lib/sound";
-import { useApp } from "@/lib/store";
 import { fmt, plainText, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
@@ -154,9 +154,8 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
   const { t } = useT();
   const cfg = MODE_CONFIG[mode];
   const [init] = useState(() => {
-    const skills = useApp.getState().skills;
     const masteries: Record<string, number | undefined> = {};
-    for (const s of SKILLS) masteries[s] = skills[s]?.mastery;
+    for (const s of SKILLS) masteries[s] = liveMastery(s);
     return nextQuestion(createStream((Date.now() ^ Math.floor(Math.random() * 2 ** 32)) >>> 0, masteries, mode));
   });
 

@@ -15,6 +15,7 @@ import { useNow } from "@/components/economy/useEconomy";
 import { DataSince } from "./DataSince";
 import { formatDuration, LEVEL_COLOR, percent, toneOfRatio, TONE_TEXT } from "./format";
 import { Sparkline } from "./Sparkline";
+import { useSkillStats } from "./useSkillStats";
 
 type Period = 7 | 30;
 
@@ -24,7 +25,7 @@ type Period = 7 | 30;
  */
 export function TopicTable({ className }: { className?: string }) {
   const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const skillDays = useApp((s) => s.skillDays);
   const now = useNow();
   // Темы ЕНТ — только у ученика, готовящегося к ЕНТ (#52); школьнику таблицу не показываем, даже если её вставят по ошибке.

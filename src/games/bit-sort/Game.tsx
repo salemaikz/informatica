@@ -2,12 +2,12 @@
 
 import { Check, Flame, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { liveMastery } from "@/games/live-mastery";
 import type { GameAttempt, GameProps } from "@/games/types";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { ignoreKey } from "@/lib/keys";
-import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
 import { fmt, tx } from "@/lib/text";
 import { S } from "./strings";
@@ -55,7 +55,7 @@ const OVER_MS = 700;
 const SWIPE_PX = 40;
 const NO_FX = { ok: null, bad: null, target: null };
 
-const masteryOf = (skill: string) => useApp.getState().skills[skill]?.mastery ?? 0.3;
+const masteryOf = (skill: string) => liveMastery(skill) ?? 0.3;
 const prefersReduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 interface Api {
