@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { COSMETIC_SLOTS, type CosmeticEquipped, type CosmeticId, type CosmeticSlot } from "@/lib/cosmetics";
 import { levelTitle } from "@/lib/gamification";
 import { useLevel } from "@/lib/hooks";
+import { LevelBadge } from "@/components/app/LevelBadge";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Avatar } from "@/components/app/Avatar";
@@ -68,12 +69,7 @@ export function ProfileCard({
             )}
           </div>
           <div className="-mb-1 flex min-w-0 items-center gap-2.5">
-            <span
-              title={t("stats.level")}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-extrabold text-white shadow-[0_3px_0_var(--primary-strong)]"
-            >
-              {level}
-            </span>
+            <LevelBadge level={level} size="md" className="shrink-0" />
             <div className="min-w-0 leading-tight">
               <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("stats.level")}</p>
               <p className="truncate font-extrabold">{l(levelTitle(level))}</p>

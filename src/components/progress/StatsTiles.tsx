@@ -6,6 +6,7 @@ import { useMemo, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { levelTitle } from "@/lib/gamification";
 import { useLevel, useStreak } from "@/lib/hooks";
+import { LevelBadge } from "@/components/app/LevelBadge";
 import { dayTotals } from "@/lib/progress";
 import { encodeShare, type ShareResult } from "@/lib/share-code";
 import { useApp } from "@/lib/store";
@@ -14,7 +15,7 @@ import { ShareSheet } from "@/components/share/ShareSheet";
 import { Card } from "@/components/ui/Card";
 import { formatDate, formatDuration, percent, toneOfRatio, TONE_TEXT } from "./format";
 
-function Tile({ icon, label, value, sub, action }: { icon: ReactNode; label: string; value: string | number; sub?: string; action?: ReactNode }) {
+function Tile({ icon, label, value, sub, action }: { icon: ReactNode; label: string; value: ReactNode; sub?: string; action?: ReactNode }) {
   return (
     <div className="min-w-0 rounded-2xl border-2 border-border bg-surface p-3">
       <p className="flex items-center gap-1.5 text-xs font-extrabold text-muted">
@@ -57,7 +58,7 @@ export function StatsTiles({ className }: { className?: string }) {
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile icon={<XpIcon size={14} />} label={t("stats.totalXp")} value={xp} />
-        <Tile icon={<Trophy size={14} className="text-primary" aria-hidden />} label={t("stats.level")} value={level} sub={l(levelTitle(level))} />
+        <Tile icon={<Trophy size={14} className="text-primary" aria-hidden />} label={t("stats.level")} value={<LevelBadge level={level} size="sm" />} sub={l(levelTitle(level))} />
         <Tile icon={<Flame size={14} className="text-streak" aria-hidden />} label={t("stats.streak")} value={current}
           sub={t("stats.best", { n: best })}
           action={
