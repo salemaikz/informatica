@@ -216,7 +216,7 @@ paywall { lastShownAt, views }        shouldShowPaywall: бесплатным �
 ```
 - **Начисление чипов** — одна функция `settleChips(prev, next, extra)` в сторе: разница XP (5 XP = 1 чип), пересечение дневной цели, новые достижения, бонусы (урок, без ошибок, пробный ЕНТ). Вызывается в конце `recordAnswer`, `finishSession`, `completeLessons`, `recordGame`, `recordExam`, `noteCombo`, `unlock`, `createNote`.
 - **ИИ**: каждый вызов модели идёт через `spendAi(kind)` → квитанция; неудача запроса или ответ из кэша → `refundAi(receipt)` (чипы и бесплатное обращение возвращаются). Виды: `hint`, `explain`, `ask`, `chat`, `photo` (чат с фото и проверка решения), `review` (ИИ-разбор пробного ЕНТ), `feedback` (отзыв после урока — бесплатно).
-- **Сердечки**: `loseHeart()` — ошибка с первой попытки в уроке; `finishSession` тренировки возвращает `heart: true`, если вернула сердечко; `buy(id)` — покупки за чипы (`SHOP_ITEMS`).
+- **Сердечки** (этап 11, #40): плата за вход — `payEntry(cost)` (не хватает — ничего не списано), цены — `ENTRY_COST` / `entryCost` / `lessonCost` в `lib/economy.ts`; `finishSession` тренировки (кроме экстерна) возвращает `heart: true`, если вернула сердечко (`practiceHeartsLeft`); `buy(id)` — покупки за чипы (`SHOP_ITEMS`, цена полного запаса — `itemPrice`).
 - **Деньги** (тарифы, `CHIP_PACKS`, `BOOST_PACKS`) — пока только `ComingSoonSheet` («Оплата скоро»); работает `startTrial()` — 7 дней «Безлимита» один раз.
 - Интерфейс: хуки `components/economy/useEconomy.ts` (`useNow` — общие «часы» раз в 15 с, `useHearts`, `useChips`, `usePlan`, `useAiQuote`), магазин `/shop`, окно тарифов `/plans?from=…` (вне оболочки), `PaywallAgent` в `Providers`.
 
@@ -313,3 +313,16 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 
 ### Веса ЕНТ
 - `content/ent-topics.ts`: `examCount` по плану НЦТ, `CONTEXT_TOPICS = ["t06", "t07"]`, `topicWeight`; раскладка «Карты ЕНТ» — `components/learn/ent-grid.ts` (`fillGrid` повторяет `grid-flow-row-dense`, тест — `learn-map`).
+
+## v0.10: этап 11 — сердечки 2.0 и продолжение урока
+
+### Плата за вход (`lib/economy.ts`, решения #40, #65)
+- `ENTRY_COST` (урок 1, «Проверить себя» 1, пробный ЕНТ 1, контрольная 2, экстерн 2, игра 1), `lessonCost(lesson)` (`Lesson.hearts = 2` — большой урок), `entryCost(kind, lesson?)` («урок игрой» — как урок); `spendHearts` / `canAfford`; стор — `payEntry(cost)`.
+- Где списывается: `LessonPlayer` — `ensurePaid()` в обработчиках «Проверить» и «Пропустить» (проп `entryCost`; урок, «Проверить себя», экстерн); `ExamRun` — по «Начать» (`canAfford` → создание попытки → `payEntry`); `GameShell` — `start()` (каждый запуск). Только из обработчиков: эффекты в режиме разработки срабатывают дважды.
+- Вход на экран: `components/economy/EntryGate` (`need` — цена или 0) → полноэкранное `OutOfHearts`; внутри экрана — шторка `OutOfHearts need` (`onResume` — один раз за открытие). Значок цены — `HeartCost` (при безлимите скрыт), «−N» — `HeartsBar`.
+
+### Незаконченный урок (`lib/lesson-run.ts`, решение #41)
+- `lessonRuns: Record<id, LessonRun>` в сторе (в резервную копию не входит): очередь `{id, retry}`, `pos` (следующий непройденный шаг), ответы, XP, комбо, `activeMs`, `xpFactor`, `chipsEarned`, `cost`, `paidAt`, `updatedAt`, отпечаток шагов `sig` (`lessonSig`). До `RUN_MAX` = 5 уроков, `RUN_TTL_MS` = 14 дней; `sanitizeLessonRuns` — проверка данных из localStorage.
+- Плеер (`saveRun`) пишет снимок (`components/lesson/run-snapshot.ts` → `buildRun`) в обработчиках: после оплаты входа (на текущем шаге), после ответа (`pos + 1`, повтор ошибки уже в очереди), при переходе к шагу; после выхода с экрана не пишет. `finishSession` урока в режиме «Учиться» удаляет сохранение.
+- `LessonScreen`: `usableRun` один раз при входе → `ResumeLesson` («Продолжить» бесплатно, если `runPaid` — оплачен и не позже `RUN_GRACE_MS` = 20 мин с последнего действия; оплата перепроверяется при нажатии) или плеер с нуля; `restoreRun` восстанавливает состояние плеера.
+
