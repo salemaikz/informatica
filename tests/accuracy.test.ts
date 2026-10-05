@@ -38,10 +38,12 @@ describe("daysAccuracy", () => {
   const day = (o: Partial<DayStat>): DayStat => ({ xp: 0, answers: 0, correct: 0, seconds: 0, ...o });
   it("по новым полям; старые дни игнорируются, если есть новые", () => {
     const r = daysAccuracy({ a: day({ asked: 4, score: 3 }), b: day({ answers: 10, correct: 1 }), c: day({ asked: 6, score: 6 }) });
-    expect(r).toEqual({ value: 0.9, asked: 10, approx: false });
+    expect(r).toEqual({ value: 0.9, asked: 10, approx: false, partial: true, since: "a" });
   });
   it("только старые дни — приблизительно", () => {
-    expect(daysAccuracy({ a: day({ answers: 4, correct: 3 }) })).toEqual({ value: 0.75, asked: 4, approx: true });
+    expect(daysAccuracy({ a: day({ answers: 4, correct: 3 }) })).toEqual({ value: 0.75, asked: 4, approx: true, partial: false, since: null });
+    // только новые дни — не partial, since — самый ранний
+    expect(daysAccuracy({ "2027-01-16": day({ asked: 1, score: 1 }), "2027-01-15": day({ asked: 1, score: 0 }) })).toMatchObject({ partial: false, since: "2027-01-15" });
   });
   it("нет данных — null; выбор дней по ключам", () => {
     expect(daysAccuracy({}).value).toBeNull();

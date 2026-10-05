@@ -80,6 +80,34 @@ describe("стор: честные цифры (#66, #67, #68)", () => {
     expect(day()).toMatchObject({ asked: 15, score: 2.5 });
     expect(day().seconds).toBe(0);
   });
+  it("пробник, записанный второй раз, не удваивает освоение, срез, счётчики дня и серию (C14)", () => {
+    const summary = { id: "e2", kind: "mini" as const, seed: 1, at: Date.now(), points: 2, maxPoints: 15, durationSec: 60, byTopic: {}, questions: 15 };
+    st().recordExam(summary, { "ns.bin2dec": [1, 1] });
+    const skill = st().skills["ns.bin2dec"];
+    const sd = st().skillDays;
+    const d = { ...day() };
+    st().recordExam({ ...summary, points: 3 }, { "ns.bin2dec": [1, 1] });
+    expect(st().skills["ns.bin2dec"]).toBe(skill);
+    expect(st().skillDays).toBe(sd);
+    expect(day()).toEqual(d);
+    // запись в истории обновлена (баллы исправлены), а не задвоена
+    expect(st().history.filter((h) => h.examId === "e2")).toHaveLength(1);
+    expect(st().history[0].points).toBe(3);
+  });
+  it("пробник: вес в истории — весь вариант, задания без ответа — «пропущено» (C17, C23)", () => {
+    const summary = { id: "e3", kind: "mini" as const, seed: 1, at: Date.now(), points: 8, maxPoints: 50, durationSec: 60, byTopic: {}, questions: 40 };
+    st().recordExam(summary, { "ns.bin2dec": [1, 1, 0, 1, 0, 1, 1, 0, 1, 1] });
+    expect(st().history[0].total).toBe(40);
+    expect(day()).toMatchObject({ asked: 40, skipped: 30 });
+  });
+  it("история: частичный балл — как в итогах урока (C13)", () => {
+    const res: SessionResult = {
+      kind: "lesson", lessonId: "ns-2-read", title: "У", xp: 10, maxCombo: 1, durationSec: 60, accuracy: 0.75,
+      answers: [rec(), rec({ stepId: "q2", correct: false, score: 0.5 })],
+    };
+    st().finishSession(res);
+    expect(st().history[0]).toMatchObject({ correct: 1, total: 2, score: 1.5 });
+  });
   it("диагностика: итог в профиль, мягкий посев только новых навыков, skipBasics", () => {
     st().recordAnswer(rec({ skill: "logic.and" }), 10);
     const before = st().skills["logic.and"];

@@ -1174,10 +1174,13 @@ export const useApp = create<AppState & AppActions>()(
         set((s) => {
           const today = todayKey();
           const day = s.days[today] ?? emptyDay();
+          // Та же попытка может записаться второй раз (сбой сохранения, вкладка закрылась между записью и сбросом активной):
+          // тогда освоение, срез, счётчики дня, серию и бонус не трогаем — только обновляем запись в истории и пробниках.
+          const isNew = isNewExam(s, summary.id);
           let skills = s.skills;
           let skillDays = s.skillDays;
           const now = Date.now();
-          for (const [skill, scores] of Object.entries(skillScores)) {
+          if (isNew) for (const [skill, scores] of Object.entries(skillScores)) {
             // Пробник — без подсказок: верный ответ — самостоятельный успех (#67).
             for (const score of scores) skills = { ...skills, [skill]: updateSkill(skills[skill], score, now, { clean: true, day: today }) };
             if (scores.length) skillDays = addSkillDay(skillDays, today, skill, { n: scores.length, s: scores.reduce((a, x) => a + Math.max(0, Math.min(1, x)), 0) });
@@ -1197,7 +1200,8 @@ export const useApp = create<AppState & AppActions>()(
             ];
           }
           mistakes = mistakes.slice(0, MAX_MISTAKES);
-          const total = summary.maxPoints > 0 ? answered : 0;
+          // Вес записи в истории — весь вариант (#66), как и знаменатель точности дня.
+          const total = summary.maxPoints > 0 ? asked : 0;
           const entry: HistoryEntry = {
             id: `exam-${summary.id}`,
             at: summary.at,
@@ -1214,25 +1218,29 @@ export const useApp = create<AppState & AppActions>()(
             wrong: wrong.slice(0, 25),
             fixed: [],
           };
-          const isNew = !s.exams.some((e) => e.id === summary.id);
           const next: AppState = {
             ...s,
             skills,
             mistakes,
             history: pushHistory(s.history, entry),
             exams: [summary, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
-            streak: answered > 0 ? bumpStreak(s.streak, today) : s.streak,
+            streak: isNew && answered > 0 ? bumpStreak(s.streak, today) : s.streak,
             skillDays,
-            days: {
-              ...s.days,
-              [today]: {
-                ...day,
-                answers: day.answers + answered,
-                correct: day.correct + correct,
-                // Время пробника пишет трекер активного времени (#68); настоящий таймер ЕНТ — в итогах попытки.
-                ...(isNewExam(s, summary.id) && asked > 0 ? { asked: (day.asked ?? 0) + asked, score: (day.score ?? 0) + scoreSum } : {}),
-              },
-            },
+            days: isNew
+              ? {
+                  ...s.days,
+                  [today]: {
+                    ...day,
+                    answers: day.answers + answered,
+                    correct: day.correct + correct,
+                    // Время пробника пишет трекер активного времени (#68); настоящий таймер ЕНТ — в итогах попытки.
+                    // Задания без ответа — «пропущено» (#66): «без подсказки» в разбивке — только отвеченные.
+                    ...(asked > 0
+                      ? { asked: (day.asked ?? 0) + asked, score: (day.score ?? 0) + scoreSum, skipped: (day.skipped ?? 0) + (asked - answered) }
+                      : {}),
+                  },
+                }
+              : s.days,
           };
           return settleChips(s, { ...next, ...evaluate(next) }, isNew && answered > 0 ? [{ base: CHIP_BONUS.exam, reason: "exam" }] : []);
         }),

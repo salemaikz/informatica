@@ -1,4 +1,5 @@
 import type { AnswerRecord, SessionResult } from "./types";
+import { tallyOf } from "./accuracy";
 
 // История тестов: все проверочные сессии в одном списке — урок, «Проверить себя», тренировки, пробный ЕНТ.
 // У каждой записи — неверные ответы с первой попытки, по ним работает «работа над ошибками этого теста».
@@ -31,9 +32,11 @@ export interface HistoryEntry {
   lessonId?: string;
   /** Попытка пробного ЕНТ (экран разбора /exam/result/<examId>). */
   examId?: string;
-  /** Верных с первой попытки / всего заданий. */
+  /** Верных с первой попытки / всего заданий (пропуск входит в total, #66). */
   correct: number;
   total: number;
+  /** Сумма баллов первых попыток (частичный балл — как есть, #66); нет у записей до v0.11 — тогда correct. */
+  score?: number;
   /** Баллы — у пробного ЕНТ. */
   points?: number;
   maxPoints?: number;
@@ -84,6 +87,7 @@ export function entryFromSession(result: SessionResult, id: string, at: number, 
     lessonId: result.lessonId,
     correct: first.filter((a) => a.correct).length,
     total: first.length,
+    score: Math.round(tallyOf(first).score * 1000) / 1000,
     durationSec: Math.max(0, Math.round(result.durationSec)),
     xp: result.xp,
     wrong: wrong.slice(0, MAX_WRONG_PER_ENTRY),
@@ -117,7 +121,9 @@ export function openWrong(e: HistoryEntry): WrongItem[] {
 /** Доля результата 0..1: у пробного ЕНТ — по баллам, у остальных — по верным ответам. */
 export function entryScore(e: HistoryEntry): number {
   if (e.maxPoints) return Math.max(0, Math.min(1, (e.points ?? 0) / e.maxPoints));
-  return e.total ? e.correct / e.total : 0;
+  // Та же точность, что в итогах урока и статистике (#66): частичный балл учитывается.
+  const s = typeof e.score === "number" ? e.score : e.correct;
+  return e.total ? Math.max(0, Math.min(1, s / e.total)) : 0;
 }
 
 export interface HistoryTotals {
@@ -209,6 +215,7 @@ export function sanitizeHistory(raw: unknown): HistoryEntry[] {
       examId: optStr(e.examId, ID_LIMIT),
       correct: num(e.correct),
       total: num(e.total),
+      score: typeof optNum(e.score) === "number" ? Math.max(0, Math.min(num(e.total), optNum(e.score)!)) : undefined,
       points: optNum(e.points),
       maxPoints: optNum(e.maxPoints),
       durationSec: num(e.durationSec),

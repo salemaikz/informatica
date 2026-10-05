@@ -87,6 +87,8 @@ export function ExamHub() {
   const router = useRouter();
   const exams = useApp((s) => s.exams);
   const skills = useApp((s) => s.skills);
+  // Прогноз — тот же, что в «Целях» и «Прогрессе»: с опорой на входную диагностику (#70).
+  const diagnostic = useApp((s) => s.profile.diagnostic);
   // Цель «пока не знаю» (#70) — без линии цели и «до цели осталось».
   const target = useApp((s) => (s.profile.targetScoreSet ? s.profile.targetScore : undefined));
 
@@ -113,8 +115,9 @@ export function ExamHub() {
         skills,
         exams: exams.map((e) => ({ at: e.at, points: e.points, maxPoints: e.maxPoints, byTopic: e.byTopic, kind: e.kind })),
         now,
+        diagnostic,
       }),
-    [skills, exams, now],
+    [skills, exams, now, diagnostic],
   );
   const points = useMemo(() => historyPoints(exams), [exams]);
   const sorted = useMemo(() => [...exams].sort((a, b) => b.at - a.at), [exams]);

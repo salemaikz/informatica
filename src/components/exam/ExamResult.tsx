@@ -63,6 +63,8 @@ export function ExamResult({ id }: { id: string }) {
   const summary = useApp((s) => s.exams.find((e) => e.id === id));
   const exams = useApp((s) => s.exams);
   const skills = useApp((s) => s.skills);
+  // Прогноз — тот же, что в «Целях» и «Прогрессе»: с опорой на входную диагностику (#70).
+  const diagnostic = useApp((s) => s.profile.diagnostic);
 
   const [loaded, setLoaded] = useState<{
     done: boolean;
@@ -99,8 +101,9 @@ export function ExamResult({ id }: { id: string }) {
           kind: e.kind,
         })),
         now,
+        diagnostic,
       }),
-    [skills, exams, now],
+    [skills, exams, now, diagnostic],
   );
   // Уроки на карте — в порядке курса (старые уроки вне карты не предлагаем).
   const lessons = useMemo(

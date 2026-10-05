@@ -73,6 +73,10 @@ export interface DaysAccuracy {
   asked: number;
   /** Приблизительно: только дни до #66 (старые поля answers/correct, с повторами и играми). */
   approx: boolean;
+  /** Есть и старые дни (до #66), и новые: точность — только по новым, начиная с since. */
+  partial: boolean;
+  /** Первый день с новыми полями «ГГГГ-ММ-ДД» (для подписи «с …»); null — нет таких дней. */
+  since: string | null;
 }
 
 /**
@@ -80,21 +84,24 @@ export interface DaysAccuracy {
  * по старым answers/correct с пометкой «приблизительно».
  */
 export function daysAccuracy(days: Record<string, DayStat>, keys?: readonly string[]): DaysAccuracy {
-  const list = (keys ?? Object.keys(days)).map((k) => days[k]).filter((d): d is DayStat => !!d);
   let asked = 0;
   let score = 0;
   let answers = 0;
   let correct = 0;
-  for (const d of list) {
+  let since: string | null = null;
+  for (const k of keys ?? Object.keys(days)) {
+    const d = days[k];
+    if (!d) continue;
     if (typeof d.asked === "number" && d.asked > 0) {
       asked += d.asked;
       score += typeof d.score === "number" ? d.score : 0;
+      if (since === null || k < since) since = k;
     } else {
       answers += d.answers || 0;
       correct += d.correct || 0;
     }
   }
-  if (asked > 0) return { value: Math.min(1, score / asked), asked, approx: false };
-  if (answers > 0) return { value: Math.min(1, correct / answers), asked: answers, approx: true };
-  return { value: null, asked: 0, approx: false };
+  if (asked > 0) return { value: Math.min(1, score / asked), asked, approx: false, partial: answers > 0, since };
+  if (answers > 0) return { value: Math.min(1, correct / answers), asked: answers, approx: true, partial: false, since: null };
+  return { value: null, asked: 0, approx: false, partial: false, since: null };
 }

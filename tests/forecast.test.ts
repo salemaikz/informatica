@@ -258,9 +258,10 @@ describe("прогноз по входной диагностике (#70)", () =
     const enough = { [SKILLS[0].id]: stat(0.45, DIAGNOSTIC_UNTIL_ANSWERS) };
     const f = forecastScore({ skills: enough, exams: [], now: NOW, diagnostic: diag(ALL, 1) });
     expect(f.basis).toBe("mastery");
-    // Натренирована одна тема (её навык — 0,45), остальные — по диагностике (всё верно): без обвала прогноза.
+    // Натренирован один навык темы (0,45) — он тянет тему вниз, остальные навыки темы и темы — по диагностике (всё верно).
     const t0 = SKILLS[0].ent!;
-    expect(f.byTopic[t0]).toBeLessThan(0.5);
+    expect(f.byTopic[t0]).toBeLessThan(1);
+    expect(f.byTopic[t0]).toBeGreaterThan(0.45);
     expect(f.score).toBeGreaterThan(40);
     // Без диагностики непройденные темы — 0.
     expect(forecastScore({ skills: enough, exams: [], now: NOW }).score).toBeLessThan(10);
@@ -301,5 +302,35 @@ describe("прогноз после диагностики: без обвала 
     // без диагностики непройденные темы — 0, прогноз низкий; с диагностикой — близко к прежнему
     expect(without.score).toBeLessThan(5);
     expect(Math.abs(after.score - before.score)).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("прогноз после диагностики: без скачков вниз от верных ответов (C27)", () => {
+  it("набор ответов по навыкам t03/t04/t05 и 5-й ответ по теме не роняют прогноз", async () => {
+    const { forecastScore } = await import("@/lib/forecast");
+    const { SKILLS } = await import("@/content/skills");
+    const diagnostic = {
+      at: 1,
+      points: 8,
+      max: 10,
+      byTopic: { t03: { points: 2, max: 2 }, t04: { points: 2, max: 2 }, t05: { points: 2, max: 2 }, t06: { points: 1, max: 1 }, t07: { points: 0, max: 1 }, t01: { points: 1, max: 1 }, t10: { points: 0, max: 1 } },
+    };
+    const one = (t: string) => SKILLS.find((s) => s.ent === t)!.id;
+    let prev = forecastScore({ skills: {}, exams: [], now: 2, diagnostic }).score;
+    // (a) 3 темы по одному навыку, 1..12 ответов каждому, оценка 0,75 — «среднее» умение
+    for (let n = 1; n <= 12; n++) {
+      const skills = Object.fromEntries(["t03", "t04", "t05"].map((t) => [one(t), { attempts: n, correct: n, mastery: 0.75, lastSeen: 1 }]));
+      const f = forecastScore({ skills, exams: [], now: 2, diagnostic });
+      expect(prev - f.score).toBeLessThanOrEqual(2);
+      prev = f.score;
+    }
+    // (b) верные ответы по навыку t04 с растущей оценкой — прогноз не падает
+    let last = -1;
+    for (let n = 1; n <= 8; n++) {
+      const skills = { [one("t04")]: { attempts: n, correct: n, mastery: Math.min(0.95, 0.7 + n * 0.04), lastSeen: 1 }, [one("t07")]: { attempts: 40, correct: 30, mastery: 0.7, lastSeen: 1 } };
+      const f = forecastScore({ skills, exams: [], now: 2, diagnostic });
+      if (last >= 0) expect(f.score).toBeGreaterThanOrEqual(last - 1);
+      last = f.score;
+    }
   });
 });

@@ -486,7 +486,7 @@ describe("dayTotals", () => {
 
   it("пусто — данных нет", () => {
     const t = dayTotals({});
-    expect(t.accuracy).toEqual({ value: null, asked: 0, approx: false });
+    expect(t.accuracy).toMatchObject({ value: null, asked: 0, approx: false });
     expect(t).toMatchObject({ self: 0, hinted: 0, skipped: 0, seconds: 0, gameSeconds: 0, games: 0, gameCorrect: 0 });
   });
 
@@ -495,14 +495,14 @@ describe("dayTotals", () => {
       a: day({ asked: 10, score: 7, hinted: 2, skipped: 1, seconds: 300 }),
       b: day({ asked: 5, score: 5, hinted: 0, skipped: 0, seconds: 100 }),
     });
-    expect(t.accuracy).toEqual({ value: 12 / 15, asked: 15, approx: false });
+    expect(t.accuracy).toMatchObject({ value: 12 / 15, asked: 15, approx: false });
     expect(t).toMatchObject({ self: 12, hinted: 2, skipped: 1, seconds: 400 });
     expect(t.self + t.hinted + t.skipped).toBe(t.accuracy.asked);
   });
 
   it("только старые дни — приблизительно, разбивки нет", () => {
     const t = dayTotals({ a: day({ answers: 10, correct: 8, seconds: 60 }) });
-    expect(t.accuracy).toEqual({ value: 0.8, asked: 10, approx: true });
+    expect(t.accuracy).toMatchObject({ value: 0.8, asked: 10, approx: true });
     expect(t).toMatchObject({ self: 0, hinted: 0, skipped: 0 });
   });
 

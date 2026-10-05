@@ -59,11 +59,31 @@ export const DIAGNOSTIC_MARGIN = 8;
  */
 export const DIAGNOSTIC_UNTIL_ANSWERS = 30;
 /**
- * Тема считается «натренированной», когда по её навыкам набралось столько ответов. До этого её вклад в прогноз
- * по навыкам берётся из диагностики (если она была), а не ноль — иначе после 30 ответов прогноз обваливался
- * (непройденные темы давали 0).
+ * После диагностики освоение темы смешивается по навыкам: у каждого навыка вес собственной оценки
+ * w = min(1, ответов / TOPIC_PRACTICE_MIN), остальное — доля темы по диагностике. Нетронутые навыки берут оценку
+ * диагностики, а не 0 — поэтому нет обвала ни на 30-м ответе, ни на 5-м ответе по теме.
  */
 export const TOPIC_PRACTICE_MIN = 5;
+
+/** Освоение тем с опорой на диагностику (см. TOPIC_PRACTICE_MIN). */
+export function blendedTopicMastery(skills: Record<string, SkillStat>, diagByTopic: Record<EntTopicId, number>): Record<EntTopicId, number> {
+  const out = Object.fromEntries(TOPIC_IDS.map((t) => [t, 0])) as Record<EntTopicId, number>;
+  for (const t of TOPIC_IDS) {
+    const ids = SKILLS.filter((s) => s.ent === t);
+    const prior = clamp01(diagByTopic[t]);
+    if (!ids.length) {
+      out[t] = prior;
+      continue;
+    }
+    const sum = ids.reduce((acc, s) => {
+      const st = skills[s.id];
+      const w = Math.min(1, attemptsOf(st) / TOPIC_PRACTICE_MIN);
+      return acc + w * (w > 0 ? clamp01(st!.mastery) : 0) + (1 - w) * prior;
+    }, 0);
+    out[t] = sum / ids.length;
+  }
+  return out;
+}
 
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
 
@@ -82,13 +102,6 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
     const sum = ids.reduce((acc, s) => acc + (attemptsOf(skills[s.id]) ? clamp01(skills[s.id].mastery) : 0), 0);
     out[t] = sum / ids.length;
   }
-  return out;
-}
-
-/** Ответов по навыкам каждой темы. */
-function topicAnswers(skills: Record<string, SkillStat>): Record<EntTopicId, number> {
-  const out = Object.fromEntries(TOPIC_IDS.map((t) => [t, 0])) as Record<EntTopicId, number>;
-  for (const s of SKILLS) if (s.ent && s.ent in out) out[s.ent as EntTopicId] += attemptsOf(skills[s.id]);
   return out;
 }
 
@@ -129,12 +142,8 @@ export function forecastScore(input: ForecastInput): Forecast {
   const masteryAnswers = skillAnswers(input.skills);
   const hasMastery = masteryAnswers > 0;
   const diagnostic = forecastFromDiagnostic(input.diagnostic);
-  // Освоение по темам; тема, которую почти не тренировали, — по диагностике (плавный переход, без обвала прогноза).
-  const mastery = topicMastery(input.skills);
-  if (diagnostic) {
-    const perTopic = topicAnswers(input.skills);
-    for (const t of TOPIC_IDS) if (perTopic[t] < TOPIC_PRACTICE_MIN) mastery[t] = diagnostic.byTopic[t];
-  }
+  // Освоение по темам; после диагностики — смешивание по навыкам (плавный переход, без обвала прогноза).
+  const mastery = diagnostic ? blendedTopicMastery(input.skills, diagnostic.byTopic) : topicMastery(input.skills);
   const masteryScore = TOPIC_IDS.reduce((s, t) => s + topicWeight(t) * mastery[t], 0) * MAX_SCORE;
 
   // Последние 3 попытки: новее — весомее (3, 2, 1) и ещё затухание по возрасту.
