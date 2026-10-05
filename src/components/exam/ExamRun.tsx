@@ -9,7 +9,7 @@ import { entTopicById } from "@/content/ent-topics";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { compareWithChallenge, encodeChallenge, UNKNOWN_POOL, type Challenge } from "@/lib/challenge";
-import { buildExam, EXAM_TIME_LIMIT_SEC, type ExamKind, type ExamPaper } from "@/lib/exam";
+import { buildExam, EXAM_TIME_LIMIT_SEC, scoreExam, unitPassed, type ExamKind, type ExamPaper } from "@/lib/exam";
 import { currentPoolTag } from "@/lib/exam-pool";
 import {
   buildSummary,
@@ -37,11 +37,13 @@ import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { HeartCost } from "@/components/economy/HeartCost";
-import { readHearts } from "@/components/economy/HeartsBar";
+import { HeartPaidPop } from "@/components/economy/HeartLoss";
+import { HeartsBar, readHearts } from "@/components/economy/HeartsBar";
+import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { ChallengeBanner } from "./ChallengeBanner";
-import { checkpointById, examTitle } from "./checkpoint";
+import { checkpointById, examTitle, unitCreditIds, unitPrioritySkills } from "./checkpoint";
 import { ExamNotes } from "./ExamNotes";
 import { formatClock, randomSeed, remainingSec } from "./logic";
 import { Navigator } from "./Navigator";
@@ -53,7 +55,7 @@ export interface ExamRunProps {
   topics: EntTopicId[];
   /** Для kind = "unit": id раздела. */
   unit?: string;
-  /** Вызов друга из адреса (#73): `ch=14-19-a9zq`; у контрольной раздела вызова нет. */
+  /** Вызов друга из адреса (#73): `ch=14-19-a9zq`; у теста по разделу вызова нет. */
   challenge?: Challenge | null;
 }
 
@@ -73,7 +75,8 @@ type Phase =
   | ({ name: "intro"; replaces: ExamAttempt | null } & Fresh)
   /** Есть начатая другая попытка: продолжить или начать новую. */
   | { name: "resume"; active: ExamAttempt; fresh: Fresh | null }
-  | { name: "run"; attempt: ExamAttempt };
+  /** paid — сердечки, списанные на «Начать» (новая попытка): «−N» показывается при входе. Продолжение — без платы. */
+  | { name: "run"; attempt: ExamAttempt; paid?: number };
 
 const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string) =>
   a.kind === kind &&
@@ -81,15 +84,15 @@ const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics
   (kind !== "topic" || (a.topics ?? []).join() === topics.join()) &&
   (kind !== "unit" || a.unit === unit);
 
-/** Цена входа (#40): контрольная раздела — 2 сердечка, пробный ЕНТ любого вида — 1. Продолжение начатой попытки бесплатно. */
+/** Цена входа (#40): тест по разделу — 2 сердечка, пробный ЕНТ любого вида — 1. Продолжение начатой попытки бесплатно. */
 const examCost = (kind: ExamKind): number => (kind === "unit" ? ENTRY_COST.checkpoint : ENTRY_COST.exam);
 
 function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string): Fresh {
   const s = seed ?? randomSeed();
-  // Контрольная: навыки раздела. Неизвестный раздел или раздел без контрольной (нет готовых уроков, < 10 заданий)
+  // Тест по разделу: навыки раздела. Неизвестный раздел или раздел без теста (нет готовых уроков, < 10 заданий)
   // даёт пустой вариант — экран условий скажет об этом.
   const cp = kind === "unit" ? checkpointById(unit) : null;
-  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [] }), seed: s, topics, unit: cp?.unitId };
+  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [], prioritySkills: cp ? unitPrioritySkills(cp.unitId, useApp.getState().lessons) : undefined }), seed: s, topics, unit: cp?.unitId };
 }
 
 /** Экран прохождения: загрузка → (продолжить?) → условия → сами задания. Спокойная оболочка без маскота, XP, звуков и ИИ. */
@@ -100,7 +103,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
   const topicsKey = topicsProp.join(",");
   const topics = useMemo(() => (topicsKey ? (topicsKey.split(",") as EntTopicId[]) : []), [topicsKey]);
 
-  // Вызов — по строке (как темы): объект из пропсов не должен перезапускать эффект. У контрольной вызова нет.
+  // Вызов — по строке (как темы): объект из пропсов не должен перезапускать эффект. У теста по разделу вызова нет.
   const challengeKey = kind !== "unit" && challengeProp ? encodeChallenge(challengeProp) : null;
   const challenge = useMemo(() => {
     const [s, m, pool] = challengeKey?.split("-") ?? [];
@@ -139,7 +142,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
     };
   }, [kind, seed, topics, unit, challenge]);
 
-  if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} />;
+  if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} paid={phase.paid} />;
 
   return (
     <Calm>
@@ -197,7 +200,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
             // Статистика (#69): попытка создана и оплачена. Продолжение начатой — не старт.
             track({ e: "exam_start", kind: attempt.kind });
             if (attempt.challenge) track({ e: "challenge", step: "start" });
-            setPhase({ name: "run", attempt });
+            setPhase({ name: "run", attempt, paid: cost });
             return "started";
           }}
         />
@@ -262,17 +265,21 @@ function Intro({
   const empty = paper.items.length === 0;
   return (
     <div className="flex flex-col gap-4 pt-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">
-          {examTitle(paper.kind, unit, t, l)}
-        </h1>
-        {!empty && (
-          <p className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Pill tone="muted">{t("exam.fmt.questions", { n: paper.items.length })}</Pill>
-            <Pill tone="muted">{t("common.minutes", { n: Math.round(paper.timeLimitSec / 60) })}</Pill>
-            <Pill tone="muted">{t("exam.fmt.points", { n: paper.maxPoints })}</Pill>
-          </p>
-        )}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-extrabold">
+            {examTitle(paper.kind, unit, t, l)}
+          </h1>
+          {!empty && (
+            <p className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Pill tone="muted">{t("exam.fmt.questions", { n: paper.items.length })}</Pill>
+              <Pill tone="muted">{t("common.minutes", { n: Math.round(paper.timeLimitSec / 60) })}</Pill>
+              <Pill tone="muted">{t("exam.fmt.points", { n: paper.maxPoints })}</Pill>
+            </p>
+          )}
+        </div>
+        {/* Счётчик сердечек: «Начать» их списывает, а этот экран вне оболочки без счётчика в шапке. */}
+        {!empty && <HeartsBar />}
       </div>
       {challenge && !empty && <ChallengeBanner challenge={challenge} maxPoints={paper.maxPoints} currentPool={currentPoolTag()} />}
       {empty ? (
@@ -284,6 +291,7 @@ function Intro({
           <li>{t("exam.rule.noAi")}</li>
           <li>{t("exam.rule.save")}</li>
           <li>{t("exam.rule.keep")}</li>
+          {paper.kind === "unit" && <li>{t("unittest.intro.credit")}</li>}
         </ul>
       )}
       {paper.kind === "topic" && topics.length > 0 && <p className="text-sm font-bold text-muted">{t("exam.run.topics", { list: topics.map((x) => l(entTopicById(x).short)).join(", ") })}</p>}
@@ -321,8 +329,9 @@ function Intro({
 
 type Sheet = null | "nav" | "finish" | "exit";
 
-function Runner({ initial }: { initial: ExamAttempt }) {
+function Runner({ initial, paid }: { initial: ExamAttempt; /** Списано на «Начать» (сердечки) — показываем «−N». */ paid?: number }) {
   const { t, l } = useT();
+  const reduce = useReduceMotion();
   const router = useRouter();
   useToolboxLevel("ent");
 
@@ -466,6 +475,16 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     const title = attempt.kind === "unit" && attempt.unit ? examTitle("unit", attempt.unit, t, l) : undefined;
     const summary = buildSummary(attempt, now, title);
     app.recordExam(summary, skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
+    // Тест по разделу сдан (≥ 80% баллов): засчитываем непройденные готовые уроки, чьи навыки были в варианте. Один раз — doneRef.
+    if (attempt.kind === "unit" && attempt.unit) {
+      const r = scoreExam(paper, attempt.answers);
+      if (unitPassed(r.points, r.maxPoints)) {
+        const ids = unitCreditIds(attempt.unit, paper, useApp.getState().lessons);
+        if (ids.length) useApp.getState().completeLessons(ids, "extern", r.points / r.maxPoints);
+        // Пустой список тоже пишем: «сдан, засчитывать нечего» отличается от старой попытки без поля.
+        attempt.credited = ids;
+      }
+    }
     // Статистика (#69): конец попытки — ровно здесь (doneRef не пускает второй раз), а не на экране итога, который открывают из истории снова.
     track(examFinishEvent(attempt.kind, summary.points, summary.maxPoints));
     // Вызов друга (#73): итог против друга — тем же единственным разом.
@@ -498,6 +517,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
 
   return (
     <div className="min-h-dvh bg-bg">
+      <HeartPaidPop amount={paid ?? 0} reduce={reduce} />
       <header className="sticky top-0 z-30 border-b-2 border-border bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-2">
           <button

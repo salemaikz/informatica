@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LESSONS, UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { SKILLS } from "@/content/skills";
-import { checkpointById, checkpointOf, examTitle } from "@/components/exam/checkpoint";
+import { checkpointById, checkpointOf, examTitle, unitPrioritySkills } from "@/components/exam/checkpoint";
 import { EXAM_FORMAT, examLink, historyPoints, parseRunParams } from "@/components/exam/logic";
 import { checkpointSkillIds, readyLessonCount } from "@/components/learn/map";
 import {
@@ -13,9 +13,14 @@ import {
   starsFor,
   unitPaperSize,
   EXAM_TIME_LIMIT_SEC,
+  UNIT_PASS_RATIO,
+  lessonsToCredit,
+  paperSkillIds,
+  unitPassed,
+  unitTimeLimitSec,
   type ExamPaper,
 } from "@/lib/exam";
-import { buildSummary, sanitizePaper, sanitizeState, type ExamAttempt } from "@/lib/exam-store";
+import { buildSummary, sanitizeCredited, sanitizePaper, sanitizeState, type ExamAttempt } from "@/lib/exam-store";
 import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, Level, Unit } from "@/lib/types";
 
 const L = (s: string) => ({ ru: s, kk: s });
@@ -61,26 +66,35 @@ const kinds = (p: ExamPaper) => {
   return c;
 };
 
-describe("buildExam: контрольная по разделу", () => {
-  it("15 заданий: 10 single, 1 вопрос контекста, 2 multi, 2 match; 25 минут", () => {
+describe("buildExam: тест по разделу", () => {
+  it("20 заданий: 14 single, 1 вопрос контекста, 3 multi, 2 match; 30 минут", () => {
     const p = unitPaper(1);
     expect(p.kind).toBe("unit");
-    expect(p.items).toHaveLength(15);
-    expect(kinds(p)).toEqual({ single: 10, multi: 2, match: 2, context: 1 });
-    expect(p.maxPoints).toBe(10 + 4 + 4 + 1);
-    expect(p.timeLimitSec).toBe(25 * 60);
+    expect(p.items).toHaveLength(20);
+    expect(kinds(p)).toEqual({ single: 14, multi: 3, match: 2, context: 1 });
+    expect(p.maxPoints).toBe(14 + 6 + 4 + 1);
+    expect(p.timeLimitSec).toBe(30 * 60);
     expect(p.timeLimitSec).toBe(EXAM_TIME_LIMIT_SEC.unit);
     expect(p.notes).toEqual([]);
-    expect(EXAM_FORMAT.unit).toEqual({ questions: 15, minutes: 25, points: 19 });
+    expect(EXAM_FORMAT.unit).toEqual({ questions: 20, minutes: 30, points: 25 });
+  });
+
+  it("время пропорционально числу заданий: 90 секунд на задание, до целой минуты вверх", () => {
+    expect(unitTimeLimitSec(20)).toBe(30 * 60);
+    expect(unitTimeLimitSec(10)).toBe(15 * 60);
+    expect(unitTimeLimitSec(11)).toBe(17 * 60); // 16,5 минуты → 17
+    expect(unitTimeLimitSec(0)).toBe(0);
+    const few: EntItem[] = Array.from({ length: 12 }, (_, i) => single(`f:${i}`, SKILL_A, 1));
+    expect(unitPaper(1, few).timeLimitSec).toBe(unitTimeLimitSec(12));
   });
 
   it("порядок как в ЕНТ: single → контекст → multi → match", () => {
     const order = unitPaper(3).items.map((q) => q.item.kind);
     const firstNonSingle = order.findIndex((k) => k !== "single");
     expect(order.slice(0, firstNonSingle).every((k) => k === "single")).toBe(true);
-    expect(order[10]).toBe("context");
-    expect(order.slice(11, 13)).toEqual(["multi", "multi"]);
-    expect(order.slice(13)).toEqual(["match", "match"]);
+    expect(order[14]).toBe("context");
+    expect(order.slice(15, 18)).toEqual(["multi", "multi", "multi"]);
+    expect(order.slice(18)).toEqual(["match", "match"]);
   });
 
   it("только навыки раздела; контекстное — со своим навыком; sub указывает на существующий вопрос", () => {
@@ -120,8 +134,8 @@ describe("buildExam: контрольная по разделу", () => {
       for (const q of unitPaper(seed).items) if (q.item.kind === "single") total[q.item.level]++;
     }
     const sum = total[1] + total[2] + total[3];
-    expect(sum).toBe(300);
-    // 5/3/2 из 10: средние доли близки (в пуле всех уровней достаточно).
+    expect(sum).toBe(420);
+    // 7/4/3 из 14: средние доли близки (в пуле всех уровней достаточно).
     expect(total[1] / sum).toBeGreaterThan(0.4);
     expect(total[1] / sum).toBeLessThan(0.6);
     expect(total[3] / sum).toBeGreaterThan(0.1);
@@ -131,14 +145,14 @@ describe("buildExam: контрольная по разделу", () => {
   it("навыки раздела представлены равномерно", () => {
     const p = unitPaper(5);
     const count = (sk: string) => p.items.filter((q) => q.item.skill === sk && q.item.kind === "single").length;
-    // 10 single на 3 навыка: 3–4 на каждый.
-    for (const sk of OWN) expect(count(sk)).toBeGreaterThanOrEqual(3);
+    // 14 single на 3 навыка: 4–5 на каждый.
+    for (const sk of OWN) expect(count(sk)).toBeGreaterThanOrEqual(4);
   });
 
   it("нет контекстных — вместо него ещё один single", () => {
     const p = unitPaper(1, pool({ ctx: false }));
-    expect(p.items).toHaveLength(15);
-    expect(kinds(p)).toEqual({ single: 11, multi: 2, match: 2, context: 0 });
+    expect(p.items).toHaveLength(20);
+    expect(kinds(p)).toEqual({ single: 15, multi: 3, match: 2, context: 0 });
     expect(p.notes).toEqual([]);
   });
 
@@ -149,9 +163,9 @@ describe("buildExam: контрольная по разделу", () => {
 
   it("не хватило вида — заменили другим, вариант той же длины, запись в notes", () => {
     const p = unitPaper(1, pool({ match: false }));
-    expect(p.items).toHaveLength(15);
+    expect(p.items).toHaveLength(20);
     expect(kinds(p).match).toBe(0);
-    expect(kinds(p).single).toBe(12);
+    expect(kinds(p).single).toBe(16);
     expect(p.notes).toEqual([{ topic: null, kind: "match", missing: 2, filledFrom: [], unfilled: 0 }]);
   });
 
@@ -159,7 +173,7 @@ describe("buildExam: контрольная по разделу", () => {
     const few: EntItem[] = Array.from({ length: 8 }, (_, i) => single(`f:${i}`, SKILL_A, 1));
     const p = unitPaper(1, few);
     expect(p.items).toHaveLength(8);
-    expect(p.notes.reduce((s, n) => s + n.unfilled, 0)).toBe(15 - 8);
+    expect(p.notes.reduce((s, n) => s + n.unfilled, 0)).toBe(20 - 8);
   });
 
   it("пустой раздел — пустой вариант без падения", () => {
@@ -178,12 +192,12 @@ describe("buildExam: контрольная по разделу", () => {
       else answers[q.key] = { choice: it.questions[q.sub!].correct, timeMs: 1000 };
     }
     const r = scoreExam(p, answers);
-    expect(r.points).toBe(19);
+    expect(r.points).toBe(25);
     expect(r.percent).toBe(100);
   });
 });
 
-describe("контрольная: есть ли она у раздела", () => {
+describe("тест по разделу: есть ли он у раздела", () => {
   const some = (n: number): EntItem[] => Array.from({ length: n }, (_, i) => single(`n:${i}`, SKILL_A, 1));
 
   it("меньше 10 заданий — нет, 10 — есть", () => {
@@ -197,8 +211,8 @@ describe("контрольная: есть ли она у раздела", () =>
     expect(hasUnitExam([...some(8), context("c", SKILL_A)], OWN)).toBe(false);
   });
 
-  it("не больше 15; чужие навыки не считаются", () => {
-    expect(unitPaperSize(some(40), OWN)).toBe(15);
+  it("не больше 20; чужие навыки не считаются", () => {
+    expect(unitPaperSize(some(40), OWN)).toBe(20);
     expect(unitPaperSize(some(40), ["other.skill"])).toBe(0);
     expect(unitPaperSize(some(40), undefined)).toBe(0);
   });
@@ -224,7 +238,7 @@ describe("звёзды", () => {
 
   const ex = (unit: unknown, points: unknown, maxPoints: unknown, kind = "unit") => ({ kind, unit, points, maxPoints });
 
-  it("bestUnitResult: лучший по доле среди контрольных этого раздела", () => {
+  it("bestUnitResult: лучший по доле среди тестов этого раздела", () => {
     const exams = [ex("u1", 10, 19), ex("u1", 17, 19), ex("u1", 12, 19), ex("u2", 19, 19), ex(undefined, 19, 19), ex("u1", 50, 50, "full")];
     expect(bestUnitResult(exams, "u1")).toEqual({ points: 17, max: 19, stars: 2 });
     expect(bestUnitResult(exams, "u2")).toEqual({ points: 19, max: 19, stars: 3 });
@@ -255,22 +269,22 @@ describe("ссылка и адрес", () => {
     expect(parseRunParams({ kind: "mini", seed: "5", unit: "u3" })?.unit).toBeUndefined();
   });
 
-  it("контрольные не попадают в график пробников", () => {
+  it("тесты по разделам не попадают в график пробников", () => {
     const base = { id: "a", seed: 1, at: 1, points: 5, maxPoints: 10, durationSec: 1, byTopic: {} };
     const pts = historyPoints([{ ...base, kind: "unit", unit: "u1" }, { ...base, id: "b", kind: "mini" }]);
     expect(pts.map((p) => p.id)).toEqual(["b"]);
   });
 });
 
-describe("хранение попытки-контрольной", () => {
+describe("хранение попытки теста по разделу", () => {
   const paper = unitPaper(11);
   const attempt: ExamAttempt = {
     id: "ex-abc", kind: "unit", seed: 11, unit: "u3", paper, answers: {}, current: 0, startedAt: 1, elapsedMs: 61_000, finishedAt: 2,
   };
 
   it("итог несёт раздел и название для истории", () => {
-    const s = buildSummary(attempt, 99, "Контрольная: Раздел");
-    expect(s).toMatchObject({ kind: "unit", unit: "u3", title: "Контрольная: Раздел", at: 99, maxPoints: 19 });
+    const s = buildSummary(attempt, 99, "Тест по разделу: Раздел");
+    expect(s).toMatchObject({ kind: "unit", unit: "u3", title: "Тест по разделу: Раздел", at: 99, maxPoints: 25 });
     // у других видов раздела и названия нет
     const other = buildSummary({ ...attempt, kind: "mini", unit: undefined }, 99, "x");
     expect(other.unit).toBeUndefined();
@@ -280,11 +294,11 @@ describe("хранение попытки-контрольной", () => {
   it("бумага проходит проверку целиком (контекстный вопрос — с исходным номером)", () => {
     const back = sanitizePaper(JSON.parse(JSON.stringify(paper)));
     expect(back?.kind).toBe("unit");
-    expect(back?.items).toHaveLength(15);
-    expect(back?.timeLimitSec).toBe(25 * 60);
+    expect(back?.items).toHaveLength(20);
+    expect(back?.timeLimitSec).toBe(30 * 60);
   });
 
-  it("состояние: раздел сохраняется только у контрольной и только корректный", () => {
+  it("состояние: раздел сохраняется только у теста по разделу и только корректный", () => {
     const { paper: _p, ...state } = attempt;
     void _p;
     expect(sanitizeState(state, paper)?.unit).toBe("u3");
@@ -293,13 +307,13 @@ describe("хранение попытки-контрольной", () => {
   });
 });
 
-describe("карта курса: контрольные реальных разделов", () => {
+describe("карта курса: тесты реальных разделов", () => {
   const fakeUnit = (ids: string[], status: "available" | "soon"): Unit => ({
     id: "ux", title: L("x"), description: L("x"), color: "#000", entTopics: ["t04"],
     lessons: ids.map((id) => ({ id, title: L(id), status })),
   });
 
-  it("раздел без готовых уроков — навыков и контрольной нет, даже если у темы есть навыки", () => {
+  it("раздел без готовых уроков — навыков и теста нет, даже если у темы есть навыки", () => {
     const unit = fakeUnit(["nope-1", "nope-2"], "soon");
     expect(readyLessonCount(unit, LESSONS)).toBe(0);
     expect(checkpointSkillIds(unit, LESSONS, SKILLS)).toEqual([]);
@@ -310,12 +324,12 @@ describe("карта курса: контрольные реальных раз�
     expect(readyLessonCount(fakeUnit(["nope-1"], "available"), LESSONS)).toBe(0);
   });
 
-  it("у каждого раздела с контрольной: размер 10–15, вариант собирается из навыков раздела", () => {
+  it("у каждого раздела с тестом: размер 10–20, вариант собирается из навыков раздела", () => {
     for (const unit of UNITS) {
       const cp = checkpointOf(unit, LESSONS, SKILLS);
       if (!cp) continue;
       expect(cp.size).toBeGreaterThanOrEqual(10);
-      expect(cp.size).toBeLessThanOrEqual(15);
+      expect(cp.size).toBeLessThanOrEqual(20);
       const p = buildExam({ kind: "unit", seed: 3, pool: ENT_POOL, skillIds: cp.skillIds });
       expect(p.items).toHaveLength(cp.size);
       expect(p.items.every((q) => cp.skillIds.includes(q.item.skill))).toBe(true);
@@ -324,7 +338,7 @@ describe("карта курса: контрольные реальных раз�
     }
   });
 
-  it("checkpointById: запуск по ссылке — только раздел с контрольной", () => {
+  it("checkpointById: запуск по ссылке — только раздел с тестом", () => {
     expect(checkpointById(undefined)).toBeNull();
     expect(checkpointById("nope")).toBeNull();
     for (const unit of UNITS) expect(checkpointById(unit.id)).toEqual(checkpointOf(unit, LESSONS, SKILLS));
@@ -337,5 +351,102 @@ describe("карта курса: контрольные реальных раз�
     expect(examTitle("unit", u.id, t, l)).toBe(`exam.unit.title:${u.title.ru}`);
     expect(examTitle("unit", "nope", t, l)).toBe("exam.mode.unit");
     expect(examTitle("mini", u.id, t, l)).toBe("exam.mode.mini");
+  });
+});
+
+describe("покрытие навыков раздела (#95)", () => {
+  it("каждый навык раздела с заданиями есть в варианте (пока навыков не больше заданий)", () => {
+    for (const unit of UNITS) {
+      const cp = checkpointOf(unit, LESSONS, SKILLS);
+      if (!cp) continue;
+      const withItems = new Set(ENT_POOL.filter((i) => cp.skillIds.includes(i.skill)).map((i) => i.skill));
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const p = buildExam({ kind: "unit", seed, pool: ENT_POOL, skillIds: cp.skillIds });
+        expect(paperSkillIds(p).size, `${unit.id} seed ${seed}`).toBe(Math.min(p.items.length, withItems.size));
+      }
+    }
+  });
+
+  const readyOf = (unit: Unit) => unit.lessons.filter((r) => r.status === "available" && LESSONS[r.id]).map((r) => ({ id: r.id, skills: LESSONS[r.id].skills }));
+
+  it("навыки готовых уроков идут первыми: где они помещаются в вариант, при 100% засчитываются все уроки", () => {
+    let checked = 0;
+    for (const unit of UNITS) {
+      const cp = checkpointOf(unit, LESSONS, SKILLS);
+      if (!cp) continue;
+      const ready = readyOf(unit);
+      const lessonSkills = new Set(ready.flatMap((x) => x.skills));
+      const inBank = new Set(ENT_POOL.map((i) => i.skill));
+      if (lessonSkills.size > cp.size || ![...lessonSkills].every((sk) => inBank.has(sk))) continue;
+      checked++;
+      for (let seed = 1; seed <= 40; seed++) {
+        const p = buildExam({ kind: "unit", seed, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: unitPrioritySkills(unit.id, {}) });
+        expect(lessonsToCredit(p, ready, () => false), `${unit.id} seed ${seed}`).toEqual(ready.map((x) => x.id));
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(6);
+  });
+
+  it("раздел, где навыков уроков больше, чем заданий: повторная попытка берёт навыки ещё не засчитанных уроков", () => {
+    const unit = UNITS.find((u) => u.id === "u3")!;
+    const cp = checkpointOf(unit, LESSONS, SKILLS)!;
+    const ready = readyOf(unit);
+    const first = buildExam({ kind: "unit", seed: 1, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: unitPrioritySkills(unit.id, {}) });
+    const credited = lessonsToCredit(first, ready, () => false);
+    expect(credited.length).toBeGreaterThan(0);
+    const done = Object.fromEntries(credited.map((id) => [id, { completions: 1 }]));
+    const prio = unitPrioritySkills(unit.id, done);
+    const second = buildExam({ kind: "unit", seed: 2, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: prio });
+    // Навыки пройденных уроков не занимают места раньше навыков непройденных.
+    const covered = prio.filter((sk) => paperSkillIds(second).has(sk)).length;
+    expect(covered).toBe(Math.min(prio.length, second.items.length));
+    expect(lessonsToCredit(second, ready, (id) => id in done).length).toBeGreaterThan(0);
+  });
+
+  it("в тестовом банке с тремя навыками представлены все", () => {
+    for (let seed = 1; seed <= 10; seed++) expect(paperSkillIds(unitPaper(seed))).toEqual(new Set(OWN));
+  });
+});
+
+describe("зачёт уроков за тест по разделу (#95)", () => {
+  const paper = { items: [{ item: { skill: "a" } }, { item: { skill: "b" } }, { item: { skill: "c" } }] } as unknown as ExamPaper;
+  const ready = [
+    { id: "l1", skills: ["a"] },
+    { id: "l2", skills: ["a", "b"] },
+    { id: "l3", skills: ["b", "z"] }, // навыка z в варианте нет
+    { id: "l4", skills: [] }, // без навыков — не засчитываем
+    { id: "l5", skills: ["c"] },
+  ];
+
+  it("засчитываем непройденные уроки, все навыки которых были в варианте; порядок курса", () => {
+    expect(lessonsToCredit(paper, ready, () => false)).toEqual(["l1", "l2", "l5"]);
+  });
+
+  it("пройденные не засчитываем повторно", () => {
+    expect(lessonsToCredit(paper, ready, (id) => id === "l1")).toEqual(["l2", "l5"]);
+    expect(lessonsToCredit(paper, ready, () => true)).toEqual([]);
+  });
+
+  it("засчитанные уроки в попытке: только корректные id, только у теста по разделу", () => {
+    expect(sanitizeCredited(["ns-1-bits", "ns-2-x", "ns-1-bits", "<b>", 5, ""])).toEqual(["ns-1-bits", "ns-2-x"]);
+    expect(sanitizeCredited("x")).toBeUndefined();
+    expect(sanitizeCredited([])).toEqual([]);
+    const { paper: _p, ...state } = { id: "ex-1", kind: "unit" as const, seed: 1, unit: "u3", paper: unitPaper(1), answers: {}, current: 0, startedAt: 1, elapsedMs: 1, credited: ["ns-1-bits"] };
+    void _p;
+    expect(sanitizeState(state, unitPaper(1))?.credited).toEqual(["ns-1-bits"]);
+    expect(sanitizeState(state, buildExam({ kind: "mini", seed: 1, pool: pool() }))?.credited).toBeUndefined();
+  });
+
+  it("пустой вариант — ничего", () => {
+    expect(lessonsToCredit({ items: [] }, ready, () => false)).toEqual([]);
+  });
+
+  it("сдан: от 80% баллов; мусор — нет", () => {
+    expect(UNIT_PASS_RATIO).toBe(0.8);
+    expect(unitPassed(20, 25)).toBe(true);
+    expect(unitPassed(19, 25)).toBe(false);
+    expect(unitPassed(25, 25)).toBe(true);
+    expect(unitPassed(0, 0)).toBe(false);
+    expect(unitPassed(NaN, 10)).toBe(false);
   });
 });

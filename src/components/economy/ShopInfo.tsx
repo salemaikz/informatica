@@ -18,7 +18,6 @@ import {
   Infinity as InfinityIcon,
   Layers,
   Lightbulb,
-  ListChecks,
   MessageCircle,
   Mic,
   RefreshCw,
@@ -54,7 +53,6 @@ const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
   check: ClipboardCheck,
   exam: GraduationCap,
   checkpoint: Flag,
-  extern: ListChecks,
   game: Gamepad2,
   theory: BookText,
 };

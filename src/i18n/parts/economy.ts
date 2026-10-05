@@ -85,7 +85,7 @@ export const economyDict = {
   "shop.rules.bigLesson": { ru: "Большой урок", kk: "Үлкен сабақ" },
   "shop.rules.check": { ru: "«Проверить себя»", kk: "«Өзіңді тексер»" },
   "shop.rules.exam": { ru: "Пробный ЕНТ", kk: "Сынақ ҰБТ" },
-  "shop.rules.checkpoint": { ru: "Контрольная", kk: "Бақылау жұмысы" },
+  "shop.rules.checkpoint": { ru: "Тест по разделу", kk: "Бөлім бойынша тест" },
   "shop.rules.extern": { ru: "Экстерн", kk: "Экстерн" },
   "shop.rules.game": { ru: "Игра", kk: "Ойын" },
   "shop.rules.free": { ru: "Бесплатно", kk: "Тегін" },

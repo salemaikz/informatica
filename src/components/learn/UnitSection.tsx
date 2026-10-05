@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, GraduationCap } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import type { Unit } from "@/lib/types";
 import type { LessonStat } from "@/lib/review";
@@ -8,16 +8,13 @@ import type { SkillStat } from "@/lib/mastery";
 import { LESSON_META } from "@/content/catalog";
 import { lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
-import { ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
-import { HeartCost } from "@/components/economy/HeartCost";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
 import {
   averageMastery,
-  canExtern,
   isPassed,
   nodeState,
   pathItemNodeId,
@@ -80,12 +77,6 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
           <ButtonLink href={`/theory#${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<BookOpen size={16} />}>
             {t("learn2.unit.theory")}
           </ButtonLink>
-          {canExtern(unit, lessons) && (
-            <ButtonLink href={`/drill?mode=extern&unit=${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<GraduationCap size={16} />}>
-              {t("learn2.unit.extern")}
-              <HeartCost n={ENTRY_COST.extern} />
-            </ButtonLink>
-          )}
         </div>
       </div>
     </div>
@@ -167,7 +158,7 @@ function UnitSectionImpl({
           ),
         )}
       </div>
-      {/* Контрольная раздела — после последнего урока (нет готовых уроков или заданий — узла нет). */}
+      {/* Тест по разделу — после последнего урока (нет готовых уроков или заданий — узла нет). */}
       <CheckpointNode unit={unit} lessons={lessons} />
       <PracticeSheet item={sheet} unit={unit} unitIndex={index} onClose={() => setSheet(null)} />
     </section>

@@ -43,7 +43,7 @@ export const EXAM_FORMAT: Record<ExamKind, { questions: number; minutes: number;
     points: FULL_COUNTS.single + (FULL_COUNTS.multi + FULL_COUNTS.match) * 2 + 5,
   },
   topic: { questions: sum(TOPIC_COUNTS), minutes: EXAM_TIME_LIMIT_SEC.topic / 60, points: TOPIC_COUNTS.single + (TOPIC_COUNTS.multi + TOPIC_COUNTS.match) * 2 },
-  // Контрольная по разделу: контекстное задание — один вопрос (1 балл); без контекстных вместо него ещё один single.
+  // Тест по разделу: контекстное задание — один вопрос (1 балл); без контекстных вместо него ещё один single. Время — по заданиям.
   unit: { questions: sum(UNIT_COUNTS), minutes: EXAM_TIME_LIMIT_SEC.unit / 60, points: UNIT_COUNTS.single + (UNIT_COUNTS.multi + UNIT_COUNTS.match) * 2 + UNIT_COUNTS.context },
 };
 
@@ -82,13 +82,13 @@ export function parseRunParams(sp: Record<string, string | string[] | undefined>
   const topics = kind === "topic" ? parseTopics(first(sp.topics)) : [];
   const rawUnit = first(sp.unit);
   const unit = kind === "unit" && rawUnit && UNIT_ID.test(rawUnit) ? rawUnit : undefined;
-  // Контрольная без раздела — не вариант: экран продолжит начатую попытку или уведёт в хаб.
+  // Тест по разделу без раздела — не вариант: экран продолжит начатую попытку или уведёт в хаб.
   if (kind === "unit" && !unit) return null;
   const challenge = kind === "unit" ? null : decodeChallenge(first(sp.ch));
   return { kind: kind as ExamKind, seed: Number.isInteger(n) && n < 2 ** 32 ? n : null, topics, unit, ...(challenge ? { challenge } : {}) };
 }
 
-/** Относительная ссылка на вариант; с `challenge` — вызов другу (#73), у контрольной раздела вызова нет. */
+/** Относительная ссылка на вариант; с `challenge` — вызов другу (#73), у теста по разделу вызова нет. */
 export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = [], unit?: string, challenge?: Challenge): string {
   const q = new URLSearchParams({ kind, seed: String(seed >>> 0) });
   if (kind === "topic" && topics.length) q.set("topics", topics.join(","));
@@ -162,7 +162,7 @@ export interface HistoryPoint {
   maxPoints: number;
 }
 
-/** Последние `n` попыток мини/полного (тест по теме и контрольные по разделам картину не показывают) — от старых к новым. */
+/** Последние `n` попыток мини/полного (тест по теме и тесты по разделам картину не показывают) — от старых к новым. */
 export function historyPoints(exams: ExamSummary[], n = 10): HistoryPoint[] {
   return exams
     .filter((e) => e.kind !== "topic" && e.kind !== "unit" && e.maxPoints > 0)

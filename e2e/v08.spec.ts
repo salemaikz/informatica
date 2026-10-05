@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // v0.8: навигация из пяти групп с подразделами, хаб «Материалы», магазин со строкой сердечек,
-// страница плана подготовки и «Контрольная» раздела на карте курса.
+// страница плана подготовки и «Тест по разделу» на карте курса.
 
 function trackErrors(page: Page) {
   const errors: string[] = [];
@@ -187,11 +187,11 @@ test("план подготовки: недели до даты ЕНТ и кар
   expect(errors).toEqual([]);
 });
 
-test("контрольная раздела на карте: шторка и запуск", async ({ page }) => {
+test("тест по разделу на карте: шторка и запуск", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/learn");
-  const node = page.getByRole("button", { name: /^Контрольная по разделу/ }).first();
+  const node = page.getByRole("button", { name: /^Тест по разделу/ }).first();
   await node.scrollIntoViewIfNeeded();
   // Банк заданий подгружается отдельным куском — пока он грузится, узел недоступен.
   await expect(node).toBeEnabled();
@@ -199,20 +199,20 @@ test("контрольная раздела на карте: шторка и з�
   await node.click();
 
   const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { name: /^Контрольная: / })).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: /^Тест по разделу: / })).toBeVisible();
   await expect(sheet.getByText(/Заданий: \d+/)).toBeVisible();
-  // Контрольная стоит 2 сердечка (#40): значок цены в шторке.
+  // Тест по разделу стоит 2 сердечка (#40): значок цены в шторке.
   await expect(sheet.getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
   await sheet.getByRole("button", { name: "Начать" }).click();
 
   await page.waitForURL(/\/exam\/run\?.*kind=unit/);
-  await expect(page.getByRole("heading", { name: /^Контрольная: / })).toBeVisible();
-  // В контрольной до 15 заданий (если в банке меньше — столько, сколько есть).
+  await expect(page.getByRole("heading", { name: /^Тест по разделу: / })).toBeVisible();
+  // В тесте по разделу до 20 заданий (если в банке меньше — столько, сколько есть).
   const pill = page.getByText(/^Заданий: \d+$/);
   await expect(pill).toBeVisible();
   const n = Number((await pill.textContent())!.match(/\d+/)![0]);
   expect(n).toBeGreaterThan(0);
-  expect(n).toBeLessThanOrEqual(15);
+  expect(n).toBeLessThanOrEqual(20);
   await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
   await page.getByRole("button", { name: "Начать" }).click();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
