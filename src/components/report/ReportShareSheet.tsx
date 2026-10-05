@@ -4,8 +4,9 @@ import { ChevronRight, ExternalLink, Users } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { translate, useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
-import { linkFits, packData, reportLink } from "@/lib/hash-pack";
+import { linkFits, packData, reportLink, selfViewLink } from "@/lib/hash-pack";
 import { buildParentReport } from "@/lib/parent-report";
+import { entVisible } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import type { Lang } from "@/lib/types";
 import { Segmented, Switch } from "@/components/goals/controls";
@@ -24,6 +25,7 @@ export function ReportEntry({ className }: { className?: string }) {
   const { t } = useT();
   const hasName = useApp((s) => s.profile.name.trim().length > 0);
   const studentLang = useApp((s) => s.profile.lang);
+  const isEnt = useApp((s) => entVisible(s.profile));
   const [open, setOpen] = useState(false);
   const [withName, setWithName] = useState(false);
   const [lang, setLang] = useState<Lang>(studentLang);
@@ -82,7 +84,7 @@ export function ReportEntry({ className }: { className?: string }) {
       <Modal open={open} onClose={close} label={t("report.entry.title")}>
         <div className="flex flex-col gap-4">
           <h2 className="text-xl font-extrabold">{t("report.entry.title")}</h2>
-          <p className="font-semibold text-muted">{t("report.share.lead")}</p>
+          <p className="font-semibold text-muted">{t(isEnt ? "report.share.lead.ent" : "report.share.lead.school")}</p>
 
           {hasName && (
             <div className="flex items-center justify-between gap-3">
@@ -134,7 +136,7 @@ export function ReportEntry({ className }: { className?: string }) {
           )}
           {link.kind === "ready" && (
             <>
-              <a href={link.url} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: "primary", block: true })}>
+              <a href={selfViewLink(link.url)} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: "primary", block: true })}>
                 <ExternalLink size={18} aria-hidden />
                 {t("report.share.view")}
               </a>

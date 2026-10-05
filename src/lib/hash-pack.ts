@@ -88,6 +88,25 @@ export function dataFromHash(hash: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Служебная метка во фрагменте: «это свой просмотр ученика» (кнопка «Посмотреть отчёт»). Получателю не отправляется. */
+const SELF_MARK = "me=1";
+const SELF_RE = /(^#?|&)me=1(?=&|$)/;
+
+/** Ссылка для собственного просмотра: та же ссылка с меткой (открытие не считается «открыл получатель»). */
+export function selfViewLink(link: string): string {
+  return `${link}&${SELF_MARK}`;
+}
+
+/** Есть ли во фрагменте метка своего просмотра. */
+export function isSelfView(hash: string): boolean {
+  return SELF_RE.test(hash);
+}
+
+/** Фрагмент без метки своего просмотра («#d=abc&me=1» → «#d=abc»). */
+export function stripSelfMark(hash: string): string {
+  return hash.replace(/&me=1(?=&|$)/g, "").replace(/^(#?)me=1&?/, "$1");
+}
+
 /** Ссылка на отчёт: `${origin}/report#d=<packed>`. */
 export function reportLink(origin: string, packed: string): string {
   return `${origin}/report#d=${packed}`;

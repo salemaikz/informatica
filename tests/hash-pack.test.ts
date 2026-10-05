@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_LINK_LENGTH, MAX_UNPACKED_BYTES, bytesToBase64Url, dataFromHash, linkFits, packData, reportLink, unpackData } from "@/lib/hash-pack";
+import { MAX_LINK_LENGTH, MAX_UNPACKED_BYTES, bytesToBase64Url, dataFromHash, isSelfView, linkFits, packData, reportLink, selfViewLink, stripSelfMark, unpackData } from "@/lib/hash-pack";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -67,6 +67,22 @@ describe("packData / unpackData", () => {
 });
 
 describe("ссылка", () => {
+  it("метка своего просмотра: чистая ссылка не помечена, предпросмотр помечен, d= разбирается", () => {
+    const link = reportLink("https://x.test", "zAbc");
+    expect(isSelfView(new URL(link).hash)).toBe(false);
+    const self = selfViewLink(link);
+    expect(self).toBe(`${link}&me=1`);
+    expect(isSelfView(new URL(self).hash)).toBe(true);
+    expect(dataFromHash(new URL(self).hash)).toBe("zAbc");
+    expect(isSelfView("#me=1&d=zAbc")).toBe(true);
+    expect(isSelfView("#d=zAbc&me=10")).toBe(false);
+    expect(isSelfView("#d=zAbc&name=me=1")).toBe(false);
+    expect(isSelfView("")).toBe(false);
+    expect(stripSelfMark("#d=zAbc&me=1")).toBe("#d=zAbc");
+    expect(stripSelfMark("#me=1&d=zAbc")).toBe("#d=zAbc");
+    expect(stripSelfMark("#d=zAbc")).toBe("#d=zAbc");
+  });
+
   it("dataFromHash", () => {
     expect(dataFromHash("#d=zAbc_-1")).toBe("zAbc_-1");
     expect(dataFromHash("d=zAbc")).toBe("zAbc");

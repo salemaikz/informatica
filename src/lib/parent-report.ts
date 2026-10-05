@@ -43,7 +43,10 @@ export interface ReportExam {
 export interface ReportEnt {
   /** null — данных для прогноза нет («пока рано судить»). */
   forecast: { basis: ReportBasis; score: number; low: number; high: number } | null;
-  /** Освоение 13 тем, % (0..100), в порядке ENT_TOPICS. */
+  /**
+   * Освоение 13 тем, % (0..100), в порядке ENT_TOPICS. `-1` (TOPIC_NO_DATA) — по теме нет собственных данных:
+   * ни ответов по навыкам, ни баллов пробника, ни заданий диагностики (схема v2 допускает значение).
+   */
   topics: number[];
   /** До 5 последних пробников (без контрольных по разделу), новые первыми. */
   exams: ReportExam[];
@@ -70,6 +73,10 @@ export interface ParentReport {
 }
 
 export const REPORT_NAME_MAX = 30;
+/** Значение `topics[i]`: по теме нет данных (в отчёте — серая полоса «нет данных»). */
+export const TOPIC_NO_DATA = -1;
+/** Меньше этого времени за день без других занятий днём с занятиями не считается (случайно открытая страница). */
+const ACTIVE_DAY_SECONDS = 60;
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
 const BASES: ReportBasis[] = ["mastery", "exams", "both", "diagnostic"];
 const KINDS: ReportExamKind[] = ["full", "mini", "topic"];
@@ -103,7 +110,10 @@ function activity(days: AppState["days"], keys: string[]): { active: number; les
     const s = days?.[k];
     if (!s || typeof s !== "object") continue;
     const l = Number.isFinite(s.lessons) ? Math.max(0, s.lessons ?? 0) : 0;
-    if (s.xp > 0 || s.answers > 0 || (s.asked ?? 0) > 0 || l > 0) active++;
+    // Один критерий дня для «дней» и «минут»: любой учебный сигнал — XP, ответы, игры, уроки или заметное время
+    // (теория, наставник, диагностика, незавершённый пробник пишут только секунды).
+    const secs = Number.isFinite(s.seconds) ? s.seconds : 0;
+    if (s.xp > 0 || s.answers > 0 || (s.asked ?? 0) > 0 || (s.games ?? 0) > 0 || l > 0 || secs >= ACTIVE_DAY_SECONDS) active++;
     lessons += l;
   }
   return { active, lessons };
@@ -145,13 +155,20 @@ export function buildParentReport(state: ReportInput, now: number, opts: ReportO
 function buildEnt(state: ReportInput, now: number): ReportEnt {
   const exams = (Array.isArray(state.exams) ? state.exams : []).filter((e) => e && e.kind !== "unit");
   const f = forecastScore({ skills: state.skills ?? {}, exams, now, diagnostic: state.profile.diagnostic });
-  const topics = TOPIC_IDS.map((t) => pct(f.byTopic[t]));
 
   // Тема «с данными»: по ней есть ответы по навыкам, баллы пробника или задания диагностики.
   const hasData = (t: EntTopicId) =>
     SKILLS.some((s) => s.ent === t && (state.skills?.[s.id]?.attempts ?? 0) > 0) ||
     exams.some((e) => (e.byTopic?.[t]?.max ?? 0) > 0) ||
     (state.profile.diagnostic?.byTopic?.[t]?.max ?? 0) > 0;
+  // Тема без собственных данных — «нет данных»; тема, чья оценка пока опирается на диагностику (`provisional`),
+  // не бывает «освоенной» — как в плане цели (#70).
+  const shaky = new Set(f.provisional);
+  const topics = TOPIC_IDS.map((t) => {
+    if (f.basis === "none" || !hasData(t)) return TOPIC_NO_DATA;
+    const v = shaky.has(t) ? Math.min(f.byTopic[t] ?? 0, MASTERED_FROM - 0.01) : (f.byTopic[t] ?? 0);
+    return pct(v);
+  });
   const weak =
     f.basis === "none"
       ? []
@@ -187,7 +204,7 @@ const int = (v: unknown, min: number, max: number): number | null => {
 function parseEnt(raw: unknown): ReportEnt | null {
   if (!isObj(raw)) return null;
   if (!Array.isArray(raw.topics) || raw.topics.length !== TOPIC_IDS.length) return null;
-  const topics = raw.topics.map((x) => int(x, 0, 100));
+  const topics = raw.topics.map((x) => int(x, TOPIC_NO_DATA, 100));
   if (topics.some((x) => x === null)) return null;
 
   let forecast: ReportEnt["forecast"] = null;
