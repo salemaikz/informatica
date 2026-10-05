@@ -11,7 +11,6 @@ import { useT } from "@/i18n/useT";
 import { aiErrorKey, lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
 import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from "@/lib/exam";
-import { currentPoolTag } from "@/lib/exam-pool";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { useApp } from "@/lib/store";
@@ -274,7 +273,7 @@ export function ExamResult({ id }: { id: string }) {
 
       {/* Вызов друга (#73): больше / столько же / меньше. Меньше — не ошибка, поэтому не красным. */}
       {attempt?.challenge && kind !== "unit" && (
-        <ChallengeCompare challenge={attempt.challenge} points={points} max={maxPoints} pool={attempt.pool ?? summary?.pool ?? currentPoolTag()} />
+        <ChallengeCompare challenge={attempt.challenge} points={points} max={maxPoints} pool={attempt.pool ?? summary?.pool} />
       )}
 
       {/* Поделиться результатом и вызвать друга (#72, #73); у контрольной раздела компонент сам ничего не рисует. */}

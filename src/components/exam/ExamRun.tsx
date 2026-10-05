@@ -7,7 +7,7 @@ import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
-import { compareWithChallenge, encodeChallenge, type Challenge } from "@/lib/challenge";
+import { compareWithChallenge, encodeChallenge, UNKNOWN_POOL, type Challenge } from "@/lib/challenge";
 import { buildExam, EXAM_TIME_LIMIT_SEC, type ExamKind, type ExamPaper } from "@/lib/exam";
 import { currentPoolTag } from "@/lib/exam-pool";
 import {
@@ -114,7 +114,8 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
         // Начатый вариант открыли по ссылке с вызовом (например, после онбординга): вызов дописываем в попытку,
         // чтобы он пережил перезагрузку и попал в сравнение после итогов.
         if (kind && challenge && active.kind !== "unit" && !active.challenge) {
-          const next: ExamAttempt = { ...active, challenge };
+          // Попытка из версии без тегов банка — тег неизвестен: сравнение честно пойдёт по доле.
+          const next: ExamAttempt = { ...active, challenge, pool: active.pool ?? UNKNOWN_POOL };
           const { paper: _paper, ...state } = next;
           void _paper;
           await saveAttemptState(state).catch(() => {});
@@ -267,7 +268,7 @@ function Intro({
           </p>
         )}
       </div>
-      {challenge && !empty && <ChallengeBanner challenge={challenge} maxPoints={paper.maxPoints} />}
+      {challenge && !empty && <ChallengeBanner challenge={challenge} maxPoints={paper.maxPoints} currentPool={currentPoolTag()} />}
       {empty ? (
         <p className="rounded-2xl border-2 border-warning/40 bg-warning-soft p-3.5 font-semibold">{t("exam.run.emptyPaper")}</p>
       ) : (
@@ -463,7 +464,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     track(examFinishEvent(attempt.kind, summary.points, summary.maxPoints));
     // Вызов друга (#73): итог против друга — тем же единственным разом.
     if (attempt.challenge) {
-      const cmp = compareWithChallenge(summary.points, summary.maxPoints, attempt.challenge, attempt.pool ?? currentPoolTag());
+      const cmp = compareWithChallenge(summary.points, summary.maxPoints, attempt.challenge, attempt.pool ?? UNKNOWN_POOL);
       track({ e: "challenge", step: cmp.outcome });
     }
     const { paper: _paper, ...state } = attempt;

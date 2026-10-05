@@ -52,8 +52,16 @@ export function withChallenge(link: string, c: Challenge): string {
 // ---------- Тег банка ----------
 
 /**
- * Тег банка заданий: FNV-1a по отсортированным id + версия сборки варианта, 4 знака base36.
- * Тот же seed даёт тот же вариант, только если банк и алгоритм сборки не менялись: не совпал тег — «вариант мог измениться».
+ * Тег «неизвестен»: попытка начата до версии с тегами (или тег потерян). Такой вариант честно считаем другим:
+ * баннер «вариант может отличаться», сравнение по доле.
+ */
+export const UNKNOWN_POOL = "0000";
+
+/**
+ * Тег банка заданий: FNV-1a по отсортированным подписям заданий + версия сборки варианта, 4 знака base36.
+ * Подпись задания — всё, от чего зависит выбор и перемешивание (`lib/exam-pool.ts → itemSignature`: id, вид, тема, уровень,
+ * число вариантов). Тот же seed даёт тот же вариант, только если банк и алгоритм сборки не менялись: не совпал тег — «вариант
+ * мог измениться».
  */
 export function poolTag(ids: readonly string[], buildVersion: number): string {
   let h = 0x811c9dc5;
@@ -77,13 +85,16 @@ export interface ChallengeComparison {
   outcome: ChallengeOutcome;
   /** Разница (мой − друга): на том же варианте — в баллах, иначе — в процентных пунктах. */
   diff: number;
-  /** true — тот же вариант (тот же максимум и тот же тег банка): сравниваем баллы. */
+  /** true — тот же вариант (тот же максимум и тот же известный тег банка): сравниваем баллы. */
   samePaper: boolean;
 }
 
+/** Тот же вариант: теги совпадают и известны. */
+export const samePool = (a: string | undefined, b: string | undefined): boolean => !!a && a === b && a !== UNKNOWN_POOL;
+
 /** Сравнение результата с вызовом: на том же варианте — по баллам, иначе — по доле (в процентных пунктах). */
-export function compareWithChallenge(points: number, max: number, c: Challenge, pool: string): ChallengeComparison {
-  if (max === c.m && pool === c.pool) {
+export function compareWithChallenge(points: number, max: number, c: Challenge, pool: string | undefined): ChallengeComparison {
+  if (max === c.m && samePool(pool, c.pool)) {
     const diff = points - c.s;
     return { outcome: diff > 0 ? "more" : diff < 0 ? "less" : "same", diff, samePaper: true };
   }

@@ -63,7 +63,7 @@ export function landingModel(r: ShareResult | null, lang: Lang): LandingModel {
         suffixFirst: lang === "kk",
         lines: [],
         ratio: r.max > 0 ? r.points / r.max : 0,
-        text: tr(lang, "share.land.exam.text"),
+        text: tr(lang, r.points >= r.max ? "share.land.exam.textMax" : "share.land.exam.text"),
         acceptHref: challengeHref(r),
       };
     case "course": {
