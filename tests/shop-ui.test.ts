@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AI_COST, ENTRY_COST, HOUR, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
-import { chipRate, dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
+import { dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
 import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
 import { compareRows } from "@/components/plans/plans-helpers";
 import { dict, type DictKey } from "@/i18n/dict";
@@ -36,9 +36,6 @@ describe("форматы", () => {
     expect(formatSpan(24, "ru")).toBe("24\u00a0ч");
     expect(formatSpan(168, "ru")).toBe("7\u00a0дней");
     expect(formatSpan(168, "kk")).toBe("7\u00a0күн");
-  });
-  it("курс чипов для подписей: 5 XP = 2 чипа", () => {
-    expect(chipRate()).toEqual({ xp: 5, n: 2 });
   });
   it("время записи", () => {
     expect(formatClock(new Date(2026, 9, 2, 9, 5).getTime())).toBe("09:05");
@@ -190,12 +187,6 @@ describe("словарь магазина, сердечек и тарифов", 
   it("новые тексты не называют старые правила (суточный полный запас, 1 чип за 5 XP, 150/40 чипов)", () => {
     const all = keys.map((k) => `${dict[k as keyof typeof dict].ru}\n${dict[k as keyof typeof dict].kk}`).join("\n");
     expect(all).not.toMatch(/Каждый день запас|Күн сайын қор|= 1 чип/);
-  });
-
-  it("курс XP → чипы в подписях подставляется из economy.ts", () => {
-    const { xp, n } = chipRate();
-    expect(dict["shop.earn.xp"].ru.replace("{xp}", String(xp)).replace("{n}", String(n))).toBe("За опыт: 5 XP = 2 чипа");
-    expect(dict["shop.earn.xp"].kk.replace("{xp}", String(xp)).replace("{n}", String(n))).toBe("Тәжірибе үшін: 5 XP = 2 чип");
   });
 });
 

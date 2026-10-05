@@ -1,6 +1,6 @@
 import { XP } from "@/lib/gamification";
 import { scaleXp } from "@/lib/review";
-import { chipsForXp } from "@/lib/economy";
+import { lessonChips } from "@/lib/economy";
 import { pluralForm } from "@/components/learn/map";
 import { chipRate, formatMult } from "./shop-helpers";
 
@@ -20,20 +20,23 @@ export function lessonXpMax(stepCount: number, factor: number, hasStat = false):
   return answers + combo + complete + perfect;
 }
 
-/** Сколько чипов дадут за XP (множитель — тариф × бустер; для подписи «≈ M чипов»). */
-export function chipsEstimate(xp: number, multiplier = 1): number {
-  return chipsForXp(xp, multiplier);
+/**
+ * Сколько чипов дадут за прохождение урока (решение #105): 3 за первое прохождение, 1 за повтор; множитель — тариф × бустер.
+ * Бонус «идеально» (+5) в оценку не входит: он зависит от результата.
+ */
+export function chipsEstimate(hasStat: boolean, multiplier = 1): number {
+  return lessonChips(!hasStat, multiplier);
 }
 
 /** Ключ строки со склонением: `xp.chipsPlus.few` и т. п. */
-export function chipsKey(base: "xp.chipsPlus" | "xp.rate" | "xp.reward", n: number): `${typeof base}.${"one" | "few" | "many"}` {
+export function chipsKey(base: "xp.chipsPlus" | "xp.rate" | "xp.reward" | "perfect.chips", n: number): `${typeof base}.${"one" | "few" | "many"}` {
   return `${base}.${pluralForm(n)}`;
 }
 
-/** Хвост подписи курса при множителе: « · ×2» (пусто при ×1). */
+/** Хвост подписи при множителе: « · ×2» (пусто при ×1). */
 export function multSuffix(multiplier: number): string {
   return multiplier === 1 ? "" : ` · ${formatMult(multiplier)}`;
 }
 
-/** Курс для подписи: «5 XP = 2 чипа». */
+/** @deprecated Курса «XP → чипы» больше нет (#105); оставлено для `GameShell`, пока он не переведён. */
 export const xpChipRate = chipRate;

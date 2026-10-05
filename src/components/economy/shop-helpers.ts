@@ -1,4 +1,4 @@
-import { CHIPS_PER_XP, MINUTE, DAY, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
+import { CHIP_REWARD, MINUTE, DAY, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
 import { daysText } from "@/lib/goals";
 import type { Lang } from "@/lib/types";
 
@@ -23,13 +23,12 @@ export function formatSpan(hours: number, lang: Lang): string {
   return text.replace(/ /g, "\u00a0");
 }
 
-/** Курс чипов для подписей: «5 XP = 2 чипа» — наименьшее целое число XP, дающее целое число чипов (из CHIPS_PER_XP). */
+/**
+ * @deprecated Курса «XP → чипы» больше нет (решение #105): чипы дают за уроки и цели (`CHIP_REWARD`).
+ * Заглушка нужна, пока `NoChipsNotice` не переведён на текст без курса; потом удалить.
+ */
 export function chipRate(): { xp: number; n: number } {
-  for (let xp = 1; xp <= 100; xp++) {
-    const n = xp * CHIPS_PER_XP;
-    if (n >= 1 && Math.abs(n - Math.round(n)) < 1e-9) return { xp, n: Math.round(n) };
-  }
-  return { xp: Math.round(1 / CHIPS_PER_XP), n: 1 };
+  return { xp: 1, n: CHIP_REWARD.lessonFirst };
 }
 
 /** Множитель: «×2», «×1,5» (запятая и в русском, и в казахском). */
