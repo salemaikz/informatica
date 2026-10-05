@@ -93,8 +93,8 @@ describe("checkPython (с подставным запуском)", () => {
 });
 
 describe("задачи Python", () => {
-  it("40 задач, id уникальны, уровни от A до C", () => {
-    expect(TASKS).toHaveLength(40);
+  it("61 задача, id уникальны, уровни от A до C", () => {
+    expect(TASKS).toHaveLength(61);
     expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
     const count = (lv: number) => TASKS.filter((t) => t.level === lv).length;
     // баланс уровней: простых меньше всего не должно быть, сложных — не меньше пятой части новых
@@ -113,6 +113,24 @@ describe("задачи Python", () => {
     expect(by("py.debug")).toHaveLength(5);
     expect(by("py.context")).toHaveLength(3);
     expect(by("py.patterns").length).toBeGreaterThanOrEqual(3);
+  });
+  it("этап 14, C9a: 20 новых задач по навыкам из ТЗ и одна на сортировку (для урока «Сортировки»)", () => {
+    const fresh = TASKS.filter((t) => Number(t.id.split("-")[1]) >= 41);
+    expect(fresh).toHaveLength(21);
+    expect(fresh.map((t) => t.id)).toEqual(TASKS.slice(-21).map((t) => t.id)); // дописаны в конец списка
+    const by = (...skills: string[]) => fresh.filter((t) => skills.includes(t.skill ?? "")).length;
+    expect(by("py.if")).toBe(4);
+    expect(by("py.for")).toBe(3);
+    expect(by("py.while")).toBe(2);
+    expect(by("py.strings", "py.strmethods")).toBe(4);
+    expect(by("py.lists", "py.listops")).toBe(3);
+    expect(by("py.functions", "py.params")).toBe(2);
+    expect(by("py.patterns")).toBe(2);
+    expect(by("py.sort")).toBe(1);
+    // уровни A/B/C: примерно 8/8/4 (плюс одна B на сортировку)
+    expect([1, 2, 3].map((lv) => fresh.filter((t) => t.level === lv).length)).toEqual([8, 9, 4]);
+    // в ветвлениях есть elif (цепочка из ≥ 3 веток)
+    expect(fresh.filter((t) => t.skill === "py.if" && /\belif\b/.test(t.solution)).length).toBeGreaterThanOrEqual(2);
   });
   it("в каждой задаче несколько тестов с краевыми случаями (≥ 3, кроме «Вывода и арифметики»)", () => {
     for (const task of TASKS) {
@@ -183,9 +201,20 @@ describe("задачи Python", () => {
       "py-30-sort-bubble": ["a.sort()", "print(sorted(a))"],
       "py-31-search-binary": ["print(a.index(x))", "print(a.find(x))", "print(a.count(x))"],
     };
+    Object.assign(bad, {
+      "py-44-if-median3": ["print(sorted([a, b, c])[1])", "print(a + b + c - min(a, b, c) - max(a, b, c))", "x = [a, b, c]\nx.sort()\nprint(x[1])"],
+      "py-45-for-evens": ["for i in range(1, n + 1):\n    if i % 2 == 0:\n        print(i)"],
+      "py-46-for-factorial": ["import math\nprint(math.factorial(n))", "from math import factorial\nprint(factorial(n))"],
+      "py-48-while-trips": ["print(b // c)\nprint(b % c)", "for i in range(b):\n    pass"],
+    });
     for (const [id, codes] of Object.entries(bad)) for (const code of codes) expect(findForbidden(code, PY_FORBID[id]), `${id}: ${code}`).not.toBeNull();
     // слова в строках и комментариях не считаются нарушением
     expect(findForbidden('# for x in y\nprint("while sorted(a)")', PY_FORBID["py-29-rec-fib"])).toBeNull();
+    // while в комментарии или строке — не цикл
+    expect(findForbidden('# while\nprint("while")', PY_FORBID["py-48-while-trips"])).not.toBeNull();
+    expect(findForbidden("while b >= c:\n    b -= c", PY_FORBID["py-48-while-trips"])).toBeNull();
+    // слово min в тексте — не вызов
+    expect(findForbidden('print("min(a)")', PY_FORBID["py-44-if-median3"])).toBeNull();
     // своя функция gcd по Евклиду — разрешена
     expect(findForbidden("def gcd(a, b):\n    return a", PY_FORBID["py-23-pat-gcd"])).toBeNull();
   });
@@ -213,6 +242,22 @@ describe("задачи Python", () => {
         "m = int(input())\np = int(input())\nd = m - p\nfor x in [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]:\n    print(x, d // x)\n    d %= x\n",
         "m = int(input())\np = int(input())\nd = m - p\nfor x in [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]:\n    if d // x > 0:\n        print(x, d // x)\n    d %= x\n",
       ],
+      // нет ветки error / граница 0 в «лёд» / нестрогое сравнение со средним / последняя серия не учтена
+      "py-41-if-weekday": ['d = int(input())\nif 1 <= d <= 5:\n    print("weekday")\nelse:\n    print("weekend")\n'],
+      "py-42-if-water": ['t = int(input())\nif t < 0:\n    print("ice")\nelif t < 100:\n    print("water")\nelse:\n    print("steam")\n'],
+      "py-44-if-median3": ["a = int(input())\nb = int(input())\nc = int(input())\nif a < b < c:\n    print(b)\nelif a < c < b:\n    print(c)\nelse:\n    print(a)\n"],
+      "py-45-for-evens": ['n = int(input())\nfor i in range(2, n, 2):\n    print(i, end=" ")\nprint()\n'],
+      "py-47-for-steps": ["n = int(input())\ntotal = 0\ngoal = 0\nfor i in range(n):\n    x = int(input())\n    total += x\n    if x > 10000:\n        goal += 1\nprint(total)\nprint(goal)\n"],
+      "py-49-while-collatz": ["n = int(input())\nsteps = 0\nwhile n > 1:\n    if n % 2 == 0:\n        n //= 2\n    else:\n        n = 3 * n + 1\n    steps += 1\nprint(steps + 1)\n"],
+      "py-51-str-date": ['s = input()\nprint(s[0:2] + "." + s[2:4] + "." + s[4:6])\n'],
+      "py-52-str-fence": ["s = input()\nprint(s[::2] + s[1::2][::-1])\n"],
+      "py-53-str-compress": ['s = input()\nres = ""\ncount = 1\nfor i in range(1, len(s)):\n    if s[i] == s[i - 1]:\n        count += 1\n    else:\n        res += s[i - 1] + str(count)\n        count = 1\nprint(res)\n'],
+      "py-54-list-basket": ['a = input().split()\nx = input()\nif x in a:\n    a.remove(x)\nprint(*a)\n'],
+      "py-56-list-jump": ["n = int(input())\na = list(map(int, input().split()))\nbest = 0\nfor i in range(n - 1):\n    best = max(best, a[i + 1] - a[i])\nprint(best)\n"],
+      "py-57-func-ticket": ["def ticket(age):\n    if age <= 7:\n        return 0\n    elif age < 18:\n        return 500\n    elif age < 60:\n        return 1000\n    else:\n        return 600\n\n\nn = int(input())\nages = list(map(int, input().split()))\nprint(sum(ticket(a) for a in ages))\n"],
+      "py-59-pat-above-avg": ["n = int(input())\na = list(map(int, input().split()))\navg = sum(a) / n\nprint(len([x for x in a if x >= avg]))\n"],
+      "py-60-pat-streak": ["n = int(input())\na = list(map(int, input().split()))\nbest = 0\ncur = 0\nfor x in a:\n    if x < 0:\n        cur += 1\n    else:\n        best = max(best, cur)\n        cur = 0\nprint(best)\n"],
+      "py-61-sort-median": ["n = int(input())\na = list(map(int, input().split()))\nprint(a[n // 2])\n"],
       // разряд: k-я цифра слева вместо справа
       "py-14-ops-digit": ["n = int(input())\nk = int(input())\nwhile n >= 10 ** k:\n    n //= 10\nprint(n % 10)\n"],
     };
