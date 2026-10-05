@@ -1,7 +1,6 @@
 "use client";
 
 import { CircleCheck, Play } from "lucide-react";
-import { useRef } from "react";
 import { entTopicById } from "@/content/ent-topics";
 import { DIAGNOSTIC_MARGIN, forecastFromDiagnostic } from "@/lib/forecast";
 import { topicStartHref, type DiagnosticResult, type ReadyLesson } from "@/lib/diagnostic";
@@ -34,20 +33,11 @@ function RangeScale({ low, high, score, label }: { low: number; high: number; sc
 /**
  * Итог диагностики: предварительный прогноз диапазоном, до трёх слабых тем с кнопкой «Начать с неё»,
  * сообщение про пропуск раздела «Старт». ИИ не используется. Кнопку «Дальше» рисует экран.
- * `fromOnboarding` — после онбординга «Начать с неё» идёт через окно тарифов (как «Дальше»): показ тарифов считается
- * один раз как «онбординг», а выбранная тема открывается после окна (`next`).
  */
-export function DiagnosticResultView({ result, ready, fromOnboarding = false }: { result: DiagnosticResult; ready: ReadyLesson[]; fromOnboarding?: boolean }) {
+export function DiagnosticResultView({ result, ready }: { result: DiagnosticResult; ready: ReadyLesson[] }) {
   const { t, l } = useT();
   const lessons = useApp((s) => s.lessons);
   const forecast = forecastFromDiagnostic(result.summary);
-  /** Показ тарифов отмечаем один раз, даже при двойном нажатии. */
-  const paywallNoted = useRef(false);
-  const notePaywall = () => {
-    if (paywallNoted.current) return;
-    paywallNoted.current = true;
-    useApp.getState().notePaywallShown();
-  };
   // Раздел «Старт» можно пропустить — его уроки в «Начать с неё» не предлагаем.
   const lessonsForLinks = result.skipBasics ? ready.filter((x) => x.unit !== "u0") : ready;
 
@@ -94,8 +84,7 @@ export function DiagnosticResultView({ result, ready, fromOnboarding = false }: 
                     )}
                   </div>
                   <ButtonLink
-                    href={fromOnboarding ? `/plans?from=onboarding&next=${encodeURIComponent(topicStartHref(topic, lessonsForLinks, lessons))}` : topicStartHref(topic, lessonsForLinks, lessons)}
-                    onClick={fromOnboarding ? notePaywall : undefined}
+                    href={topicStartHref(topic, lessonsForLinks, lessons)}
                     variant="secondary"
                     size="md"
                     block

@@ -22,6 +22,7 @@ import { useSkillStats } from "@/components/progress/useSkillStats";
 import { iconFor } from "@/components/scenes/icons";
 import { GAMES } from "@/games/registry";
 import { useEntVisible } from "@/components/school/useEntVisible";
+import { PageTip } from "@/components/tour/PageTip";
 
 /** Разделы курса с навыками — считаем один раз (данные курса не меняются). */
 const GROUPS = skillsByUnit();
@@ -48,6 +49,7 @@ export default function PracticePage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <PageTip id="page-practice" />
       <div>
         <h1 className="text-2xl font-extrabold">{t("prac.title")}</h1>
         <p className="font-semibold text-muted">{t("prac.subtitle")}</p>

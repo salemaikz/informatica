@@ -53,7 +53,8 @@ beforeEach(() => {
   h.enable = vi.fn() as unknown as typeof h.enable;
   h.enable.mockResolvedValue("ok");
   useApp.getState().resetProgress();
-  useApp.setState((s) => ({ onboarded: true, profile: { ...s.profile, lang: "ru", createdAt: T0 - 1000 } }));
+  // Проводник первого входа (#104) пройден: до этого окно напоминаний ждёт (отдельный тест ниже).
+  useApp.setState((s) => ({ onboarded: true, tips: { nav: T0 }, profile: { ...s.profile, lang: "ru", createdAt: T0 - 1000 } }));
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -106,6 +107,18 @@ describe("PushAskAgent: когда показывается", () => {
     await mount();
     await wait(PUSH_ASK_DELAY_MS + 500);
     expect(dialog()).toBeNull();
+  });
+
+  it("пока идёт проводник первого входа — ждёт; после обзора панели появляется (#104)", async () => {
+    useApp.setState({ tips: {} });
+    await mount();
+    await wait(PUSH_ASK_DELAY_MS + 500);
+    expect(dialog()).toBeNull();
+    expect(useApp.getState().pushAsk.count).toBe(0);
+    await act(async () => useApp.getState().noteTip("nav"));
+    await wait(PUSH_ASK_DELAY_MS + 500);
+    expect(dialog()).not.toBeNull();
+    expect(useApp.getState().pushAsk.count).toBe(1);
   });
 
   it("разрешено в браузере, включено в профиле или браузер не умеет — не показывается", async () => {

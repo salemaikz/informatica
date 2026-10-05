@@ -8,6 +8,7 @@ import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ChatList } from "@/components/chat/ChatList";
 import { Button } from "@/components/ui/Button";
+import { PageTip } from "@/components/tour/PageTip";
 
 /** Пришли из поиска (?q=): кнопка создаёт свободный чат с готовым черновиком (сообщение не отправляется само). */
 function AskFromSearch() {
@@ -36,6 +37,7 @@ export default function TutorPage() {
   const { t } = useT();
   return (
     <div className="flex flex-col gap-4">
+      <PageTip id="page-tutor" />
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-extrabold text-ai">
           <Sparkles size={24} /> {t("chat2.list.title")}

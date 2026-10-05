@@ -7,6 +7,7 @@ import { groupById } from "@/components/app/nav";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
+import { PageTip } from "@/components/tour/PageTip";
 
 const DESC: Record<string, DictKey> = {
   notes: "nav2.hub.notes",
@@ -23,6 +24,7 @@ export default function MaterialsPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <PageTip id="page-materials" />
       <header>
         <h1 className="text-2xl font-extrabold">{t("nav2.materials")}</h1>
         <p className="mt-1 text-sm font-semibold text-muted">{t("nav2.hub.subtitle")}</p>
