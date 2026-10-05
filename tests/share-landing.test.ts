@@ -44,12 +44,13 @@ describe("страница результата: метки по коду", () =
   it("курс: процент как sharePercent, строки «N из M уроков» и подпись курса/класса", () => {
     const m = landingModel({ t: "course", done: 37, total: 96, lang: "ru", grade: null }, "ru");
     expect(m.big).toBe("39%");
-    expect(m.lines[0]).toBe("37 из 96 уроков");
-    expect(m.lines[1]).toBe("курса подготовки к ЕНТ");
+    // Подпись курса идёт первой: «39% курса подготовки к ЕНТ», потом «37 из 96 уроков».
+    expect(m.lines[0]).toBe("курса подготовки к ЕНТ");
+    expect(m.lines[1]).toBe("37 из 96 уроков");
     expect(m.acceptHref).toBeNull();
     const c = landingModel({ t: "course", done: 3, total: 12, lang: "ru", grade: "8" }, "ru");
-    expect(c.lines[1]).toBe("программы 8 класса");
-    expect(landingModel({ t: "course", done: 3, total: 12, lang: "ru", grade: "8" }, "kk").lines[1]).toBe("8-сынып бағдарламасы");
+    expect(c.lines[0]).toBe("программы 8 класса");
+    expect(landingModel({ t: "course", done: 3, total: 12, lang: "ru", grade: "8" }, "kk").lines[0]).toBe("8-сынып бағдарламасы");
   });
   it("серия: число, слово по числу, рекорд", () => {
     const m = landingModel({ t: "streak", days: 12, best: 30, lang: "ru" }, "ru");
@@ -94,7 +95,19 @@ describe("страница результата: ссылка вызова", () 
   });
 });
 
+// Глаголы прошедшего времени с родом (пол ученика неизвестен). `\b` с кириллицей не работает — границы слова через \p{L}.
+const GENDERED = /(^|[^\p{L}])(прошёл|прошел|прошла|сделал|сделала|набрал|набрала|смог|смогла|решил|решила|освоил|освоила|выполнил|выполнила|справился|справилась)(?=$|[^\p{L}])/iu;
+
 describe("тексты сообщения и превью", () => {
+  it("проверка на глаголы с родом реально срабатывает", () => {
+    for (const s of ["Ты прошёл тест", "Я набрала 14", "Прошла неделя? Нет: смогла!", "сделал"]) expect(s, s).toMatch(GENDERED);
+    for (const s of ["прошёлся", "Сделали", "Пройдено 42%", "Ты сможешь так же?"]) expect(s, s).not.toMatch(GENDERED);
+  });
+  it("в ru-строках share.*, challenge.* и report.* нет глаголов с родом", () => {
+    for (const key of Object.keys(dict).filter((k) => /^(share|challenge|report)\./.test(k))) {
+      expect(dict[key as keyof typeof dict].ru, key).not.toMatch(GENDERED);
+    }
+  });
   const all: ShareResult[] = [
     exam(),
     exam({ lang: "kk", kind: "full", max: 50, points: 33 }),
@@ -109,7 +122,7 @@ describe("тексты сообщения и превью", () => {
       for (const text of [messageText(r), messageText(r, "challenge"), metaTexts(r).title, metaTexts(r).description]) {
         expect(text).not.toMatch(/\{\w+\}/);
         expect(text.toLowerCase()).not.toMatch(/официальн|прогноз|болжам|ресми/);
-        expect(text).not.toMatch(/\b(прошёл|прошла|сделал|сделала|набрал|набрала)\b/i);
+        expect(text).not.toMatch(GENDERED);
       }
     }
   });

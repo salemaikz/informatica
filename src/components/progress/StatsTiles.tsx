@@ -61,7 +61,7 @@ export function StatsTiles({ className }: { className?: string }) {
           sub={t("stats.best", { n: best })}
           action={
             streakShare && (
-              <ShareSheet source={streakShare} what="streak" label={t("share.btn.short")} icon={<Share2 size={14} className="text-streak" aria-hidden />} variant="secondary" size="sm" block className="mt-2" />
+              <ShareSheet source={streakShare} what="streak" label={t("share.btn.short")} icon={<Share2 size={14} className="text-streak" aria-hidden />} variant="secondary" size="sm" block className="mt-2 h-11" />
             )
           }
         />

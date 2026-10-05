@@ -107,10 +107,10 @@ export function ogImageTree(r: ShareResult | null): ReactElement {
     const p = sharePercent(r.done, r.total);
     return (
       <Shell>
-        <div style={muted(40)}>{`${tr(lang, "share.card.lead")} · ${m.lines[1]}`}</div>
+        <div style={muted(40)}>{tr(lang, "share.card.lead")}</div>
         <div style={{ display: "flex", fontSize: 190, fontWeight: 900, color: C.text, lineHeight: 1 }}>{`${p}%`}</div>
         <Bar ratio={p / 100} showPct={false} />
-        <div style={{ display: "flex", fontSize: 32, fontWeight: 900, color: C.primaryStrong }}>{m.lines[0]}</div>
+        <div style={{ display: "flex", fontSize: 32, fontWeight: 900, color: C.primaryStrong }}>{`${m.lines[0]} · ${m.lines[1]}`}</div>
       </Shell>
     );
   }
