@@ -79,6 +79,7 @@ export function CompareTable() {
               <tr key={row.id} className="border-t border-border">
                 <th scope="row" className="py-3 pl-3.5 pr-2 text-left text-[13px] font-bold leading-snug">
                   {t(row.label)}
+                  {row.sub && <span className="block text-xs font-semibold leading-snug text-muted">{t(row.sub)}</span>}
                 </th>
                 {COLS.map((tier) => (
                   <td key={tier} className={cn("px-0.5 py-3 text-center align-middle", tier === "unlimited" && "bg-gold-soft")}>

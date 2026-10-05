@@ -145,6 +145,12 @@ test("магазин: строка сердечек «5 из 5», карточк
   await expect(status).toBeVisible();
   await expect(status).toContainText("5 из 5");
   await expect(page.getByText("Твой баланс")).toHaveCount(0);
+  // Полный запас — недоступен, пока запас полный; сердечко тратится на вход, а не за ошибку.
+  await expect(page.getByRole("button", { name: "Купить: Полный запас" })).toBeDisabled();
+  await expect(page.getByText("Запас полный").first()).toBeVisible();
+  await expect(page.getByText(/Сердечко тратится на вход в урок, тест или игру/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Как работают сердечки" })).toBeVisible();
+  await expect(page.getByText(/за ошибку в уроке/)).toHaveCount(0);
   // Чипы остались в шапке и ведут в магазин.
   await expect(page.getByLabel(/^Чипы: \d+\. Открыть магазин/).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);

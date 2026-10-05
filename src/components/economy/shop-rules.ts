@@ -1,0 +1,73 @@
+import {
+  ENTRY_COST,
+  PLAN_FEATURES,
+  PRACTICE_HEART_DAILY,
+  PRACTICE_HEART_MIN_ACCURACY,
+  PRACTICE_HEART_MIN_ANSWERS,
+  lessonCost,
+  itemPrice,
+  refillPrice,
+  type HeartsView,
+  type PlanTier,
+  type ShopItem,
+} from "@/lib/economy";
+import { heartsGain } from "./shop-helpers";
+
+// Чистые помощники магазина про сердечки (без React): блок «Как работают сердечки» и цена «Полного запаса».
+// Все числа — из lib/economy.ts: в текстах и разметке они не вписываются.
+
+export type EntryRuleId = "lesson" | "bigLesson" | "check" | "exam" | "checkpoint" | "extern" | "game";
+
+/** За что платятся сердечки и сколько (#40, #60): строки списка «Вход стоит сердечко». */
+export function entryRules(): { id: EntryRuleId; cost: number }[] {
+  return [
+    { id: "lesson", cost: ENTRY_COST.lesson },
+    { id: "bigLesson", cost: lessonCost({ hearts: 2 }) },
+    { id: "check", cost: ENTRY_COST.check },
+    { id: "exam", cost: ENTRY_COST.exam },
+    { id: "checkpoint", cost: ENTRY_COST.checkpoint },
+    { id: "extern", cost: ENTRY_COST.extern },
+    { id: "game", cost: ENTRY_COST.game },
+  ];
+}
+
+/** Что бесплатно: тренировка, повторение, работа над ошибками, практикум кода, теория, чат с Битом. */
+export const FREE_ENTRIES = ["practice", "review", "mistakes", "code", "theory", "chat"] as const;
+export type FreeEntryId = (typeof FREE_ENTRIES)[number];
+
+export interface RegenRule {
+  tier: PlanTier;
+  /** Запас; Infinity — сердечки не тратятся. */
+  max: number;
+  /** Через сколько возвращается одно сердечко, мс (0 — у безлимита не нужно). */
+  regenMs: number;
+  unlimited: boolean;
+}
+
+/** Восстановление сердечек по тарифам (из PLAN_FEATURES): бесплатный, «Лайт», «Безлимит». */
+export function regenRules(): RegenRule[] {
+  return (["free", "lite", "unlimited"] as const).map((tier) => {
+    const f = PLAN_FEATURES[tier];
+    return { tier, max: f.maxHearts, regenMs: f.regenMs, unlimited: !Number.isFinite(f.maxHearts) };
+  });
+}
+
+/** Возврат сердечка за тренировку: от скольких ответов, какая точность (в процентах), сколько раз в день. */
+export function practiceRule(): { answers: number; percent: number; daily: number } {
+  return { answers: PRACTICE_HEART_MIN_ANSWERS, percent: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100), daily: PRACTICE_HEART_DAILY };
+}
+
+/**
+ * Цена на кнопке товара (чипы). Сердечки и бустеры — цена товара; «Полный запас» — за недостающие сейчас (itemPrice).
+ * Когда недостающих нет (запас полон или безлимит), товар всё равно неактивен: показываем цену запаса, пустого до конца.
+ */
+export function shownPrice(item: ShopItem, v: HeartsView): number {
+  if (item.kind !== "refill") return item.price;
+  if (heartsGain(item, v) > 0) return itemPrice(item, v);
+  return refillPrice(v.unlimited ? PLAN_FEATURES.free.maxHearts : v.max);
+}
+
+/** Сколько сердечек добавит «Полный запас» сейчас — для подписи «(+N)». 0 — у других товаров и когда добавлять нечего. */
+export function refillGain(item: ShopItem, v: HeartsView): number {
+  return item.kind === "refill" ? heartsGain(item, v) : 0;
+}

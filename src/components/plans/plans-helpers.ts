@@ -55,6 +55,8 @@ export type CellValue = { kind: "check" } | { kind: "dash" } | { kind: "text"; t
 export interface CompareRow {
   id: "access" | "history" | "hearts" | "regen" | "ai" | "chips";
   label: DictKey;
+  /** Вторая строка под подписью: пояснение (у сердечек — за что они платятся). */
+  sub?: DictKey;
   cells: Record<PlanTier, CellValue>;
 }
 
@@ -73,6 +75,7 @@ export function compareRows(lang: Lang): CompareRow[] {
     {
       id: "hearts",
       label: "plans.cmp.hearts",
+      sub: "plans.cmp.heartsFor",
       cells: perTier((t) => ({ kind: "text", text: Number.isFinite(PLAN_FEATURES[t].maxHearts) ? String(PLAN_FEATURES[t].maxHearts) : "∞" })),
     },
     {
