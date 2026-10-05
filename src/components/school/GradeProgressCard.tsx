@@ -10,9 +10,11 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 
 // Карточка класса: прогресс по готовым урокам и кнопка «Продолжить» со следующим уроком программы.
 
-export function GradeProgressCard({ grade, progress, nextLessonId }: { grade: SchoolGrade; progress: GradeProgress; nextLessonId: string | null }) {
+export function GradeProgressCard({ grade, progress, nextLessonId, resume }: { grade: SchoolGrade; progress: GradeProgress; nextLessonId: string | null; resume?: { lessonId: string; step: number; total: number } | null }) {
   const { t, l } = useT();
-  const next = nextLessonId ? LESSON_META[nextLessonId] : undefined;
+  // Незаконченный урок важнее «следующего по программе» (этап 16Б).
+  const goId = resume?.lessonId ?? nextLessonId;
+  const next = goId ? LESSON_META[goId] : undefined;
   const none = progress.lessonsTotal === 0;
   const finished = !none && !next;
   return (
@@ -36,12 +38,13 @@ export function GradeProgressCard({ grade, progress, nextLessonId }: { grade: Sc
         </>
       )}
 
-      {next && nextLessonId && (
+      {next && goId && (
         <div className="flex flex-col gap-2 rounded-2xl bg-primary-soft p-3">
-          <p className="text-xs font-extrabold uppercase tracking-wide text-primary">{t("school.next.label")}</p>
+          <p className="text-xs font-extrabold uppercase tracking-wide text-primary">{resume ? t("resume.label") : t("school.next.label")}</p>
           <p className="font-extrabold leading-snug">{l(next.title)}</p>
-          <ButtonLink href={`/lesson/${nextLessonId}`} data-tour="continue" size="lg" block icon={<ArrowRight size={20} />} className="flex-row-reverse">
-            {t("school.next.cta")}
+          {resume && <p className="text-sm font-bold text-muted">{t("resume.step", { x: resume.step, y: resume.total })}</p>}
+          <ButtonLink href={`/lesson/${goId}`} data-tour="continue" size="lg" block icon={<ArrowRight size={20} />} className="flex-row-reverse">
+            {resume ? t("resume.cta", { title: l(next.title) }) : t("school.next.cta")}
           </ButtonLink>
         </div>
       )}

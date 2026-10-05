@@ -16,11 +16,11 @@ interface Action {
   tone: "main" | "streak" | "primary";
 }
 
-export function QuickActions({ continueId, dueCount, firstTime }: { continueId?: string; dueCount: number; firstTime?: boolean }) {
+export function QuickActions({ continueId, dueCount, firstTime, resuming }: { continueId?: string; dueCount: number; firstTime?: boolean; resuming?: boolean }) {
   const { t } = useT();
   const ent = useEntVisible();
   const actions: Action[] = [
-    ...(continueId ? [{ href: `/lesson/${continueId}`, icon: Play, label: firstTime ? t("learn2.hero.start") : t("learn2.quick.continue"), tone: "main" as const }] : []),
+    ...(continueId ? [{ href: `/lesson/${continueId}`, icon: Play, label: firstTime && !resuming ? t("learn2.hero.start") : t("learn2.quick.continue"), tone: "main" as const }] : []),
     ...(dueCount > 0 ? [{ href: "/drill?mode=review", icon: History, label: t("learn2.quick.review", { n: dueCount }), tone: "streak" as const }] : []),
     ...(ent ? [{ href: "/exam", icon: ClipboardCheck, label: t("learn2.quick.exam"), tone: "primary" as const }] : []),
     { href: "/theory", icon: BookOpen, label: t("learn2.quick.theory"), tone: "primary" },
