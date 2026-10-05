@@ -48,6 +48,7 @@ import { reportDict } from "./parts/report";
 import { course3Dict } from "./parts/course3";
 import { entfmtDict } from "./parts/entfmt";
 import { ideRunDict } from "./parts/ide-run";
+import { codeviewDict } from "./parts/codeview";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -530,6 +531,7 @@ export const dict = {
   ...course3Dict,
   ...entfmtDict,
   ...ideRunDict,
+  ...codeviewDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

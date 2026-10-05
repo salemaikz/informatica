@@ -203,7 +203,7 @@ export function LessonPlayer({
   // Экстерн начинают с карты курса — туда и выход; остальные тренировки — в «Практику».
   // Урок, экстерн и узлы курса 3.0 (практика, повторение, мини-тест) начинаются с карты — туда и возвращаемся.
   const exitHref =
-    kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : mode === "context" ? "/code/context" : "/practice";
+    kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : mode === "context" ? "/code/context" : mode === "codeview" ? "/code/review" : "/practice";
 
   const total = steps.length;
   const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));

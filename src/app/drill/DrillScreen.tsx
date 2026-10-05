@@ -29,6 +29,7 @@ import {
 import { decaySkills } from "@/lib/mastery";
 import { buildMiniTest, buildPractice, buildRecap, miniTestPoints, weakestSkill } from "@/lib/course-mix";
 import { buildContextDrill } from "@/lib/context-drill";
+import { buildReviewDrill, parseReviewArea } from "@/lib/code-review-drill";
 import { groupOfPracticeNode, recapNodeId } from "@/content/groups";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
@@ -57,6 +58,8 @@ interface Params {
   node?: string;
   /** Контекстное задание практикума — режим context. */
   item?: string;
+  /** Область «Чтения кода» (py, db, sql, sheet, web, mix) — режим codeview. */
+  area?: string;
 }
 
 /** Собирает набор заданий для тренировки один раз при открытии экрана. */
@@ -78,6 +81,10 @@ function buildSession(mode: DrillMode, p: Params): Built {
       return { steps: unitById(p.unit) ? buildRecap(p.unit!, s.lessons, s.skills, seed) : [] };
     case "context":
       return { steps: p.item ? buildContextDrill(p.item, seed) : [] };
+    case "codeview": {
+      const area = parseReviewArea(p.area);
+      return { steps: area ? buildReviewDrill(area, seed) : [] };
+    }
     case "mistakes": {
       const { steps, map } = buildMistakes(s.mistakes, s.skills, seed);
       return { steps, mistakeMap: map };
@@ -110,9 +117,9 @@ function buildSession(mode: DrillMode, p: Params): Built {
 
 type ExternOutcome = { passed: true; accuracy: number; credited: number } | { passed: false; accuracy: number; lessonId?: string };
 
-export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { mode: DrillMode } & Params) {
+export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area }: { mode: DrillMode } & Params) {
   const { t, l } = useT();
-  const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item }));
+  const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item, area }));
   const recordCourseNode = useApp((s) => s.recordCourseNode);
   const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
   // Итог мини-теста: баллы «как на ЕНТ» и слабое место (этап 14).
@@ -171,6 +178,10 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
                   ? t("course3.recap.title", { unit: l(externUnit.title) })
                   : mode === "context"
                     ? t("iderun.context.title")
+                    : mode === "codeview"
+                      ? parseReviewArea(area)
+                        ? t("codeview.session", { area: t(`codeview.area.${parseReviewArea(area)!}`) })
+                        : t("codeview.title")
             : mode === "topic"
               ? t("modes.topic.title", { topic: topicShort })
               : t("prac.smart");
@@ -194,7 +205,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
                     : t("modes.empty")}
         </p>
         <ButtonLink
-          href={mode === "extern" || mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : "/practice"}
+          href={mode === "extern" || mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : mode === "codeview" ? "/code/review" : "/practice"}
           variant="secondary"
         >
           {t("common.back")}

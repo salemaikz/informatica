@@ -20,10 +20,11 @@ import { collectWorked } from "@/games/build/logic";
  * history — работа над ошибками одного теста из истории (/drill?mode=history&entry=<id>).
  * Этап 14: practice / minitest — узел «Практика» группы (&node=practice:<урок>), recap — «Повторение» раздела (&unit=u3),
  * context — контекстное задание практикума (&item=<id задания ЕНТ>).
+ * Этап 15: codeview — «Чтение кода» как на ЕНТ (&area=py|db|sql|sheet|web|mix, lib/code-review-drill.ts).
  */
-export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic" | "history" | "practice" | "recap" | "minitest" | "context";
+export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic" | "history" | "practice" | "recap" | "minitest" | "context" | "codeview";
 
-const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context"];
+const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context", "codeview"];
 
 /** Режим из адреса; неизвестный — «умная тренировка». */
 export function parseDrillMode(v: unknown): DrillMode {

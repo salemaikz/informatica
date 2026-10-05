@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, Timer, Trophy } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, ScanSearch, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
@@ -96,6 +96,21 @@ export default function PracticePage() {
           <span className="block text-sm font-semibold text-muted">{t("prac.code.desc")}</span>
         </span>
         <ChevronRight size={20} className="shrink-0 text-primary" />
+      </Link>
+
+      {/* «Чтение кода» как на ЕНТ (этап 15, #87): найти ошибку, исправить, дописать. */}
+      <Link
+        href="/code/review"
+        className="flex items-center gap-4 rounded-3xl border-2 border-border bg-surface p-4 hover:bg-surface-2 active:translate-y-0.5"
+      >
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <ScanSearch size={26} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg font-extrabold">{t("codeview.title")}</span>
+          <span className="block text-sm font-semibold text-muted">{t("codeview.entry.about")}</span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-muted" />
       </Link>
 
       {/* Повторение (разминка): тема «остывает» — повторяем по расписанию. */}
