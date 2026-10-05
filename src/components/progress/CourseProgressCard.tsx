@@ -1,9 +1,13 @@
 "use client";
 
-import { BookOpenCheck, ChevronRight, GraduationCap } from "lucide-react";
+import { BookOpenCheck, ChevronRight, GraduationCap, Share2 } from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
+import type { SchoolGrade } from "@/content/school-program";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
+import { encodeShare, type ShareResult } from "@/lib/share-code";
+import { ShareSheet } from "@/components/share/ShareSheet";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { percent } from "./format";
@@ -21,11 +25,17 @@ function titleOf(v: CourseView, t: ReturnType<typeof useT>["t"]): string {
  * Школьный трек — процент своего класса. Цвет: primary, на 100% — success.
  */
 export function CourseProgressCard({ className }: { className?: string }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const v = useCourseView();
   const full = v.ratio >= 1 && v.total > 0;
   const color = full ? "var(--success)" : "var(--primary)";
   const Icon = v.kind === "class" ? GraduationCap : BookOpenCheck;
+  // «Поделиться» — когда пройден хоть один урок; в коде только числа (#72), класс — у школьного трека.
+  const share = useMemo<ShareResult | null>(() => {
+    if (!v.anyDone || v.total <= 0) return null;
+    const r: ShareResult = { t: "course", done: Math.min(v.done, v.total), total: v.total, lang, grade: v.kind === "class" ? (v.grade as SchoolGrade) : null };
+    return encodeShare(r) ? r : null;
+  }, [v, lang]);
   return (
     <Card className={cn("flex items-center gap-4", className)}>
       <Ring value={v.ratio} size={76} stroke={9} color={color}>
@@ -42,6 +52,17 @@ export function CourseProgressCard({ className }: { className?: string }) {
         </p>
         {!v.anyDone && <p className="mt-1 text-sm font-semibold text-muted">{t("progress.course.empty")}</p>}
         {v.kind === "course" && v.skipBasics && <p className="mt-1 text-xs font-semibold text-muted">{t("progress.skipBasics")}</p>}
+        {share && (
+          <ShareSheet
+            source={share}
+            what="course"
+            label={t("share.btn.short")}
+            icon={<Share2 size={16} className="text-primary" aria-hidden />}
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+          />
+        )}
       </div>
     </Card>
   );
