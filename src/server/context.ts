@@ -165,7 +165,7 @@ export function renderContext(c: StudentContext & Partial<WithTrack>): string {
   if (c.strong.length) lines.push(`Сильные темы: ${c.strong.join("; ")}.`);
   if (c.mistakes.length) {
     lines.push("Недавние ошибки:");
-    for (const m of c.mistakes) lines.push(`- «${m.q}» — ответил «${m.given}», верно «${m.expected}»`);
+    for (const m of c.mistakes) lines.push(`- «${m.q}» — ответ ученика «${m.given}», верно «${m.expected}»`);
   }
   if (c.memory) lines.push(`Заметки наставника об ученике (память):\n${c.memory}`);
   if (c.notes) lines.push(`Заметки ученика из конспекта:\n${c.notes}`);
