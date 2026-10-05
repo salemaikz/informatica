@@ -13,6 +13,7 @@ const NET: L = { ru: "Сети и безопасность", kk: "Желілер
 const OFFICE: L = { ru: "Таблицы и веб", kk: "Кестелер және веб" };
 const IT: L = { ru: "Современные IT", kk: "Заманауи IT" };
 const ENT: L = { ru: "Как решать ЕНТ", kk: "ҰБТ-ны қалай шешу керек" };
+const SCHOOL: L = { ru: "Школьная программа", kk: "Мектеп бағдарламасы" };
 const BASICS: L = { ru: "Компьютер с нуля", kk: "Компьютер нөлден" };
 
 export const SKILLS: Skill[] = [
@@ -148,6 +149,19 @@ export const SKILLS: Skill[] = [
 
   // ---------- Раздел 9: как решать ЕНТ ----------
   { id: "ent.strategy", topic: ENT, title: { ru: "Стратегия ЕНТ", kk: "ҰБТ стратегиясы" } },
+
+  // ---------- Школьные уроки (этап 15): только в школьной программе, без темы ЕНТ ----------
+  { id: "school.ergonomics", topic: SCHOOL, title: { ru: "Рабочее место и здоровье", kk: "Жұмыс орны және денсаулық" } },
+  { id: "school.digital-health", topic: SCHOOL, title: { ru: "Компьютер и здоровье: риски", kk: "Компьютер және денсаулық: қатерлер" } },
+  { id: "school.robots", topic: SCHOOL, title: { ru: "Роботы и их применение", kk: "Роботтар және оларды қолдану" } },
+  { id: "school.robot-sensors", topic: SCHOOL, title: { ru: "Датчики и движение робота", kk: "Робот датчиктері және қозғалысы" } },
+  { id: "school.info-props", topic: SCHOOL, title: { ru: "Свойства информации", kk: "Ақпараттың қасиеттері" } },
+  { id: "school.pc-config", topic: SCHOOL, title: { ru: "Конфигурация и стоимость компьютера", kk: "Компьютер конфигурациясы және құны" } },
+  { id: "school.vm", topic: SCHOOL, title: { ru: "Виртуальные машины", kk: "Виртуалды машиналар" } },
+  { id: "school.digital-kz", topic: SCHOOL, title: { ru: "Цифровой Казахстан и электронное правительство", kk: "Цифрлық Қазақстан және электрондық үкімет" } },
+  { id: "school.blockchain", topic: SCHOOL, title: { ru: "Технология блокчейн", kk: "Блокчейн технологиясы" } },
+  { id: "school.vr", topic: SCHOOL, title: { ru: "Виртуальная и дополненная реальность", kk: "Виртуалды және толықтырылған шындық" } },
+  { id: "school.design", topic: SCHOOL, title: { ru: "Основы дизайна", kk: "Дизайн негіздері" } },
 ];
 
 export function skillById(id: string): Skill | undefined {
