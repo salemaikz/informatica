@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DEVICE_ART, DEVICE_IDS } from "@/components/scenes/hardware/devices";
+import { HARDWARE_ART, HARDWARE_NAMES } from "@/components/scenes/hardware";
 import type { HardwareId } from "@/lib/types";
 
 // Все устройства ввода/вывода и «компьютеры вокруг нас» из HardwareId.
@@ -9,13 +10,20 @@ const EXPECTED: HardwareId[] = [
   "keyboard", "mouse", "touchpad", "touchscreen", "mic", "webcam", "scanner", "gamepad",
   "monitor", "printer", "speakers", "headphones", "projector",
   "desktop", "laptop", "phone", "tablet", "smartwatch", "atm", "pos", "car", "server", "router",
+  "switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber",
+  "printer-dot", "printer-inkjet", "printer-laser", "plotter", "pen-tablet",
+  "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator",
 ];
 
 describe("DEVICE_ART", () => {
-  it("рисует все 23 устройства", () => {
-    expect(EXPECTED).toHaveLength(23);
+  it("рисует все 40 устройств", () => {
+    expect(EXPECTED).toHaveLength(40);
     expect([...DEVICE_IDS].sort()).toEqual([...EXPECTED].sort());
     expect(Object.keys(DEVICE_ART).sort()).toEqual([...EXPECTED].sort());
+  });
+
+  it("у каждого HardwareId из HARDWARE_NAMES есть рисунок", () => {
+    for (const id of Object.keys(HARDWARE_NAMES) as HardwareId[]) expect(HARDWARE_ART[id], id).toBeTypeOf("function");
   });
 
   it.each(EXPECTED)("%s — <svg> с viewBox 0 0 120 90, только цвета темы", (id) => {
