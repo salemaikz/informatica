@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ENT_TOPICS } from "@/content/ent-topics";
-import { daysText, daysUntil, examTrend, formatDayMonth, formatExamDate, goalStatus, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
+import { EXAM_DATE_MAX_DAYS, TARGET_CHOICES, daysText, daysUntil, examTrend, formatDayMonth, formatExamDate, goalStatus, isExamDateValid, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
 import type { EntTopicId } from "@/lib/types";
 
 describe("daysUntil", () => {
@@ -79,6 +79,37 @@ describe("goalStatus", () => {
     expect(goalStatus({ score: 33, basis: "mastery" }, 35).status).toBe("on");
     expect(goalStatus({ score: 37, basis: "both" }, 35).status).toBe("on");
     expect(goalStatus({ score: 40, basis: "exams" }, 35)).toEqual({ status: "above", gap: -5 });
+  });
+});
+
+describe("goalStatus: цель не выбрана («пока не знаю»)", () => {
+  it("сравнивать не с чем — none и никакого разрыва, даже если прогноз есть", () => {
+    expect(goalStatus({ score: 20, basis: "mastery" }, 35, false)).toEqual({ status: "none", gap: 0 });
+    expect(goalStatus({ score: 20, basis: "diagnostic" }, 35, false)).toEqual({ status: "none", gap: 0 });
+    expect(goalStatus({ score: 0, basis: "none" }, 35, false)).toEqual({ status: "none", gap: 0 });
+  });
+  it("цель выбрана (по умолчанию) — как раньше, в том числе по диагностике", () => {
+    expect(goalStatus({ score: 20, basis: "diagnostic" }, 35, true)).toEqual({ status: "below", gap: 15 });
+    expect(goalStatus({ score: 20, basis: "diagnostic" }, 35)).toEqual({ status: "below", gap: 15 });
+  });
+});
+
+describe("isExamDateValid и целевые баллы онбординга", () => {
+  it("сегодня и позже — годится; вчера, мусор, пусто — нет", () => {
+    expect(isExamDateValid("2026-10-02", "2026-10-02")).toBe(true);
+    expect(isExamDateValid("2027-05-20", "2026-10-02")).toBe(true);
+    expect(isExamDateValid("2026-10-01", "2026-10-02")).toBe(false);
+    expect(isExamDateValid("", "2026-10-02")).toBe(false);
+    expect(isExamDateValid(null, "2026-10-02")).toBe(false);
+    expect(isExamDateValid("20.05.2027", "2026-10-02")).toBe(false);
+  });
+  it("слишком далёкая дата (опечатка в году) не годится", () => {
+    expect(isExamDateValid("2056-05-20", "2026-10-02")).toBe(false);
+    expect(EXAM_DATE_MAX_DAYS).toBeGreaterThan(365);
+  });
+  it("целевые баллы — 25–45 с шагом 5, в пределах 5..50 из профиля", () => {
+    expect([...TARGET_CHOICES]).toEqual([25, 30, 35, 40, 45]);
+    expect(TARGET_CHOICES.every((n) => n >= 5 && n <= 50)).toBe(true);
   });
 });
 

@@ -2,10 +2,12 @@ import { SKILLS } from "@/content/skills";
 import { ENT_POINTS, ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import type { ExamKind } from "./exam";
 import type { SkillStat } from "./mastery";
+import type { DiagnosticSummary } from "./store";
 import type { EntTopicId } from "./types";
 
 // Прогноз балла ЕНТ (из 50): по освоению навыков и по результатам пробников.
 // Честность: нет данных — basis "none", балл 0 (UI просит пройти мини-ЕНТ).
+// Входная диагностика (#70) даёт предварительный прогноз, пока нет ни пробников, ни достаточно ответов по навыкам.
 
 export interface ForecastExam {
   at: number;
@@ -21,9 +23,12 @@ export interface ForecastInput {
   skills: Record<string, SkillStat>;
   exams: ForecastExam[];
   now: number;
+  /** Итог входной диагностики (профиль): используется, только если нет пробников и мало ответов по навыкам. */
+  diagnostic?: DiagnosticSummary | null;
 }
 
-export type ForecastBasis = "none" | "mastery" | "exams" | "both";
+/** "diagnostic" — предварительно, по входной диагностике (10 заданий). */
+export type ForecastBasis = "none" | "mastery" | "exams" | "both" | "diagnostic";
 
 export interface Forecast {
   /** Из 50, целое. */
@@ -46,6 +51,13 @@ const HALF_LIFE_DAYS = 45;
 const DAY_MS = 86_400_000;
 /** Примерно 0.8 задания на балл (40 заданий — 50 баллов). */
 const QUESTIONS_PER_POINT = 0.8;
+/** Погрешность прогноза по диагностике, баллов: 10 заданий — это лишь первый взгляд (показываем диапазоном). */
+export const DIAGNOSTIC_MARGIN = 8;
+/**
+ * Пока по навыкам меньше стольких ответов (там же посеянные диагностикой — по одному на навык) и нет пробников,
+ * прогноз остаётся диагностическим. 30 — граница, до которой интервал по навыкам тоже ±8 (`forecastMargin`).
+ */
+export const DIAGNOSTIC_UNTIL_ANSWERS = 30;
 
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
 
@@ -77,6 +89,29 @@ export function forecastMargin(answers: number): number {
   return answers < 30 ? 8 : answers < 100 ? 5 : 3;
 }
 
+/**
+ * Прогноз по входной диагностике: доля верных по каждой теме × вес темы (`topicWeight`) × 50.
+ * Темы, которых не было в диагностике, оцениваются по среднему оценённых тем. null — диагностики нет или она пустая.
+ */
+export function forecastFromDiagnostic(d: DiagnosticSummary | null | undefined): { score: number; low: number; high: number; byTopic: Record<EntTopicId, number> } | null {
+  if (!d || !fin(d.max) || d.max <= 0 || !fin(d.points)) return null;
+  const rated = new Map<EntTopicId, number>();
+  for (const t of TOPIC_IDS) {
+    const x = d.byTopic?.[t];
+    if (x && fin(x.max) && x.max > 0 && fin(x.points)) rated.set(t, clamp01(x.points / x.max));
+  }
+  const mean = rated.size ? [...rated.values()].reduce((a, b) => a + b, 0) / rated.size : clamp01(d.points / d.max);
+  const byTopic = {} as Record<EntTopicId, number>;
+  for (const t of TOPIC_IDS) byTopic[t] = Math.round((rated.get(t) ?? mean) * 1000) / 1000;
+  const raw = TOPIC_IDS.reduce((s, t) => s + topicWeight(t) * byTopic[t], 0) * MAX_SCORE;
+  return {
+    score: Math.max(0, Math.min(MAX_SCORE, Math.round(raw))),
+    low: Math.max(0, Math.round(raw - DIAGNOSTIC_MARGIN)),
+    high: Math.min(MAX_SCORE, Math.round(raw + DIAGNOSTIC_MARGIN)),
+    byTopic,
+  };
+}
+
 export function forecastScore(input: ForecastInput): Forecast {
   const mastery = topicMastery(input.skills);
   const masteryAnswers = skillAnswers(input.skills);
@@ -99,6 +134,10 @@ export function forecastScore(input: ForecastInput): Forecast {
   const wSum = used.reduce((s, x) => s + x.w, 0);
   const examScore = hasExams ? used.reduce((s, x) => s + x.w * (x.e.points / x.e.maxPoints), 0) / wSum * MAX_SCORE : 0;
   const examAnswers = used.reduce((s, x) => s + Math.round(x.e.maxPoints * QUESTIONS_PER_POINT), 0);
+
+  // Диагностика — только пока нет пробников и ответов по навыкам набралось мало (посеянные диагностикой — тоже «мало»).
+  const diag = !hasExams && masteryAnswers < DIAGNOSTIC_UNTIL_ANSWERS ? forecastFromDiagnostic(input.diagnostic) : null;
+  if (diag) return { score: diag.score, low: diag.low, high: diag.high, basis: "diagnostic", answers: Math.round(input.diagnostic!.max), byTopic: diag.byTopic };
 
   const basis: ForecastBasis = hasMastery && hasExams ? "both" : hasExams ? "exams" : hasMastery ? "mastery" : "none";
   const answers = (hasMastery ? masteryAnswers : 0) + examAnswers;

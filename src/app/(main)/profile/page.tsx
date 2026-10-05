@@ -189,7 +189,7 @@ export default function ProfilePage() {
                 max={50}
                 step={5}
                 value={profile.targetScore}
-                onChange={(e) => update({ targetScore: Number(e.target.value) })}
+                onChange={(e) => update({ targetScore: Number(e.target.value), targetScoreSet: true })}
                 className="mt-2 h-8 w-full cursor-pointer accent-primary"
               />
               <div className="flex justify-between text-xs font-bold text-muted" aria-hidden="true">

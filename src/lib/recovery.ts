@@ -21,6 +21,8 @@ export function isFocusPath(pathname: string): boolean {
     pathname.startsWith("/game/") ||
     // Знакомство и окно тарифов: баннер сдвигал кнопку «Далее».
     pathname === "/onboarding" ||
-    pathname === "/plans"
+    pathname === "/plans" ||
+    // Входная диагностика (#70): та же нижняя панель кнопок.
+    pathname === "/diagnostic"
   );
 }

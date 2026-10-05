@@ -14,25 +14,29 @@ const STATUS_TONE = { none: "muted", below: "warning", on: "success", above: "su
 
 /**
  * Компактная карточка цели для главной: «До ЕНТ 214 дней · прогноз ~12/50 · цель 35» и кольцо недели.
- * Без даты ЕНТ — «Поставь цель» и переход в профиль.
+ * Без даты ЕНТ — «Поставь цель» и переход в профиль. Предварительный прогноз по диагностике подписан «Предварительно»;
+ * цель «пока не знаю» — «цель не выбрана», без статуса против цели.
  */
 export function GoalSummaryCard({ className }: { className?: string }) {
   const { t, lang } = useT();
-  const { daysLeft, forecast, goal, week, targetScore } = useGoalData();
+  const { daysLeft, forecast, goal, week, targetScore, targetScoreSet } = useGoalData();
   const hasDate = daysLeft !== null;
+  const hasForecast = forecast.basis !== "none";
 
-  const title = !hasDate
-    ? t("goals.card.set")
-    : daysLeft > 0
+  const title = hasDate
+    ? daysLeft > 0
       ? t("goals.card.until", { days: daysText(daysLeft, lang) })
       : daysLeft === 0
         ? t("goals.card.today")
-        : t("goals.card.past");
-  const sub = !hasDate
-    ? t("goals.card.setHint")
-    : forecast.basis === "none"
-      ? t("goals.card.noForecast", { target: targetScore })
-      : t("goals.card.forecast", { score: forecast.score, target: targetScore });
+        : t("goals.card.past")
+    : targetScoreSet
+      ? t("goals.card.addDate")
+      : t("goals.card.set");
+  const main = hasForecast
+    ? t(forecast.basis === "diagnostic" ? "goals.card.main.prelim" : "goals.card.main.forecast", { score: forecast.score })
+    : t("goals.card.main.none");
+  const tail = targetScoreSet ? t("goals.card.tail.target", { target: targetScore }) : t("goals.card.tail.none");
+  const sub = !hasDate && !targetScoreSet && !hasForecast ? t("goals.card.setHint") : `${main} · ${tail}`;
 
   return (
     <Link
@@ -48,7 +52,7 @@ export function GoalSummaryCard({ className }: { className?: string }) {
       <span className="min-w-0 flex-1">
         <span className="block text-lg font-extrabold leading-tight">{title}</span>
         <span className="mt-0.5 block text-sm font-bold text-muted">{sub}</span>
-        {hasDate && forecast.basis !== "none" && (
+        {hasDate && hasForecast && targetScoreSet && (
           <Pill tone={STATUS_TONE[goal.status]} className="mt-1.5">
             {t(`goals.status.${goal.status}` as DictKey)}
           </Pill>

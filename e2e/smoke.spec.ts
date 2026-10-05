@@ -1,27 +1,47 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Дымовой тест без обращений к ИИ: онбординг → главная → начало урока → тренировка.
+// Дымовой тест без обращений к ИИ: онбординг → диагностика → тарифы → главная → начало урока → тренировка.
 
-/** Шаги онбординга до главной; на шаге «С чего начнём?» — «с нуля» или «основы знаю». */
-async function finishOnboarding(page: Page, skipBasics: boolean) {
-  const next = page.getByRole("button", { name: /Продолжить|Поехали/ });
-  while (!(await page.getByText("С чего начнём?").isVisible())) await next.click();
-  await page.getByText(skipBasics ? "Основы знаю — сразу к темам ЕНТ" : "С нуля: как устроен компьютер").click();
-  while (!page.url().includes("/plans")) {
-    await next.click();
-    await page.waitForTimeout(150);
-  }
-  // После онбординга — окно тарифов; закрываем «Продолжить бесплатно».
+/**
+ * Онбординг ЕНТ до главной (язык и имя уже выбраны): «Продолжить» → ЕНТ → «Пока не знаю» (дата) → «Пока не знаю» (цель)
+ * → «Поехали» → диагностика → «Пропустить» → тарифы → «Продолжить бесплатно» → /learn.
+ */
+async function finishOnboarding(page: Page) {
+  await page.getByRole("button", { name: "Продолжить" }).click();
+  await page.getByRole("button", { name: /Готовлюсь к ЕНТ/ }).click();
+  await expect(page.getByText("Когда у тебя ЕНТ?")).toBeVisible();
+  await page.getByRole("button", { name: "Пока не знаю" }).click();
+  await expect(page.getByText("Сколько баллов хочешь набрать?")).toBeVisible();
+  await page.getByRole("button", { name: "Пока не знаю" }).click();
+  await page.getByRole("button", { name: "Поехали" }).click();
+  // После онбординга ЕНТ — входная диагностика; пропускаем.
+  await page.waitForURL("**/diagnostic?from=onboarding");
+  await page.getByRole("button", { name: "Пропустить", exact: true }).click();
+  // Дальше — окно тарифов; закрываем «Продолжить бесплатно».
   await page.waitForURL("**/plans?from=onboarding");
   await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
   await page.waitForURL("**/learn");
+}
+
+/**
+ * «Основы знаю»: настоящую диагностику в e2e не пройти (верных ответов не видно), поэтому ставим то, что она ставит
+ * при знакомых основах, — profile.skipBasics (раздел «Старт» не рекомендуется первым).
+ */
+async function knowBasics(page: Page) {
+  await page.evaluate(() => {
+    const raw = localStorage.getItem("informatica-v1");
+    const saved = raw ? JSON.parse(raw) : { state: {}, version: 1 };
+    saved.state.profile = { ...saved.state.profile, skipBasics: true };
+    localStorage.setItem("informatica-v1", JSON.stringify(saved));
+  });
+  await page.reload();
 }
 
 test("новичок начинает с раздела «Старт: компьютер с нуля»", async ({ page }) => {
   await page.goto("/onboarding");
   await page.getByText("Русский").click();
   await page.getByPlaceholder("Твоё имя").fill("Новичок");
-  await finishOnboarding(page, false);
+  await finishOnboarding(page);
   await page.getByRole("link", { name: "Начать" }).first().click();
   await page.waitForURL("**/lesson/base-1-computer");
   await expect(page.locator("footer button").last()).toBeVisible();
@@ -35,7 +55,8 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.waitForURL("**/onboarding");
   await page.getByText("Русский").click();
   await page.getByPlaceholder("Твоё имя").fill("Тест");
-  await finishOnboarding(page, true);
+  await finishOnboarding(page);
+  await knowBasics(page);
   await expect(page.getByText("Привет, Тест!")).toBeVisible();
 
   await page.getByRole("link", { name: "Начать" }).first().click();

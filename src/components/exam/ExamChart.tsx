@@ -12,10 +12,11 @@ const BOTTOM = 14;
 const FILL: Record<Tone, string> = { danger: "var(--danger)", warning: "var(--warning)", success: "var(--success)" };
 
 /** Столбики по последним попыткам мини/полного (доля баллов), цвет — по семантике; пунктир — цель ученика. */
-export function ExamChart({ points, target }: { points: HistoryPoint[]; target: number }) {
+/** target — цель в баллах; нет (цель «пока не знаю», #70) — линии цели нет. */
+export function ExamChart({ points, target }: { points: HistoryPoint[]; target?: number }) {
   const { t } = useT();
   const bars = chartBars(points, W, H);
-  const goalY = TOP + H - (Math.max(0, Math.min(MAX_SCORE, target)) / MAX_SCORE) * H;
+  const goalY = target === undefined ? 0 : TOP + H - (Math.max(0, Math.min(MAX_SCORE, target)) / MAX_SCORE) * H;
   return (
     <svg
       viewBox={`0 0 ${W} ${TOP + H + BOTTOM}`}
@@ -43,10 +44,14 @@ export function ExamChart({ points, target }: { points: HistoryPoint[]; target: 
         );
       })}
       {/* Цель — по баллам из 50 */}
-      <line x1={0} x2={W} y1={goalY} y2={goalY} stroke="var(--primary)" strokeWidth={2} strokeDasharray="6 4" />
-      <text x={W} y={goalY - 4} textAnchor="end" fontSize={10} fontWeight={800} fill="var(--primary)">
-        {t("exam.chart.goal", { n: target })}
-      </text>
+      {target !== undefined && (
+        <>
+          <line x1={0} x2={W} y1={goalY} y2={goalY} stroke="var(--primary)" strokeWidth={2} strokeDasharray="6 4" />
+          <text x={W} y={goalY - 4} textAnchor="end" fontSize={10} fontWeight={800} fill="var(--primary)">
+            {t("exam.chart.goal", { n: target })}
+          </text>
+        </>
+      )}
     </svg>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { CalendarDays, ClipboardCheck, Dumbbell, ListChecks, Play, Target } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, Dumbbell, ListChecks, Play, Target } from "lucide-react";
 import { useMemo } from "react";
 import { UNITS, getLesson } from "@/content/course";
 import { entTopicById } from "@/content/ent-topics";
 import { cn } from "@/lib/cn";
+import { DIAGNOSTIC_MARGIN } from "@/lib/forecast";
 import { daysText, examTrend, formatDayMonth, formatExamDate, lessonsForTopic, weeklyPlan } from "@/lib/goals";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
@@ -32,15 +33,15 @@ function SectionHead({ icon, title, action }: { icon: React.ReactNode; title: st
   );
 }
 
-/** Шкала 0–50: вероятный интервал, прогноз и цель. */
-function ForecastScale({ low, high, score, target }: { low: number; high: number; score: number; target: number }) {
+/** Шкала 0–50: вероятный интервал, прогноз и цель (цель «пока не выбрана» — без отметки). */
+function ForecastScale({ low, high, score, target }: { low: number; high: number; score: number; target: number | null }) {
   const pct = (v: number) => `${(Math.max(0, Math.min(50, v)) / 50) * 100}%`;
   return (
     <div className="relative mt-6 h-4" aria-hidden="true">
       <div className="absolute inset-0 rounded-full bg-surface-2" />
       <div className="absolute inset-y-0 rounded-full bg-primary/25" style={{ left: pct(low), width: `calc(${pct(high)} - ${pct(low)})` }} />
       <div className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-primary" style={{ left: pct(score) }} />
-      <div className="absolute -top-1.5 bottom-[-6px] w-0.5 -translate-x-1/2 rounded-full bg-text" style={{ left: pct(target) }} />
+      {target !== null && <div className="absolute -top-1.5 bottom-[-6px] w-0.5 -translate-x-1/2 rounded-full bg-text" style={{ left: pct(target) }} />}
     </div>
   );
 }
@@ -101,7 +102,7 @@ export function WeekCard({ showEdit = false, className }: { showEdit?: boolean; 
  */
 export function GoalsPanel({ className }: { className?: string }) {
   const { t, l, lang } = useT();
-  const { daysLeft, examDate, forecast, goal, targetScore } = useGoalData();
+  const { daysLeft, examDate, forecast, goal, targetScore, targetScoreSet, diagnostic } = useGoalData();
   const lessons = useApp((s) => s.lessons);
   const exams = useApp((s) => s.exams);
 
@@ -115,6 +116,8 @@ export function GoalsPanel({ className }: { className?: string }) {
 
   const dateText = examDate ? formatExamDate(examDate, lang) : "";
   const noData = forecast.basis === "none";
+  /** Предварительный прогноз: по входной диагностике, а не по ответам и пробникам. */
+  const prelim = forecast.basis === "diagnostic";
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -147,27 +150,46 @@ export function GoalsPanel({ className }: { className?: string }) {
         </div>
 
         <div className="mt-4 border-t-2 border-border pt-4">
-          <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("goals.forecast.title")}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("goals.forecast.title")}</p>
+            {prelim && <Pill tone="muted">{t("goals.forecast.prelim")}</Pill>}
+          </div>
           {forecast.basis === "none" ? (
             <p className="mt-1 font-semibold text-muted">{t("goals.forecast.none")}</p>
           ) : (
             <>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="text-3xl font-extrabold leading-tight">{t("goals.forecast.value", { score: forecast.score })}</p>
-                <Pill tone={STATUS_TONE[goal.status]}>{t(`goals.status.${goal.status}` as DictKey)}</Pill>
+                {targetScoreSet && <Pill tone={STATUS_TONE[goal.status]}>{t(`goals.status.${goal.status}` as DictKey)}</Pill>}
               </div>
               <p className="text-sm font-bold text-muted">{t("goals.forecast.range", { low: forecast.low, high: forecast.high })}</p>
-              <ForecastScale low={forecast.low} high={forecast.high} score={forecast.score} target={targetScore} />
-              <div className="mt-2 flex items-center justify-between gap-2 text-sm font-bold">
-                <span className="text-muted">{t("goals.forecast.target", { target: targetScore })}</span>
-                {goal.status !== "on" && (
-                  <span className={goal.gap > 0 ? "text-warning-strong" : "text-success-strong"}>
-                    {goal.gap > 0 ? t("goals.forecast.gap", { n: goal.gap }) : t("goals.forecast.reserve", { n: -goal.gap })}
-                  </span>
-                )}
-              </div>
-              <p className="mt-2 text-xs font-semibold text-muted">{t("goals.forecast.honest")}</p>
+              <ForecastScale low={forecast.low} high={forecast.high} score={forecast.score} target={targetScoreSet ? targetScore : null} />
+              {targetScoreSet ? (
+                <div className="mt-2 flex items-center justify-between gap-2 text-sm font-bold">
+                  <span className="text-muted">{t("goals.forecast.target", { target: targetScore })}</span>
+                  {goal.status !== "on" && (
+                    <span className={goal.gap > 0 ? "text-warning-strong" : "text-success-strong"}>
+                      {goal.gap > 0 ? t("goals.forecast.gap", { n: goal.gap }) : t("goals.forecast.reserve", { n: -goal.gap })}
+                    </span>
+                  )}
+                </div>
+              ) : null}
+              <p className="mt-2 text-xs font-semibold text-muted">{prelim ? t("goals.forecast.honestDiag", { n: DIAGNOSTIC_MARGIN }) : t("goals.forecast.honest")}</p>
             </>
+          )}
+          {!targetScoreSet && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="font-extrabold text-muted">{t("goals.target.unset")}</p>
+              <ButtonLink href="/profile#goals" variant="secondary" size="sm" className="h-10">
+                {t("goals.target.choose")}
+              </ButtonLink>
+            </div>
+          )}
+          {/* Диагностику можно пройти (заново), пока прогноз пустой или предварительный: по ответам и пробникам она его не меняет. */}
+          {(noData || prelim) && (
+            <ButtonLink href="/diagnostic" variant="ghost" size="sm" className="mt-3 h-10" icon={<ClipboardList size={16} aria-hidden />}>
+              {t(diagnostic ? "goals.diag.again" : "goals.diag.first")}
+            </ButtonLink>
           )}
         </div>
       </Card>
@@ -200,7 +222,7 @@ export function GoalsPanel({ className }: { className?: string }) {
                     <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.notStarted")}</p>
                   ) : (
                     <>
-                      <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
+                      <p className="mt-1 text-xs font-bold text-muted">{t(prelim ? "goals.plan.diagMastery" : "goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
                       <ProgressBar value={p.mastery} color={p.mastery < 0.6 ? "var(--danger)" : "var(--warning)"} height={8} className="mt-1" label={l(topic.short)} />
                     </>
                   )}

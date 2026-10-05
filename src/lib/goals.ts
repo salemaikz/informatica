@@ -13,6 +13,18 @@ export function daysUntil(examDate: string | null | undefined, today: string): n
   return Number.isFinite(n) ? n : null;
 }
 
+/** Насколько вперёд разумно ставить дату ЕНТ, дней (чуть больше двух лет): дальше — скорее всего опечатка. */
+export const EXAM_DATE_MAX_DAYS = 800;
+
+/** Дата ЕНТ годится: «ГГГГ-ММ-ДД», не раньше сегодняшнего дня и не дальше EXAM_DATE_MAX_DAYS. */
+export function isExamDateValid(day: string | null | undefined, today: string): boolean {
+  const n = daysUntil(day, today);
+  return n !== null && n >= 0 && n <= EXAM_DATE_MAX_DAYS;
+}
+
+/** Целевые баллы из 50 на экране онбординга (дальше — ползунок в профиле, шаг 5). */
+export const TARGET_CHOICES = [25, 30, 35, 40, 45] as const;
+
 /** Склонение русского существительного по числу: 1 день, 2 дня, 5 дней. */
 export function pluralRu(n: number, forms: readonly [string, string, string]): string {
   const a = Math.abs(Math.trunc(n));
@@ -75,8 +87,12 @@ export type GoalStatus = "none" | "below" | "on" | "above";
 /** Допуск «на уровне цели», баллов. */
 export const GOAL_TOLERANCE = 2;
 
-/** Прогноз против цели: нет данных / ниже / на уровне (±2 балла) / выше. gap — сколько баллов не хватает (меньше 0 — запас). */
-export function goalStatus(forecast: { score: number; basis: string }, targetScore: number): { status: GoalStatus; gap: number } {
+/**
+ * Прогноз против цели: нет данных / ниже / на уровне (±2 балла) / выше. gap — сколько баллов не хватает (меньше 0 — запас).
+ * Цель не выбрана (`targetSet` = false, «пока не знаю») — сравнивать не с чем: status "none", разрыва нет (gap 0).
+ */
+export function goalStatus(forecast: { score: number; basis: string }, targetScore: number, targetSet = true): { status: GoalStatus; gap: number } {
+  if (!targetSet) return { status: "none", gap: 0 };
   if (forecast.basis === "none") return { status: "none", gap: targetScore };
   const gap = targetScore - forecast.score;
   const status: GoalStatus = gap > GOAL_TOLERANCE ? "below" : gap < -GOAL_TOLERANCE ? "above" : "on";

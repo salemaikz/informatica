@@ -29,7 +29,7 @@ export function entVisible(profile: { track?: Track } | null | undefined): boole
  * `/exam/run` — прохождение пробного (вне оболочки приложения, страж с `fullscreen`); результаты старых попыток
  * `/exam/result/[id]` остаются доступны. Тест tests/school-ent-ui.test.ts проверяет, что на странице каждого пути есть страж.
  */
-export const ENT_ONLY_PATHS = ["/exam", "/plan", "/exam/run"] as const;
+export const ENT_ONLY_PATHS = ["/exam", "/plan", "/exam/run", "/diagnostic"] as const;
 
 /** Нужен только факт завершения урока — берём минимум от LessonStat, чтобы функции не зависели от стора. */
 export type LessonsDone = Record<string, { completions: number } | undefined>;

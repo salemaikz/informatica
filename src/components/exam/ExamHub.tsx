@@ -87,7 +87,8 @@ export function ExamHub() {
   const router = useRouter();
   const exams = useApp((s) => s.exams);
   const skills = useApp((s) => s.skills);
-  const target = useApp((s) => s.profile.targetScore);
+  // Цель «пока не знаю» (#70) — без линии цели и «до цели осталось».
+  const target = useApp((s) => (s.profile.targetScoreSet ? s.profile.targetScore : undefined));
 
   const [topics, setTopics] = useState<EntTopicId[]>([]);
   const [active, setActive] = useState<ExamAttempt | null>(null);
@@ -258,9 +259,11 @@ export function ExamHub() {
               <p className="text-sm font-semibold text-muted">
                 {t("exam.forecast.by", { n: forecast.answers })} · {t(`exam.forecast.basis.${forecast.basis}` as DictKey)}
               </p>
-              <p className="text-sm font-bold">
-                {forecast.score >= target ? t("exam.forecast.goalDone", { n: target }) : t("exam.forecast.goalLeft", { n: target, left: target - forecast.score })}
-              </p>
+              {target !== undefined && (
+                <p className="text-sm font-bold">
+                  {forecast.score >= target ? t("exam.forecast.goalDone", { n: target }) : t("exam.forecast.goalLeft", { n: target, left: target - forecast.score })}
+                </p>
+              )}
             </div>
           )}
         </Card>
