@@ -19,6 +19,7 @@ import type {
 import { bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
 import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
+import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -266,6 +267,8 @@ export interface AppState {
   skillDays: SkillDays;
   /** Когда показывали окно тарифов. */
   paywall: PaywallState;
+  /** Когда просили включить уведомления (этап 15, lib/push-ask.ts). */
+  pushAsk: PushAskState;
 
   /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
   history: HistoryEntry[];
@@ -366,6 +369,8 @@ export interface AppActions {
   startTrial: () => boolean;
   /** Окно тарифов показано. */
   notePaywallShown: () => void;
+  /** Окно «Включить уведомления» показано (этап 15). */
+  notePushAsked: () => void;
 
   // ---- ИИ-чат 2.0 ----
   /** Новый чат; возвращает id. Больше MAX_CHATS — вытесняется самый старый незакреплённый (его сообщения удаляет вызывающий). */
@@ -447,6 +452,7 @@ const initialState: AppState = {
   lessonRuns: {},
   skillDays: {},
   paywall: { lastShownAt: 0, views: 0 },
+  pushAsk: EMPTY_PUSH_ASK,
   history: [],
   chats: [],
   codeTasks: {},
@@ -659,6 +665,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     // #67: у старых навыков нет clean и дней — migrateSkillStat переводит их на новое правило (и проверяет данные).
     skills: cleanSkills(p.skills),
     paywall: sanitizePaywall(p.paywall),
+    pushAsk: sanitizePushAsk(p.pushAsk),
     courseNodes: sanitizeCourseNodes(p.courseNodes),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
@@ -1086,6 +1093,7 @@ export const useApp = create<AppState & AppActions>()(
       },
 
       notePaywallShown: () => set((s) => ({ paywall: { lastShownAt: Date.now(), views: s.paywall.views + 1 } })),
+      notePushAsked: () => set((s) => ({ pushAsk: { lastAt: Date.now(), count: s.pushAsk.count + 1 } })),
 
       // ---------- ИИ-чат 2.0 ----------
 
