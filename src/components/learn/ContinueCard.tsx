@@ -18,10 +18,13 @@ export function ContinueCard({
   kind,
   unitIndex,
   firstTime,
+  resume,
   onModes,
 }: {
   target?: { unit: Unit; ref: LessonRef };
   kind: "next" | "due";
+  /** Незаконченный урок (этап 16Б): «Продолжить: <урок>», шаг X из Y. */
+  resume?: { step: number; total: number };
   unitIndex: number;
   /** Ни одного урока ещё не пройдено. */
   firstTime: boolean;
@@ -50,7 +53,7 @@ export function ContinueCard({
   const lesson = lessonMeta(ref.id);
   const Icon = unit.icon ? ICONS[unit.icon] : BookOpen;
   const steps = lesson ? lesson.stepCount : 0;
-  const cta = kind === "due" ? t("learn2.hero.review") : firstTime ? t("learn2.hero.start") : t("learn2.hero.continue");
+  const cta = resume ? t("resume.cta", { title: l(ref.title) }) : kind === "due" ? t("learn2.hero.review") : firstTime ? t("learn2.hero.start") : t("learn2.hero.continue");
 
   return (
     <div style={unitVars(unit.color)} className="relative overflow-hidden rounded-3xl border-2 border-(--u)/30 bg-surface">
@@ -62,7 +65,7 @@ export function ContinueCard({
             <Icon size={18} />
           </span>
           <p className="min-w-0 text-xs font-extrabold uppercase leading-tight tracking-wide text-(--u-ink)">
-            {kind === "due" ? t("learn2.hero.due") : t("learn2.hero.next")}
+            {resume ? t("resume.label") : kind === "due" ? t("learn2.hero.due") : t("learn2.hero.next")}
             <span className="block truncate font-bold normal-case tracking-normal text-muted">
               {t("learn.unit", { n: unitIndex + 1 })} · {t("learn.lesson", { n: lessonNumber(ref.id) })}
             </span>
@@ -75,7 +78,7 @@ export function ContinueCard({
               <span className="flex items-center gap-1">
                 <Clock size={15} /> {t("common.minutes", { n: lesson.durationMin })}
               </span>
-              <span>{t(`learn2.steps.${pluralForm(steps)}`, { n: steps })}</span>
+              <span>{resume ? t("resume.step", { x: resume.step, y: resume.total }) : t(`learn2.steps.${pluralForm(steps)}`, { n: steps })}</span>
             </p>
           ) : (
             <span />
@@ -89,7 +92,8 @@ export function ContinueCard({
           data-tour="continue"
           size="lg"
           block
-          icon={kind === "due" ? <RotateCcw size={20} /> : <Play size={20} fill="currentColor" />}
+          className="h-auto min-h-13 py-2 text-balance leading-tight"
+          icon={kind === "due" && !resume ? <RotateCcw size={20} /> : <Play size={20} fill="currentColor" />}
         >
           {cta}
         </ButtonLink>

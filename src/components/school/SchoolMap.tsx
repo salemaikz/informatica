@@ -4,7 +4,8 @@ import { Link2, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { UNITS } from "@/content/course-map";
 import { schoolPlan } from "@/content/school-program";
-import { gradeProgress, hasDirections, nextSchoolLesson, toSchoolGrade } from "@/lib/school";
+import { gradeLessonIds, gradeProgress, hasDirections, nextSchoolLesson, toSchoolGrade } from "@/lib/school";
+import { resumeTarget } from "@/lib/lesson-run";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +23,7 @@ export function SchoolMap() {
   const gradeRaw = useApp((s) => s.profile.grade);
   const direction = useApp((s) => s.profile.direction);
   const lessons = useApp((s) => s.lessons);
+  const lessonRuns = useApp((s) => s.lessonRuns);
   const updateProfile = useApp((s) => s.updateProfile);
   const grade = toSchoolGrade(gradeRaw);
   const plan = useMemo(() => (grade ? schoolPlan(grade, direction) : undefined), [grade, direction]);
@@ -29,9 +31,18 @@ export function SchoolMap() {
   const progress = useMemo(() => (plan ? gradeProgress(plan, lessons) : null), [plan, lessons]);
   const next = useMemo(() => (plan ? nextSchoolLesson(plan, lessons) : null), [plan, lessons]);
 
+  // Незаконченный урок этого класса (школьный трек — только уроки программы класса).
+  const [now] = useState(() => Date.now());
+  const resume = useMemo(() => {
+    if (!plan) return null;
+    const ids = new Set(gradeLessonIds(plan));
+    return resumeTarget(lessonRuns, now, (id) => ids.has(id), lessons);
+  }, [plan, lessonRuns, now, lessons]);
+
   // Раскрытые разделы: пока ученик ничего не трогал — открыт тот, где следующий урок (иначе первый).
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const defaultOpen = next?.sectionId ?? plan?.sections[0]?.id;
+  const resumeSection = resume ? plan?.sections.find((s) => s.topics.some((tp) => tp.lessonIds.includes(resume.lessonId)))?.id : undefined;
+  const defaultOpen = resumeSection ?? next?.sectionId ?? plan?.sections[0]?.id;
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,7 +64,7 @@ export function SchoolMap() {
         </MascotSays>
       ) : (
         <>
-          <GradeProgressCard grade={grade} progress={progress} nextLessonId={next?.lessonId ?? null} />
+          <GradeProgressCard grade={grade} progress={progress} nextLessonId={next?.lessonId ?? null} resume={resume} />
           <div className="flex flex-col gap-3">
             {plan.sections.map((section, i) => (
               <SchoolSectionCard

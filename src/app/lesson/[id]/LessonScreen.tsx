@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useT } from "@/i18n/useT";
 import { track } from "@/lib/analytics";
 import { ENTRY_COST, canAfford, lessonCost } from "@/lib/economy";
@@ -33,8 +33,13 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
   // Сохранённое прохождение читаем один раз при входе (только «Учиться»): подходит ли оно, оплачен ли вход, остались ли задания.
   const [entry] = useState(() => {
     const run = asCheck ? null : usableRun(useApp.getState().lessonRuns[id], lesson, Date.now());
-    return { run, paid: !!run && runPaid(run, Date.now()), ahead: run ? questionsAhead(run, lesson.steps) : true };
+    // Сохранение есть, но не подходит (урок изменился): уберём его, чтобы главная не обещала «Шаг X из Y».
+    const stale = !asCheck && !run && !!useApp.getState().lessonRuns[id];
+    return { run, stale, paid: !!run && runPaid(run, Date.now()), ahead: run ? questionsAhead(run, lesson.steps) : true };
   });
+  useEffect(() => {
+    if (entry.stale) useApp.getState().clearLessonRun(id);
+  }, [entry.stale, id]);
   const saved = entry.run;
   // ask — экран выбора; continue — плеер с сохранения; fresh — плеер с первого шага.
   const [choice, setChoice] = useState<"ask" | "continue" | "fresh">(saved ? "ask" : "fresh");

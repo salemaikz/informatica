@@ -3,7 +3,9 @@
 import { ClipboardCheck, Timer } from "lucide-react";
 import { GoalSummaryCard } from "@/components/goals/GoalSummaryCard";
 import { StreakReminder } from "@/components/goals/StreakReminder";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { resumeTarget } from "@/lib/lesson-run";
+import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { QuickActions } from "@/components/learn/QuickActions";
@@ -55,7 +57,11 @@ export default function LearnPage() {
   const firstTime = Object.keys(lessons).length === 0;
   // «Продолжить»: следующий рекомендуемый урок, а если все готовые пройдены — самый «остывший» к повторению.
   const dueTarget = !recommended && due[0] ? findLessonRef(due[0].id) : undefined;
-  const hero = recommended ?? dueTarget;
+  // Незаконченный урок карты ЕНТ — главнее рекомендации (этап 16Б).
+  const lessonRuns = useApp((s) => s.lessonRuns);
+  const resume = useMemo(() => resumeTarget(lessonRuns, now, (id) => !!findLessonRef(id), lessons), [lessonRuns, now, lessons]);
+  const resumeRef = resume ? findLessonRef(resume.lessonId) : undefined;
+  const hero = resumeRef ?? recommended ?? dueTarget;
   const heroIndex = hero ? (findLessonRef(hero.ref.id)?.unitIndex ?? 0) : 0;
 
   return (
@@ -66,7 +72,7 @@ export default function LearnPage() {
       {/* Цель (дата ЕНТ, балл) — для трека ЕНТ; у школьной программы своя карточка прогресса класса. */}
       {ent && <GoalSummaryCard />}
 
-      <QuickActions continueId={ent ? recommended?.ref.id : undefined} dueCount={due.length} firstTime={firstTime} />
+      <QuickActions continueId={ent ? (resumeRef ?? recommended)?.ref.id : undefined} dueCount={due.length} firstTime={firstTime} resuming={!!resumeRef} />
 
       {!ent ? (
         <SchoolMap />
@@ -77,6 +83,7 @@ export default function LearnPage() {
           <ContinueCard
             target={hero}
             kind={recommended ? "next" : "due"}
+            resume={resumeRef ? resume ?? undefined : undefined}
             unitIndex={heroIndex}
             firstTime={firstTime}
             onModes={() => hero && setSheet(hero.ref.id)}

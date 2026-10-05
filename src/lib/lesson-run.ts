@@ -192,6 +192,42 @@ function cleanRun(id: string, raw: unknown): LessonRun | null {
   };
 }
 
+// ---------- «Продолжить» ведёт в начатый урок (этап 16Б, P5) ----------
+
+export interface ResumeTarget {
+  lessonId: string;
+  /** Номер текущего шага (с 1). */
+  step: number;
+  /** Всего шагов в очереди. */
+  total: number;
+}
+
+/**
+ * Самый свежий действительный незаконченный урок или null. Содержимого урока на клиенте нет, поэтому проверяем то, что видно
+ * из сохранения: не просрочено, что-то пройдено или вход оплачен, шаги ещё остались. `accept` — фильтр трека
+ * (школьный урок — только в школьном треке, урок карты ЕНТ — только в ЕНТ); точную проверку отпечатка делает экран урока.
+ */
+export function resumeTarget(
+  runs: Record<string, LessonRun>,
+  now: number,
+  accept?: (lessonId: string) => boolean,
+  lessons?: Record<string, { firstAt?: number } | undefined>,
+): ResumeTarget | null {
+  let best: LessonRun | null = null;
+  for (const run of Object.values(runs)) {
+    if (now - run.updatedAt > RUN_TTL_MS) continue;
+    if (run.queue.length === 0 || run.pos >= run.queue.length) continue;
+    if (run.pos === 0 && run.paidAt === null) continue;
+    if (accept && !accept(run.lessonId)) continue;
+    // Урок засчитан уже после последнего шага (тестом раздела и т.п.) — продолжать нечего.
+    const first = lessons?.[run.lessonId]?.firstAt;
+    if (first !== undefined && first > run.updatedAt) continue;
+    if (!best || run.updatedAt > best.updatedAt) best = run;
+  }
+  if (!best) return null;
+  return { lessonId: best.lessonId, step: Math.min(best.pos + 1, best.queue.length), total: best.queue.length };
+}
+
 /** Сохранения незаконченных уроков из localStorage: только корректные записи, не больше RUN_MAX. */
 export function sanitizeLessonRuns(raw: unknown, now = Date.now()): Record<string, LessonRun> {
   if (!isObj(raw)) return {};
