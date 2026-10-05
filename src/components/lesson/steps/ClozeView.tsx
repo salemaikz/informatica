@@ -7,7 +7,6 @@ import { checkInput } from "@/lib/check";
 import { cn } from "@/lib/cn";
 import { clozeBlanks, isBlank } from "@/lib/evaluate";
 import { useT } from "@/i18n/useT";
-import { SceneView } from "@/components/scenes/SceneView";
 import type { StepProps } from "./types";
 
 type Cell = { kind: "text"; token: Exclude<ClozeToken, ClozeBlank> } | { kind: "blank"; blank: ClozeBlank; index: number };
