@@ -161,11 +161,12 @@ CSS — Cascading Style Sheets, яғни «каскадты стиль кест�
       scene: { kind: "web", html: "<h1>Cafe Baqyt</h1>" },
       lines: [
         ["h1 {"],
-        ["    ", { blank: ["color"], mode: "text" }, ": blue;"],
-        ["    ", { blank: ["background-color"], mode: "text" }, ": yellow;"],
-        ["    text-align: ", { blank: ["center"], mode: "text" }, ";"],
+        ["    ", { blank: ["color"], mode: "text", label: { ru: "color", kk: "color" } }, ": blue;"],
+        ["    ", { blank: ["background-color"], mode: "text", label: { ru: "background-color", kk: "background-color" } }, ": yellow;"],
+        ["    text-align: ", { blank: ["center"], mode: "text", label: { ru: "center", kk: "center" } }, ";"],
         ["}"],
       ],
+      bank: [{ ru: "font-color", kk: "font-color" }, { ru: "text-color", kk: "text-color" }, { ru: "right", kk: "right" }],
       explanation: w(
         "Цвет текста — `color`, цвет фона — `background-color`, выравнивание по центру — `text-align: center`. Свойство и значение разделяет двоеточие, пара заканчивается точкой с запятой.",
         "Мәтін түсі — `color`, фон түсі — `background-color`, ортаға туралау — `text-align: center`. Қасиет пен мәнді қос нүкте бөледі, жұп нүктелі үтірмен аяқталады.",

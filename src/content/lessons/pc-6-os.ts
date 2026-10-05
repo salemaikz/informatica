@@ -553,9 +553,10 @@ Windows C: және D: дискілерін көрсетеді және қалт
       scene: { kind: "files", tree: TREE, active: "Users/Ali/Docs", caption: l("Текущая папка — Docs", "Ағымдағы қалта — Docs") },
       lines: [
         [l("Кластер — 4 КБ. Файл размером 9 КБ занимает ", "Кластер — 4 КБ. Көлемі 9 КБ файл "), { blank: ["3"], mode: "number" }, l(" кластера, то есть ", " кластер алады, яғни дискіде "), { blank: ["12"], mode: "number" }, l(" КБ на диске.", " КБ орын.")],
-        [l("Текущая папка — ", "Ағымдағы қалта — "), DOCS, l(". Путь ", ". Жол "), REL, l(" — это абсолютный путь ", " — абсолютті жол "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text" }, "\\", { blank: ["song.mp3"], mode: "text" }],
+        [l("Текущая папка — ", "Ағымдағы қалта — "), DOCS, l(". Путь ", ". Жол "), REL, l(" — это абсолютный путь ", " — абсолютті жол "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text", label: { ru: "Music", kk: "Music" } }, "\\", { blank: ["song.mp3"], mode: "text", label: { ru: "song.mp3", kk: "song.mp3" } }],
         [l("Предел размера одного файла в FAT32: ", "FAT32 жүйесіндегі бір файлдың ең үлкен көлемі: "), { blank: ["4"], mode: "number" }, " ГБ"],
       ],
+      bank: [{ ru: "Docs", kk: "Docs" }, { ru: "report.docx", kk: "report.docx" }, { ru: "Ali", kk: "Ali" }],
       explanation: l(
         "9 : 4 = 2,25, округляем вверх: 3 кластера, то есть 3 · 4 = 12 КБ. Путь ..\\Music\\song.mp3 поднимается из Docs в Ali и спускается в Music: C:\\Users\\Ali\\Music\\song.mp3. Предел файла в FAT32 — 4 ГБ.",
         "9 : 4 = 2,25, жоғары қарай дөңгелектейміз: 3 кластер, яғни 3 · 4 = 12 КБ. ..\\Music\\song.mp3 жолы Docs қалтасынан Ali қалтасына көтеріліп, Music қалтасына түседі: C:\\Users\\Ali\\Music\\song.mp3. FAT32 жүйесіндегі файл шегі — 4 ГБ.",
