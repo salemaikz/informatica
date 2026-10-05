@@ -3,6 +3,10 @@ import { SCHOOL_PROGRAM, type SchoolGrade, type SchoolGradePlan, type SchoolSect
 
 // Школьный трек: прогресс по классу, следующий урок, проверка данных программы.
 // Чистая логика без React; данные — content/school-program.ts. Урок «пройден», если у него есть хотя бы одно завершение.
+// Прогресс ОБЩИЙ с подготовкой к ЕНТ (v0.9.1): у школьной карты и у карты курса («Путь», «Карта ЕНТ») один источник —
+// `lessons` и `skills` стора, ключи — id уроков курса, а `profile.track` на них не влияет. Урок, пройденный в одном
+// режиме, пройден в обоих; «пройден» везде определяет `isPassedStat` (components/learn/map.ts тоже зовёт её).
+// Тест: tests/school.test.ts, «общий прогресс школы и ЕНТ».
 
 /** Режим обучения в контексте ИИ (расширяет StudentContext, пока поле не добавлено в lib/ai-types.ts). */
 export interface WithTrack {
@@ -35,8 +39,13 @@ export function toSchoolGrade(g: Grade | undefined): SchoolGrade | null {
   return g && g !== "other" && (SCHOOL_GRADES as string[]).includes(g) ? (g as SchoolGrade) : null;
 }
 
+/** Единое определение «урок пройден» для школьной карты и карты курса ЕНТ: есть хотя бы одно завершение. */
+export function isPassedStat(stat: { completions: number } | undefined): boolean {
+  return (stat?.completions ?? 0) > 0;
+}
+
 export function isLessonDone(id: string, lessons: LessonsDone): boolean {
-  return (lessons[id]?.completions ?? 0) > 0;
+  return isPassedStat(lessons[id]);
 }
 
 export interface TopicProgress {

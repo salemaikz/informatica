@@ -1,16 +1,31 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement, act, type ComponentType, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { useApp } from "@/lib/store";
 import { QuickActions } from "@/components/learn/QuickActions";
 import { EntOnly } from "@/components/school/EntOnly";
+import { SchoolMap } from "@/components/school/SchoolMap";
 import { WeekCard } from "@/components/goals/GoalsPanel";
 import { HistoryScreen } from "@/components/history/HistoryScreen";
 import StatsPage from "@/app/(main)/stats/page";
-import { ENT_ONLY_PATHS } from "@/lib/school";
+import LearnPage from "@/app/(main)/learn/page";
+import { UNITS } from "@/content/course";
+import { ENT_TOPICS } from "@/content/ent-topics";
+import { schoolPlan } from "@/content/school-program";
+import { ENT_ONLY_PATHS, SCHOOL_GRADES, gradeProgress } from "@/lib/school";
+import type { Grade, SessionResult } from "@/lib/types";
+import { translate } from "@/i18n/useT";
+import type { DictKey } from "@/i18n/dict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+// Страница «Учиться» зовёт useRouter (контрольная раздела) — в тесте приложения-роутера нет.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {} }),
+  usePathname: () => "/learn",
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 // Школьный трек без ЕНТ-элементов (#52): быстрые действия и стража разделов /exam и /plan отрисовываем в DOM.
 
@@ -184,5 +199,154 @@ describe("История у школьника: без пробного ЕНТ",
     expect(host.textContent).not.toMatch(/ЕНТ/);
     expect(hrefs()).not.toContain("/exam");
     expect(hrefs()).toContain("/learn");
+  });
+});
+
+describe("«Учиться»: переключатель режима и общий прогресс школы и ЕНТ (v0.9.1)", () => {
+  const BITS = "ns-1-bits";
+  const VIEW_KEY = "informatica-learn-view";
+  const ru = (key: DictKey, params?: Record<string, string | number>) => translate("ru", key, params);
+  const group = (label: DictKey) => host.querySelector<HTMLElement>(`[role="group"][aria-label="${ru(label)}"]`);
+  const switchGroup = () => group("school.track.label");
+  const clickTrack = async (label: string) => {
+    const btn = [...switchGroup()!.querySelectorAll("button")].find((b) => b.textContent === label);
+    expect(btn, label).toBeTruthy();
+    await act(async () => btn!.click());
+  };
+  const profile = (track: "ent" | "school", grade: Grade) => act(() => useApp.getState().updateProfile({ track, grade }));
+  const session = (lessonId: string): SessionResult => ({
+    kind: "lesson",
+    lessonId,
+    title: "t",
+    answers: [{ stepId: "q1", skill: "ns.base", correct: true, score: 1, given: "1", expected: "1", prompt: "?", retry: false, timeMs: 1000 }],
+    xp: 10,
+    maxCombo: 1,
+    durationSec: 60,
+    accuracy: 1,
+  });
+  /** Подпись узла урока на «Пути» («Урок 1: …, пройден»). */
+  const nodeLabel = (id: string) => {
+    const title = UNITS.flatMap((u) => u.lessons).find((r) => r.id === id)!.title.ru;
+    return [...host.querySelectorAll("button[aria-label]")].map((b) => b.getAttribute("aria-label")!).find((a) => a.includes(title));
+  };
+  const lessonsLine = (done: number, grade: Grade) => ru("school.progress.lessons", { done, total: gradeProgress(schoolPlan(grade as never)!, {}).lessonsTotal });
+
+  beforeEach(() => {
+    useApp.getState().resetProgress();
+    localStorage.removeItem(VIEW_KEY);
+  });
+  afterEach(() => {
+    useApp.getState().resetProgress();
+    localStorage.removeItem(VIEW_KEY);
+  });
+
+  it("переключатель «ЕНТ / Школа» — первый элемент страницы в обоих режимах; нажатая кнопка показывает режим; кнопки ≥ 44 px", async () => {
+    for (const [track, label] of [["ent", "ЕНТ"], ["school", "Школа"]] as const) {
+      await profile(track, "6");
+      await render(createElement(LearnPage));
+      const g = switchGroup();
+      expect(g, track).toBeTruthy();
+      expect(host.firstElementChild?.firstElementChild, track).toBe(g);
+      expect([...g!.querySelectorAll("button")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.textContent), track).toEqual([label]);
+      for (const b of g!.querySelectorAll("button")) expect(b.className).toContain("h-11");
+    }
+  });
+
+  it("одним нажатием и без перезагрузки: элементы режима появляются и исчезают сразу, переключатель остаётся тем же узлом", async () => {
+    await profile("ent", "6");
+    await render(createElement(LearnPage));
+    const g = switchGroup();
+    // режим ЕНТ: пробный ЕНТ, «Путь / Карта ЕНТ», нет выбора класса
+    expect(hrefs()).toContain("/exam");
+    expect(group("learn2.view.label")).toBeTruthy();
+    expect(group("school.grade.label")).toBeNull();
+
+    await clickTrack("Школа");
+    expect(useApp.getState().profile.track).toBe("school");
+    expect(switchGroup()).toBe(g);
+    expect(hrefs()).not.toContain("/exam");
+    expect(group("learn2.view.label")).toBeNull();
+    expect(group("school.grade.label")).toBeTruthy();
+    expect(host.textContent).toContain(ru("school.progress.shared"));
+
+    await clickTrack("ЕНТ");
+    expect(useApp.getState().profile.track).toBe("ent");
+    expect(switchGroup()).toBe(g);
+    expect(hrefs()).toContain("/exam");
+    expect(group("learn2.view.label")).toBeTruthy();
+    expect(group("school.grade.label")).toBeNull();
+    expect(host.textContent).not.toContain(ru("school.progress.shared"));
+  });
+
+  it("урок про биты, пройденный в школьном режиме, отмечен пройденным на «Пути» ЕНТ", async () => {
+    await profile("school", "6");
+    await render(createElement(LearnPage));
+    expect(host.textContent).toContain(lessonsLine(0, "6"));
+
+    await act(async () => {
+      useApp.getState().finishSession(session(BITS));
+    });
+    expect(host.textContent).toContain(lessonsLine(1, "6"));
+
+    await clickTrack("ЕНТ");
+    const label = nodeLabel(BITS);
+    expect(label, "узел урока на «Пути»").toBeTruthy();
+    expect(label).toContain(`, ${ru("learn2.state.done")}`);
+  });
+
+  it("урок, пройденный в режиме ЕНТ, отмечен в школьной программе (и в 6, и в 10 классе)", async () => {
+    await profile("ent", "6");
+    await render(createElement(LearnPage));
+    expect(nodeLabel(BITS)).not.toContain(`, ${ru("learn2.state.done")}`);
+
+    await act(async () => {
+      useApp.getState().finishSession(session(BITS));
+    });
+    expect(nodeLabel(BITS)).toContain(`, ${ru("learn2.state.done")}`);
+
+    await clickTrack("Школа");
+    expect(host.textContent).toContain(lessonsLine(1, "6"));
+    await profile("school", "10");
+    expect(host.textContent).toContain(lessonsLine(1, "10"));
+  });
+
+  it("«Карта ЕНТ»: ответы, данные в школьном режиме, окрашивают тему «Системы счисления»", async () => {
+    localStorage.setItem(VIEW_KEY, "ent");
+    await profile("school", "6");
+    await render(createElement(LearnPage));
+    await act(async () => {
+      useApp.getState().recordAnswer(session(BITS).answers[0], 5, BITS);
+    });
+    await clickTrack("ЕНТ");
+    const title = ENT_TOPICS.find((x) => x.id === "t04")!.title.ru;
+    const tile = [...host.querySelectorAll("button[aria-label]")].map((b) => b.getAttribute("aria-label")!).find((a) => a.startsWith(`Тема ЕНТ: ${title}`));
+    expect(tile, "плитка темы t04").toBeTruthy();
+    expect(tile).not.toBe(ru("learn2.ent.open.none", { title }));
+    expect(tile).toContain("освоение");
+  });
+});
+
+describe("Школьная карта: строка про общий прогресс", () => {
+  beforeEach(() => useApp.getState().resetProgress());
+  afterEach(() => useApp.getState().resetProgress());
+
+  it("для каждого класса 5–11 — под всеми разделами программы, на обоих языках", async () => {
+    for (const grade of SCHOOL_GRADES) {
+      await act(async () => useApp.getState().updateProfile({ track: "school", grade }));
+      await render(createElement(SchoolMap));
+      const line = [...host.querySelectorAll("p")].find((p) => p.textContent?.includes(translate("ru", "school.progress.shared")));
+      expect(line, grade).toBeTruthy();
+      const sections = [...host.querySelectorAll("section")];
+      expect(sections.length, grade).toBeGreaterThan(1);
+      for (const s of sections) expect(s.compareDocumentPosition(line!) & Node.DOCUMENT_POSITION_FOLLOWING, grade).toBeTruthy();
+    }
+    await act(async () => useApp.getState().updateProfile({ lang: "kk" }));
+    expect(host.textContent).toContain(translate("kk", "school.progress.shared"));
+  });
+
+  it("класс не выбран («другое») — карты нет, строки тоже нет", async () => {
+    await act(async () => useApp.getState().updateProfile({ track: "school", grade: "other" }));
+    await render(createElement(SchoolMap));
+    expect(host.textContent).not.toContain(translate("ru", "school.progress.shared"));
   });
 });
