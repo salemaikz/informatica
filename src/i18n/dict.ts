@@ -52,6 +52,11 @@ import { codeviewDict } from "./parts/codeview";
 import { goalsPlanDict } from "./parts/goals-plan";
 import { heartsTheoryDict } from "./parts/hearts-theory";
 import { pushAskDict } from "./parts/push-ask";
+import { tourDict } from "./parts/tour";
+import { unitTestDict } from "./parts/unit-test";
+import { xpSignDict } from "./parts/xp-sign";
+import { aiLimitsDict } from "./parts/ai-limits";
+import { resumeDict } from "./parts/resume";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -537,6 +542,11 @@ export const dict = {
   ...goalsPlanDict,
   ...heartsTheoryDict,
   ...pushAskDict,
+  ...tourDict,
+  ...unitTestDict,
+  ...xpSignDict,
+  ...aiLimitsDict,
+  ...resumeDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

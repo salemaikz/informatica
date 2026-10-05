@@ -40,7 +40,7 @@ export function GradeProgressCard({ grade, progress, nextLessonId }: { grade: Sc
         <div className="flex flex-col gap-2 rounded-2xl bg-primary-soft p-3">
           <p className="text-xs font-extrabold uppercase tracking-wide text-primary">{t("school.next.label")}</p>
           <p className="font-extrabold leading-snug">{l(next.title)}</p>
-          <ButtonLink href={`/lesson/${nextLessonId}`} size="lg" block icon={<ArrowRight size={20} />} className="flex-row-reverse">
+          <ButtonLink href={`/lesson/${nextLessonId}`} data-tour="continue" size="lg" block icon={<ArrowRight size={20} />} className="flex-row-reverse">
             {t("school.next.cta")}
           </ButtonLink>
         </div>

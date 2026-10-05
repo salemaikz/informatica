@@ -292,6 +292,16 @@ export function validateStep(step: Step): string[] {
       need(step.lines.flat().every((t) => (typeof t === "object" && !("blank" in t) ? filledL(t) : true)), "текст ru/kk");
       need(blanks.every((b) => b.width === undefined || b.width > 0), "width > 0");
       need(blanks.every((b) => b.mode !== "binary" || b.blank.every((v) => /^[01]+$/.test(v))), "двоичный пропуск: ответ из 0 и 1");
+      // Этап 16Б: выбор слов вместо ввода. Подписи — у всех текстовых пропусков шага или ни у одного; подпись — верный ответ.
+      const textBlanks = blanks.filter((b) => b.mode === "text");
+      const labeled = textBlanks.filter((b) => b.label);
+      need(labeled.length === 0 || labeled.length === textBlanks.length, "label — у всех текстовых пропусков шага или ни у одного");
+      need(labeled.every((b) => filledL(b.label!) && checkInput(b.label!.ru, b.blank, "text") && checkInput(b.label!.kk, b.blank, "text")), "label.ru и label.kk — верные ответы пропуска");
+      need(!step.bank || labeled.length > 0, "bank (отвлекатели) — только вместе с label у пропусков");
+      need(
+        (step.bank ?? []).every((d) => filledL(d) && !textBlanks.some((b) => checkInput(d.ru, b.blank, "text") || checkInput(d.kk, b.blank, "text"))),
+        "отвлекатель bank не должен быть верным ответом ни одного пропуска",
+      );
       break;
     }
     case "entmatch":

@@ -37,7 +37,7 @@ export function XpChipAnimated() {
   }, [xp]);
 
   return (
-    <span title="XP" className="relative flex items-center gap-1 font-extrabold text-warning-strong">
+    <span data-tour="hdr-xp" title="XP" className="relative flex items-center gap-1 font-extrabold text-warning-strong">
       <Zap size={20} className="text-gold" fill="currentColor" />
       <m.span
         className="inline-block"
@@ -68,7 +68,7 @@ export function StreakChipAnimated() {
   }, [current]);
 
   return (
-    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
+    <span data-tour="hdr-streak" title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
       <m.span
         className="flex origin-bottom"
         animate={wiggling ? { rotate: [0, -16, 14, -9, 5, 0], scale: [1, 1.25, 1.25, 1.1, 1, 1] } : { rotate: 0, scale: 1 }}

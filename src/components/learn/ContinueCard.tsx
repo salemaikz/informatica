@@ -86,6 +86,7 @@ export function ContinueCard({
         </div>
         <ButtonLink
           href={`/lesson/${ref.id}`}
+          data-tour="continue"
           size="lg"
           block
           icon={kind === "due" ? <RotateCcw size={20} /> : <Play size={20} fill="currentColor" />}

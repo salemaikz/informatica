@@ -30,6 +30,7 @@ export function HeartsChip({ className }: { className?: string }) {
 
   return (
     <Link
+      data-tour="hdr-hearts"
       href="/shop"
       aria-label={label}
       title={label}
@@ -75,6 +76,7 @@ export function ChipsChip({ className }: { className?: string }) {
   const label = t("shop.chip.chips", { n: chips });
   return (
     <Link
+      data-tour="hdr-chips"
       href="/shop"
       aria-label={label}
       title={label}

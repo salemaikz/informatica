@@ -179,6 +179,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={id}
                 href={href}
+                data-tour={`nav-${id}`}
                 aria-current={current(href, id === group)}
                 className={clsx(
                   "relative flex h-16 flex-col items-center justify-start gap-0.5 pt-[7px] text-[11px] font-extrabold transition-colors",

@@ -737,7 +737,11 @@ export function LessonPlayer({
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
-          {entryCost > 0 && <HeartsBar />}
+          {entryCost > 0 && (
+            <span data-tour="lesson-hearts" className="flex">
+              <HeartsBar />
+            </span>
+          )}
           {/* В тесте до ответа Бита не спрашиваем (как на ЕНТ); после ответа — «Почему?» на панели. */}
           {!(testMode && phase !== "feedback") && (
             <button

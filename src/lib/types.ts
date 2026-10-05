@@ -351,6 +351,11 @@ export interface ClozeBlank {
   mode: "number" | "binary" | "text";
   /** Ширина поля в символах (по умолчанию по длине ответа). */
   width?: number;
+  /**
+   * Этап 16Б: верный ответ, как он показан на плашке выбора (ru и kk). Есть у всех текстовых пропусков шага — пропуски
+   * заполняются выбором плашек, а не вводом с клавиатуры. Нормализованный label.ru и label.kk входят в blank.
+   */
+  label?: L;
 }
 export type ClozeToken = string | L | ClozeBlank;
 
@@ -360,6 +365,8 @@ export interface ClozeStep extends StepBase {
   prompt: L;
   scene?: Scene;
   lines: ClozeToken[][];
+  /** Этап 16Б: лишние плашки-отвлекатели для выбора слов (к label пропусков). Не совпадают ни с одним верным ответом. */
+  bank?: L[];
   explanation: L;
 }
 

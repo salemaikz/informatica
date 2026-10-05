@@ -20,6 +20,7 @@ import { bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamifica
 import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
+import { sanitizeTips, type TipId, type TipsState } from "./tips";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -272,6 +273,8 @@ export interface AppState {
   paywall: PaywallState;
   /** Когда просили включить уведомления (этап 15, lib/push-ask.ts). */
   pushAsk: PushAskState;
+  /** Подсказки первого входа, которые уже показаны (этап 16Б, lib/tips.ts). */
+  tips: TipsState;
 
   /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
   history: HistoryEntry[];
@@ -379,6 +382,10 @@ export interface AppActions {
   notePaywallShown: () => void;
   /** Окно «Включить уведомления» показано (этап 15). */
   notePushAsked: () => void;
+  /** Подсказка первого входа показана (этап 16Б). */
+  noteTip: (id: TipId) => void;
+  /** Показать подсказки первого входа заново (профиль). */
+  resetTips: () => void;
 
   // ---- ИИ-чат 2.0 ----
   /** Новый чат; возвращает id. Больше MAX_CHATS — вытесняется самый старый незакреплённый (его сообщения удаляет вызывающий). */
@@ -462,6 +469,7 @@ const initialState: AppState = {
   skillDays: {},
   paywall: { lastShownAt: 0, views: 0 },
   pushAsk: EMPTY_PUSH_ASK,
+  tips: {},
   history: [],
   chats: [],
   codeTasks: {},
@@ -676,6 +684,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     skills: cleanSkills(p.skills),
     paywall: sanitizePaywall(p.paywall),
     pushAsk: sanitizePushAsk(p.pushAsk),
+    tips: sanitizeTips(p.tips),
     courseNodes: sanitizeCourseNodes(p.courseNodes),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
@@ -1119,6 +1128,8 @@ export const useApp = create<AppState & AppActions>()(
 
       notePaywallShown: () => set((s) => ({ paywall: { lastShownAt: Date.now(), views: s.paywall.views + 1 } })),
       notePushAsked: () => set((s) => ({ pushAsk: { lastAt: Date.now(), count: s.pushAsk.count + 1 } })),
+      noteTip: (id) => set((s) => (s.tips[id] ? {} : { tips: { ...s.tips, [id]: Date.now() } })),
+      resetTips: () => set({ tips: {} }),
 
       // ---------- ИИ-чат 2.0 ----------
 
