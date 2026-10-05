@@ -18,11 +18,11 @@ export function readHearts(): HeartsView {
   return heartsView(s.hearts, effectiveTier(s.plan, now), now, todayKey());
 }
 
-type Anim = { id: number; dir: "down" | "up" };
+type Anim = { id: number; dir: "down" | "up"; diff: number };
 
 /**
  * Сердечки в шапке урока: иконка и число (∞ при безлимите), без ссылки — чтобы случайным касанием не уйти из урока.
- * Потеря: сердечко трескается и вздрагивает, вниз «падает» «−1». Покупка/возврат: сердечко «подпрыгивает».
+ * Плата за вход (#40): сердечко трескается и вздрагивает, вниз «падает» «−1» («−2» у входа за два). Покупка/возврат: сердечко «подпрыгивает».
  * Нет сердечек — иконка пустая и пульсирует.
  */
 export function HeartsBar({ className }: { className?: string }) {
@@ -30,13 +30,13 @@ export function HeartsBar({ className }: { className?: string }) {
   const v = useHearts();
   const reduce = useReduceMotion();
   const [prev, setPrev] = useState(v.count);
-  const [anim, setAnim] = useState<Anim>({ id: 0, dir: "down" });
+  const [anim, setAnim] = useState<Anim>({ id: 0, dir: "down", diff: 0 });
 
   // Изменение замечаем при рендере (приём «предыдущее значение»), без эффектов с setState.
   if (v.count !== prev) {
     setPrev(v.count);
     if (Number.isFinite(v.count) && Number.isFinite(prev)) {
-      setAnim((a) => ({ id: a.id + 1, dir: v.count < prev ? "down" : "up" }));
+      setAnim((a) => ({ id: a.id + 1, dir: v.count < prev ? "down" : "up", diff: Math.abs(v.count - prev) }));
     }
   }
 
@@ -103,7 +103,7 @@ export function HeartsBar({ className }: { className?: string }) {
           animate={{ opacity: [0, 1, 1, 0], y: [-4, 4, 14, 26], scale: [0.6, 1.12, 1, 1] }}
           transition={{ duration: 1, times: [0, 0.2, 0.7, 1], ease: "easeOut" }}
         >
-          −1
+          −{anim.diff}
         </m.span>
       )}
     </div>

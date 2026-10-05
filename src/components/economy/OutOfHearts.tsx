@@ -7,7 +7,7 @@ import { useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
-import { AI_DAILY_CAP, shopItem, type ShopItemId } from "@/lib/economy";
+import { AI_DAILY_CAP, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -88,7 +88,7 @@ function BuyRow({
         >
           <span className="flex items-center gap-1">
             <Cpu size={16} className={av.ok ? "text-gold" : undefined} aria-hidden />
-            <span className="tabular-nums">{formatNum(item.price)}</span>
+            <span className="tabular-nums">{formatNum(itemPrice(item, hearts))}</span>
           </span>
           {missing > 0 && <span className="text-xs font-bold text-danger">{t("hearts.out.missing", { n: formatNum(missing) })}</span>}
         </span>
@@ -121,11 +121,13 @@ function LinkCard({ href, icon, title, desc, tone }: { href: string; icon: React
 
 function Content({
   layout,
+  need,
   onResume,
   onExit,
   theoryHref,
 }: {
   layout: "sheet" | "screen";
+  need: number;
   onResume: () => void;
   onExit: () => void;
   theoryHref?: string;
@@ -134,13 +136,15 @@ function Content({
   const hearts = useHearts();
   const { chips } = useChips();
   const now = useNow();
-  // Сердечко вернулось само (таймер) или куплено — предлагаем продолжить.
-  const back = hearts.unlimited || hearts.count > 0;
+  // Сердечек снова хватает на вход (вернулись по таймеру или куплены) — предлагаем продолжить.
+  const back = canAfford(hearts, need);
+  // Сердечки есть, но на вход за 2 не хватает — «Не хватает сердечек», а не «закончились».
+  const short = !back && hearts.count > 0;
   const remaining = hearts.nextAt !== null && now > 0 ? formatRemaining(hearts.nextAt - now, lang) : null;
 
-  // После покупки состояние в сторе уже обновлено — продолжаем сразу, без лишнего нажатия.
+  // После покупки состояние в сторе уже обновлено — хватает на вход: продолжаем сразу, без лишнего нажатия.
   const bought = () => {
-    if (readHearts().count > 0 || readHearts().unlimited) onResume();
+    if (canAfford(readHearts(), need)) onResume();
   };
 
   return (
@@ -155,9 +159,12 @@ function Content({
           ) : (
             <HeartCrack size={26} className="shrink-0 text-heart" aria-hidden />
           )}
-          {back ? t("hearts.out.back") : t("hearts.out.title")}
+          {back ? t("hearts.out.back") : short ? t("hearts.out.titleShort") : t("hearts.out.title")}
         </h2>
         <p className="font-semibold text-muted">{back ? t("hearts.out.backText") : t("hearts.out.text")}</p>
+        {!back && need > 1 && (
+          <p className="text-sm font-extrabold text-heart-strong">{t("hearts.out.need", { need, have: hearts.count })}</p>
+        )}
         {!back && remaining && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-heart-soft px-3 py-1 text-sm font-extrabold text-heart-strong">
             <Clock size={15} aria-hidden /> {t("hearts.out.next", { time: remaining })}
@@ -186,7 +193,7 @@ function Content({
           <BuyRow id="heart-1" icon={<Heart size={22} fill="currentColor" aria-hidden />} nameKey="hearts.out.one" descKey="hearts.out.oneDesc" onBought={bought} />
           <BuyRow id="hearts-3" icon={<HeartPlus size={22} aria-hidden />} nameKey="hearts.out.three" descKey="hearts.out.threeDesc" onBought={bought} />
           <BuyRow id="hearts-full" icon={<HeartPulse size={22} aria-hidden />} nameKey="hearts.out.refill" descKey="hearts.out.refillDesc" onBought={bought} />
-          <LinkCard href="/practice" tone="primary" icon={<Dumbbell size={24} />} title={t("hearts.out.practice")} desc={t("hearts.out.practiceDesc")} />
+          <LinkCard href="/practice" tone="primary" icon={<Dumbbell size={24} />} title={t("hearts.out.practice")} desc={t("hearts.out.practiceDesc", { n: PRACTICE_HEART_MIN_ANSWERS, p: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100) })} />
           <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc", { n: AI_DAILY_CAP.unlimited })} />
           {theoryHref && (
             <ButtonLink href={theoryHref} variant="ghost" block icon={<BookOpen size={18} />}>
@@ -204,13 +211,16 @@ function Content({
 }
 
 /**
- * «Сердечки закончились»: купить за чипы (полный запас, +1), вернуть тренировкой (бесплатно), взять «Безлимит» или выйти.
- * layout="sheet" — шторка поверх урока (open/onClose); layout="screen" — полноэкранно на входе в урок.
- * onResume — сердечки появились (куплены или восстановились): окно закрывается, урок продолжается.
+ * «Сердечки закончились» / «Не хватает сердечек» (#40: сердечки — плата за вход в урок, тест или игру):
+ * купить за чипы (+1, +3, полный запас), вернуть тренировкой (бесплатно), взять «Безлимит» или выйти.
+ * layout="sheet" — шторка поверх экрана (open/onClose); layout="screen" — полноэкранно на входе.
+ * need — цена входа (1 или 2): окно предлагает продолжить, когда сердечек хватает на вход.
+ * onResume — сердечек хватает (куплены или восстановились): окно закрывается, вызывающий продолжает вход.
  */
 export function OutOfHearts({
   layout = "sheet",
   open = true,
+  need = 1,
   onClose,
   onResume,
   onExit,
@@ -218,6 +228,7 @@ export function OutOfHearts({
 }: {
   layout?: "sheet" | "screen";
   open?: boolean;
+  need?: number;
   onClose?: () => void;
   onResume: () => void;
   onExit: () => void;
@@ -228,13 +239,13 @@ export function OutOfHearts({
   if (layout === "screen") {
     return (
       <main className="mx-auto flex min-h-dvh w-full items-center justify-center px-4 py-8">
-        <Content layout="screen" onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
+        <Content layout="screen" need={need} onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
       </main>
     );
   }
   return (
     <Modal open={open} onClose={onClose ?? onExit} label={t("hearts.out.title")}>
-      <Content layout="sheet" onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
+      <Content layout="sheet" need={need} onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
     </Modal>
   );
 }
