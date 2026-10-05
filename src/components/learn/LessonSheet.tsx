@@ -1,5 +1,6 @@
 "use client";
 
+import { lessonStepCount } from "@/lib/lesson-size";
 import { AnimatePresence, m } from "motion/react";
 import {
   BookOpen,
@@ -166,7 +167,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
 
   const due = isDue(stat, now);
   const xp = xpKind(stat, now);
-  const steps = lesson.steps.length;
+  const steps = lessonStepCount(lesson);
   const step = lessonStep(stat, now);
   const stepDays = stepReviewDays(stat, now);
   // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
