@@ -25,6 +25,7 @@ import { Pill } from "@/components/ui/Pill";
 import { XpIcon } from "@/components/economy/XpIcon";
 import { useChips } from "@/components/economy/useEconomy";
 import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -271,6 +272,9 @@ export function Results({
       </div>
 
       <StreakIgnite />
+
+      {/* Первый урок: короткое «что всё это значит» (проводник, #104); компонент сам решает, показываться ли. */}
+      {kind === "lesson" && <AfterFirstLesson />}
 
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">

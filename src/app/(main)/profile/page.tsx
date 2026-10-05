@@ -28,6 +28,7 @@ import { TrackSettings } from "@/components/school/TrackSettings";
 import { useEntVisible } from "@/components/school/useEntVisible";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { AnalyticsToggle } from "@/components/profile/AnalyticsToggle";
+import { TipsReset } from "@/components/profile/TipsReset";
 import { FeedbackLink } from "@/components/issue/FeedbackLink";
 import { ReportEntry } from "@/components/report/ReportShareSheet";
 
@@ -355,6 +356,7 @@ export default function ProfilePage() {
 
       {/* Статистика (#69, сама скрыта, пока сбор выключен) и отзывы */}
       <AnalyticsToggle />
+      <TipsReset />
       <ReportEntry />
       <FeedbackLink />
 

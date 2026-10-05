@@ -330,7 +330,7 @@ function textFromMirror(m, now) {
     },
     pool,
     );
-  } catch (e) {
+  } catch {
     return reminderText(m.lang, streak, m.freezes || 0);
   }
 }

@@ -19,6 +19,7 @@ import { StorageBanner } from "@/components/app/StorageBanner";
 import { RecoveryScreen } from "@/components/app/RecoveryScreen";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
 import { PushAskAgent } from "@/components/reminders/PushAskAgent";
+import { TourAgent } from "@/components/tour/TourAgent";
 
 function subscribeHydration(cb: () => void): () => void {
   const offs = [useApp.persist.onHydrate(cb), useApp.persist.onFinishHydration(cb), subscribeStorage(cb)];
@@ -127,6 +128,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <PaywallAgent />
       {/* Окно «Включить напоминания»: с первого входа, дальше раз в 3 дня первую неделю, потом раз в 7 (F3). */}
       <PushAskAgent />
+      {/* Проводник первого входа (#104): приветствие, обзор панели, карточки страниц; окна тарифов и напоминаний ждут его. */}
+      <TourAgent />
     </MotionProvider>
   );
 }
