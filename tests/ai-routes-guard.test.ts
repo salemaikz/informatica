@@ -175,7 +175,7 @@ describe("POST /api/ai/check-solution — страж лимитов", () => {
 
 describe("POST /api/ai/lesson-feedback — бесплатно для устройства, 1 для сайта", () => {
   const body = { context: {}, lesson: "Системы счисления", accuracy: 0.8, durationSec: 300, mistakes: [], skills: [] };
-  const good = JSON.stringify({ feedback: "Хорошо", memory: "- любит примеры", focus: ["двоичная"] });
+  const good = JSON.stringify({ feedback: "Хорошо", focus: ["двоичная"] });
 
   it("успех: сайт +1, у устройства свой потолок (AI_FREE_DEVICE_DAILY), обращения устройства не тратятся", async () => {
     vi.stubEnv("AI_FREE_DEVICE_DAILY", "2");
@@ -194,9 +194,18 @@ describe("POST /api/ai/lesson-feedback — бесплатно для устро�
     expect(create.mock.calls[0][0].max_completion_tokens).toBe(MAX_TOKENS.feedback);
   });
 
-  it("бюджет входа: тяжёлый контекст и сводка ужимаются до INPUT_BUDGET.feedback, память наставника цела, в логе chars и trimmed", async () => {
+  it("без «памяти ИИ» (этап 16В, L): в схеме ответа только feedback и focus, поле memory от модели отбрасывается", async () => {
+    create.mockResolvedValue(reply(JSON.stringify({ feedback: "Хорошо", memory: "- любит примеры", focus: ["двоичная"] })));
+    const res = await feedback.POST(post("/api/ai/lesson-feedback", body, { "x-forwarded-for": freshIp() }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ feedback: "Хорошо", focus: ["двоичная"] });
+    const schema = create.mock.calls[0][0].response_format.json_schema.schema;
+    expect(schema.required).toEqual(["feedback", "focus"]);
+    expect(Object.keys(schema.properties)).toEqual(["feedback", "focus"]);
+  });
+
+  it("бюджет входа: тяжёлый контекст и сводка ужимаются до INPUT_BUDGET.feedback, в логе chars и trimmed", async () => {
     create.mockResolvedValue(reply(good));
-    const memory = "м".repeat(1500);
     const heavy = {
       context: {
         lang: "ru",
@@ -204,7 +213,8 @@ describe("POST /api/ai/lesson-feedback — бесплатно для устро�
         weak: Array.from({ length: 8 }, () => "а".repeat(60)),
         strong: Array.from({ length: 8 }, () => "б".repeat(60)),
         mistakes: Array.from({ length: 6 }, () => ({ q: "в".repeat(220), given: "г".repeat(80), expected: "д".repeat(80) })),
-        memory,
+        // «Памяти ИИ» больше нет (этап 16В, L): поле из старого клиента сервер отбрасывает и в промпт не кладёт.
+        memory: "м".repeat(1500),
         notes: "н".repeat(800),
         lessons: Array.from({ length: 20 }, () => "у".repeat(80)),
       },
@@ -217,7 +227,7 @@ describe("POST /api/ai/lesson-feedback — бесплатно для устро�
     expect((await feedback.POST(post("/api/ai/lesson-feedback", heavy))).status).toBe(200);
     const sent = create.mock.calls[0][0].messages as { role: string; content: string }[];
     expect(sent.reduce((a, m) => a + m.content.length, 0)).toBeLessThanOrEqual(INPUT_BUDGET.feedback);
-    expect(sent[0].content).toContain(memory);
+    expect(sent[0].content).not.toContain("м".repeat(50));
     expect(sent[1].content).toContain("Ошибки:\n- «");
     const line = vi.mocked(console.info).mock.calls.map((c) => String(c[0])).find((l) => l.startsWith("[ai] route=lesson-feedback")) ?? "";
     expect(line).toMatch(/chars=\d+ trimmed=1$/);

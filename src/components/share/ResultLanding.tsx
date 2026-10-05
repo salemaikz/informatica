@@ -82,13 +82,13 @@ export function ResultLanding({ result }: { result: ShareResult | null }) {
 
           {model.ratio !== null ? (
             <Ring value={model.ratio} size={168} stroke={16} color="var(--primary)">
-              <span className="px-2 text-4xl font-extrabold tabular-nums">{model.kind === "course" ? model.big : `${Math.round(model.ratio * 100)}%`}</span>
+              <span className="px-2 text-4xl font-extrabold tabular-nums">{model.kind === "course" || model.kind === "lesson" ? model.big : `${Math.round(model.ratio * 100)}%`}</span>
             </Ring>
           ) : (
             <Flame size={84} className="text-streak" fill="var(--streak-soft)" aria-hidden />
           )}
 
-          {model.kind !== "course" && (
+          {model.kind !== "course" && model.kind !== "lesson" && (
             <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-muted">
               {first && <span className="text-xl font-extrabold">{model.suffix}</span>}
               <span className="text-6xl font-extrabold leading-none tabular-nums text-text">{model.big}</span>

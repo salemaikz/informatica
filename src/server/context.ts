@@ -98,7 +98,6 @@ export function sanitizeContext(raw: unknown): StudentContext & WithTrack {
     weak: strArr(c.weak, 8, 60),
     strong: strArr(c.strong, 8, 60),
     mistakes,
-    memory: str(c.memory, 1500),
     notes: str(c.notes, 800),
     lessons: strArr(c.lessons, 20, 80),
   };
@@ -169,7 +168,6 @@ export function renderContext(c: StudentContext & Partial<WithTrack>): string {
     lines.push("Недавние ошибки:");
     for (const m of c.mistakes) lines.push(`- «${m.q}» — ответ ученика «${m.given}», верно «${m.expected}»`);
   }
-  if (c.memory) lines.push(`Заметки наставника об ученике (память):\n${c.memory}`);
   if (c.notes) lines.push(`Заметки ученика из конспекта:\n${c.notes}`);
   return lines.join("\n");
 }
@@ -177,7 +175,7 @@ export function renderContext(c: StudentContext & Partial<WithTrack>): string {
 // ---------- Бюджет входа одного запроса (v0.9.1) ----------
 // Размер входа считаем в символах (токены без токенизатора не посчитать): системный промпт + данные ученика + задание +
 // история. Бюджеты — INPUT_BUDGET в server/openai.ts. Потолки полей выше заданы так, что обычный запрос укладывается без
-// обрезки; сюда попадают только тяжёлые: длинный чат с большим конспектом, памятью и списком ошибок.
+// обрезки; сюда попадают только тяжёлые: длинный чат с большим конспектом и списком ошибок.
 
 /** Сумма длин текстов сообщений истории. */
 export function historyChars(history: readonly HistoryMsg[]): number {
@@ -207,13 +205,12 @@ const MIN_KEEP_CHARS = 40;
 /** Один шаг ужатия контекста: вернуть укороченный контекст или null, если в этой части ужимать уже нечего. */
 type ShrinkStep = <C extends StudentContext>(ctx: C, over: number) => C | null;
 
-const cutText =
-  (key: "notes" | "memory"): ShrinkStep =>
-  (ctx, over) => {
-    const s = ctx[key];
-    if (!s) return null;
-    return { ...ctx, [key]: s.length - over < MIN_KEEP_CHARS ? "" : clipEnd(s, over) };
-  };
+/** Укорачивает заметки ученика с конца; остаток короче MIN_KEEP_CHARS убирается целиком. */
+const cutNotes: ShrinkStep = (ctx, over) => {
+  const s = ctx.notes;
+  if (!s) return null;
+  return { ...ctx, notes: s.length - over < MIN_KEEP_CHARS ? "" : clipEnd(s, over) };
+};
 
 /** Убирает по одному элементу с конца списка. */
 const dropLast =
@@ -222,12 +219,10 @@ const dropLast =
     ctx[key].length ? { ...ctx, [key]: ctx[key].slice(0, -1) } : null;
 
 /**
- * Необязательные части контекста — с конца блока «ДАННЫЕ УЧЕНИКА» (renderContext): заметки ученика, память наставника,
+ * Необязательные части контекста — с конца блока «ДАННЫЕ УЧЕНИКА» (renderContext): заметки ученика,
  * ошибки, пройденные уроки, сильные и слабые темы. Основа (имя, класс, режим, цель, стиль, уровень) не трогается.
  */
-const SHRINK_STEPS: ShrinkStep[] = [cutText("notes"), cutText("memory"), dropLast("mistakes"), dropLast("lessons"), dropLast("strong"), dropLast("weak")];
-/** Память наставника обновляется по её же тексту (отзыв после урока) — ужимаем в последнюю очередь. */
-const SHRINK_STEPS_KEEP_MEMORY: ShrinkStep[] = [cutText("notes"), dropLast("mistakes"), dropLast("lessons"), dropLast("strong"), dropLast("weak"), cutText("memory")];
+const SHRINK_STEPS: ShrinkStep[] = [cutNotes, dropLast("mistakes"), dropLast("lessons"), dropLast("strong"), dropLast("weak")];
 
 export interface FitResult<C extends StudentContext> {
   ctx: C;
@@ -242,7 +237,7 @@ export interface FitResult<C extends StudentContext> {
  * Укладывает вход одного запроса в бюджет (символы). Чистая функция: ничего не мутирует, маленький запрос возвращает
  * как есть (те же объекты). Порядок ужатия:
  * 1) отбрасываем самые старые сообщения истории — последнее (вопрос ученика, до 2000 символов) остаётся целиком;
- * 2) укорачиваем необязательные части контекста с конца: заметки, память, ошибки, уроки, сильные и слабые темы.
+ * 2) укорачиваем необязательные части контекста с конца: заметки, ошибки, уроки, сильные и слабые темы.
  * Системные правила и задание не трогаем — они внутри `base`.
  * base(ctx) — размер всего входа, КРОМЕ истории, для данного контекста (длина системного промпта и прочего текста).
  */
@@ -251,8 +246,6 @@ export function fitInput<C extends StudentContext>(a: {
   ctx: C;
   history: HistoryMsg[];
   base: (ctx: C) => number;
-  /** Не трогать память наставника, пока есть что ужать ещё (отзыв после урока перезаписывает память). */
-  keepMemory?: boolean;
 }): FitResult<C> {
   let { ctx, history } = a;
   let chars = a.base(ctx) + historyChars(history);
@@ -262,7 +255,7 @@ export function fitInput<C extends StudentContext>(a: {
   while (chars > a.budget && history.length - from > 1) chars -= history[from++].content.length;
   history = history.slice(from);
 
-  for (const step of a.keepMemory ? SHRINK_STEPS_KEEP_MEMORY : SHRINK_STEPS) {
+  for (const step of SHRINK_STEPS) {
     while (chars > a.budget) {
       const next = step(ctx, chars - a.budget);
       if (!next) break;
@@ -278,7 +271,7 @@ export const FEEDBACK_SUMMARY_MAX_CHARS = 2500;
 
 /**
  * Сводка по только что пройденному уроку для /api/ai/lesson-feedback (недоверенные данные с клиента → текст).
- * Не длиннее FEEDBACK_SUMMARY_MAX_CHARS: иначе длинные ошибки вытеснили бы память наставника из бюджета входа.
+ * Не длиннее FEEDBACK_SUMMARY_MAX_CHARS: иначе длинные ошибки вытеснили бы из бюджета входа данные ученика.
  */
 export function feedbackSummary(body: Record<string, unknown>): string {
   const mistakes = (Array.isArray(body.mistakes) ? body.mistakes : []).slice(0, 10).map((m) => {

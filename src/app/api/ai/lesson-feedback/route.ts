@@ -5,21 +5,20 @@ import { guardAi, withGuardHeaders } from "@/server/ai-guard";
 import { feedbackSummary, fitInput, messagesChars, sanitizeContext } from "@/server/context";
 import { lessonFeedbackPrompt } from "@/server/prompts";
 
-// Отзыв после урока + обновление «памяти наставника» об ученике. Дешёвая модель.
+// Отзыв после урока (feedback + focus). Дешёвая модель. «Памяти наставника» больше нет (этап 16В, L): модель её не обновляет.
 // Страж лимитов (server/ai-guard.ts): для устройства бесплатно (AI_UNITS.feedback = 0, свой потолок в сутки), с сайта списывается 1.
 // Возврат — только если модель точно не получила запрос (ошибка до вызова, HTTP-ошибка OpenAI); обрыв и таймаут не возвращают.
 // Бюджет входа (INPUT_BUDGET.feedback, v0.9.1): сводка по уроку не длиннее FEEDBACK_SUMMARY_MAX_CHARS, затем fitInput ужимает
-// контекст ученика; память наставника — в последнюю очередь (отзыв перезаписывает её по её же тексту).
+// контекст ученика.
 
 export const maxDuration = 30;
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["feedback", "memory", "focus"],
+  required: ["feedback", "focus"],
   properties: {
     feedback: { type: "string" },
-    memory: { type: "string" },
     focus: { type: "array", items: { type: "string" } },
   },
 } as const;
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
   let messages: { role: "system" | "user"; content: string }[];
   let input: { chars: number; trimmed: boolean };
   try {
-    const fit = fitInput({ budget: INPUT_BUDGET.feedback, ctx, history: [], base: (c) => lessonFeedbackPrompt(c).length + summary.length, keepMemory: true });
+    const fit = fitInput({ budget: INPUT_BUDGET.feedback, ctx, history: [], base: (c) => lessonFeedbackPrompt(c).length + summary.length });
     messages = [
       { role: "system", content: lessonFeedbackPrompt(fit.ctx) },
       { role: "user", content: summary },
@@ -86,7 +85,6 @@ export async function POST(req: Request) {
     return withGuardHeaders(
       Response.json({
         feedback: str(parsed.feedback, 700),
-        memory: str(parsed.memory, 900),
         focus: (parsed.focus ?? []).slice(0, 3).map((f) => str(f, 80)),
       } satisfies LessonFeedbackResponse),
       g,

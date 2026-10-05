@@ -38,9 +38,9 @@ export const isSafeId = (v: unknown): v is string => typeof v === "string" && ID
 export const PAYWALL_FROMS: readonly PaywallFrom[] = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "other"];
 export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game"];
 export const BREAK_REASONS: readonly BreakReason[] = ["time", "hard", "boring", "forgot", "other_prep", "other"];
-export const SHARE_WHATS: readonly ShareWhat[] = ["exam", "course", "streak", "challenge", "report"];
+export const SHARE_WHATS: readonly ShareWhat[] = ["exam", "course", "streak", "lesson", "challenge", "report"];
 export const SHARE_HOWS: readonly ShareHow[] = ["native", "copy", "wa", "tg", "save", "manual"];
-export const SHARE_OPENS = ["exam", "course", "streak", "report"] as const;
+export const SHARE_OPENS = ["exam", "course", "streak", "lesson", "report"] as const;
 export const CHALLENGE_STEPS: readonly ChallengeStep[] = ["accept", "start", "more", "same", "less"];
 const VIA = ["learn", "check"] as const;
 const EXAM_KINDS = ["full", "mini", "topic", "unit"] as const;

@@ -265,7 +265,6 @@ export function ExamResult({ id }: { id: string }) {
         })),
       });
       if (!data.feedback?.trim()) throw new Error("empty");
-      if (data.memory) app.setMemory(data.memory);
       const review = {
         feedback: data.feedback,
         focus: Array.isArray(data.focus) ? data.focus : [],

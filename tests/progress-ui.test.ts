@@ -186,6 +186,22 @@ describe("UnitProgressList", () => {
     expect(text()).toContain("Разделы программы");
     expect(text()).not.toContain("Как решать ЕНТ");
   });
+
+  it("у раздела — освоено навыков из всех (этап 16В); строка ведёт к разделу на карте", async () => {
+    await patch({ skills: { "ns.bin2dec": stat(0.9, { clean: 4, okDays: 2 }) } });
+    await render(createElement(UnitProgressList));
+    const row = [...host.querySelectorAll("li")].find((li) => li.textContent?.includes("Информация и системы счисления"))!;
+    expect(row.textContent).toMatch(/освоено навыков: 1 из 18/);
+    expect(row.querySelector("a")?.getAttribute("href")).toBe("/learn#unit-u1");
+    expect(hrefs()).toHaveLength(UNITS.length);
+  });
+
+  it("школьный трек: навыки раздела программы и ссылка на карту класса", async () => {
+    await setProfile({ track: "school", grade: "7" });
+    await render(createElement(UnitProgressList));
+    expect(text()).toMatch(/освоено навыков: 0 из \d+/);
+    expect(new Set(hrefs())).toEqual(new Set(["/learn"]));
+  });
 });
 
 describe("TopicTable", () => {
@@ -353,10 +369,20 @@ describe("WeakTopicsRail (боковая карточка «Слабые мес�
   });
 });
 
-describe("SkillsMasteryCard (правило «освоено», #67)", () => {
+describe("SkillsMasteryCard (правило «освоено», #67; группы по разделам — этап 16В)", () => {
+  const groupBtn = (needle: string) => [...host.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((b) => b.textContent?.includes(needle))!;
+  /** Раскрывает группу по части названия (уже раскрытую не трогает). */
+  const openGroup = (needle: string) =>
+    act(async () => {
+      const b = groupBtn(needle);
+      if (b.getAttribute("aria-expanded") !== "true") b.click();
+    });
+  const rowsOf = () => [...host.querySelectorAll('ul[id^="skills-"] > li')];
+
   it("высокая оценка без самостоятельных ответов в разные дни — «в процессе» и чего не хватает", async () => {
     await patch({ skills: { "ns.bin2dec": stat(0.9, { clean: 2, okDays: 1 }) } });
     await render(createElement(SkillsMasteryCard));
+    await openGroup("Информация и системы счисления");
     expect(text()).toContain("В процессе");
     expect(text()).toContain("До «освоено»: ещё 2 верных ответа без подсказки, в другой день");
   });
@@ -364,15 +390,52 @@ describe("SkillsMasteryCard (правило «освоено», #67)", () => {
   it("освоено: оценка, 4 самостоятельных ответа и 2 дня — «Освоено», без подсказки «до освоено»", async () => {
     await patch({ skills: { "ns.bin2dec": stat(0.9, { clean: 4, okDays: 2 }) } });
     await render(createElement(SkillsMasteryCard));
+    await openGroup("Информация и системы счисления");
     expect(text()).toContain("Освоено");
     expect(text()).not.toContain("До «освоено»");
-    expect(text()).toContain("освоено 1 · в процессе 0 · слабо 0");
+    expect(text()).toContain("освоено 1 · в процессе 0 · слабо 0 · не начато 17"); // сводка раздела: 18 навыков
   });
 
-  it("навыки без ответов не показываются; пусто — «Пока нет данных»", async () => {
+  it("группы по разделам курса: на каждый раздел одна; пока ничего не тронуто — раскрыта первая, все навыки «не начато»", async () => {
     await render(createElement(SkillsMasteryCard));
-    expect(text()).toContain("Пока нет данных");
-    expect(host.querySelectorAll("li")).toHaveLength(0);
+    const buttons = [...host.querySelectorAll("button[aria-expanded]")];
+    expect(buttons).toHaveLength(UNITS.length);
+    for (const u of UNITS) expect(text()).toContain(u.title.ru);
+    expect(buttons.map((b) => b.getAttribute("aria-expanded"))).toEqual(UNITS.map((_, i) => String(i === 0)));
+    expect(rowsOf()).toHaveLength(8); // «Старт» — 8 навыков, все серые
+    expect(host.querySelectorAll("ul[id^='skills-'] [role=progressbar]")).toHaveLength(8);
+    expect(text()).toContain("Решай задания");
+    expect(text()).toMatch(/освоено 0 · в процессе 0 · слабо 0 · не начато \d+/);
+  });
+
+  it("раскрыта по умолчанию группа со слабыми навыками; группу можно раскрыть и свернуть", async () => {
+    await patch({ skills: { "logic.ops": stat(0.3) } });
+    await render(createElement(SkillsMasteryCard));
+    expect(groupBtn("Логика").getAttribute("aria-expanded")).toBe("true");
+    expect(groupBtn("Старт").getAttribute("aria-expanded")).toBe("false");
+    expect(rowsOf()).toHaveLength(10); // все навыки раздела «Логика», в том числе не начатые
+    expect(rowsOf()[0].textContent).toContain("Логические операции"); // слабый — первым
+    await openGroup("Старт");
+    expect(rowsOf()).toHaveLength(18);
+    await act(async () => groupBtn("Логика").click());
+    expect(groupBtn("Логика").getAttribute("aria-expanded")).toBe("false");
+    expect(rowsOf()).toHaveLength(8);
+  });
+
+  it("школьный трек: группы — разделы программы класса", async () => {
+    await setProfile({ track: "school", grade: "7" });
+    await render(createElement(SkillsMasteryCard));
+    const buttons = [...host.querySelectorAll("button[aria-expanded]")];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(text()).not.toContain("Как решать ЕНТ");
+    expect(text()).toContain("Измерение информации и компьютерная память");
+  });
+
+  it("навык вне разделов трека, по которому были ответы, — в группе «Другие навыки»", async () => {
+    await setProfile({ track: "ent" });
+    await patch({ skills: { "school.robots": stat(0.7) } });
+    await render(createElement(SkillsMasteryCard));
+    expect(groupBtn("Другие навыки")).toBeTruthy();
   });
 
   it("needsText: склонение числа ответов и «в N разных днях»", () => {
@@ -398,6 +461,15 @@ describe("страница «Прогресс»", () => {
     expect(weak).toBeLessThan(units);
     expect(units).toBeLessThan(topics);
     expect(topics).toBeLessThan(tiles);
+  });
+
+  it("«Что ИИ знает обо мне» убрано (этап 16В, L); метки проводника на сводке и слабых местах", async () => {
+    await patch({ memory: "- любит примеры" });
+    await render(createElement(StatsPage));
+    expect(text()).not.toContain("Что ИИ знает");
+    expect(text()).not.toContain("любит примеры");
+    expect(host.querySelector('[data-tour="stats-overview"]')?.textContent).toContain("Пройдено 0% курса");
+    expect(host.querySelector('[data-tour="stats-weak"]')?.textContent).toContain("Слабые места");
   });
 
   it("школьный трек: шкала класса, разделы программы, без тем ЕНТ", async () => {

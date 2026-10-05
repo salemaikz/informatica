@@ -1,13 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { BadgeCheck, BookOpen, Library, Clock, Cpu, Flame, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
+import { BadgeCheck, BookOpen, Library, Clock, Cpu, Flame, Heart, Map as MapIcon, Repeat, RotateCcw, Share2, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { LevelBadge, TierPill } from "@/components/app/LevelBadge";
 import { RARITY_BORDER, RARITY_SOFT } from "@/components/ui/rarity";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Lesson, LessonVia, SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
@@ -16,6 +16,7 @@ import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById, levelInfo, levelTitle, newTierOnLevelUp } from "@/lib/gamification";
 import { ACHIEVEMENT_CHIPS, earnAmount } from "@/lib/economy";
+import { encodeShare, SHARE_MAX_XP, type ShareResult } from "@/lib/share-code";
 import { isPerfectSession, PERFECT_RUN_SHOW_FROM } from "@/lib/perfect";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill-meta";
@@ -37,6 +38,7 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
 import { useSkillStats } from "@/components/progress/useSkillStats";
+import { ShareSheet } from "@/components/share/ShareSheet";
 import { Mascot } from "@/components/mascot/Mascot";
 import { CountUp } from "@/components/motion/CountUp";
 import { Reveal } from "@/components/motion/Reveal";
@@ -59,7 +61,7 @@ function formatTime(sec: number) {
 export type FeedbackState = { status: "loading" } | { status: "done"; data: LessonFeedbackResponse } | { status: "failed" };
 
 /**
- * Запрашивает у ИИ отзыв об уроке и обновляет «память наставника».
+ * Запрашивает у ИИ отзыв об уроке («памяти наставника» больше нет — этап 16В, L).
  * Вызывается из обработчика завершения урока (не из эффекта), поэтому запрос уходит ровно один раз.
  */
 export function requestLessonFeedback(result: SessionResult, onState: (s: FeedbackState) => void) {
@@ -85,10 +87,7 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
     mistakes: mistakes.slice(0, 8).map((m) => ({ q: m.prompt, given: m.given, expected: m.expected })),
     skills: skills.map((id) => ({ title: skillById(id)?.title[app.profile.lang] ?? id, mastery: stats[id]?.mastery ?? 0 })),
   })
-    .then((data) => {
-      if (data.memory) useApp.getState().setMemory(data.memory);
-      onState({ status: "done", data });
-    })
+    .then((data) => onState({ status: "done", data }))
     .catch(() => {
       useApp.getState().refundAi(receipt);
       onState({ status: "failed" });
@@ -141,7 +140,7 @@ export function Results({
   doneHref?: string;
 }) {
   const router = useRouter();
-  const { t, l } = useT();
+  const { t, l, lang } = useT();
   const { multiplier: chipMult } = useChips();
   const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
@@ -175,6 +174,22 @@ export function Results({
   const sessionSkills = [...new Set(answered.map((a) => a.skill).filter(Boolean))] as string[];
   // Из чего сложилась точность: сам / с подсказкой / пропущено (сумма = предъявлено).
   const mix = breakdownOf(result);
+
+  // «Поделиться» уроком (этап 16В, M): ненавязчивая кнопка в «Что дальше». В ссылке только числа — точность, XP, «идеально»,
+  // сколько уроков пройдено; ни имени, ни названия урока. Урок уже засчитан в сторе, поэтому пройденных не меньше одного.
+  const shareLesson = useMemo<ShareResult | null>(() => {
+    if (kind !== "lesson") return null;
+    const passed = Object.values(lessons).filter((s) => (s?.completions ?? 0) > 0).length;
+    const r: ShareResult = {
+      t: "lesson",
+      accuracy: Math.max(0, Math.min(100, accuracy)),
+      xp: Math.max(0, Math.min(SHARE_MAX_XP, Math.round(totalXp))),
+      perfect,
+      n: Math.max(1, passed),
+      lang,
+    };
+    return encodeShare(r) ? r : null;
+  }, [kind, lessons, accuracy, totalXp, perfect, lang]);
 
   // Защита от двойного клика: второй клик «Продолжить» из урока не должен сразу уводить с итогов.
   const [armed, setArmed] = useState(false);
@@ -464,9 +479,21 @@ export function Results({
                 {t("modes.next.note")}
               </Button>
             </div>
-            <ButtonLink href={`/theory/${lessonId}`} variant="ghost" block icon={<Library size={18} />}>
-              {t("theory.read")}
-            </ButtonLink>
+            <div className="flex gap-3">
+              <ButtonLink href={`/theory/${lessonId}`} variant="ghost" block icon={<Library size={18} />} className="h-auto min-h-11 flex-1 py-2 leading-tight">
+                {t("theory.read")}
+              </ButtonLink>
+              {shareLesson && (
+                <ShareSheet
+                  source={shareLesson}
+                  what="lesson"
+                  label={<span className="sr-only">{t("share.btn.short")}</span>}
+                  icon={<Share2 size={20} aria-hidden />}
+                  variant="ghost"
+                  className="h-11 w-11 shrink-0 px-0"
+                />
+              )}
+            </div>
           </div>
         </Card>
       )}

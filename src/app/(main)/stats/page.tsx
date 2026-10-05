@@ -1,11 +1,10 @@
 "use client";
 
-import { Snowflake, Sparkles, Trash2 } from "lucide-react";
+import { Snowflake } from "lucide-react";
 import Link from "next/link";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
-import { Markdown } from "@/components/Markdown";
 import { WeekChart } from "@/components/app/WeekChart";
 import { GoalsPanel, WeekCard } from "@/components/goals/GoalsPanel";
 import { HistoryStatsCard } from "@/components/history/HistoryCards";
@@ -16,28 +15,29 @@ import { TopicTable } from "@/components/progress/TopicTable";
 import { UnitProgressList } from "@/components/progress/UnitProgressList";
 import { WeakSpotsCard } from "@/components/progress/WeakSpotsCard";
 import { useEntVisible } from "@/components/school/useEntVisible";
-import { PageTip } from "@/components/tour/PageTip";
 
 /**
  * «Прогресс»: сверху шкала курса, слабые места, разделы и темы (#71); затем честные числа (#66, #68),
- * цели, история, освоение навыков (#67), ошибки и «что ИИ знает обо мне».
+ * цели, история, освоение навыков по разделам (#67, этап 16В) и ошибки. «Памяти ИИ» здесь больше нет (этап 16В, L).
  */
 export default function StatsPage() {
   const { t } = useT();
   const mistakes = useApp((s) => s.mistakes);
-  const memory = useApp((s) => s.memory);
-  const setMemory = useApp((s) => s.setMemory);
   const freezes = useApp((s) => s.streak.freezes ?? 0);
   // Темы ЕНТ, цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
   const ent = useEntVisible();
 
   return (
     <div className="flex flex-col gap-5">
-      <PageTip id="page-progress" />
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
-      <CourseProgressCard />
-      <WeakSpotsCard />
+      {/* Метки для проводника по странице (data-tour): сводка и слабые места. */}
+      <div data-tour="stats-overview">
+        <CourseProgressCard />
+      </div>
+      <div data-tour="stats-weak">
+        <WeakSpotsCard />
+      </div>
       <UnitProgressList />
       {ent && <TopicTable />}
 
@@ -91,20 +91,6 @@ export default function StatsPage() {
           </ul>
         </Card>
       )}
-
-      <Card className="border-ai/30">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 font-extrabold text-ai">
-            <Sparkles size={18} /> {t("stats.memory")}
-          </p>
-          {memory && (
-            <button type="button" onClick={() => setMemory("")} className="flex items-center gap-1 text-xs font-bold text-muted hover:text-danger">
-              <Trash2 size={14} /> {t("common.delete")}
-            </button>
-          )}
-        </div>
-        {memory ? <Markdown className="text-[15px]">{memory}</Markdown> : <p className="font-semibold text-muted">{t("stats.memoryEmpty")}</p>}
-      </Card>
     </div>
   );
 }

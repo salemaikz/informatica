@@ -246,7 +246,7 @@ export interface AppState {
   newAchievements: string[];
   /** Конспекты 2.0: папки и записи. */
   notebook: Notebook;
-  /** Заметки ИИ об ученике: как объяснять, что западает. Видны ученику в статистике. */
+  /** Устарело (этап 16В, L): «память ИИ» убрана — не показывается и не отправляется. Поле оставлено пустым для совместимости сохранений. */
   memory: string;
   chat: ChatMessage[];
   /** Обращения к ИИ за день: всего и бесплатных по тарифу (lib/economy.ts). */
@@ -338,7 +338,6 @@ export interface AppActions {
   noteCombo: (combo: number) => void;
   unlock: (id: string) => void;
   consumeNewAchievements: () => string[];
-  setMemory: (text: string) => void;
   addChat: (msg: Omit<ChatMessage, "id" | "at">) => void;
   clearChat: () => void;
 
@@ -700,6 +699,8 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
   return {
     ...current,
     ...p,
+    // «Память ИИ» убрана (этап 16В, L): старый текст из сохранения не оставляем.
+    memory: "",
     profile: cleanProfile(p.profile),
     streak: { ...current.streak, ...(p.streak ?? {}) },
     notebook: repairNotebook(p.notebook ?? current.notebook),
@@ -946,8 +947,6 @@ export const useApp = create<AppState & AppActions>()(
         if (ids.length) set({ newAchievements: [] });
         return ids;
       },
-
-      setMemory: (text) => set({ memory: text.slice(0, 1500) }),
 
       addChat: (msg) =>
         set((s) => ({ chat: [...s.chat, { ...msg, id: uid(), at: Date.now() }].slice(-MAX_CHAT) })),

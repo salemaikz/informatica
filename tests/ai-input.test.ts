@@ -32,7 +32,6 @@ function maxContext(lang: "ru" | "kk" = "ru") {
     weak: Array.from({ length: 8 }, () => word(60, "а")),
     strong: Array.from({ length: 8 }, () => word(60, "б")),
     mistakes: Array.from({ length: 6 }, () => ({ q: word(220, "в"), given: word(80, "г"), expected: word(80, "д") })),
-    memory: word(1500, "м"),
     notes: word(800, "н"),
     lessons: Array.from({ length: 20 }, () => word(80, "у")),
   });
@@ -53,7 +52,6 @@ const smallContext = () =>
     weak: ["Системы счисления (30%)"],
     strong: ["Биты и байты (90%)"],
     mistakes: [{ q: "Переведи 5 в двоичную", given: "11", expected: "101" }],
-    memory: "- любит примеры",
     notes: "Степени двойки: 1, 2, 4, 8",
     lessons: ["Биты", "Байты"],
   });
@@ -127,7 +125,6 @@ describe("fitInput: история — старые сообщения отбр�
     expect(fit.history).toEqual([last]);
     expect(fit.chars).toBeGreaterThan(500); // правила + основа + вопрос не поддаются ужатию
     expect(fit.ctx.notes).toBe("");
-    expect(fit.ctx.memory).toBe("");
     expect(fit.ctx.mistakes).toEqual([]);
     expect(fit.ctx.lessons).toEqual([]);
     expect(fit.ctx.weak).toEqual([]);
@@ -149,46 +146,38 @@ describe("fitInput: контекст ужимается с конца необя
   const base = (c: StudentContext) => 1000 + renderContext(c).length;
   const full = base(ctx) + historyChars(history);
 
-  it("сначала заметки ученика (с конца), память и ошибки целы", () => {
+  it("сначала заметки ученика (с конца), ошибки целы", () => {
     const fit = fitInput({ budget: full - 100, ctx, history, base });
     expect(fit.ctx.notes).toHaveLength(700);
-    expect(fit.ctx.memory).toBe(ctx.memory);
     expect(fit.ctx.mistakes).toEqual(ctx.mistakes);
     expect(fit.chars).toBeLessThanOrEqual(full - 100);
   });
 
-  it("потом память наставника, затем ошибки по одной с конца", () => {
-    const afterNotes = fitInput({ budget: full - 900, ctx, history, base });
-    expect(afterNotes.ctx.notes).toBe("");
-    expect(afterNotes.ctx.memory.length).toBeLessThan(1500);
-    expect(afterNotes.ctx.memory.length).toBeGreaterThan(1400);
-    expect(afterNotes.ctx.mistakes).toEqual(ctx.mistakes);
+  it("потом ошибки по одной с конца; уроки и темы — позже", () => {
+    const budget = full - 800 - 100; // заметки уйдут целиком, и ещё около 100 символов
+    const fit = fitInput({ budget, ctx, history, base });
+    expect(fit.ctx.notes).toBe("");
+    expect(fit.ctx.mistakes.length).toBeLessThan(6);
+    expect(fit.ctx.mistakes).toEqual(ctx.mistakes.slice(0, fit.ctx.mistakes.length));
+    expect(fit.ctx.lessons).toEqual(ctx.lessons);
+    expect(fit.chars).toBeLessThanOrEqual(budget);
 
-    const afterMemory = fitInput({ budget: full - 800 - 1500 - 400, ctx, history, base });
-    expect(afterMemory.ctx.notes).toBe("");
-    expect(afterMemory.ctx.memory).toBe("");
-    expect(afterMemory.ctx.mistakes.length).toBeLessThan(6);
-    expect(afterMemory.ctx.mistakes).toEqual(ctx.mistakes.slice(0, afterMemory.ctx.mistakes.length));
-    expect(afterMemory.ctx.lessons).toEqual(ctx.lessons);
-    expect(afterMemory.chars).toBeLessThanOrEqual(full - 800 - 1500 - 400);
-  });
-
-  it("keepMemory: память отдаётся в последнюю очередь — раньше уходят ошибки, уроки и темы", () => {
-    const budget = full - 800 - 600; // заметки уйдут целиком, и ещё около 600 символов
-    const keep = fitInput({ budget, ctx, history, base, keepMemory: true });
-    expect(keep.ctx.notes).toBe("");
-    expect(keep.ctx.memory).toBe(ctx.memory);
-    expect(keep.ctx.mistakes.length).toBeLessThan(6);
-    expect(keep.chars).toBeLessThanOrEqual(budget);
-    // обычный порядок на том же бюджете режет память раньше ошибок
-    const def = fitInput({ budget, ctx, history, base });
-    expect(def.ctx.memory.length).toBeLessThan(1500);
-    expect(def.ctx.mistakes).toEqual(ctx.mistakes);
-    // а если без памяти не обойтись — она режется последней, после ошибок, уроков и тем
-    const hard = fitInput({ budget: 600, ctx, history, base, keepMemory: true });
+    // а если бюджет совсем мал — уходят ошибки, уроки, сильные и слабые темы
+    const hard = fitInput({ budget: 600, ctx, history, base });
+    expect(hard.ctx.notes).toBe("");
     expect(hard.ctx.mistakes).toEqual([]);
     expect(hard.ctx.lessons).toEqual([]);
-    expect(hard.ctx.memory).toBe("");
+    expect(hard.ctx.strong).toEqual([]);
+    expect(hard.ctx.weak).toEqual([]);
+  });
+
+  it("«памяти ИИ» в контексте нет: поле из запроса отбрасывается, в промпт не попадает (этап 16В, L)", () => {
+    const raw = { ...smallContext(), memory: "- любит примеры; помнит про степени двойки" };
+    const clean = sanitizeContext(raw);
+    expect("memory" in clean).toBe(false);
+    expect(renderContext(clean)).not.toContain("помнит про степени двойки");
+    expect(renderContext(clean)).not.toMatch(/памят/i);
+    expect(lessonFeedbackPrompt(clean)).not.toContain("помнит про степени двойки");
   });
 
   it("не мутирует вход и сохраняет лишние поля контекста (track)", () => {
@@ -279,7 +268,7 @@ describe("проверка решения по фото: вход в бюдже�
   });
 });
 
-describe("отзыв после урока: вход в бюджете feedback, память цела", () => {
+describe("отзыв после урока: вход в бюджете feedback", () => {
   const worstBody = {
     lesson: word(120),
     accuracy: 0.4,
@@ -311,15 +300,22 @@ describe("отзыв после урока: вход в бюджете feedback,
     expect(feedbackSummary({})).toContain("Ошибок не было.");
   });
 
-  it("потолочный контекст и тяжёлая сводка: ≤ 6 000, память наставника не тронута", () => {
+  it("потолочный контекст и тяжёлая сводка: ≤ 6 000", () => {
     for (const lang of ["ru", "kk"] as const) {
       const ctx = maxContext(lang);
       const summary = feedbackSummary(worstBody);
-      const fit = fitInput({ budget: INPUT_BUDGET.feedback, ctx, history: [], base: (c) => lessonFeedbackPrompt(c).length + summary.length, keepMemory: true });
+      const fit = fitInput({ budget: INPUT_BUDGET.feedback, ctx, history: [], base: (c) => lessonFeedbackPrompt(c).length + summary.length });
       expect(fit.chars, lang).toBeLessThanOrEqual(INPUT_BUDGET.feedback);
-      expect(fit.trimmed, lang).toBe(true);
-      expect(fit.ctx.memory, lang).toBe(ctx.memory);
       expect(fit.chars, lang).toBe(lessonFeedbackPrompt(fit.ctx).length + summary.length);
+    }
+  });
+
+  it("промпт отзыва: два поля (feedback, focus), про память и заметки наставника — ни слова", () => {
+    for (const lang of ["ru", "kk"] as const) {
+      const p = lessonFeedbackPrompt({ ...smallContext(), lang });
+      expect(p, lang).toContain("1) feedback");
+      expect(p, lang).toContain("2) focus");
+      expect(p, lang).not.toMatch(/memory|памят|заметки наставника/i);
     }
   });
 });

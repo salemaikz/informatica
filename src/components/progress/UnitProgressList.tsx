@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 import { UNITS } from "@/content/course-map";
 import { schoolPlan } from "@/content/school-program";
@@ -23,6 +25,11 @@ interface Row {
   soon: number;
   ratio: number;
   mastery: number | null;
+  /** Навыков раздела всего и освоено (этап 16В). */
+  skillsTotal: number;
+  skillsMastered: number;
+  /** Куда ведёт строка: раздел на карте («Путь» ЕНТ) или карта школьного трека. */
+  href: string;
 }
 
 /** Цвет раздела на полосе: чуть сдвинут к цвету текста, чтобы тёмные цвета были видны на тёмной теме, а светлые — на светлой. */
@@ -43,7 +50,7 @@ export function UnitProgressList({ className }: { className?: string }) {
     if (school) {
       const plan = schoolPlan(toSchoolGrade(gradeRaw)!, direction);
       if (plan) {
-        return schoolSectionRows(plan, lessons).map((r, i) => ({
+        return schoolSectionRows(plan, lessons, skills).map((r, i) => ({
           id: r.id,
           title: l(r.title),
           color: UNITS[i % UNITS.length].color,
@@ -52,6 +59,9 @@ export function UnitProgressList({ className }: { className?: string }) {
           soon: r.soon,
           ratio: r.ratio,
           mastery: null,
+          skillsTotal: r.skillsTotal,
+          skillsMastered: r.skillsMastered,
+          href: "/learn",
         }));
       }
     }
@@ -64,6 +74,9 @@ export function UnitProgressList({ className }: { className?: string }) {
       soon: r.soon,
       ratio: r.ratio,
       mastery: r.mastery,
+      skillsTotal: r.skillsTotal,
+      skillsMastered: r.skillsMastered,
+      href: `/learn#unit-${r.id}`,
     }));
   }, [school, gradeRaw, direction, lessons, skills, skipBasics, l]);
 
@@ -73,34 +86,45 @@ export function UnitProgressList({ className }: { className?: string }) {
       <ul className="flex flex-col gap-3.5">
         {rows.map((r) => {
           const full = r.ready > 0 && r.done >= r.ready;
+          const skillsFull = r.skillsTotal > 0 && r.skillsMastered >= r.skillsTotal;
           return (
             <li key={r.id}>
-              <div className="flex items-start justify-between gap-3">
-                {/* Название — до двух строк по границам слов, без переноса посреди слова. */}
-                <p className="line-clamp-2 min-w-0 flex-1 break-normal text-sm font-extrabold leading-snug">{r.title}</p>
-                <p className={cn("shrink-0 text-sm font-extrabold tabular-nums", full ? "text-success-strong" : "text-muted")}>
-                  {r.done}/{r.ready}
-                </p>
-              </div>
-              <ProgressBar
-                value={r.ratio}
-                color={full ? "var(--success)" : barColor(r.color)}
-                height={10}
-                className="mt-1.5"
-                label={t("progress.units.aria", { title: r.title, done: r.done, ready: r.ready })}
-              />
-              {(r.ready === 0 || r.soon > 0 || (r.mastery ?? 0) > 0) && (
-                <p className="mt-1 flex flex-wrap gap-x-3 text-xs font-bold text-muted">
-                  {r.ready === 0 ? (
-                    <span>{t("progress.units.waiting")}</span>
-                  ) : (
-                    <>
-                      {(r.mastery ?? 0) > 0 && <span>{t("progress.units.mastery", { p: percent(r.mastery ?? 0) })}</span>}
-                      {r.soon > 0 && <span>{t("progress.units.soon", { n: r.soon })}</span>}
-                    </>
-                  )}
-                </p>
-              )}
+              {/* Строка — ссылка на раздел карты (ЕНТ: якорь раздела на «Пути»). */}
+              <Link
+                href={r.href}
+                className="-m-1.5 block rounded-2xl p-1.5 hover:bg-surface-2 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  {/* Название — до двух строк по границам слов, без переноса посреди слова. */}
+                  <p className="line-clamp-2 min-w-0 flex-1 break-normal text-sm font-extrabold leading-snug">{r.title}</p>
+                  <p className={cn("shrink-0 text-sm font-extrabold tabular-nums", full ? "text-success-strong" : "text-muted")}>
+                    {r.done}/{r.ready}
+                  </p>
+                  <ChevronRight size={16} aria-hidden className="mt-0.5 shrink-0 text-muted" />
+                </div>
+                <ProgressBar
+                  value={r.ratio}
+                  color={full ? "var(--success)" : barColor(r.color)}
+                  height={10}
+                  className="mt-1.5"
+                  label={t("progress.units.aria", { title: r.title, done: r.done, ready: r.ready })}
+                />
+                {(r.ready === 0 || r.skillsTotal > 0 || r.soon > 0 || (r.mastery ?? 0) > 0) && (
+                  <p className="mt-1 flex flex-wrap gap-x-3 text-xs font-bold text-muted">
+                    {r.ready === 0 ? (
+                      <span>{t("progress.units.waiting")}</span>
+                    ) : (
+                      <>
+                        {r.skillsTotal > 0 && (
+                          <span className={cn(skillsFull && "text-success-strong")}>{t("progress16c.units.skills", { m: r.skillsMastered, n: r.skillsTotal })}</span>
+                        )}
+                        {(r.mastery ?? 0) > 0 && <span>{t("progress.units.mastery", { p: percent(r.mastery ?? 0) })}</span>}
+                        {r.soon > 0 && <span>{t("progress.units.soon", { n: r.soon })}</span>}
+                      </>
+                    )}
+                  </p>
+                )}
+              </Link>
             </li>
           );
         })}
