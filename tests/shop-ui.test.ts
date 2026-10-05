@@ -351,6 +351,6 @@ describe("тексты магазина и тарифов: сердечко — 
   });
   it("«Безлимит»: уроки, тесты и игры без сердечек", () => {
     expect(dict["plans.perk.unl.hearts"].ru).toBe("Уроки, тесты и игры без сердечек");
-    expect(dict["plans.perk.unl.hearts"].kk).toBe("Сабақ, тест пен ойын жүрексіз");
+    expect(dict["plans.perk.unl.hearts"].kk).toBe("Сабаққа, тестке және ойынға жүрек жұмсалмайды");
   });
 });
