@@ -2,16 +2,15 @@
 
 import { BellRing, CalendarPlus } from "lucide-react";
 import { useState } from "react";
-import { liveStreak } from "@/lib/gamification";
-import { buildIcs, reminderText } from "@/lib/reminders";
+import { pickReminder } from "@/lib/reminder-texts";
+import { buildIcs } from "@/lib/reminders";
 import { useApp } from "@/lib/store";
-import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
 import { downloadBlob } from "@/lib/download";
 import { Row, Switch } from "./controls";
-import { disablePush, enablePush, pushSupport, showNotification } from "./push";
+import { disablePush, enablePush, pushSupport, reminderCtxFrom, showNotification } from "./push";
 
 type Problem = "denied" | "unsupported" | "failed" | null;
 
@@ -19,7 +18,6 @@ type Problem = "denied" | "unsupported" | "failed" | null;
 export function ReminderSettings() {
   const { t, lang } = useT();
   const reminder = useApp((s) => s.profile.reminder);
-  const streak = useApp((s) => s.streak);
   const update = useApp((s) => s.updateProfile);
   const [problem, setProblem] = useState<Problem>(null);
   const [busy, setBusy] = useState(false);
@@ -49,7 +47,7 @@ export function ReminderSettings() {
     }
   };
 
-  const testText = () => reminderText({ streak: liveStreak(streak, todayKey()), freezes: streak.freezes ?? 0, lang });
+  const testText = () => pickReminder(reminderCtxFrom(useApp.getState(), new Date()));
 
   const downloadIcs = () => {
     const ics = buildIcs({ time: reminder.time, lang, title: t("remind.ics.summary"), body: t("remind.ics.body") });

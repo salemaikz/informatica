@@ -3,14 +3,16 @@
 import { Dumbbell, Flame, Play, X } from "lucide-react";
 import { useState } from "react";
 import { UNITS } from "@/content/course-map";
-import { liveStreak, streakAtRisk } from "@/lib/gamification";
+import { streakAtRisk } from "@/lib/gamification";
 import { nextLessonId } from "@/lib/goals";
-import { parseTime, reminderText } from "@/lib/reminders";
+import { pickReminder } from "@/lib/reminder-texts";
+import { parseTime } from "@/lib/reminders";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { reminderCtxFrom } from "./push";
 import { useMinuteClock } from "./useClock";
 
 const HIDDEN_KEY = "informatica:streak-banner-hidden";
@@ -28,10 +30,13 @@ function readHidden(): string | null {
  * Главная вставляет её над картой курса.
  */
 export function StreakReminder({ className }: { className?: string }) {
-  const { t, lang } = useT();
+  const { t } = useT();
   const reminder = useApp((s) => s.profile.reminder);
   const streak = useApp((s) => s.streak);
   const lessons = useApp((s) => s.lessons);
+  // Подписки на поля, из которых строится текст: смена имени/цели/XP перерисует баннер.
+  useApp((s) => s.profile);
+  useApp((s) => s.days);
   const now = useMinuteClock();
   // Скрытие запоминаем на день (localStorage в try/catch): иначе баннер возвращается при каждом переходе на главную.
   const [hiddenDay, setHiddenDay] = useState<string | null>(readHidden);
@@ -51,7 +56,7 @@ export function StreakReminder({ className }: { className?: string }) {
   const late = at !== null && date.getHours() * 60 + date.getMinutes() >= at;
   if (!reminder.enabled || !late || !streakAtRisk(streak, today) || hiddenDay === today) return null;
 
-  const text = reminderText({ streak: liveStreak(streak, today), freezes: streak.freezes ?? 0, lang });
+  const text = pickReminder(reminderCtxFrom(useApp.getState(), date));
   const next = nextLessonId(UNITS, lessons);
 
   return (

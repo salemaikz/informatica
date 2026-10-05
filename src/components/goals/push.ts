@@ -1,5 +1,13 @@
 import { del, get, set } from "idb-keyval";
+import { UNITS } from "@/content/course-map";
+import { lessonMeta } from "@/content/catalog";
+import { liveStreak } from "@/lib/gamification";
+import { nextLessonId } from "@/lib/goals";
 import { iosNeedsInstall, type PushPermission } from "@/lib/push-ask";
+import { REMINDER_POOL, type ReminderCtx, type ReminderPool } from "@/lib/reminder-texts";
+import { dueLessons } from "@/lib/review";
+import type { AppState } from "@/lib/store";
+import { dayDiff, todayKey } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 
 // Клиентская часть уведомлений о серии: разрешение, сервис-воркер, зеркало настроек в IndexedDB для public/sw.js.
@@ -17,6 +25,58 @@ export interface ReminderMirror {
   streak: number;
   lastActiveDay: string | null;
   freezes: number;
+  // Дальше — поля дружеских текстов (#101). Старое зеркало без них работает с простыми текстами (см. public/sw.js).
+  name?: string;
+  /** Уроков «пора повторить» на момент записи. */
+  due?: number;
+  nextTitle?: { ru: string; kk: string } | null;
+  goalXp?: number;
+  /** XP за день xpDay (сегодня на момент записи). */
+  xpToday?: number;
+  xpDay?: string;
+  /** Пул шаблонов: тексты живут в lib/reminder-texts.ts, воркер читает их отсюда. */
+  pool?: ReminderPool;
+}
+
+/** Контекст выбора текста из состояния ученика: для баннера, тестового уведомления, зеркала. */
+export function reminderCtxFrom(s: AppState, now: Date): ReminderCtx {
+  const today = todayKey(now);
+  // Школьный трек идёт по своему плану, а не по ЕНТ-дорожке: названия следующего урока для него нет.
+  const next = s.profile.track === "school" ? null : nextLessonId(UNITS, s.lessons);
+  const meta = next ? lessonMeta(next) : undefined;
+  return {
+    lang: s.profile.lang,
+    streak: liveStreak(s.streak, today),
+    freezes: s.streak.freezes ?? 0,
+    due: dueLessons(s.lessons, now.getTime()).length,
+    idle: s.streak.lastDay ? Math.max(0, dayDiff(s.streak.lastDay, today)) : null,
+    nextTitle: meta ? { ru: meta.title.ru, kk: meta.title.kk } : null,
+    goalXp: s.profile.dailyGoalXp,
+    xpToday: s.days[today]?.xp ?? 0,
+    name: s.profile.name ?? "",
+    today,
+  };
+}
+
+/** Зеркало для воркера из состояния ученика. */
+export function mirrorFrom(s: AppState, now: Date): ReminderMirror {
+  const c = reminderCtxFrom(s, now);
+  return {
+    enabled: s.profile.reminder.enabled,
+    push: s.profile.reminder.push,
+    time: s.profile.reminder.time,
+    lang: c.lang,
+    streak: s.streak.current,
+    lastActiveDay: s.streak.lastDay,
+    freezes: c.freezes,
+    name: c.name,
+    due: c.due,
+    nextTitle: c.nextTitle,
+    goalXp: c.goalXp,
+    xpToday: c.xpToday,
+    xpDay: c.today,
+    pool: REMINDER_POOL,
+  };
 }
 
 export type PushSupport = "ok" | "unsupported" | "denied";

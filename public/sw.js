@@ -177,7 +177,7 @@ function precache() {
   });
 }
 
-var MIRROR_KEY = "informatica:reminder"; // { enabled, push, time, lang, streak, lastActiveDay, freezes } — пишет ReminderAgent
+var MIRROR_KEY = "informatica:reminder"; // { enabled, push, time, lang, streak, lastActiveDay, freezes, name, due, nextTitle, goalXp, xpToday, xpDay, pool } — пишет ReminderAgent
 var REMINDED_KEY = "informatica:reminded"; // день «ГГГГ-ММ-ДД», когда уже напомнили
 
 function p2(n) {
@@ -240,6 +240,101 @@ function reminderText(lang, streak, freezes) {
   };
 }
 
+// ---------- дружеские тексты (#101): зеркало lib/reminder-texts.ts; шаблоны (m.pool) приходят из зеркала ----------
+
+function dayNumber(key) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  return m ? Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000) : 0;
+}
+
+function pluralRu(n, forms) {
+  var a = Math.abs(Math.trunc(n));
+  var m10 = a % 10;
+  var m100 = a % 100;
+  if (m10 === 1 && m100 !== 11) return forms[0];
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return forms[1];
+  return forms[2];
+}
+
+function pickSituation(c) {
+  var hasNext = !!c.nextTitle && !!c.nextTitle[c.lang];
+  if (c.streak > 0) {
+    if (c.idle === 0) return c.goalXp > 0 && c.xpToday < c.goalXp ? "goal" : hasNext ? "nextLesson" : "goal";
+    var spare = Math.max(0, c.freezes - Math.max(0, (c.idle || 0) - 1));
+    return spare > 0 ? "streakFreeze" : "streakRisk";
+  }
+  if (c.due > 0) return "review";
+  if (c.idle !== null) {
+    if (c.idle >= 7) return "away7";
+    if (c.idle >= 4) return "forgetting";
+    if (c.idle >= 2) return "away2";
+  }
+  var d = dayNumber(c.today) % 3;
+  if (d === 0 && hasNext) return "nextLesson";
+  if (d === 2 && c.goalXp > 0 && c.xpToday < c.goalXp) return "goal";
+  return "newStreak";
+}
+
+function reminderVars(c) {
+  var kk = c.lang === "kk";
+  return {
+    streak: String(c.streak),
+    days: kk ? c.streak + " күн" : daysRu(c.streak),
+    n: String(c.due),
+    lessons: kk ? "сабақ" : pluralRu(c.due, ["урок", "урока", "уроков"]),
+    idleDays: kk ? (c.idle || 0) + " күн" : daysRu(c.idle || 0),
+    lesson: c.nextTitle && c.nextTitle[c.lang] ? c.nextTitle[c.lang] : "",
+    goal: String(c.goalXp),
+    xp: String(c.xpToday),
+    name: String(c.name || "").trim(),
+  };
+}
+
+function fillTemplate(s, vars) {
+  return s.replace(/\{(\w+)\}/g, function (_, k) {
+    return vars[k] !== undefined ? vars[k] : "";
+  });
+}
+
+function pickReminder(c, pool) {
+  var vars = reminderVars(c);
+  var all = pool[pickSituation(c)][c.lang];
+  if (!Array.isArray(all) || !all.length) throw new Error("empty pool");
+  var usable = all.filter(function (v) {
+    return vars.name || !/\{name\}/.test(v.title + v.body);
+  });
+  var list = usable.length ? usable : all;
+  var v = list[dayNumber(c.today) % list.length];
+  return { title: fillTemplate(v.title, vars), body: fillTemplate(v.body, vars) };
+}
+
+/** Текст из зеркала: дружеский пул, а если зеркало старое (без pool) — простые тексты. */
+function textFromMirror(m, now) {
+  var today = dayKey(now);
+  var streak = liveStreak(m, today);
+  var pool = m.pool;
+  if (!pool || !pool.streakRisk || !pool.goal) return reminderText(m.lang, streak, m.freezes || 0);
+  try {
+    return pickReminder(
+    {
+      lang: m.lang === "kk" ? "kk" : "ru",
+      streak: streak,
+      freezes: m.freezes || 0,
+      due: m.due || 0,
+      idle: m.lastActiveDay ? Math.max(0, dayDiff(m.lastActiveDay, today)) : null,
+      nextTitle: m.nextTitle || null,
+      goalXp: m.goalXp || 0,
+      xpToday: m.xpDay === today ? m.xpToday || 0 : 0,
+      name: m.name || "",
+      today: today,
+    },
+    pool,
+    );
+  } catch (e) {
+    return reminderText(m.lang, streak, m.freezes || 0);
+  }
+}
+
 // ---------- IndexedDB (та же база, что у idb-keyval: keyval-store / keyval) ----------
 
 function openDb() {
@@ -296,7 +391,7 @@ function remind() {
     if (typeof Notification !== "undefined" && Notification.permission !== "granted") return;
     // Приложение открыто и на экране — там свой баннер.
     if (r[2].some(function (c) { return c.visibilityState === "visible"; })) return;
-    var text = reminderText(m.lang, liveStreak(m, dayKey(now)), m.freezes || 0);
+    var text = textFromMirror(m, now);
     return self.registration
       .showNotification(text.title, { body: text.body, icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", tag: "streak-reminder", data: { url: "/learn" } })
       .then(function () {
