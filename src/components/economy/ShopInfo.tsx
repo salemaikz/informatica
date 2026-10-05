@@ -3,6 +3,7 @@
 import {
   BadgeCheck,
   BookOpen,
+  BookText,
   Bot,
   Camera,
   ClipboardCheck,
@@ -21,6 +22,7 @@ import {
   MessageCircle,
   Mic,
   RefreshCw,
+  ScrollText,
   Sparkles,
   Target,
   Trophy,
@@ -31,7 +33,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { AI_COST, CHIP_BONUS, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { AI_COST, CHIP_BONUS, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -40,29 +42,30 @@ import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { chipRate, dayDiff, formatClock, formatMult, formatNum, formatRemaining, knownAiKind, knownShopId } from "./shop-helpers";
-import { entryRules, practiceRule, regenRules, FREE_ENTRIES, type EntryRuleId, type FreeEntryId } from "./shop-rules";
+import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, regenRules, type EntryRuleId, type FreeEntryId } from "./shop-rules";
 import { ChipPrice, IconTile } from "./ShopParts";
 import { useAiQuote, useNow } from "./useEconomy";
 
 // Информационные блоки магазина: как работают сердечки, как заработать чипы, цена ИИ, история чипов.
 
-const ENTRY_ROWS: Record<EntryRuleId, { icon: LucideIcon; key: DictKey }> = {
-  lesson: { icon: BookOpen, key: "shop.rules.lesson" },
-  bigLesson: { icon: Layers, key: "shop.rules.bigLesson" },
-  check: { icon: ClipboardCheck, key: "shop.rules.check" },
-  exam: { icon: GraduationCap, key: "shop.rules.exam" },
-  checkpoint: { icon: Flag, key: "shop.rules.checkpoint" },
-  extern: { icon: ListChecks, key: "shop.rules.extern" },
-  game: { icon: Gamepad2, key: "shop.rules.game" },
+const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
+  lesson: BookOpen,
+  bigLesson: Layers,
+  check: ClipboardCheck,
+  exam: GraduationCap,
+  checkpoint: Flag,
+  extern: ListChecks,
+  game: Gamepad2,
+  theory: BookText,
 };
 
-const FREE_ROWS: Record<FreeEntryId, { icon: LucideIcon; key: DictKey }> = {
-  practice: { icon: Dumbbell, key: "shop.rules.free.practice" },
-  review: { icon: RefreshCw, key: "shop.rules.free.review" },
-  mistakes: { icon: Undo2, key: "shop.rules.free.mistakes" },
-  code: { icon: Code2, key: "shop.rules.free.code" },
-  theory: { icon: BookOpen, key: "shop.rules.free.theory" },
-  chat: { icon: MessageCircle, key: "shop.rules.free.chat" },
+const FREE_ICONS: Record<FreeEntryId, LucideIcon> = {
+  practice: Dumbbell,
+  review: RefreshCw,
+  mistakes: Undo2,
+  code: Code2,
+  cheatsheet: ScrollText,
+  chat: MessageCircle,
 };
 
 const TIER_NAME: Record<"free" | "lite" | "unlimited", DictKey> = {
@@ -74,7 +77,7 @@ const TIER_NAME: Record<"free" | "lite" | "unlimited", DictKey> = {
 /** Цена входа в сердечках — всегда видна (у HeartCost при безлимите значок скрыт, а здесь это справка). */
 function CostBadge({ n }: { n: number }) {
   const { t } = useT();
-  const label = t("hearts.cost.aria", { n });
+  const label = t("hearts.cost.aria", { n: formatHearts(n) });
   return (
     <span
       role="img"
@@ -84,7 +87,7 @@ function CostBadge({ n }: { n: number }) {
     >
       <Heart size={14} fill="currentColor" aria-hidden />
       <span className="tabular-nums" aria-hidden>
-        {n}
+        {formatHearts(n)}
       </span>
     </span>
   );
@@ -106,17 +109,17 @@ export function HeartRules() {
         </h3>
         <ul className="mt-1.5 flex flex-col gap-1">
           {entryRules().map((r) => {
-            const row = ENTRY_ROWS[r.id];
+            const Icon = ENTRY_ICONS[r.id];
             return (
               <li key={r.id} className="flex min-h-11 items-center gap-3">
-                <row.icon size={20} className="shrink-0 text-heart" aria-hidden />
-                <span className="min-w-0 flex-1 text-base font-extrabold leading-tight">{t(row.key)}</span>
+                <Icon size={20} className="shrink-0 text-heart" aria-hidden />
+                <span className="min-w-0 flex-1 text-base font-extrabold leading-tight">{t(ENTRY_RULE_KEYS[r.id])}</span>
                 <CostBadge n={r.cost} />
               </li>
             );
           })}
         </ul>
-        <p className="mt-2 text-sm font-semibold text-muted">{t("shop.rules.when")}</p>
+        <p className="mt-2 text-sm font-semibold text-muted">{t("hearts15.rules.when", { cost: formatHearts(ENTRY_COST.theory) })}</p>
       </section>
 
       <section className="p-3.5" aria-labelledby="heart-rules-free">
@@ -125,11 +128,11 @@ export function HeartRules() {
         </h3>
         <ul className="mt-2 flex flex-wrap gap-2">
           {FREE_ENTRIES.map((id) => {
-            const row = FREE_ROWS[id];
+            const Icon = FREE_ICONS[id];
             return (
               <li key={id}>
-                <Pill tone="success" icon={<row.icon size={14} aria-hidden />} className="gap-1.5 px-3 py-1.5 text-sm">
-                  {t(row.key)}
+                <Pill tone="success" icon={<Icon size={14} aria-hidden />} className="gap-1.5 px-3 py-1.5 text-sm">
+                  {t(FREE_ENTRY_KEYS[id])}
                 </Pill>
               </li>
             );

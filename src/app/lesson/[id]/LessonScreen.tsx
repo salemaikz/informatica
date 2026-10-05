@@ -21,7 +21,8 @@ import { OutOfHearts } from "@/components/economy/OutOfHearts";
 /**
  * Урок. Режимы: «Учиться» (learn) — вход стоит сердечко (у большого урока два), прохождение сохраняется,
  * при возврате — «Продолжить / Начать заново» (#41); «Проверить себя» (check) — вход 1, без сохранения.
- * Сердечки списывает плеер при первом ответе (#40); здесь — проверка на входе (EntryGate) и выбор продолжения.
+ * Сердечки списывает плеер, когда урок начался: первый переход «дальше», первый ответ или «Пропустить» (#40, этап 15);
+ * здесь — проверка на входе (EntryGate) и выбор продолжения. Открыть и сразу закрыть — бесплатно.
  */
 export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check" }) {
   const router = useRouter();
@@ -74,7 +75,6 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
     }
   };
 
-  const theoryHref = `/theory/${lesson.id}`;
   let body: ReactNode;
   if (saved && choice === "ask") {
     body = (
@@ -100,7 +100,6 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
             else if (action === "continue") setChoice("continue");
           }}
           onExit={() => router.push("/learn")}
-          theoryHref={theoryHref}
         />
       </>
     );
@@ -122,7 +121,7 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
   }
 
   return (
-    <EntryGate need={need} exitHref="/learn" theoryHref={theoryHref}>
+    <EntryGate need={need} exitHref="/learn">
       {body}
     </EntryGate>
   );

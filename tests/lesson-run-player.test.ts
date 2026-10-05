@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LESSONS } from "@/content/course";
 import { isQuestion } from "@/lib/evaluate";
-import { RUN_GRACE_MS, lessonSig, sanitizeLessonRuns, usableRun } from "@/lib/lesson-run";
+import { RUN_GRACE_MS, lessonSig, runPaid, sanitizeLessonRuns, usableRun } from "@/lib/lesson-run";
 import type { AnswerRecord } from "@/lib/types";
 import { buildRun, freshQueue, graceText, questionsAhead, restoreRun, resumeStep, retryItem, type RunSnapshotInput } from "@/components/lesson/run-snapshot";
 
@@ -96,6 +96,21 @@ describe("buildRun", () => {
     const run = buildRun(afterFirstAnswer({ paidAt: null, records: [], pos: 2, done: 1 }));
     expect(run.paidAt).toBeNull();
     expect(usableRun(run, lesson, T0)).not.toBeNull();
+  });
+
+  it("вход оплачен на первом «дальше», до всяких ответов: снимок пригоден, возврат в окне бесплатен (этап 15)", () => {
+    // ensurePaid плеера пишет снимок на текущем шаге (pos 0) с paidAt, затем переход сохраняет pos 1 — оба пригодны для продолжения
+    for (const pos of [0, 1]) {
+      const run = buildRun(afterFirstAnswer({ queue: freshQueue(steps), pos, done: pos, records: [], paidAt: T0 - 10_000 }));
+      expect(usableRun(run, lesson, T0)).not.toBeNull();
+      expect(runPaid(run, T0 + RUN_GRACE_MS - 10_000)).toBe(true);
+      expect(runPaid(run, T0 + RUN_GRACE_MS + 1)).toBe(false);
+    }
+  });
+
+  it("открыл и закрыл без «дальше» и ответа — сохранять нечего: pos 0 без оплаты непригоден", () => {
+    const run = buildRun(afterFirstAnswer({ queue: freshQueue(steps), pos: 0, done: 0, records: [], paidAt: null }));
+    expect(usableRun(run, lesson, T0)).toBeNull();
   });
 
   it("записи ответов копируются: правка исходного массива не меняет снимок", () => {

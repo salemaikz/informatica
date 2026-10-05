@@ -2,6 +2,7 @@
 
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { formatHearts } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { useHearts } from "./useEconomy";
 
@@ -14,7 +15,7 @@ export function HeartCost({ n, variant = "soft", className }: { n: number; varia
   const { t } = useT();
   const v = useHearts();
   if (v.unlimited || n <= 0) return null;
-  const label = t("hearts.cost.aria", { n });
+  const label = t("hearts.cost.aria", { n: formatHearts(n) });
   const short = v.count < n;
   return (
     <span
@@ -30,7 +31,7 @@ export function HeartCost({ n, variant = "soft", className }: { n: number; varia
     >
       <Heart size={14} fill="currentColor" aria-hidden />
       <span className="tabular-nums" aria-hidden>
-        {n}
+        {formatHearts(n)}
       </span>
     </span>
   );

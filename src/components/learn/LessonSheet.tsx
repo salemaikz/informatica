@@ -23,7 +23,9 @@ import { LESSONS, UNITS, getLesson, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
 import { gameSkillsFor } from "@/lib/drill";
-import { ENTRY_COST, entryCost, lessonCost } from "@/lib/economy";
+import { ENTRY_COST, entryCost, formatHearts, lessonCost } from "@/lib/economy";
+import { theoryPayState } from "@/lib/theory-pay";
+import { shortDate } from "@/lib/date";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -31,7 +33,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
-import { useHearts } from "@/components/economy/useEconomy";
+import { useHearts, usePlan } from "@/components/economy/useEconomy";
 import { ICONS } from "@/components/scenes/icons";
 import { bestPercent, isDue, lessonTopics, pluralForm, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
@@ -40,7 +42,8 @@ import { StepMarks } from "./MasteryLegend";
 
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
 // игрой, только теория, конспект). Её открывают карта курса и другие экраны.
-// Платные режимы (#40) показывают цену входа значком HeartCost; теория и конспект бесплатны.
+// Платные режимы (#40) показывают цену входа значком HeartCost; «Только теория» стоит 0,5, пока урок не пройден и
+// конспект не оплачен за сутки (lib/theory-pay.ts); конспект в заметках бесплатен.
 
 function ModeCard({
   href,
@@ -51,6 +54,7 @@ function ModeCard({
   onClick,
   expanded,
   cost,
+  note,
 }: {
   href?: string;
   icon: LucideIcon;
@@ -61,6 +65,8 @@ function ModeCard({
   expanded?: boolean;
   /** Цена входа в сердечках; нет — режим бесплатный. */
   cost?: number;
+  /** Мелкая подпись у цены: когда спишется сердечко. */
+  note?: string;
 }) {
   const cls = cn(
     "flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-[translate,box-shadow] duration-75 active:translate-y-[3px] active:shadow-none",
@@ -80,6 +86,7 @@ function ModeCard({
           {cost ? <HeartCost n={cost} variant={main ? "solid" : "soft"} /> : null}
         </span>
         <span className={cn("block text-sm font-semibold leading-snug", main ? "text-white/85" : "text-muted")}>{hint}</span>
+        {note && <span className={cn("mt-0.5 block text-xs font-bold leading-snug", main ? "text-white/80" : "text-muted")}>{note}</span>}
       </span>
       {onClick ? (
         <ChevronDown size={20} className={cn("shrink-0 text-muted transition-transform", expanded && "rotate-180")} />
@@ -102,11 +109,13 @@ function ModeCard({
 }
 
 function SheetBody({ lessonId }: { lessonId: string }) {
-  const { t, l } = useT();
+  const { t, l, lang } = useT();
   const now = useNow();
-  // При безлимите значки цены скрыты — и строка о плате тоже.
+  // При безлимите значки цены скрыты — и строка о плате тоже; у пробного периода вместо неё — до какого дня.
   const unlimited = useHearts().unlimited;
+  const { plan, trial } = usePlan();
   const stat = useApp((s) => s.lessons[lessonId]);
+  const theoryPaidAt = useApp((s) => s.theoryPaid[lessonId]);
   const [gamesOpen, setGamesOpen] = useState(false);
   const place = findLessonRef(lessonId);
   const lesson = getLesson(lessonId);
@@ -172,6 +181,8 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const stepDays = stepReviewDays(stat, now);
   // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
   const gameCost = entryCost("game", lesson);
+  // Теория: платная, пока урок не пройден и конспект не оплачен за сутки (при безлимите значок скрыт сам).
+  const theoryState = theoryPayState({ done: !!stat && stat.completions > 0, unlimited, paidAt: theoryPaidAt, now });
 
   return (
     <div className="flex flex-col gap-4" style={unitVars(unit.color)}>
@@ -213,7 +224,15 @@ function SheetBody({ lessonId }: { lessonId: string }) {
 
       <div className="flex flex-col gap-2.5">
         <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("learn2.sheet.modes")}</p>
-        <ModeCard main href={`/lesson/${lessonId}`} icon={Play} title={t("learn2.mode.learn")} hint={t("learn2.mode.learnHint")} cost={lessonCost(lesson)} />
+        <ModeCard
+          main
+          href={`/lesson/${lessonId}`}
+          icon={Play}
+          title={t("learn2.mode.learn")}
+          hint={t("learn2.mode.learnHint")}
+          cost={lessonCost(lesson)}
+          note={unlimited ? undefined : t("hearts15.sheet.startNote")}
+        />
         <ModeCard
           href={`/lesson/${lessonId}?mode=check`}
           icon={ClipboardCheck}
@@ -260,9 +279,27 @@ function SheetBody({ lessonId }: { lessonId: string }) {
             </AnimatePresence>
           </div>
         )}
-        <ModeCard href={`/theory/${lessonId}`} icon={BookOpen} title={t("learn2.mode.theory")} hint={t("learn2.mode.theoryHint")} />
+        <ModeCard
+          href={`/theory/${lessonId}`}
+          icon={BookOpen}
+          title={t("learn2.mode.theory")}
+          hint={t("learn2.mode.theoryHint")}
+          cost={theoryState === "pay" ? ENTRY_COST.theory : undefined}
+          note={
+            theoryState === "pay"
+              ? t("hearts15.sheet.theoryPay")
+              : theoryState === "paid"
+                ? t("hearts15.sheet.theoryPaid")
+                : theoryState === "done"
+                  ? t("hearts15.sheet.theoryDone")
+                  : undefined
+          }
+        />
         <ModeCard href={`/notes/lesson/${lessonId}`} icon={NotebookPen} title={t("learn2.mode.notes")} hint={t("learn2.mode.notesHint")} />
-        {!unlimited && <p className="px-1 text-xs font-bold text-muted">{t("learn2.sheet.costNote")}</p>}
+        {!unlimited && <p className="px-1 text-xs font-bold text-muted">{t("hearts15.sheet.costNote", { cost: formatHearts(ENTRY_COST.theory) })}</p>}
+        {unlimited && trial && plan.until !== undefined && (
+          <p className="px-1 text-xs font-bold text-muted">{t("hearts15.sheet.trial", { date: shortDate(new Date(plan.until), lang) })}</p>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AI_COST, ENTRY_COST, HOUR, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
 import { chipRate, dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
-import { FREE_ENTRIES, entryRules, practiceRule, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
+import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
 import { compareRows } from "@/components/plans/plans-helpers";
 import { dict, type DictKey } from "@/i18n/dict";
 
@@ -275,9 +275,13 @@ describe("цены и «Полный запас» в магазине (#60)", ()
 });
 
 describe("«Как работают сердечки»: числа из констант", () => {
-  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, контрольная 2, экстерн 2, игра 1", () => {
+  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, контрольная 2, экстерн 2, игра 1, теория 0,5", () => {
     const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
-    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1 });
+    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 });
+    expect(rules.theory).toBe(ENTRY_COST.theory);
+    // теория платная: в бесплатных её больше нет, зато есть шпаргалка
+    expect(FREE_ENTRIES).not.toContain("theory");
+    expect(FREE_ENTRIES).toContain("cheatsheet");
     expect(rules.lesson).toBe(ENTRY_COST.lesson);
     expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
     expect(rules.extern).toBe(ENTRY_COST.extern);
@@ -295,8 +299,8 @@ describe("«Как работают сердечки»: числа из конс
     expect(practiceRule()).toEqual({ answers: 6, percent: 70, daily: 3 });
   });
   it("у каждой строки правил есть подпись в словаре (ru и kk)", () => {
-    const keys: string[] = [...entryRules().map((r) => `shop.rules.${r.id}`), ...FREE_ENTRIES.map((id) => `shop.rules.free.${id}`)];
-    keys.push("shop.rules.title", "shop.rules.hint", "shop.rules.paid", "shop.rules.when", "shop.rules.free", "shop.rules.regen", "shop.rules.regen.row", "shop.rules.regen.unlimited", "shop.rules.practice");
+    const keys: string[] = [...entryRules().map((r) => ENTRY_RULE_KEYS[r.id]), ...FREE_ENTRIES.map((id) => FREE_ENTRY_KEYS[id])];
+    keys.push("shop.rules.title", "shop.rules.hint", "shop.rules.paid", "hearts15.rules.when", "shop.rules.free", "shop.rules.regen", "shop.rules.regen.row", "shop.rules.regen.unlimited", "shop.rules.practice");
     for (const k of keys) {
       const v = dict[k as DictKey];
       expect(v, k).toBeDefined();

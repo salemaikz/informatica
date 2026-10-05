@@ -15,15 +15,12 @@ import { useHearts } from "./useEconomy";
 export function EntryGate({
   need,
   exitHref,
-  theoryHref,
   children,
 }: {
   /** Цена входа; 0 — вход уже оплачен (продолжение в течение 20 минут) или бесплатный. */
   need: number;
   /** Куда «Выйти». */
   exitHref: string;
-  /** «Пока почитай теорию» — для урока. */
-  theoryHref?: string;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -33,5 +30,5 @@ export function EntryGate({
   // «Предыдущее значение» при рендере (без эффекта с setState): сердечко вернулось или куплено — впускаем.
   if (!admitted && ok) setAdmitted(true);
   if (admitted || ok) return <>{children}</>;
-  return <OutOfHearts layout="screen" need={need} onResume={() => setAdmitted(true)} onExit={() => router.push(exitHref)} theoryHref={theoryHref} />;
+  return <OutOfHearts layout="screen" need={need} onResume={() => setAdmitted(true)} onExit={() => router.push(exitHref)} />;
 }
