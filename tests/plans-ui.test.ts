@@ -111,12 +111,12 @@ describe("тексты тарифов без суточного пополнен
   });
 
   it("у сердечек в магазине и в окне «закончились» нет обещания полного запаса каждый день", () => {
-    for (const key of ["shop.hearts.hint", "hearts.out.text"] as const) {
+    for (const key of ["econ16c.hearts.hint", "econ16c.out.text"] as const) {
       expect(dict[key].ru, key).not.toMatch(/Каждый день|каждый день|снова полный/);
       expect(dict[key].kk, key).not.toMatch(/Күн сайын/);
     }
-    expect(dict["shop.hearts.hint"].ru).toContain("{time}");
-    expect(dict["shop.hearts.hint"].kk).toContain("{time}");
+    expect(dict["econ16c.hearts.hint"].ru).toContain("{time}");
+    expect(dict["econ16c.hearts.hint"].kk).toContain("{time}");
   });
 });
 

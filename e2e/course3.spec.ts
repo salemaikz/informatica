@@ -2,7 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Этап 14 (P2): узлы «Практика» и «Повторение» на карте курса, мини-тест группы (#81).
 // Группа «Ветвления» (раздел «Python»): после неё — узел «Практика» (12 заданий), в конце раздела — «Повторение».
-// Мини-тест стоит 1 сердечко (как «Проверить себя»), практика бесплатна. Без обращений к ИИ.
+// Мини-тест стоит 1 сердечко по «Начать» (как «Проверить себя»); практика и повторение — тоже 1 сердечко, но при первом ответе
+// (этап 16В: бесплатной тренировки нет). Без обращений к ИИ.
 
 const NODE_ID = "practice:py-2a-if";
 
@@ -108,15 +109,17 @@ test("карта: узел «Практика» после группы «Вет
   await node.click();
   const sheet = page.getByRole("dialog", { name: "Практика: Ветвления" });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByText("12 заданий: эта тема, прошлые темы и начало курса. Бесплатно.")).toBeVisible();
+  await expect(sheet.getByText("12 заданий: эта тема, прошлые темы и начало курса.")).toBeVisible();
+  // Цена тренировки видна на кнопке (этап 16В).
+  await expect(sheet.getByRole("link", { name: "Начать практику" }).getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
   await expect(sheet.getByText("Пока не пройдено")).toBeVisible();
   await expect(sheet.getByRole("link", { name: /Мини-тест/ })).toHaveAttribute("href", `/drill?mode=minitest&node=${NODE_ID}`);
 
   await sheet.getByRole("link", { name: "Начать практику" }).click();
   await page.waitForURL("**/drill?mode=practice**");
   await expect(page.getByRole("button", { name: "Проверить", exact: true })).toBeVisible();
-  // Практика бесплатна: сердечек в шапке нет.
-  await expect(page.getByLabel(/^Сердечки: /)).toHaveCount(0);
+  // Практика стоит сердечко (этап 16В), но спишется при первом ответе, а не при входе: в шапке плеера пока 5.
+  await expect(hearts(page, 5)).toBeVisible();
 
   await playThrough(page);
   // Заданий — 12 (первые попытки; ошибки показываются ещё раз в «работе над ошибками»).
@@ -124,6 +127,9 @@ test("карта: узел «Практика» после группы «Вет
 
   const saved = await page.evaluate((id) => JSON.parse(localStorage.getItem("informatica-v1")!).state.courseNodes?.[id], NODE_ID);
   expect(saved.runs).toBe(1);
+  // Вход списан один раз (первый ответ), возврата сердечка за тренировку нет: было 5, стало 4.
+  const heartsLeft = await page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1")!).state.hearts.count);
+  expect(heartsLeft).toBe(4);
 
   // «Продолжить» на итогах ведёт на карту (практика начинается с карты): узел пройден.
   await page.getByRole("button", { name: "Продолжить", exact: true }).click();

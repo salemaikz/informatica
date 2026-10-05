@@ -124,11 +124,13 @@ export function taskEvent(rec: AnswerRecord, stable: ReadonlySet<string> | null,
   };
 }
 
-/** Где закончились сердечки у плеера: урок, «Проверить себя» или экстерн. */
+/** Где закончились сердечки у плеера: урок, «Проверить себя», экстерн или тренировка (любой режим /drill). */
 export function playerHeartsWhere(p: { via?: LessonVia; mode?: string }): HeartOutWhere {
   if (p.mode === "extern") return "extern";
   // Мини-тест группы (этап 14) стоит как «Проверить себя».
-  return p.via === "check" || p.mode === "minitest" ? "check" : "lesson";
+  if (p.via === "check" || p.mode === "minitest") return "check";
+  // Режим есть только у тренировки (DrillMode); у урока его нет (этап 16В: тренировка платная).
+  return p.mode ? "drill" : "lesson";
 }
 
 /** Игра: доля верных в %. Раундов не было — 0. */

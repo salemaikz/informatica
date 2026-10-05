@@ -3,13 +3,15 @@
 //
 // Правила (решения #31, #34, #40, #65 — docs/DECISIONS.md):
 // - сердечки — плата за вход, а не за ошибки: урок 1 (большой 2), «Проверить себя» и пробный ЕНТ 1, контрольная
-//   и экстерн 2, игра 1 (каждый запуск), чтение конспекта урока 0,5 (этап 15: lib/theory-pay.ts);
-//   тренировка, повторение, работа над ошибками, практикум, шпаргалка, чат — бесплатно;
+//   и экстерн 2, игра 1 (каждый запуск), чтение конспекта урока 0,5 (этап 15: lib/theory-pay.ts),
+//   тренировка 1 (любой режим /drill, при первом ответе; этап 16В, решение F);
+//   практикум кода, шпаргалка, чат — бесплатно;
 // - сердечки считаются с шагом 0,5 (halfFloor): половинка бывает только после платы за теорию, восстановление и покупки — целые;
 // - потраченное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
-// - тренировка (в том числе работа над ошибками) возвращает сердечко — бесплатный путь всегда есть;
-// - чипы дают за дела, а не за опыт (решение #105, CHIP_REWARD): урок 3 (повтор 1), идеальный урок +5, цель дня, тест, ЕНТ,
-//   достижение (по редкости 5–40, ACHIEVEMENT_CHIPS); тренировка, игры и практикум чипов не дают (опыт и освоение). На чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
+// - возврата сердечка за тренировку больше нет (этап 16В): при нуле — ждать, купить за чипы или «Безлимит»;
+// - чипы дают за дела, а не за опыт (решение #105, CHIP_REWARD): урок 3 (повтор 1), цель дня, тест, ЕНТ,
+//   достижение (по редкости 5–40, ACHIEVEMENT_CHIPS); идеальный урок / тест на 100% — не гарантированная награда, а «сюрприз»
+//   с шансом 40% (PERFECT_DROP, lib/perfect.ts); тренировка, игры и практикум чипов не дают (опыт и освоение). На чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
 // - оплата деньгами (тарифы, наборы чипов) пока не подключена — экран «скоро» без имитации платежа.
 
 import type { Rarity } from "./rarity";
@@ -206,15 +208,16 @@ export const canAfford = (v: HeartsView, cost: number): boolean => v.unlimited |
 
 // ---------- Плата за вход (#40) ----------
 
-/** Что стоит сердечек. Тренировка, повторение, работа над ошибками, практикум, шпаргалка и чат — бесплатно. */
-export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory";
+/** Что стоит сердечек. Практикум кода, шпаргалка и чат — бесплатно; тренировка (любой режим /drill) — drill. */
+export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory" | "drill";
 
 /**
  * Цена входа в сердечках: урок 1 (большой урок — поле lesson.hearts = 2), «Проверить себя» 1, пробный ЕНТ любого вида 1,
  * контрольная раздела 2, экстерн (зачёт раздела тестом) 2, игра 1 — каждый запуск, в том числе «ещё раз»,
- * чтение конспекта урока (`/theory/<id>`) 0,5 — когда платить, решает lib/theory-pay.ts.
+ * чтение конспекта урока (`/theory/<id>`) 0,5 — когда платить, решает lib/theory-pay.ts,
+ * тренировка (`/drill`: умная, навык, тема, ошибки, повторение, практика и др.) 1 — при первом ответе, как у урока.
  */
-export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 };
+export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5, drill: 1 };
 
 /** Вход в урок в режиме «Учиться»: 1, у большого урока — 2. */
 export function lessonCost(lesson: { hearts?: number } | undefined): number {
@@ -234,22 +237,6 @@ export function sanitizeHearts(raw: unknown): Hearts {
   const updatedAt = typeof h.updatedAt === "number" && Number.isFinite(h.updatedAt) ? h.updatedAt : 0;
   const day = typeof h.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.day) ? h.day : "";
   return { count, updatedAt, day };
-}
-
-/** Сколько тренировок в день могут вернуть сердечко (#65: строже, чем было — вход теперь платный, а не ошибки). */
-export const PRACTICE_HEART_DAILY = 3;
-/** Тренировка возвращает сердечко, если ответов с первой попытки не меньше и точность не ниже. */
-export const PRACTICE_HEART_MIN_ANSWERS = 6;
-export const PRACTICE_HEART_MIN_ACCURACY = 0.7;
-
-export function practiceEarnsHeart(answers: number, accuracy: number): boolean {
-  return answers >= PRACTICE_HEART_MIN_ANSWERS && accuracy >= PRACTICE_HEART_MIN_ACCURACY;
-}
-
-/** Сколько раз сегодня тренировка ещё может вернуть сердечко (счётчик за другой день — сброшен). */
-export function practiceHeartsLeft(ph: { day: string; count: number } | undefined, today: string): number {
-  const used = ph && ph.day === today ? Math.max(0, ph.count) : 0;
-  return Math.max(0, PRACTICE_HEART_DAILY - used);
 }
 
 // ---------- Чипы ----------
@@ -300,8 +287,6 @@ export const CHIP_REWARD = {
   lessonFirst: 3,
   /** Урок пройден повторно (в том числе плановое повторение). */
   lessonRepeat: 1,
-  /** Идеальный урок: без ошибок, с первой попытки; только при первом прохождении (как бонус XP, #23). */
-  perfect: 5,
   dailyGoal: 5,
   /** Тест по разделу сдан (≥ 80% баллов). */
   unit: 10,
@@ -314,6 +299,14 @@ export const CHIP_REWARD = {
  * До множителя тарифа и бустера (`earnAmount`), как и CHIP_REWARD.
  */
 export const ACHIEVEMENT_CHIPS: Record<Rarity, number> = { common: 5, rare: 10, epic: 20, legendary: 40 };
+
+/**
+ * «Сюрприз за идеальный урок» (этап 16В, решение B): вместо гарантированных +5 чипов — шанс 40%.
+ * Идеальный урок (первое прохождение) и мини-тест / тест по теме / тест по разделу на 100% бросают кубик один раз:
+ * `heartChance` — пол-сердечка, следующие `chipsChance` — `chips` чипов (без множителя тарифа и бустера: «немного»),
+ * остальное (60%) — ничего. Сердечко при полном запасе или «Безлимите» заменяется чипами. Бросок — lib/perfect.ts.
+ */
+export const PERFECT_DROP = { heartChance: 0.2, chipsChance: 0.2, chips: 3, heart: 0.5 } as const;
 export const MAX_LEDGER = 50;
 /** Начисления одной причины в пределах этого окна склеиваются в одну строку истории. */
 export const LEDGER_MERGE_MS = 15 * MINUTE;
@@ -334,9 +327,13 @@ export function lessonChips(first: boolean, multiplier: number): number {
   return earnAmount(lessonChipBase(first), multiplier);
 }
 
-/** Чипов в награде за «Идеальный урок» с учётом множителя. */
+/**
+ * @deprecated Бонуса «+5 за идеальный урок» больше нет — вместо него шанс (PERFECT_DROP, lib/perfect.ts); стор его не начисляет.
+ * Оставлено ТОЛЬКО ради старой карточки проводника components/tour/AfterFirstLesson и tests/tour-ui.test.ts (их заменяет пакет P2a):
+ * удалить вместе с ними.
+ */
 export function perfectChips(multiplier: number): number {
-  return earnAmount(CHIP_REWARD.perfect, multiplier);
+  return earnAmount(5, multiplier);
 }
 
 /** Добавляет запись в историю чипов: свежие записи той же причины склеиваются. Новые — первыми. */

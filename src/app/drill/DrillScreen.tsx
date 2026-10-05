@@ -109,6 +109,14 @@ function buildSession(mode: DrillMode, p: Params): Built {
   }
 }
 
+/** Куда «Выйти» с экрана «Сердечки закончились»: туда же, откуда пришли (как у плеера). */
+function drillExitHref(mode: DrillMode): string {
+  if (mode === "practice" || mode === "recap" || mode === "minitest") return "/learn";
+  if (mode === "context") return "/code/context";
+  if (mode === "codeview") return "/code/review";
+  return "/practice";
+}
+
 /** Экран старта мини-теста (#95): сердечко списывается по «Начать», а не при первом ответе. */
 function MiniStart({ title, count, onStart }: { title: string; count: number; onStart: () => boolean }) {
   const { t } = useT();
@@ -155,8 +163,10 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   // Итог мини-теста: баллы «как на ЕНТ» и слабое место (этап 14).
   const [mini, setMini] = useState<{ points: number; max: number; weak?: string } | null>(null);
   const markReviewed = useApp((s) => s.markReviewed);
-  // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14), списывается по «Начать» (#95). Практика и повторение — бесплатно (#40).
-  useHeartsOutOnEntry(mode === "minitest" && session.steps.length ? ENTRY_COST.check : 0, "check");
+  // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14), списывается по «Начать» (#95).
+  // Любая другая тренировка (этап 16В, решение F) — тоже 1 сердечко, но при первом ответе, как у урока: плеер списывает сам.
+  const entryNeed = !session.steps.length ? 0 : mode === "minitest" ? ENTRY_COST.check : ENTRY_COST.drill;
+  useHeartsOutOnEntry(entryNeed, mode === "minitest" ? "check" : "drill");
 
   const onSessionFinish = useCallback(
     (result: SessionResult) => {
@@ -247,7 +257,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   }
 
   // Мини-тест (#95): до «Начать» — экран старта; вход (1 сердечко) списывается кнопкой, плеер дальше не списывает (entryCost 0).
-  // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — бесплатно.
+  // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — вход списывает плеер при первом ответе.
   if (mode === "minitest" && !started) {
     return (
       <EntryGate need={ENTRY_COST.check} exitHref="/learn">
@@ -265,7 +275,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       </EntryGate>
     );
   }
-  return (
+  const player = (
     <LessonPlayer
       kind="drill"
       title={title}
@@ -275,7 +285,15 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
       testMode={mode === "minitest"}
+      entryCost={mode === "minitest" ? undefined : ENTRY_COST.drill}
       prepaid={mode === "minitest" ? prepaid : undefined}
     />
+  );
+  // Минитест оплачен «Начать» (плеер не списывает); остальные режимы — нет сердечек на входе: «Сердечки закончились» (EntryGate).
+  if (mode === "minitest") return player;
+  return (
+    <EntryGate need={ENTRY_COST.drill} exitHref={drillExitHref(mode)}>
+      {player}
+    </EntryGate>
   );
 }

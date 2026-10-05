@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Heart, Minus, Target, X } from "lucide-react";
+import { Check, Minus, Target, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnswerRecord, EntTopicId, QuestionStep } from "@/lib/types";
 import type { QuizSummary } from "@/lib/chats";
@@ -11,6 +11,7 @@ import { feedback as giveFeedback } from "@/lib/feedback";
 import { decaySkills } from "@/lib/mastery";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
+import { ENTRY_COST } from "@/lib/economy";
 import {
   answerRecord,
   buildQuiz,
@@ -26,6 +27,8 @@ import { entTopicById } from "@/content/ent-topics";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { InlineMarkdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -81,7 +84,10 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const [xp, setXp] = useState(0);
   const [gain, setGain] = useState(0);
   const [praise, setPraise] = useState(0);
-  const [outcome, setOutcome] = useState<{ bonusXp: number; heart: boolean } | null>(null);
+  const [outcome, setOutcome] = useState<{ bonusXp: number } | null>(null);
+  // Тренировка стоит сердечко (этап 16В): плата при первом ответе, как в уроке. Не хватает — шторка «Сердечки закончились».
+  const paidRef = useRef(false);
+  const [outOpen, setOutOpen] = useState(false);
   const stepStartedAt = useRef(0);
   const finished = useRef(false);
 
@@ -100,6 +106,13 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const check = useCallback(
     (a: Answer | null = answer) => {
       if (!step || !a || phase !== "answering" || !isReady(step, a)) return;
+      if (!paidRef.current) {
+        if (!useApp.getState().payEntry(ENTRY_COST.drill).ok) {
+          setOutOpen(true);
+          return;
+        }
+        paidRef.current = true;
+      }
       const res = evaluate(step, a, lang);
       const newCombo = nextCombo(combo, res.correct);
       const gained = xpForAnswer(res.correct, false, newCombo);
@@ -144,7 +157,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
     const session = quizSession(records, xp, maxCombo, durationSec, t("quiz.title"));
     const out = finishSession(session);
     giveFeedback("complete");
-    setOutcome(out);
+    setOutcome({ bonusXp: out.bonusXp });
     setPhase("done");
     onDone(quizSummary(records, topic));
   };
@@ -171,7 +184,10 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       <section className="flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="text-lg font-extrabold">{t("quiz.setup.title")}</h3>
+            <h3 className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
+              {t("quiz.setup.title")}
+              <HeartCost n={ENTRY_COST.drill} />
+            </h3>
             <p className="mt-0.5 text-sm font-semibold text-muted">{topicTitle ? t("quiz.setup.byTopic") : t("quiz.setup.smart")}</p>
           </div>
           {cancelButton}
@@ -245,12 +261,6 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
             <p className="text-sm font-semibold text-muted">{t("quiz.done.text")}</p>
             <div className="mt-1.5 flex flex-wrap gap-2">
               <Pill tone="gold">+{xp + (outcome?.bonusXp ?? 0)} XP</Pill>
-              {outcome?.heart && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-heart-soft px-2.5 py-0.5 text-xs font-extrabold text-heart-strong">
-                  <Heart size={14} fill="currentColor" aria-hidden />
-                  {t("quiz.done.heart")}
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -331,6 +341,8 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
           {last ? t("quiz.finish") : t("common.next")}
         </Button>
       )}
+
+      <OutOfHearts open={outOpen} need={ENTRY_COST.drill} onClose={() => setOutOpen(false)} onResume={() => setOutOpen(false)} onExit={() => (onCancel ? onCancel() : setOutOpen(false))} />
     </section>
   );
 }

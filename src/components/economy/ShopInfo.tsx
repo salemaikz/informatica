@@ -25,13 +25,12 @@ import {
   Sparkles,
   Target,
   Trophy,
-  Undo2,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { ACHIEVEMENT_CHIPS, AI_COST, CHIP_REWARD, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { ACHIEVEMENT_CHIPS, AI_COST, CHIP_REWARD, ENTRY_COST, PERFECT_DROP, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -40,7 +39,7 @@ import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { dayDiff, formatClock, formatMult, formatNum, formatRemaining, knownAiKind, knownShopId } from "./shop-helpers";
-import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, regenRules, type EntryRuleId, type FreeEntryId } from "./shop-rules";
+import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, regenRules, type EntryRuleId, type FreeEntryId } from "./shop-rules";
 import { ChipPrice, IconTile } from "./ShopParts";
 import { useAiQuote, useNow } from "./useEconomy";
 
@@ -49,6 +48,7 @@ import { useAiQuote, useNow } from "./useEconomy";
 const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
   lesson: BookOpen,
   bigLesson: Layers,
+  drill: Dumbbell,
   check: ClipboardCheck,
   exam: GraduationCap,
   checkpoint: Flag,
@@ -57,9 +57,6 @@ const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
 };
 
 const FREE_ICONS: Record<FreeEntryId, LucideIcon> = {
-  practice: Dumbbell,
-  review: RefreshCw,
-  mistakes: Undo2,
   code: Code2,
   cheatsheet: ScrollText,
   chat: MessageCircle,
@@ -91,12 +88,11 @@ function CostBadge({ n }: { n: number }) {
 }
 
 /**
- * «Как работают сердечки» (#40, #60): за что платятся (цены входа), что бесплатно, как возвращаются по тарифам и
- * что даёт тренировка. Числа — из ENTRY_COST, PLAN_FEATURES, PRACTICE_HEART_* (через shop-rules.ts).
+ * «Как работают сердечки» (#40, #60; этап 16В): за что платятся (цены входа, в том числе тренировка), что бесплатно,
+ * как возвращаются по тарифам и что делать при нуле. Числа — из ENTRY_COST, PLAN_FEATURES (через shop-rules.ts).
  */
 export function HeartRules() {
   const { t, lang } = useT();
-  const practice = practiceRule();
 
   return (
     <Card className="divide-y-2 divide-border p-0 sm:p-0">
@@ -116,7 +112,7 @@ export function HeartRules() {
             );
           })}
         </ul>
-        <p className="mt-2 text-sm font-semibold text-muted">{t("hearts15.rules.when", { cost: formatHearts(ENTRY_COST.theory) })}</p>
+        <p className="mt-2 text-sm font-semibold text-muted">{t("econ16c.rules.when", { cost: formatHearts(ENTRY_COST.theory) })}</p>
       </section>
 
       <section className="p-3.5" aria-labelledby="heart-rules-free">
@@ -159,28 +155,32 @@ export function HeartRules() {
       </section>
 
       <section className="flex items-start gap-3 p-3.5">
-        <Dumbbell size={20} className="mt-0.5 shrink-0 text-success" aria-hidden />
-        <p className="min-w-0 flex-1 text-[15px] font-bold leading-snug">
-          {t("shop.rules.practice", { n: practice.answers, p: practice.percent, d: practice.daily })}
-        </p>
+        <Heart size={20} className="mt-0.5 shrink-0 text-heart" aria-hidden />
+        <p className="min-w-0 flex-1 text-[15px] font-bold leading-snug">{t("econ16c.rules.zero")}</p>
       </section>
     </Card>
   );
 }
 
-const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips: number; /** Верхняя граница, если награда от — до (достижения по редкости). */ chipsMax?: number }[] = [
+/**
+ * chips — гарантированная награда (chipsMax — верхняя граница, если награда от — до: достижения по редкости);
+ * у строки «сюрприз» (perfect) чипов нет: вместо числа — шанс (PERFECT_DROP).
+ */
+const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips?: number; chipsMax?: number }[] = [
   { id: "lessonFirst", icon: BookOpen, key: "economy.earn.lessonFirst", chips: CHIP_REWARD.lessonFirst },
   { id: "lessonRepeat", icon: RefreshCw, key: "economy.earn.lessonRepeat", chips: CHIP_REWARD.lessonRepeat },
-  { id: "perfect", icon: BadgeCheck, key: "economy.earn.perfect", chips: CHIP_REWARD.perfect },
+  { id: "perfect", icon: BadgeCheck, key: "econ16c.earn.perfect" },
   { id: "dailyGoal", icon: Target, key: "economy.earn.dailyGoal", chips: CHIP_REWARD.dailyGoal },
   { id: "unit", icon: ClipboardCheck, key: "economy.earn.unit", chips: CHIP_REWARD.unit },
   { id: "exam", icon: GraduationCap, key: "economy.earn.exam", chips: CHIP_REWARD.exam },
   { id: "achievement", icon: Trophy, key: "economy.earn.achievement", chips: ACHIEVEMENT_CHIPS.common, chipsMax: ACHIEVEMENT_CHIPS.legendary },
 ];
 
-/** «Как заработать чипы»: за что и сколько (числа — CHIP_REWARD из economy.ts, решение #105). */
+/** «Как заработать чипы»: за что и сколько (числа — CHIP_REWARD из economy.ts, решение #105; сюрприз — PERFECT_DROP, этап 16В). */
 export function EarnList() {
   const { t } = useT();
+  const pct = (x: number) => Math.round(x * 100);
+  const chancePct = pct(PERFECT_DROP.heartChance + PERFECT_DROP.chipsChance);
   return (
     <Card className="p-0 sm:p-0">
       <ul className="divide-y-2 divide-border">
@@ -189,15 +189,32 @@ export function EarnList() {
             <IconTile tone="gold">
               <r.icon size={22} />
             </IconTile>
-            <span className="min-w-0 flex-1 font-extrabold">{t(r.key)}</span>
-            <Pill tone="gold" className="py-1 text-sm">
-              +<Cpu size={13} />
-              {r.chipsMax ? `${r.chips}–${r.chipsMax}` : r.chips}
-            </Pill>
+            <span className="min-w-0 flex-1 font-extrabold">
+              {t(r.key)}
+              {r.id === "perfect" && (
+                <span className="block text-sm font-semibold text-muted">
+                  {t("econ16c.earn.perfectSub", {
+                    h: pct(PERFECT_DROP.heartChance),
+                    c: pct(PERFECT_DROP.chipsChance),
+                    n: 100 - chancePct,
+                  })}
+                </span>
+              )}
+            </span>
+            {r.chips === undefined ? (
+              <Pill tone="gold" className="py-1 text-sm">
+                {t("econ16c.earn.perfectPill", { p: chancePct })}
+              </Pill>
+            ) : (
+              <Pill tone="gold" className="py-1 text-sm">
+                +<Cpu size={13} />
+                {r.chipsMax ? `${r.chips}–${r.chipsMax}` : r.chips}
+              </Pill>
+            )}
           </li>
         ))}
       </ul>
-      <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">{t("economy.earn.note")}</p>
+      <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">{t("econ16c.earn.note")}</p>
       <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">
         {t("shop.earn.mult", {
           lite: formatMult(PLAN_FEATURES.lite.chipMultiplier),
@@ -209,15 +226,16 @@ export function EarnList() {
   );
 }
 
-const AI_ROWS: { kind: AiKind; icon: LucideIcon; key: DictKey }[] = [
-  { kind: "hint", icon: Lightbulb, key: "shop.ai.hint" },
-  { kind: "explain", icon: Wand2, key: "shop.ai.explain" },
-  { kind: "ask", icon: Bot, key: "shop.ai.ask" },
-  { kind: "chat", icon: MessageCircle, key: "shop.ai.chat" },
-  { kind: "voice", icon: Mic, key: "shop.ai.voice" },
-  { kind: "photo", icon: Camera, key: "shop.ai.photo" },
-  { kind: "review", icon: GraduationCap, key: "shop.ai.review" },
-  { kind: "feedback", icon: Sparkles, key: "shop.ai.feedback" },
+/** desc — строка «что это» под названием (этап 16В, пункт H: чем подсказка отличается от сообщения в чате). У голоса — прежняя про расшифровку. */
+const AI_ROWS: { kind: AiKind; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
+  { kind: "hint", icon: Lightbulb, key: "shop.ai.hint", desc: "econ16c.ai.hint.desc" },
+  { kind: "explain", icon: Wand2, key: "shop.ai.explain", desc: "econ16c.ai.explain.desc" },
+  { kind: "ask", icon: Bot, key: "shop.ai.ask", desc: "econ16c.ai.ask.desc" },
+  { kind: "chat", icon: MessageCircle, key: "shop.ai.chat", desc: "econ16c.ai.chat.desc" },
+  { kind: "voice", icon: Mic, key: "shop.ai.voice", desc: "shop.ai.voice.sub" },
+  { kind: "photo", icon: Camera, key: "shop.ai.photo", desc: "econ16c.ai.photo.desc" },
+  { kind: "review", icon: GraduationCap, key: "shop.ai.review", desc: "econ16c.ai.review.desc" },
+  { kind: "feedback", icon: Sparkles, key: "shop.ai.feedback", desc: "econ16c.ai.feedback.desc" },
 ];
 
 /** «ИИ-помощник»: сколько бесплатных обращений осталось и цены сверх них. */
@@ -247,7 +265,7 @@ export function AiPricing() {
                 <r.icon size={18} className="shrink-0 text-ai" />
                 <span className="min-w-0 flex-1 text-[15px] font-bold">
                   {t(r.key)}
-                  {r.kind === "voice" && <span className="block text-sm font-semibold text-muted">{t("shop.ai.voice.sub", { n: AI_COST.voice })}</span>}
+                  <span className="block text-sm font-semibold text-muted">{t(r.desc, { n: AI_COST.voice })}</span>
                 </span>
                 {AI_COST[r.kind] > 0 ? (
                   <ChipPrice n={AI_COST[r.kind]} plus={r.kind === "voice"} className="font-extrabold text-warning-strong" />
@@ -270,7 +288,7 @@ const REASON_KEY: Record<Exclude<ChipReason, "buy" | "ai" | "refund">, DictKey> 
   welcome: "shop.ledger.welcome",
   xp: "shop.ledger.xp",
   lesson: "shop.ledger.lesson",
-  perfect: "shop.ledger.perfect",
+  perfect: "econ16c.ledger.perfect",
   dailyGoal: "shop.ledger.dailyGoal",
   achievement: "shop.ledger.achievement",
   exam: "shop.ledger.exam",

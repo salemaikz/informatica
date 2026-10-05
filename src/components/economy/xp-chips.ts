@@ -21,13 +21,13 @@ export function lessonXpMax(stepCount: number, factor: number, hasStat = false):
 
 /**
  * Сколько чипов дадут за прохождение урока (решение #105): 3 за первое прохождение, 1 за повтор; множитель — тариф × бустер.
- * Бонус «идеально» (+5) в оценку не входит: он зависит от результата.
+ * «Сюрприз за идеальный урок» (шанс, PERFECT_DROP) в оценку не входит: он зависит от результата.
  */
 export function chipsEstimate(hasStat: boolean, multiplier = 1): number {
   return lessonChips(!hasStat, multiplier);
 }
 
 /** Ключ строки со склонением: `xp.chipsPlus.few` и т. п. */
-export function chipsKey(base: "xp.chipsPlus" | "xp.reward" | "perfect.chips", n: number): `${typeof base}.${"one" | "few" | "many"}` {
+export function chipsKey(base: "xp.chipsPlus" | "xp.reward" | "econ16c.drop.chips", n: number): `${typeof base}.${"one" | "few" | "many"}` {
   return `${base}.${pluralForm(n)}`;
 }

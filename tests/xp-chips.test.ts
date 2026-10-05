@@ -19,6 +19,6 @@ describe("xp-chips", () => {
     expect(chipsKey("xp.chipsPlus", 4)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 22)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 11)).toBe("xp.chipsPlus.many");
-    expect(chipsKey("perfect.chips", 5)).toBe("perfect.chips.many");
+    expect(chipsKey("econ16c.drop.chips", 3)).toBe("econ16c.drop.chips.few");
   });
 });

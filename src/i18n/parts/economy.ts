@@ -41,11 +41,7 @@ export const economyDict = {
 
   // Сердечки
   "shop.hearts.title": { ru: "Сердечки", kk: "Жүректер" },
-  // Сердечко — плата за вход (#40), не за ошибку; {time} — PLAN_FEATURES[тариф].regenMs
-  "shop.hearts.hint": {
-    ru: "Сердечко тратится на вход в урок, тест или игру и возвращается само раз в {time}. Быстрее — тренировкой или за чипы.",
-    kk: "Жүрек сабаққа, тестке немесе ойынға кіргенде жұмсалады және әр {time} сайын өзі қайтады. Тезірек — жаттығумен немесе чиппен.",
-  },
+  // Подсказка раздела сердечек — econ16c.hearts.hint (этап 16В)
   "shop.hearts.hintUnlimited": {
     ru: "Пока у тебя Безлимит, сердечки не тратятся.",
     kk: "Шексіз тарифі қосулы тұрғанда жүректер жұмсалмайды.",
@@ -71,13 +67,8 @@ export const economyDict = {
   "shop.fail.overflowRefill": { ru: "Выгоднее по одному или тройкой", kk: "Бір-бірден немесе үшеуін бірден алған тиімді" },
   // Полный запас при 1–2 недостающих: тройка тоже не поместится
   "shop.fail.overflowRefillOne": { ru: "Выгоднее по одному", kk: "Бір-бірден алған тиімді" },
-  // n — PRACTICE_HEART_MIN_ANSWERS, p — PRACTICE_HEART_MIN_ACCURACY в процентах
-  "shop.free.practice": {
-    ru: "Бесплатно: тренировка вернёт сердечко (от {n} заданий, верно от {p}%)",
-    kk: "Тегін: жаттығу жүректі қайтарады (кемінде {n} тапсырма, дұрысы {p}%-дан кем емес)",
-  },
 
-  // «Как работают сердечки» (#40, #60): числа подставляются из ENTRY_COST, PLAN_FEATURES, PRACTICE_HEART_*
+  // «Как работают сердечки» (#40, #60): числа подставляются из ENTRY_COST, PLAN_FEATURES
   "shop.rules.title": { ru: "Как работают сердечки", kk: "Жүректер қалай жұмыс істейді" },
   "shop.rules.hint": { ru: "Сердечко — плата за вход, а не за ошибку.", kk: "Жүрек — қате үшін емес, кіру үшін төлем." },
   "shop.rules.paid": { ru: "Цена входа", kk: "Кіру бағасы" },
@@ -89,20 +80,12 @@ export const economyDict = {
   "shop.rules.extern": { ru: "Экстерн", kk: "Экстерн" },
   "shop.rules.game": { ru: "Игра", kk: "Ойын" },
   "shop.rules.free": { ru: "Бесплатно", kk: "Тегін" },
-  "shop.rules.free.practice": { ru: "Тренировка", kk: "Жаттығу" },
-  "shop.rules.free.review": { ru: "Повторение", kk: "Қайталау" },
-  "shop.rules.free.mistakes": { ru: "Работа над ошибками", kk: "Қателермен жұмыс" },
   "shop.rules.free.code": { ru: "Практикум кода", kk: "Код практикумы" },
   "shop.rules.free.chat": { ru: "Чат с Битом", kk: "Битпен чат" },
   "shop.rules.regen": { ru: "Сердечки возвращаются сами", kk: "Жүректер өздігінен қайтады" },
   // max — запас тарифа, time — PLAN_FEATURES[тариф].regenMs
   "shop.rules.regen.row": { ru: "запас {max}, +1 за {time}", kk: "қор {max}, әр {time} сайын +1" },
   "shop.rules.regen.unlimited": { ru: "сердечки не тратятся", kk: "жүректер жұмсалмайды" },
-  // n — PRACTICE_HEART_MIN_ANSWERS, p — точность в процентах, d — PRACTICE_HEART_DAILY
-  "shop.rules.practice": {
-    ru: "Тренировка возвращает сердечко: от {n} заданий, верно от {p}%, до {d} раз в день.",
-    kk: "Жаттығу жүректі қайтарады: кемінде {n} тапсырма, дұрысы {p}%-дан кем емес, күніне {d} реттен көп емес.",
-  },
 
   // Сердечки без ограничений на время (за деньги)
   "shop.passes.title": { ru: "Сердечки на время", kk: "Уақытша шексіз жүректер" },
@@ -167,7 +150,6 @@ export const economyDict = {
   "shop.ledger.welcome": { ru: "Подарок за старт", kk: "Бастау сыйлығы" },
   "shop.ledger.xp": { ru: "Опыт (XP)", kk: "Тәжірибе (XP)" },
   "shop.ledger.lesson": { ru: "Урок пройден", kk: "Сабақ аяқталды" },
-  "shop.ledger.perfect": { ru: "Урок без ошибок", kk: "Қатесіз сабақ" },
   "shop.ledger.dailyGoal": { ru: "Дневная цель", kk: "Күндік мақсат" },
   "shop.ledger.achievement": { ru: "Достижение", kk: "Жетістік" },
   "shop.ledger.exam": { ru: "Пробный ЕНТ", kk: "Сынақ ҰБТ" },

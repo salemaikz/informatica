@@ -1,9 +1,6 @@
 import {
   ENTRY_COST,
   PLAN_FEATURES,
-  PRACTICE_HEART_DAILY,
-  PRACTICE_HEART_MIN_ACCURACY,
-  PRACTICE_HEART_MIN_ANSWERS,
   lessonCost,
   itemPrice,
   refillPrice,
@@ -17,13 +14,14 @@ import { heartsGain } from "./shop-helpers";
 // Чистые помощники магазина про сердечки (без React): блок «Как работают сердечки» и цена «Полного запаса».
 // Все числа — из lib/economy.ts: в текстах и разметке они не вписываются.
 
-export type EntryRuleId = "lesson" | "bigLesson" | "check" | "exam" | "checkpoint" | "game" | "theory";
+export type EntryRuleId = "lesson" | "bigLesson" | "drill" | "check" | "exam" | "checkpoint" | "game" | "theory";
 
-/** За что платятся сердечки и сколько (#40, #60; теория — этап 15): строки списка «Вход стоит сердечко». */
+/** За что платятся сердечки и сколько (#40, #60; теория — этап 15; тренировка — этап 16В): строки списка «Вход стоит сердечко». */
 export function entryRules(): { id: EntryRuleId; cost: number }[] {
   return [
     { id: "lesson", cost: ENTRY_COST.lesson },
     { id: "bigLesson", cost: lessonCost({ hearts: 2 }) },
+    { id: "drill", cost: ENTRY_COST.drill },
     { id: "check", cost: ENTRY_COST.check },
     { id: "exam", cost: ENTRY_COST.exam },
     { id: "checkpoint", cost: ENTRY_COST.checkpoint },
@@ -32,14 +30,15 @@ export function entryRules(): { id: EntryRuleId; cost: number }[] {
   ];
 }
 
-/** Что бесплатно: тренировка, повторение, работа над ошибками, практикум кода, шпаргалка и формулы, чат с Битом (теория урока теперь за 0,5). */
-export const FREE_ENTRIES = ["practice", "review", "mistakes", "code", "cheatsheet", "chat"] as const;
+/** Что бесплатно: практикум кода, шпаргалка и формулы, чат с Битом (теория урока — за 0,5, тренировка любого вида — за 1). */
+export const FREE_ENTRIES = ["code", "cheatsheet", "chat"] as const;
 export type FreeEntryId = (typeof FREE_ENTRIES)[number];
 
 /** Подписи строк правил в словаре. */
 export const ENTRY_RULE_KEYS: Record<EntryRuleId, DictKey> = {
   lesson: "shop.rules.lesson",
   bigLesson: "shop.rules.bigLesson",
+  drill: "econ16c.rules.drill",
   check: "shop.rules.check",
   exam: "shop.rules.exam",
   checkpoint: "shop.rules.checkpoint",
@@ -47,9 +46,6 @@ export const ENTRY_RULE_KEYS: Record<EntryRuleId, DictKey> = {
   theory: "hearts15.rules.theory",
 };
 export const FREE_ENTRY_KEYS: Record<FreeEntryId, DictKey> = {
-  practice: "shop.rules.free.practice",
-  review: "shop.rules.free.review",
-  mistakes: "shop.rules.free.mistakes",
   code: "shop.rules.free.code",
   cheatsheet: "hearts15.rules.free.cheatsheet",
   chat: "shop.rules.free.chat",
@@ -70,11 +66,6 @@ export function regenRules(): RegenRule[] {
     const f = PLAN_FEATURES[tier];
     return { tier, max: f.maxHearts, regenMs: f.regenMs, unlimited: !Number.isFinite(f.maxHearts) };
   });
-}
-
-/** Возврат сердечка за тренировку: от скольких ответов, какая точность (в процентах), сколько раз в день. */
-export function practiceRule(): { answers: number; percent: number; daily: number } {
-  return { answers: PRACTICE_HEART_MIN_ANSWERS, percent: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100), daily: PRACTICE_HEART_DAILY };
 }
 
 /**

@@ -64,16 +64,19 @@ test("магазин: полный запас — цена за недостаю
   const refill = page.getByRole("button", { name: "Купить: Полный запас (+4)" });
   await expect(refill).toContainText("180");
 
-  // Сердечко — плата за вход: цены из констант, бесплатное, восстановление по тарифам, возврат за тренировку.
+  // Сердечко — плата за вход: цены из констант (тренировка — 1), бесплатное, восстановление по тарифам, путь при нуле.
   await expect(page.getByRole("heading", { name: "Как работают сердечки" })).toBeVisible();
   await expect(page.getByText("Сердечко — плата за вход, а не за ошибку.")).toBeVisible();
   // Цена 2 — большой урок и тест по разделу (экстерна больше нет, #96).
   await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(2);
-  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(4);
+  // Цена 1 — урок, тренировка, «Проверить себя», пробный ЕНТ, игра (этап 16В: тренировка платная).
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(5);
   await expect(page.getByText("Чат с Битом")).toBeVisible();
   await expect(page.getByText("запас 5, +1 за 6 ч")).toBeVisible();
   await expect(page.getByText("запас 10, +1 за 3 ч")).toBeVisible();
-  await expect(page.getByText("Тренировка возвращает сердечко: от 6 заданий, верно от 70%, до 3 раз в день.")).toBeVisible();
+  // Возврата за тренировку нет: при нуле — подождать, купить за чипы или «Безлимит».
+  await expect(page.getByText(/Бесплатной тренировки нет/)).toBeVisible();
+  await expect(page.getByText(/Тренировка возвращает сердечко/)).toHaveCount(0);
 
   // Покупка полного запаса: 300 − 180 = 120 чипов, сердечек 5.
   await refill.click();

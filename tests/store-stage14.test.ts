@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp } from "@/lib/store";
 import { XP, lengthFactor, rewardFactor } from "@/lib/gamification";
+import { dropRandom } from "@/lib/perfect";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
 import type { GameResult } from "@/games/types";
 
@@ -52,10 +53,14 @@ describe("награда по длине (этап 14, #46)", () => {
     expect(st().finishSession(session({ kind: "drill", lessonId: undefined, mode: "practice", planned: 12 })).bonusXp).toBe(Math.round(XP.drillComplete * 1.5));
   });
 
-  it("мини-тест не возвращает сердечко", () => {
+  it("мини-тест не возвращает сердечко за тренировку (16В); на 100% — бросок «сюрприза», здесь выпало «ничего»", () => {
     useApp.setState({ hearts: { ...st().hearts, count: 2 } as never });
     const answers = Array.from({ length: 8 }, (_, i) => rec(i));
-    expect(st().finishSession(session({ kind: "drill", lessonId: undefined, mode: "minitest", planned: 8, answers })).heart).toBe(false);
+    vi.spyOn(dropRandom, "next").mockReturnValue(0.99);
+    const out = st().finishSession(session({ kind: "drill", lessonId: undefined, mode: "minitest", planned: 8, answers }));
+    expect(out.perfectDrop).toEqual({ kind: "none" });
+    expect(st().hearts.count).toBe(2);
+    vi.restoreAllMocks();
   });
 });
 

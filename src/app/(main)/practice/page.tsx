@@ -61,7 +61,10 @@ export default function PracticePage() {
           className="flex flex-col gap-2 rounded-3xl bg-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
         >
           <Brain size={30} />
-          <span className="text-lg font-extrabold">{t("prac.smart")}</span>
+          <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
+            {t("prac.smart")}
+            <HeartCost n={ENTRY_COST.drill} variant="solid" />
+          </span>
           <span className="text-sm font-semibold opacity-90">{t("prac.smart.desc")}</span>
         </Link>
         <Link
@@ -75,7 +78,10 @@ export default function PracticePage() {
           )}
         >
           <RotateCcw size={30} />
-          <span className="text-lg font-extrabold">{t("prac.mistakes")}</span>
+          <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
+            {t("prac.mistakes")}
+            {mistakes.length > 0 && <HeartCost n={ENTRY_COST.drill} variant="solid" />}
+          </span>
           <span className="text-sm font-semibold opacity-90">
             {mistakes.length ? t("prac.mistakes.desc", { n: mistakes.length }) : t("prac.noMistakes")}
           </span>
@@ -127,7 +133,10 @@ export default function PracticePage() {
           <Repeat size={26} strokeWidth={2.4} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-lg font-extrabold">{t("modes.review.title")}</span>
+          <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
+            {t("modes.review.title")}
+            <HeartCost n={ENTRY_COST.drill} />
+          </span>
           <span className="block text-sm font-semibold text-muted">
             {due > 0 ? t("modes.review.due", { n: due }) : t("modes.review.none")}
           </span>
