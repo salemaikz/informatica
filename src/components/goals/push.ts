@@ -1,4 +1,5 @@
 import { del, get, set } from "idb-keyval";
+import { iosNeedsInstall, type PushPermission } from "@/lib/push-ask";
 import type { Lang } from "@/lib/types";
 
 // Клиентская часть уведомлений о серии: разрешение, сервис-воркер, зеркало настроек в IndexedDB для public/sw.js.
@@ -23,6 +24,16 @@ export type PushSupport = "ok" | "unsupported" | "denied";
 export function pushSupport(): PushSupport {
   if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) return "unsupported";
   return Notification.permission === "denied" ? "denied" : "ok";
+}
+
+/** Разрешение и поддержка для окна «Включить напоминания» (правило — shouldAskPush в lib/push-ask.ts). Только в браузере. */
+export function pushPermission(): PushPermission {
+  if (typeof window === "undefined") return "unsupported";
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || !!window.matchMedia?.("(display-mode: standalone)").matches;
+    return iosNeedsInstall({ ua: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints, standalone }) ? "needs-install" : "unsupported";
+  }
+  return Notification.permission;
 }
 
 type PeriodicSync = { register: (tag: string, opts: { minInterval: number }) => Promise<void>; unregister: (tag: string) => Promise<void> };

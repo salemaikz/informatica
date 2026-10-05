@@ -18,6 +18,7 @@ import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { StorageBanner } from "@/components/app/StorageBanner";
 import { RecoveryScreen } from "@/components/app/RecoveryScreen";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
+import { PushAskAgent } from "@/components/reminders/PushAskAgent";
 
 function subscribeHydration(cb: () => void): () => void {
   const offs = [useApp.persist.onHydrate(cb), useApp.persist.onFinishHydration(cb), subscribeStorage(cb)];
@@ -124,6 +125,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <ActiveTimeAgent />
       {/* Окно тарифов: бесплатным ученикам на главной не чаще раза в 3 дня. */}
       <PaywallAgent />
+      {/* Окно «Включить напоминания»: с первого входа, дальше раз в 3 дня первую неделю, потом раз в 7 (F3). */}
+      <PushAskAgent />
     </MotionProvider>
   );
 }

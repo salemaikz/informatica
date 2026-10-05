@@ -16,7 +16,7 @@ export function Segmented<T extends string | number>({
   label?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+    <div role="group" aria-label={label} className="flex min-w-0 max-w-full flex-wrap gap-1.5">
       {options.map((o) => (
         <button
           key={String(o.id)}
@@ -24,7 +24,7 @@ export function Segmented<T extends string | number>({
           onClick={() => onChange(o.id)}
           aria-pressed={value === o.id}
           className={cn(
-            "min-h-10 rounded-xl border-2 px-3.5 py-1.5 text-sm font-bold transition-colors",
+            "min-h-10 max-w-full rounded-xl border-2 px-3.5 py-1.5 text-sm font-bold transition-colors",
             value === o.id ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:text-text",
           )}
         >
@@ -35,17 +35,22 @@ export function Segmented<T extends string | number>({
   );
 }
 
-/** Строка настройки: подпись слева (или сверху на телефоне), элемент управления справа. */
+/**
+ * Строка настройки: подпись и элемент управления.
+ * На телефоне — друг под другом. От 640px — в одну строку (подпись слева, управление справа), а если управление
+ * (длинные варианты выбора) не помещается рядом с подписью, оно переносится целиком под подпись и само переносит кнопки:
+ * ничего не вылезает за карточку и не закрывает подпись.
+ */
 export function Row({ label, hint, children, id }: { label: string; hint?: string; children: ReactNode; id?: string }) {
   return (
-    <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
+      <div className="min-w-0 sm:min-w-40 sm:flex-1">
         <span id={id} className="font-extrabold">
           {label}
         </span>
         {hint && <p className="text-sm font-semibold text-muted">{hint}</p>}
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="min-w-0 max-w-full">{children}</div>
     </div>
   );
 }
