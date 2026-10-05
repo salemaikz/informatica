@@ -126,7 +126,8 @@ describe("генераторы", () => {
       for (let seed = 1; seed < 300; seed++) {
         const step = generateLeveled("ns.base", level, seed);
         const [, , kind, arg] = step.id.split(":");
-        expect(["digits", "invalid", "invalid3"], step.id).toContain(kind);
+        // digitset — «какие цифры у двоичной системы» (уровень A, ноль и единица); minbase, maxrec — уровень C (tests/generators-c.test.ts)
+        expect(["digits", "invalid", "invalid3", "digitset", "minbase", "maxrec"], step.id).toContain(kind);
         if (kind === "digits") expect([2, 3, 5, 10], step.id).toContain(Number(arg));
         const text = JSON.stringify({ ...step, id: "" });
         expect(MENTION.test(text), step.id).toBe(false);

@@ -206,7 +206,8 @@ describe("цифры 8/16 и буквы A–F: ns.base → ns.octhex (аудит
         else if ((m = t.match(/Запись (\d+) может быть числом в (двоичной|троичной) системе/))) {
           const limit = m[2] === "двоичной" ? 2 : 3;
           expect(st.value, t).toBe(m[1].split("").every((d) => Number(d) < limit));
-        } else throw new Error(`неизвестное утверждение: ${t}`);
+        } else if ((m = t.match(/^Наименьшая цифра в двоичной системе — (\d)$/))) expect(st.value, t).toBe(m[1] === "0");
+        else throw new Error(`неизвестное утверждение: ${t}`);
 
         const p = base.pair!(level, seed);
         const left = text(p.left);
