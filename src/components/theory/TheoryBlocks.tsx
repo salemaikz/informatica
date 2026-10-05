@@ -6,16 +6,12 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { ExploreStep, InfoStep, TheoryStep, WorkedStep } from "@/lib/types";
 import { Markdown } from "@/components/Markdown";
-import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ExploreView } from "@/components/lesson/steps/ExploreView";
 import { StoryView } from "@/components/lesson/steps/StoryView";
-import { WorkedView } from "@/components/lesson/steps/WorkedView";
 import { SceneView } from "@/components/scenes/SceneView";
 import { Visual } from "@/components/visuals/Visuals";
 import { LessonVideo } from "@/videos/LessonVideo";
-
-export type WorkedMode = "all" | "steps";
 
 /** Широкие markdown-таблицы (конспекты) прокручиваются внутри блока, а не растягивают страницу на телефоне. */
 export const MD_WIDE = "[&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto";
@@ -57,7 +53,7 @@ function TheoryBlock({ step }: { step: TheoryStep }) {
   );
 }
 
-/** «Всё сразу»: все подшаги раскрыты, у каждого своя сцена под текстом. */
+/** Разбор: все подшаги раскрыты, у каждого своя сцена под текстом. */
 function WorkedAll({ step }: { step: WorkedStep }) {
   const { t, l } = useT();
   return (
@@ -90,22 +86,6 @@ function WorkedResult({ text }: { text: string }) {
   );
 }
 
-/** «По шагам»: как в уроке — шаги открываются по кнопке, сцена меняется вместе с шагом. */
-function WorkedSteps({ step, revealed, onReveal }: { step: WorkedStep; revealed: number; onReveal: () => void }) {
-  const { t } = useT();
-  const more = revealed < step.steps.length;
-  return (
-    <>
-      <WorkedView step={step} revealed={revealed} />
-      {more && (
-        <Button size="md" onClick={onReveal} className="self-start">
-          {t("lesson.nextStep")}
-        </Button>
-      )}
-    </>
-  );
-}
-
 const noop = () => {};
 
 /** Песочница без цели: работает как в уроке, но «Продолжить» не нужно — просто пробуй. */
@@ -116,34 +96,25 @@ function ExploreBlock({ step }: { step: ExploreStep }) {
     <>
       <BlockHead icon={<Hand size={14} />} label={t("lesson.explore")} title={l(step.title)} />
       {step.body && <Markdown className="text-[17px]">{l(step.body)}</Markdown>}
-      <ExploreView step={free} onGoalChange={noop} />
+      {/* Песочница ловит касания сама — свайп по карточкам здесь не листает. */}
+      <div data-no-swipe>
+        <ExploreView step={free} onGoalChange={noop} />
+      </div>
     </>
   );
 }
 
 /**
  * Один информационный блок урока. id = id шага — на него ведут ссылки из поиска (`/theory/<урок>#<шаг>`).
- * revealed/onReveal — только для разборов в режиме «по шагам».
+ * Разбор показывается целиком (режим «по шагам» заменила постраничная подача карточек, этап 16В).
  */
-export function InfoBlock({
-  step,
-  mode,
-  revealed,
-  onReveal,
-  onAsk,
-}: {
-  step: InfoStep;
-  mode: WorkedMode;
-  revealed: number;
-  onReveal: () => void;
-  onAsk: () => void;
-}) {
+export function InfoBlock({ step, onAsk }: { step: InfoStep; onAsk: () => void }) {
   const { t, l } = useT();
   return (
     <section id={step.id} className="flex min-w-0 scroll-mt-20 flex-col gap-4 rounded-3xl border-2 border-border bg-surface p-4 sm:p-5">
       {step.type === "theory" && <TheoryBlock step={step} />}
       {step.type === "story" && <StoryView step={step} />}
-      {step.type === "worked" && (mode === "all" ? <WorkedAll step={step} /> : <WorkedSteps step={step} revealed={revealed} onReveal={onReveal} />)}
+      {step.type === "worked" && <WorkedAll step={step} />}
       {step.type === "explore" && <ExploreBlock step={step} />}
       {step.type === "video" && (
         <>

@@ -4,7 +4,7 @@
 import type { TaskContext } from "./ai-types";
 import { fold, queryTokens, search, type SearchIndex, type SearchKind, type SearchResult } from "./search";
 import { plain, tx } from "./text";
-import type { InfoStep, Lang, Lesson, Step, Unit } from "./types";
+import type { EntTopicId, InfoStep, Lang, Lesson, Step, Unit } from "./types";
 
 // ---------- Чтение урока ----------
 
@@ -74,6 +74,212 @@ export function adjacentLessons(order: string[], id: string): { prev: string | n
   const i = order.indexOf(id);
   if (i < 0) return { prev: null, next: null };
   return { prev: order[i - 1] ?? null, next: order[i + 1] ?? null };
+}
+
+// ---------- Теория 2.0 (этап 16В, P6): порядок, разделы, карточки, «Продолжить» ----------
+
+/** Id готовых уроков раздела по порядку курса (без повторов). */
+export function unitReadableIds(unit: Unit): string[] {
+  const ids: string[] = [];
+  for (const l of unit.lessons) if (l.status === "available" && !ids.includes(l.id)) ids.push(l.id);
+  return ids;
+}
+
+export interface LessonPlace {
+  /** Номер раздела в курсе с нуля («Раздел N» = unitIndex + 1, как на карте). */
+  unitIndex: number;
+  unit: Unit;
+  /** Номер урока в разделе (с 1) среди готовых уроков — «Урок K из M». */
+  number: number;
+  /** Сколько готовых уроков в разделе (M). */
+  total: number;
+  /** Готовые уроки раздела по порядку. */
+  ids: string[];
+}
+
+/** Где урок в курсе: раздел и номер среди готовых уроков раздела. null — урока нет на карте (школьный, неизвестный). */
+export function lessonPlace(units: Unit[], id: string): LessonPlace | null {
+  for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
+    const ids = unitReadableIds(units[unitIndex]);
+    const i = ids.indexOf(id);
+    if (i >= 0) return { unitIndex, unit: units[unitIndex], number: i + 1, total: ids.length, ids };
+  }
+  return null;
+}
+
+/** Статус урока в «Теории»: пройден (уроком), прочитан (конспект дочитан до конца) или не начат. */
+export type LessonReadStatus = "done" | "read" | "new";
+
+export function lessonReadStatus(input: { done: boolean; read: boolean }): LessonReadStatus {
+  return input.done ? "done" : input.read ? "read" : "new";
+}
+
+export interface UnitSummary {
+  /** Готовых уроков в разделе. */
+  total: number;
+  /** Прочитано: прочитан конспект или пройден урок. */
+  read: number;
+  /** Пройдено уроков. */
+  done: number;
+}
+
+/** Сводка раздела для списка: «прочитано N из M» (пройденный урок считается прочитанным). */
+export function unitSummary(ids: readonly string[], isDone: (id: string) => boolean, isRead: (id: string) => boolean): UnitSummary {
+  let read = 0;
+  let done = 0;
+  for (const id of ids) {
+    const d = isDone(id);
+    if (d) done++;
+    if (d || isRead(id)) read++;
+  }
+  return { total: ids.length, read, done };
+}
+
+/** Какой раздел раскрыть при входе: из адреса (`#u3`), иначе раздел текущего урока, иначе ничего. */
+export function initialOpenUnit(units: Unit[], hash: string, currentLessonId: string | undefined): string | null {
+  const h = hash.replace(/^#/, "");
+  if (h && units.some((u) => u.id === h)) return h;
+  if (currentLessonId) {
+    const place = lessonPlace(units, currentLessonId);
+    if (place) return place.unit.id;
+  }
+  return null;
+}
+
+/** Тема ЕНТ урока: своя (entTopics урока), иначе первая тема его раздела; нет ни там ни там — undefined. */
+export function lessonEntTopic(lesson: { unitId: string; entTopics?: EntTopicId[] }, units: readonly Unit[]): EntTopicId | undefined {
+  return lesson.entTopics?.[0] ?? units.find((u) => u.id === lesson.unitId)?.entTopics?.[0];
+}
+
+// Карточки урока: информационные шаги, последняя карточка — конспект.
+
+/** Якорь конспекта (поиск ведёт на `/theory/<урок>#conspect`). */
+export const CONSPECT_ID = "conspect";
+
+/** Id карточек урока по порядку: информационные шаги и в конце конспект. */
+export function theoryCardIds(steps: readonly InfoStep[]): string[] {
+  return [...steps.map((s) => s.id), CONSPECT_ID];
+}
+
+/** Номер карточки по якорю адреса (`#<id шага>`, `#conspect`); null — якоря нет или он не от этого урока. */
+export function cardIndexFromHash(hash: string, cardIds: readonly string[]): number | null {
+  let h = hash.replace(/^#/, "");
+  try {
+    h = decodeURIComponent(h);
+  } catch {
+    return null; // битая %-последовательность
+  }
+  if (!h) return null;
+  const i = cardIds.indexOf(h);
+  return i >= 0 ? i : null;
+}
+
+/** Номер карточки в пределах 0..total-1 (мусор — 0). */
+export function clampCard(i: number, total: number): number {
+  if (!Number.isFinite(i) || total <= 0) return 0;
+  return Math.min(total - 1, Math.max(0, Math.trunc(i)));
+}
+
+/**
+ * С какой карточки открыть урок: якорь из адреса важнее всего; иначе — где ученик остановился (theoryLast этого урока,
+ * если конспект ещё не дочитан); иначе с первой.
+ */
+export function initialCard(input: { hash: string; cardIds: readonly string[]; lessonId: string; last: TheoryLast | null }): number {
+  const fromHash = cardIndexFromHash(input.hash, input.cardIds);
+  if (fromHash !== null) return fromHash;
+  const { last, cardIds } = input;
+  if (last && last.id === input.lessonId && last.card < cardIds.length - 1) return clampCard(last.card, cardIds.length);
+  return 0;
+}
+
+// Свайп по карточке: влево — дальше, вправо — назад.
+
+/** Минимальная длина горизонтального жеста, px. */
+export const SWIPE_MIN_PX = 56;
+
+/** Куда листать по жесту (dx, dy — смещение пальца, px): только достаточно длинный и заметно горизонтальный жест, иначе null. */
+export function swipeDirection(dx: number, dy: number, min = SWIPE_MIN_PX): "next" | "prev" | null {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+  if (Math.abs(dx) < min || Math.abs(dx) < Math.abs(dy) * 1.5) return null;
+  return dx < 0 ? "next" : "prev";
+}
+
+// Что читал ученик: последний открытый урок («Продолжить чтение»), прочитанные уроки, как показывать карточки.
+
+/** Режим чтения: по одной карточке или всё сразу (для повторения). */
+export type TheoryMode = "cards" | "all";
+
+export const THEORY_MODES: readonly TheoryMode[] = ["cards", "all"];
+
+/** Режим из сохранения (недоверенные данные): по умолчанию — по карточкам. */
+export function sanitizeTheoryMode(raw: unknown): TheoryMode {
+  return raw === "all" ? "all" : "cards";
+}
+
+/** Последний открытый конспект: урок, номер карточки с нуля (конспект — последняя) и когда. */
+export interface TheoryLast {
+  id: string;
+  card: number;
+  at: number;
+}
+
+const ID_MAX = 80;
+export const THEORY_CARD_MAX = 60;
+
+export function sanitizeTheoryLast(raw: unknown): TheoryLast | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Partial<Record<keyof TheoryLast, unknown>>;
+  if (typeof r.id !== "string" || !r.id || r.id.length > ID_MAX) return null;
+  if (typeof r.card !== "number" || !Number.isFinite(r.card) || typeof r.at !== "number" || !Number.isFinite(r.at) || r.at < 0) return null;
+  return { id: r.id, card: Math.min(THEORY_CARD_MAX, Math.max(0, Math.trunc(r.card))), at: r.at };
+}
+
+/** Прочитанные конспекты: id урока → когда дочитан (мс). */
+export type TheoryRead = Record<string, number>;
+
+/** Записей о прочитанном храним не больше (с запасом на рост курса). */
+export const THEORY_READ_MAX = 500;
+
+export function sanitizeTheoryRead(raw: unknown): TheoryRead {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const rows: [string, number][] = [];
+  for (const [id, at] of Object.entries(raw as Record<string, unknown>)) {
+    if (!id || id.length > ID_MAX || typeof at !== "number" || !Number.isFinite(at) || at <= 0) continue;
+    rows.push([id, at]);
+  }
+  rows.sort((a, b) => b[1] - a[1]);
+  return Object.fromEntries(rows.slice(0, THEORY_READ_MAX));
+}
+
+/** Отметить конспект прочитанным: запись обновляется, лишние (самые старые) отбрасываются. Исходный объект не меняется. */
+export function putTheoryRead(read: TheoryRead, id: string, now: number): TheoryRead {
+  return sanitizeTheoryRead({ ...read, [id]: now });
+}
+
+/** Что показать в «Продолжить чтение». */
+export interface ContinueTarget {
+  id: string;
+  /** Номер карточки с нуля, с которой продолжить. */
+  card: number;
+  /** Сколько в уроке карточек без конспекта. */
+  cards: number;
+  /** true — прошлый урок дочитан, предлагаем следующий по порядку (card = 0). */
+  next: boolean;
+}
+
+/**
+ * «Продолжить чтение»: последний открытый урок с того же места; если он дочитан до конспекта — следующий урок курса.
+ * cardsOf(id) — число карточек урока без конспекта (null — урок неизвестен). null — продолжать нечего.
+ */
+export function continueTarget(last: TheoryLast | null, order: readonly string[], cardsOf: (id: string) => number | null): ContinueTarget | null {
+  if (!last) return null;
+  const cards = cardsOf(last.id);
+  if (cards === null || !order.includes(last.id)) return null;
+  if (last.card < cards) return { id: last.id, card: last.card, cards, next: false };
+  const nextId = adjacentLessons([...order], last.id).next;
+  const nextCards = nextId ? cardsOf(nextId) : null;
+  if (nextId && nextCards !== null) return { id: nextId, card: 0, cards: nextCards, next: true };
+  return { id: last.id, card: cards, cards, next: false };
 }
 
 /** Контекст для «Спросить Бита» по блоку теории. */

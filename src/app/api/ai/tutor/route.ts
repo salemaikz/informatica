@@ -7,7 +7,7 @@ import { AI_UNITS } from "@/lib/economy";
 import { crisisLang, crisisReply, detectCrisis } from "@/lib/safety";
 import { callTimeoutMs, getOpenAI, INPUT_BUDGET, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { guardAi, preCheckAi, withGuardHeaders, type GuardOk } from "@/server/ai-guard";
-import { fitInput, messagesChars, sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask, type HistoryMsg } from "@/server/context";
+import { fitInput, loadLessonChat, messagesChars, sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask, type HistoryMsg } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
 import { LEAK_FALLBACK, leaksUnsolved, unsolvedSecrets } from "@/server/answer-guard";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
@@ -134,7 +134,9 @@ export async function POST(req: Request) {
   let sent = false;
   try {
     const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
-    const promptOpts = { chatMode, topic };
+    // Чат по теме урока (этап 16В): клиент шлёт только id урока, название и конспект берём здесь (только свободный чат).
+    const lesson = mode === "chat" && !image && (!chatMode || chatMode === "free") ? await loadLessonChat(body.lessonId, ctx.lang) : undefined;
+    const promptOpts = { chatMode, topic, lesson };
     // Бюджет входа: укладываем историю и необязательные части контекста (подробности — в шапке файла и в fitInput).
     const fit = fitInput({
       budget: INPUT_BUDGET.tutor,

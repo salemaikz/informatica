@@ -12,8 +12,10 @@ export interface ChatMeta {
   id: string;
   title: string;
   mode: ChatMode;
-  /** Тема ЕНТ режима «Объясни тему» / «Дай задачи». */
+  /** Тема ЕНТ режима «Объясни тему» / «Дай задачи» (у чата по теме урока — тема урока). */
   topic?: EntTopicId;
+  /** Чат по теме урока теории (этап 16В, P6): id урока; контекст урока (название и конспект) добавляет сервер. */
+  lessonId?: string;
   pinned?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -89,6 +91,13 @@ export function quizGrade(correct: number, total: number): 2 | 3 | 4 | 5 {
   return r >= 0.9 ? 5 : r >= 0.7 ? 4 : r >= 0.5 ? 3 : 2;
 }
 
+/** Чат по теме урока: один на урок (если их несколько — самый свежий). undefined — ещё не создавали. */
+export function findLessonChat(list: readonly ChatMeta[], lessonId: string): ChatMeta | undefined {
+  let best: ChatMeta | undefined;
+  for (const c of list) if (c.lessonId === lessonId && (!best || c.updatedAt > best.updatedAt)) best = c;
+  return best;
+}
+
 export function sanitizeChats(raw: unknown): ChatMeta[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatMeta[] = [];
@@ -102,6 +111,7 @@ export function sanitizeChats(raw: unknown): ChatMeta[] {
       title: typeof c.title === "string" ? c.title.slice(0, TITLE_LEN + 1) : "",
       mode: c.mode as ChatMode,
       topic: typeof c.topic === "string" ? (c.topic as EntTopicId) : undefined,
+      lessonId: typeof c.lessonId === "string" && c.lessonId.length > 0 && c.lessonId.length <= 80 ? c.lessonId : undefined,
       pinned: c.pinned ? true : undefined,
       createdAt: num(c.createdAt),
       updatedAt: num(c.updatedAt),

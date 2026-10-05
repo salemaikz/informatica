@@ -1,21 +1,19 @@
-// Плата за чтение конспекта урока (этап 15, F2; ТЗ docs/specs/stage15.md): 0,5 сердечка за страницу `/theory/<id>`.
+// Плата за чтение конспекта урока (этап 15, F2; этап 16В, P6 «Теория 2.0»; ТЗ docs/specs/stage16c.md §10): 0,5 сердечка за страницу `/theory/<id>`.
 // Чистые функции без React; факт оплаты (id урока → когда) лежит в сторе (`theoryPaid`), действие — `payTheory`.
 //
-// Правила:
-// - урок пройден — читать бесплатно (повторять пройденное не наказываем);
+// Правила (этап 16В — оплата явная, кнопкой, без таймера):
+// - первая карточка урока открыта всегда (превью), дальше — кнопка-ворота «Читать дальше — ½ ❤»;
 // - «Безлимит» (в том числе пробный) — бесплатно;
 // - тот же конспект оплачен не раньше THEORY_REPEAT_MS назад — бесплатно (сутки);
-// - иначе платим ENTRY_COST.theory, когда ученик листает дальше первого экрана или читает THEORY_READ_MS — что раньше.
+// - иначе платим ENTRY_COST.theory по нажатию кнопки. Пройденный урок — тоже платно (владелец: «теория тоже платная за сердца»).
 // Шпаргалка, формулы и «Конспект урока» в заметках — бесплатно (это не эта страница).
 
 import { DAY, ENTRY_COST, MINUTE } from "./economy";
 
 /** Повторное чтение того же конспекта бесплатно столько мс после оплаты. */
 export const THEORY_REPEAT_MS = DAY;
-/** Через сколько мс чтения (без прокрутки) платим. */
-export const THEORY_READ_MS = 15_000;
-/** Прокрутка от верха, после которой платим, в долях высоты экрана («дальше первого экрана»). */
-export const THEORY_SCROLL_SCREENS = 0.6;
+/** Сколько карточек урока видно без оплаты (превью): только первая. */
+export const THEORY_FREE_CARDS = 1;
 /** Записей об оплате храним не больше (защита от раздувания localStorage). */
 export const THEORY_PAID_MAX = 60;
 /** Запись «из будущего» дальше этого допуска — мусор (часы переведены); меньше — часы интерфейса отстают на тик. */
@@ -27,14 +25,10 @@ export type TheoryPaid = Record<string, number>;
 /** Цена чтения конспекта, сердечек. */
 export const theoryCost = (): number => ENTRY_COST.theory;
 
-/**
- * Состояние оплаты чтения конспекта:
- * done — урок пройден, unlimited — «Безлимит», paid — уже оплачено в последние сутки, pay — нужно платить.
- */
-export type TheoryPayState = "done" | "unlimited" | "paid" | "pay";
+/** Состояние оплаты чтения конспекта: unlimited — «Безлимит», paid — уже оплачено в последние сутки, pay — нужно платить. */
+export type TheoryPayState = "unlimited" | "paid" | "pay";
 
-export function theoryPayState(input: { done: boolean; unlimited: boolean; paidAt: number | undefined; now: number }): TheoryPayState {
-  if (input.done) return "done";
+export function theoryPayState(input: { unlimited: boolean; paidAt: number | undefined; now: number }): TheoryPayState {
   if (input.unlimited) return "unlimited";
   const at = input.paidAt;
   if (typeof at === "number" && Number.isFinite(at) && at - input.now <= FUTURE_SKEW_MS && input.now - at < THEORY_REPEAT_MS) return "paid";
@@ -44,8 +38,20 @@ export function theoryPayState(input: { done: boolean; unlimited: boolean; paidA
 /** Нужно ли платить за открытие конспекта прямо сейчас. */
 export const shouldPayTheory = (input: Parameters<typeof theoryPayState>[0]): boolean => theoryPayState(input) === "pay";
 
+/** Закрыта ли карточка с номером `index` (с нуля): без оплаты видны первые THEORY_FREE_CARDS. */
+export const isTheoryCardLocked = (state: TheoryPayState, index: number): boolean => state === "pay" && index >= THEORY_FREE_CARDS;
+
 /** Оплачено время `at` — до какого момента повторное чтение бесплатно (мс). */
 export const theoryFreeUntil = (at: number): number => at + THEORY_REPEAT_MS;
+
+/** Когда закончится оплаченное чтение: сегодня или завтра (локальное время) и «ЧЧ:ММ». */
+export function theoryUntilLabel(paidAt: number, now: number): { day: "today" | "tomorrow"; time: string } {
+  const until = new Date(theoryFreeUntil(paidAt));
+  const today = new Date(now);
+  const sameDay = until.getFullYear() === today.getFullYear() && until.getMonth() === today.getMonth() && until.getDate() === today.getDate();
+  const time = `${String(until.getHours()).padStart(2, "0")}:${String(until.getMinutes()).padStart(2, "0")}`;
+  return { day: sameDay ? "today" : "tomorrow", time };
+}
 
 /** Записать оплату: старше суток и лишние (самые старые) записи отбрасываются. */
 export function putTheoryPaid(paid: TheoryPaid, id: string, now: number): TheoryPaid {

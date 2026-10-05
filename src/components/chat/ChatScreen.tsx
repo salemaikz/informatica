@@ -17,6 +17,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
 import { Composer } from "./Composer";
+import { LessonChips, LessonIntro } from "./LessonChat";
 import { displayTitle, firstUserText, lastPreview, MODE_NAME_KEY, quizInHistory, reviewRequest, toHistory, topicTitle } from "./helpers";
 import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
@@ -121,7 +122,7 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
     pendingRef.current = "";
     setPending("");
     const answer = await ask(
-      { mode: "chat", messages: toHistory(msgsRef.current, lang, t), image: img, chatMode: chat.mode, topic: chat.topic },
+      { mode: "chat", messages: toHistory(msgsRef.current, lang, t), image: img, chatMode: chat.mode, topic: chat.topic, lessonId: chat.lessonId },
       (full) => {
         pendingRef.current = full;
         setPending(full);
@@ -188,7 +189,8 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
       deleteChat(id);
       void deleteMessages(id);
     }
-    router.push("/tutor");
+    // Чат по теме урока — назад к уроку теории, из которого пришли.
+    router.push(chat.lessonId ? `/theory/${chat.lessonId}` : "/tutor");
   };
 
   const openManage = (view: ManageTarget["view"]) => setManage({ id, view, nonce: nextManageNonce() });
@@ -219,9 +221,9 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
         >
           <span className="block truncate text-lg font-extrabold">{title}</span>
           <span className="flex items-center gap-1.5 text-xs font-extrabold text-ai">
-            <ModeIcon mode={chat.mode} size={14} />
+            <ModeIcon mode={chat.mode} size={14} lesson={!!chat.lessonId} />
             <span className="truncate">
-              {t(MODE_NAME_KEY[chat.mode])}
+              {chat.lessonId ? t("theory16c.chat.badge") : t(MODE_NAME_KEY[chat.mode])}
               {topic ? ` · ${topic}` : ""}
             </span>
           </span>
@@ -238,7 +240,9 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
 
       <div className="flex flex-1 flex-col gap-3">
         {messages === null && <p className="py-10 text-center font-bold text-muted">{t("common.loading")}</p>}
-        {empty && (
+        {chat.lessonId && messages !== null && <LessonIntro lessonId={chat.lessonId} />}
+        {empty && chat.lessonId && <LessonChips onSend={(text) => void send({ text })} />}
+        {empty && !chat.lessonId && (
           <ChatEmpty
             chat={chat}
             onSend={(text) => void send({ text })}

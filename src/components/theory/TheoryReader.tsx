@@ -1,27 +1,50 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BookmarkPlus, ClipboardCheck, Eye, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
+import { m } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { lessonMeta } from "@/content/catalog";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UNITS } from "@/content/course-map";
 import { cn } from "@/lib/cn";
 import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import type { Lesson } from "@/lib/types";
-import { adjacentLessons, blockContext, conspectContext, infoSteps, pluralIndex, readableLessonIds, readingStats } from "@/lib/theory";
+import {
+  adjacentLessons,
+  blockContext,
+  cardIndexFromHash,
+  CONSPECT_ID,
+  clampCard,
+  conspectContext,
+  infoSteps,
+  initialCard,
+  lessonPlace,
+  lessonReadStatus,
+  pluralIndex,
+  readableLessonIds,
+  readingStats,
+  theoryCardIds,
+  type LessonReadStatus,
+} from "@/lib/theory";
+import { isTheoryCardLocked, THEORY_FREE_CARDS } from "@/lib/theory-pay";
 import { useApp } from "@/lib/store";
-import { Markdown } from "@/components/Markdown";
 import { AiPanel } from "@/components/ai/AiPanel";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { useOpenLessonChat } from "@/components/chat/useLessonChat";
+import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { springSoft } from "@/components/motion/presets";
+import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
-import { AskBit, InfoBlock, MD_WIDE, type WorkedMode } from "./TheoryBlocks";
+import { InfoBlock } from "./TheoryBlocks";
+import { CardProgress } from "./TheoryCards";
+import { ConspectActions, ConspectCard } from "./TheoryConspect";
+import { TheoryCrumbs } from "./TheoryCrumbs";
+import { TheoryGate, TheoryPayButton, TheoryPayStatus } from "./TheoryPay";
 import { useHashScroll } from "./useHashScroll";
-import { TheoryLock, TheoryPayStatus } from "./TheoryPay";
+import { useSwipe } from "./useSwipe";
 import { useTheoryPay } from "./useTheoryPay";
 
 const CARDS_KEY: DictKey[] = ["theory.cards.one", "theory.cards.few", "theory.cards.many"];
@@ -29,177 +52,239 @@ const SUGGESTIONS: DictKey[] = ["tutor.q.simpler", "tutor.q.example", "tutor.q.w
 const ORDER = readableLessonIds(UNITS);
 
 /**
- * Чтение урока без заданий: все информационные шаги подряд, затем конспект.
- * Ничего не пишет в прогресс. Якоря: `#<id шага>` и `#conspect` — на них ведёт поиск.
- * Чтение стоит 0,5 сердечка (этап 15, useTheoryPay): первый экран бесплатный, дальше — после прокрутки или ~15 секунд;
- * пройденный урок, «Безлимит» и повторное чтение за сутки — бесплатно. Не хватает сердечек — остальное закрыто замком.
+ * Чтение урока без заданий (этап 16В, «Теория 2.0»): карточки урока — по одной (как шаги урока), последняя — конспект.
+ * Сверху «где я»: раздел, номер урока, лента уроков раздела. Переключатель «По карточкам / Всё сразу» запоминается.
+ * Ничего не пишет в прогресс уроков; запоминает последнюю карточку (theoryLast) и прочитанный до конспекта урок (theoryRead).
+ * Якоря: `#<id шага>` и `#conspect` (на них ведёт поиск) открывают нужную карточку.
+ * Плата — явная (useTheoryPay): первая карточка бесплатна, дальше — кнопка «Читать дальше — 0,5»; «Безлимит» и повтор за сутки — бесплатно.
  * Урок приходит с сервера (страница /theory/[id]): клиент не грузит содержимое всех уроков (этап 16).
  */
 export function TheoryReader({ lesson }: { lesson: Lesson }) {
   const id = lesson.id;
   const { t, l, lang } = useT();
   const router = useRouter();
+  const reduce = useReduceMotion();
   const pay = useTheoryPay(id);
   const openSave = useSaveToNotes((s) => s.open);
-  const done = useApp((s) => (s.lessons[id]?.completions ?? 0) > 0);
-  const [mode, setMode] = useState<WorkedMode>("all");
-  const [revealed, setRevealed] = useState<Record<string, number>>({});
-  const [askId, setAskId] = useState<string | null>(null);
+  const openChat = useOpenLessonChat();
+  const lessons = useApp((s) => s.lessons);
+  const theoryRead = useApp((s) => s.theoryRead);
+  const mode = useApp((s) => s.theoryMode);
+  const setMode = useApp((s) => s.setTheoryMode);
 
   const steps = useMemo(() => infoSteps(lesson), [lesson]);
+  const cardIds = useMemo(() => theoryCardIds(steps), [steps]);
+  const total = cardIds.length;
+  const last = total - 1;
   const stats = useMemo(() => readingStats(lesson, lang), [lesson, lang]);
-  const unit = UNITS.find((u) => u.id === lesson.unitId);
-  const { prev, next } = adjacentLessons(ORDER, id);
-  const prevLesson = prev ? lessonMeta(prev) : undefined;
-  const nextLesson = next ? lessonMeta(next) : undefined;
-  const hasWorked = steps.some((s) => s.type === "worked");
+  const place = useMemo(() => lessonPlace(UNITS, id), [id]);
+  const nextLessonId = adjacentLessons(ORDER, id).next;
 
-  // Переход по ссылке с якорем (из поиска): доскролл и короткая подсветка блока.
+  const statusOf = (lid: string): LessonReadStatus => lessonReadStatus({ done: (lessons[lid]?.completions ?? 0) > 0, read: !!theoryRead[lid] });
+  const status = statusOf(id);
+
+  // Страницы показываются только после гидратации стора (Providers), поэтому якорь и сохранённая карточка читаются сразу.
+  const [index, setIndex] = useState(() =>
+    initialCard({ hash: typeof window === "undefined" ? "" : window.location.hash, cardIds, lessonId: id, last: useApp.getState().theoryLast }),
+  );
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [askId, setAskId] = useState<string | null>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
+  const conspectRef = useRef<HTMLDivElement>(null);
+
+  const locked = isTheoryCardLocked(pay.state, index);
+  const allUnlocked = pay.state !== "pay";
+
+  // Запоминаем, где остановились: «Продолжить чтение» на странице «Теория».
+  useEffect(() => {
+    useApp.getState().noteTheoryOpen(id, index);
+  }, [id, index]);
+
+  // «Прочитан»: конспект (последняя карточка) открыт — только оплаченным чтением, не превью.
+  useEffect(() => {
+    if (mode === "cards" && index === last && !locked) useApp.getState().markTheoryRead(id);
+  }, [mode, index, last, locked, id]);
+
+  // То же в режиме «Всё сразу»: конспект показался на экране.
+  useEffect(() => {
+    const el = conspectRef.current;
+    if (mode !== "all" || !allUnlocked || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        const app = useApp.getState();
+        app.markTheoryRead(id);
+        app.noteTheoryOpen(id, last);
+        io.disconnect();
+      },
+      { threshold: 0.2 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [mode, allUnlocked, id, last]);
+
+  // Якорь сменился без перезагрузки (кнопки «назад»/«вперёд» браузера): открываем нужную карточку.
+  useEffect(() => {
+    const onHash = () => {
+      const i = cardIndexFromHash(window.location.hash, cardIds);
+      if (i !== null) setIndex(i);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [cardIds]);
+
+  // Переход по ссылке с якорем (из поиска): доскролл и короткая подсветка карточки (в режиме карточек она уже открыта).
   useHashScroll(id);
 
   const askTask = useMemo(() => {
     if (!askId) return null;
-    if (askId === "conspect") return conspectContext(lesson, lang);
+    if (askId === CONSPECT_ID) return conspectContext(lesson, lang);
     const step = steps.find((s) => s.id === askId);
     return step ? blockContext(step, lesson, lang) : null;
   }, [lesson, steps, askId, lang]);
 
+  const go = (i: number) => {
+    const next = clampCard(i, total);
+    if (next === index) return;
+    setDir(next > index ? 1 : -1);
+    setIndex(next);
+    // Якорь из адреса сработал при входе; дальше он только мешал бы (обновление страницы вернуло бы к нему, а не к месту, где остановились).
+    if (window.location.hash) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    // Новая карточка — с её начала (шапка урока остаётся выше).
+    areaRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  };
+
+  // Свайп листает только по уже открытому: платные ворота — только кнопкой.
+  const swipe = useSwipe({
+    onPrev: () => go(index - 1),
+    onNext: () => {
+      if (!isTheoryCardLocked(pay.state, index + 1)) go(index + 1);
+    },
+  });
+
+  /** Кнопка-ворота на превью: списать и открыть следующую карточку. */
+  const payNext = () => {
+    if (pay.unlock()) go(index + 1);
+  };
+  /** Не хватало сердечек — купили или дождались: списываем; кнопка была на превью — открываем следующую карточку. */
+  const resume = () => {
+    const wasPreview = mode === "cards" && index < THEORY_FREE_CARDS && index < last;
+    if (pay.resume() && wasPreview) go(index + 1);
+  };
+
   const saveConspect = () => openSave({ source: "lesson", lessonId: lesson.id, title: l(lesson.title), text: l(lesson.conspect) });
-  const reveal = (stepId: string, total: number) => setRevealed((r) => ({ ...r, [stepId]: Math.min(total, (r[stepId] ?? 1) + 1) }));
+
+  const gateAt = index >= THEORY_FREE_CARDS && locked;
+  const nextOpens = !isTheoryCardLocked(pay.state, index + 1);
+
+  const card = gateAt ? (
+    <TheoryGate onPay={() => void pay.unlock()} />
+  ) : index === last ? (
+    <ConspectCard lesson={lesson} onAsk={() => setAskId(CONSPECT_ID)} />
+  ) : (
+    <InfoBlock step={steps[index]} onAsk={() => setAskId(steps[index].id)} />
+  );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-3">
-        <Link href={`/theory#${lesson.unitId}`} className="-ml-2 flex h-10 items-center gap-1.5 self-start rounded-xl px-2 text-sm font-extrabold text-primary hover:bg-primary-soft">
-          <ArrowLeft size={16} /> {t("theory.back")}
-        </Link>
-        {unit && (
-          <p className="text-sm font-extrabold uppercase" style={{ color: unit.color }}>
-            {l(unit.title)}
-          </p>
+        {place ? (
+          <TheoryCrumbs place={place} lessonId={id} statusOf={statusOf} />
+        ) : (
+          <Link href="/theory" className="-ml-2 flex h-10 items-center gap-1.5 self-start rounded-xl px-2 text-sm font-extrabold text-primary hover:bg-primary-soft">
+            <ArrowLeft size={16} /> {t("theory.back")}
+          </Link>
         )}
-        <h1 className="text-3xl font-extrabold leading-tight">{l(lesson.title)}</h1>
-        <p className="font-semibold text-muted">{l(lesson.description)}</p>
+        <h1 className="text-2xl font-extrabold leading-tight sm:text-3xl">{l(lesson.title)}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Pill tone="muted">{t(CARDS_KEY[lang === "ru" ? pluralIndex(stats.cards) : 2], { n: stats.cards })}</Pill>
           <Pill tone="muted">{t("theory.readMin", { n: stats.minutes })}</Pill>
-          {done && <Pill tone="success">{t("theory.done")}</Pill>}
+          {status === "done" && (
+            <Pill tone="success" icon={<Check size={12} strokeWidth={3.5} />}>
+              {t("theory16c.status.done")}
+            </Pill>
+          )}
+          {status === "read" && <Pill tone="primary">{t("theory16c.status.read")}</Pill>}
         </div>
-        <p className="flex items-start gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm font-semibold text-muted">
-          <Eye size={16} className="mt-0.5 shrink-0" aria-hidden /> {t("theory.readOnly")}
-        </p>
         <TheoryPayStatus state={pay.state} paidAt={pay.paidAt} />
+        <Button variant="ai" block icon={<Sparkles size={20} aria-hidden />} onClick={() => openChat(lesson)} data-tour="theory-ask">
+          {t("theory16c.ask.button")}
+        </Button>
       </header>
 
-      {(steps.length > 1 || hasWorked) && (
-        <nav aria-label={t("theory.toc")} className="flex flex-col gap-3">
-          <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
-            {steps.map((s, i) => (
-              <li key={s.id} className="shrink-0">
-                <a
-                  href={`#${s.id}`}
-                  className="flex h-10 max-w-[220px] items-center gap-1.5 rounded-full border-2 border-border bg-surface px-3 text-sm font-bold hover:bg-surface-2"
-                >
-                  <span className="text-muted">{i + 1}</span>
-                  <span className="truncate">{blockTitle(s, lesson.title[lang], lang)}</span>
-                </a>
-              </li>
-            ))}
-            <li className="shrink-0">
-              <a href="#conspect" className="flex h-10 items-center whitespace-nowrap rounded-full border-2 border-primary/40 bg-primary-soft px-3 text-sm font-extrabold text-primary">
-                {t("theory.conspect")}
-              </a>
-            </li>
-          </ul>
-          {hasWorked && (
-            <div role="group" aria-label={t("theory.modeLabel")} className="flex self-start rounded-2xl bg-surface-2 p-1">
-              {(["all", "steps"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={mode === m}
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "h-10 rounded-xl px-4 text-sm font-extrabold transition-colors",
-                    mode === m ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text",
-                  )}
-                >
-                  {t(m === "all" ? "theory.modeAll" : "theory.modeSteps")}
-                </button>
-              ))}
+      <div className="flex flex-col gap-4">
+        <div role="group" aria-label={t("theory16c.mode.label")} className="flex self-start rounded-2xl bg-surface-2 p-1">
+          {(["cards", "all"] as const).map((m2) => (
+            <button
+              key={m2}
+              type="button"
+              aria-pressed={mode === m2}
+              onClick={() => setMode(m2)}
+              className={cn(
+                "h-10 rounded-xl px-4 text-sm font-extrabold transition-colors",
+                mode === m2 ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text",
+              )}
+            >
+              {t(m2 === "cards" ? "theory16c.mode.cards" : "theory16c.mode.all")}
+            </button>
+          ))}
+        </div>
+
+        {mode === "cards" ? (
+          <>
+            <div ref={areaRef} className="scroll-mt-20">
+              <CardProgress index={index} total={total} onGo={go} />
             </div>
-          )}
-        </nav>
-      )}
-
-      {/* Первый блок — «первый экран», бесплатный; остальное и конспект закрываются, если не хватило сердечек. */}
-      {(pay.blocked ? steps.slice(0, 1) : steps).map((step) => (
-        <InfoBlock
-          key={step.id}
-          step={step}
-          mode={mode}
-          revealed={revealed[step.id] ?? 1}
-          onReveal={() => step.type === "worked" && reveal(step.id, step.steps.length)}
-          onAsk={() => setAskId(step.id)}
-        />
-      ))}
-
-      {pay.blocked ? (
-        <TheoryLock onOpen={() => pay.setSheetOpen(true)} />
-      ) : (
-        <section id="conspect" className="flex min-w-0 scroll-mt-20 flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-surface p-4 sm:p-5">
-          <div>
-            <h2 className="text-2xl font-extrabold">{t("theory.conspect")}</h2>
-            <p className="text-sm font-semibold text-muted">{t("theory.conspectHint")}</p>
-          </div>
-          <Markdown className={cn("text-[17px]", MD_WIDE)}>{l(lesson.conspect)}</Markdown>
-          <AskBit onClick={() => setAskId("conspect")} label={t("theory.askConspect")} />
-        </section>
-      )}
-
-      <div className="flex flex-col gap-3">
-        <ButtonLink href={`/lesson/${lesson.id}`} size="lg" block icon={<Play size={20} />}>
-          {t("theory.start")}
-        </ButtonLink>
-        <ButtonLink href={`/lesson/${lesson.id}?mode=check`} variant="secondary" size="lg" block icon={<ClipboardCheck size={20} />}>
-          {t("theory.check")}
-        </ButtonLink>
-        <Button variant="secondary" size="lg" block icon={<BookmarkPlus size={20} />} onClick={saveConspect}>
-          {t("theory.save")}
-        </Button>
+            <div {...swipe}>
+              <m.div
+                key={index}
+                className="flex min-w-0 flex-col gap-4"
+                initial={reduce ? false : { opacity: 0, x: dir * 28 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={springSoft}
+              >
+                {card}
+              </m.div>
+            </div>
+            {index === last && !locked && <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />}
+            <nav className={cn("grid gap-3", index < last ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1")}>
+              <Button variant="secondary" size="lg" block={index === last} disabled={index === 0} icon={<ArrowLeft size={20} />} onClick={() => go(index - 1)} className="px-3">
+                {t("theory16c.nav.back")}
+              </Button>
+              {index < last &&
+                (nextOpens ? (
+                  <Button size="lg" block icon={<ArrowRight size={20} />} onClick={() => go(index + 1)} data-tour="theory-next" className="flex-row-reverse px-3">
+                    {t("theory16c.nav.next")}
+                  </Button>
+                ) : gateAt ? null : (
+                  <TheoryPayButton onClick={payNext} data-tour="theory-next" />
+                ))}
+            </nav>
+          </>
+        ) : (
+          <>
+            {cardIds.map((cid, i) => {
+              if (isTheoryCardLocked(pay.state, i)) return null;
+              return cid === CONSPECT_ID ? (
+                <div key={cid} ref={conspectRef} className="flex flex-col gap-4">
+                  <ConspectCard lesson={lesson} onAsk={() => setAskId(CONSPECT_ID)} />
+                </div>
+              ) : (
+                <InfoBlock key={cid} step={steps[i]} onAsk={() => setAskId(cid)} />
+              );
+            })}
+            {!allUnlocked && <TheoryGate onPay={() => void pay.unlock()} />}
+            {allUnlocked && <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />}
+          </>
+        )}
       </div>
-
-      {(prevLesson || nextLesson) && (
-        <nav className="grid grid-cols-2 gap-3">
-          {prevLesson ? (
-            <Link href={`/theory/${prevLesson.id}`} className="flex min-w-0 flex-col gap-0.5 rounded-2xl border-2 border-border bg-surface p-3 hover:bg-surface-2">
-              <span className="flex items-center gap-1 text-xs font-extrabold text-muted">
-                <ArrowLeft size={14} /> {t("theory.prev")}
-              </span>
-              <span className="line-clamp-2 text-sm font-extrabold">{l(prevLesson.title)}</span>
-            </Link>
-          ) : (
-            <span />
-          )}
-          {nextLesson ? (
-            <Link href={`/theory/${nextLesson.id}`} className="flex min-w-0 flex-col items-end gap-0.5 rounded-2xl border-2 border-border bg-surface p-3 text-right hover:bg-surface-2">
-              <span className="flex items-center gap-1 text-xs font-extrabold text-muted">
-                {t("theory.next")} <ArrowRight size={14} />
-              </span>
-              <span className="line-clamp-2 text-sm font-extrabold">{l(nextLesson.title)}</span>
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
 
       <OutOfHearts
         open={pay.sheetOpen}
         need={ENTRY_COST.theory}
         what="theory"
         onClose={() => pay.setSheetOpen(false)}
-        onResume={pay.resume}
+        onResume={resume}
         onExit={() => router.push("/theory")}
       />
 
@@ -208,10 +293,4 @@ export function TheoryReader({ lesson }: { lesson: Lesson }) {
       )}
     </div>
   );
-}
-
-/** Короткий заголовок блока для содержания. */
-function blockTitle(step: ReturnType<typeof infoSteps>[number], lessonTitle: string, lang: "ru" | "kk"): string {
-  if (step.type === "story") return step.title?.[lang] ?? lessonTitle;
-  return step.title[lang];
 }
