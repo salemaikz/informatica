@@ -68,7 +68,7 @@ describe("стор: работа над ошибками", () => {
 // Гидратация настоящего стора: подставляем window.localStorage и заново загружаем модули (тесты идут в node, без браузера).
 describe("стор: сохранение прогресса не ломает приложение", () => {
   const KEY = "informatica-v1";
-  const BROKEN = "informatica-v1-broken";
+  const LEGACY_BROKEN = "informatica-v1-broken";
 
   function fakeLocalStorage(initial: Record<string, string> = {}, fail?: { set?: Error }) {
     const data = new Map(Object.entries(initial));
@@ -108,20 +108,30 @@ describe("стор: сохранение прогресса не ломает п
     expect(safe.storageStatus()).toBe("ok");
   });
 
-  it("битый JSON: гидратация не «висит» молча — сбой отмечен, копия сохранена, прогресс не затирается", async () => {
+  it("битый JSON: гидратация не «висит» молча — сбой отмечен, прогресс не затирается, копий нет", async () => {
     const { ls, data } = fakeLocalStorage({ [KEY]: "{" });
     const { useApp, safe } = await load({ localStorage: ls });
     expect(useApp.persist.hasHydrated()).toBe(false);
     expect(safe.hydrationFailed()).toBe(true);
-    expect(data.get(BROKEN)).toBe("{");
-    expect(safe.rawForDownload()).toBe("{");
+    expect(safe.peekSaved()).toBe("{");
+    expect(data.has(LEGACY_BROKEN)).toBe(false);
     // Действия работают, но поверх нечитаемого сохранения не пишут, пока ученик не решил.
     useApp.getState().updateProfile({ name: "Новый" });
     expect(data.get(KEY)).toBe("{");
-    // «Начать заново»: основное сохранение очищено, копия осталась.
+    // «Начать заново»: сохранение удалено, копии не остаётся.
     safe.discardSaved();
     expect(data.has(KEY)).toBe(false);
-    expect(data.get(BROKEN)).toBe("{");
+    expect(data.has(LEGACY_BROKEN)).toBe(false);
+    expect(safe.hydrationFailed()).toBe(false);
+  });
+
+  it("копия повреждённого сохранения из прежней версии удаляется при запуске, прогресс читается", async () => {
+    const saved = { state: { xp: 12, onboarded: true, profile: { lang: "ru" } }, version: 2 };
+    const { ls, data } = fakeLocalStorage({ [KEY]: JSON.stringify(saved), [LEGACY_BROKEN]: "x".repeat(1000) });
+    const { useApp } = await load({ localStorage: ls });
+    expect(data.has(LEGACY_BROKEN)).toBe(false);
+    expect(useApp.persist.hasHydrated()).toBe(true);
+    expect(useApp.getState().xp).toBe(12);
   });
 
   it("«Попробовать ещё раз»: после исправления данных стор читается", async () => {

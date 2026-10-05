@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { LEGAL, LEGAL_IDS, LEGAL_PLACEHOLDERS, legalMarkdown, type LegalDoc } from "@/content/legal";
 import { dict } from "@/i18n/dict";
 import { legalDict } from "@/i18n/parts/legal";
-import { BACKUP_STATE_KEYS } from "@/lib/backup";
 import { AI_DAILY_CAP, AI_UNITS, TRIAL_DAYS } from "@/lib/economy";
 import { detectLang, GUEST_LANG_KEY, guestLangToApply, markLangChosen } from "@/lib/guest-lang";
 import { ISSUE_CHANNELS, ISSUE_LIMITS } from "@/lib/issue";
@@ -216,17 +215,6 @@ describe("правовые документы", () => {
       expect(openai, lang).toContain(`«${dict["exam.ai.title"][lang]}»`);
       expect(fullText(LEGAL.privacy, lang)).toContain(`«${dict["issue.button"][lang]}»`);
     }
-  });
-
-  it("копия данных: состав как в lib/backup.ts", () => {
-    for (const k of ["profile", "xp", "notebook", "wallet", "history", "chats"]) expect(BACKUP_STATE_KEYS as readonly string[], k).toContain(k);
-    for (const k of ["plan", "onboarded"]) expect(BACKUP_STATE_KEYS as readonly string[], k).not.toContain(k);
-    const device = LEGAL.privacy.sections.find((x) => x.title.ru === "Что хранится на твоём устройстве")!;
-    expect(device.body.ru).toContain("В копию входят прогресс и конспекты, чипы, история, чаты с сообщениями, фото конспектов и листы черновика");
-    expect(device.body.ru).toContain("Не входят код из практикума");
-    expect(device.body.ru).toContain("и тариф");
-    expect(device.body.kk).toContain("Практикумдағы код");
-    expect(device.body.kk).toContain("және тариф кірмейді");
   });
 
   it("голос: аудиозапись уходит в OpenAI, у нас не хранится", () => {

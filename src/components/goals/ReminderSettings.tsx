@@ -9,7 +9,7 @@ import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
-import { downloadBlob } from "./backup";
+import { downloadBlob } from "@/lib/download";
 import { Row, Switch } from "./controls";
 import { disablePush, enablePush, pushSupport, showNotification } from "./push";
 

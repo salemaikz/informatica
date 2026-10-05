@@ -631,11 +631,4 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(m.ledger).toHaveLength(1);
     expect(m.history.map((e) => e.id)).toEqual(["h"]);
   });
-
-  it("importProgress тариф из файла не берёт", () => {
-    const ok = st().importProgress({ xp: 5, profile: {}, plan: { tier: "unlimited", until: Date.now() + 1e10 }, wallet: { chips: 555, earned: 555, spent: 0 } });
-    expect(ok).toBe(true);
-    expect(st().plan.tier).toBe("free");
-    expect(chips()).toBe(555);
-  });
 });
