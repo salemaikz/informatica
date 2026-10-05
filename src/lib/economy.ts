@@ -3,7 +3,9 @@
 //
 // Правила (решения #31, #34, #40, #65 — docs/DECISIONS.md):
 // - сердечки — плата за вход, а не за ошибки: урок 1 (большой 2), «Проверить себя» и пробный ЕНТ 1, контрольная
-//   и экстерн 2, игра 1 (каждый запуск); тренировка, повторение, работа над ошибками, практикум, теория, чат — бесплатно;
+//   и экстерн 2, игра 1 (каждый запуск), чтение конспекта урока 0,5 (этап 15: lib/theory-pay.ts);
+//   тренировка, повторение, работа над ошибками, практикум, шпаргалка, чат — бесплатно;
+// - сердечки считаются с шагом 0,5 (halfFloor): половинка бывает только после платы за теорию, восстановление и покупки — целые;
 // - потраченное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
 // - тренировка (в том числе работа над ошибками) возвращает сердечко — бесплатный путь всегда есть;
 // - чипы зарабатываются опытом (5 XP = 2 чипа) и бонусами; на чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
@@ -119,6 +121,17 @@ export function sanitizePlan(raw: unknown): Plan {
 
 // ---------- Сердечки ----------
 
+/** Вниз до шага 0,5: 1,9 → 1,5; 2 → 2. Сердечки считаются половинками (теория стоит 0,5). */
+export function halfFloor(x: number): number {
+  return Math.floor(x * 2 + 1e-9) / 2;
+}
+
+/** «4,5» / «5»: запятая и в русском, и в казахском (число — как строка для подстановки в `{n}`). */
+export function formatHearts(n: number): string {
+  if (!Number.isFinite(n)) return "∞";
+  return String(halfFloor(n)).replace(".", ",");
+}
+
 export interface Hearts {
   count: number;
   /** С какого момента идёт восстановление (мс). */
@@ -164,7 +177,7 @@ export function heartsView(h: Hearts, tier: PlanTier, now: number, today: string
  */
 export function spendHearts(h: Hearts, n: number, tier: PlanTier, now: number, today: string): Hearts | null {
   if (!Number.isFinite(PLAN_FEATURES[tier].maxHearts)) return h;
-  const cost = Math.max(0, Math.floor(n));
+  const cost = Math.max(0, halfFloor(n));
   const cur = heartsNow(h, tier, now, today);
   if (cost === 0) return cur;
   if (cur.count < cost) return null;
@@ -172,12 +185,12 @@ export function spendHearts(h: Hearts, n: number, tier: PlanTier, now: number, t
   return { count: cur.count - cost, updatedAt: wasFull ? now : cur.updatedAt, day: today };
 }
 
-/** Плюс n сердечек (не выше запаса). */
+/** Плюс n сердечек (не выше запаса), с шагом 0,5. */
 export function addHearts(h: Hearts, n: number, tier: PlanTier, now: number, today: string): Hearts {
   const max = PLAN_FEATURES[tier].maxHearts;
   if (!Number.isFinite(max)) return h;
   const cur = heartsNow(h, tier, now, today);
-  const count = Math.min(max, cur.count + Math.max(0, Math.floor(n)));
+  const count = Math.min(max, cur.count + Math.max(0, halfFloor(n)));
   return { count, updatedAt: count >= max ? now : cur.updatedAt, day: today };
 }
 
@@ -190,14 +203,15 @@ export const canAfford = (v: HeartsView, cost: number): boolean => v.unlimited |
 
 // ---------- Плата за вход (#40) ----------
 
-/** Что стоит сердечек. Тренировка, повторение, работа над ошибками, практикум, теория и чат — бесплатно. */
-export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game";
+/** Что стоит сердечек. Тренировка, повторение, работа над ошибками, практикум, шпаргалка и чат — бесплатно. */
+export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory";
 
 /**
  * Цена входа в сердечках: урок 1 (большой урок — поле lesson.hearts = 2), «Проверить себя» 1, пробный ЕНТ любого вида 1,
- * контрольная раздела 2, экстерн (зачёт раздела тестом) 2, игра 1 — каждый запуск, в том числе «ещё раз».
+ * контрольная раздела 2, экстерн (зачёт раздела тестом) 2, игра 1 — каждый запуск, в том числе «ещё раз»,
+ * чтение конспекта урока (`/theory/<id>`) 0,5 — когда платить, решает lib/theory-pay.ts.
  */
-export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1 };
+export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 };
 
 /** Вход в урок в режиме «Учиться»: 1, у большого урока — 2. */
 export function lessonCost(lesson: { hearts?: number } | undefined): number {
@@ -212,7 +226,8 @@ export function entryCost(kind: EntryKind, lesson?: { hearts?: number }): number
 
 export function sanitizeHearts(raw: unknown): Hearts {
   const h = (raw ?? {}) as Partial<Hearts>;
-  const count = typeof h.count === "number" && Number.isFinite(h.count) ? Math.max(0, Math.min(99, Math.floor(h.count))) : START_HEARTS.count;
+  // Старые сохранения с целыми сердечками читаются как есть; дробь — только половинки.
+  const count = typeof h.count === "number" && Number.isFinite(h.count) ? Math.max(0, Math.min(99, halfFloor(h.count))) : START_HEARTS.count;
   const updatedAt = typeof h.updatedAt === "number" && Number.isFinite(h.updatedAt) ? h.updatedAt : 0;
   const day = typeof h.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.day) ? h.day : "";
   return { count, updatedAt, day };
@@ -370,10 +385,10 @@ export const SHOP_ITEMS: ShopItem[] = [
 /** Полный запас продаётся, когда не хватает хотя бы стольких сердечек (меньше — выгоднее по одному или тройкой). */
 export const REFILL_MIN_MISSING = 4;
 
-/** Цена полного запаса: по item.price за каждое недостающее сердечко. */
+/** Цена полного запаса: по item.price за каждое недостающее сердечко; половинка считается как целое (покупки — целые). */
 export function refillPrice(missing: number): number {
   const item = SHOP_ITEMS.find((i) => i.kind === "refill")!;
-  return Math.max(0, Math.floor(missing)) * item.price;
+  return Math.max(0, Math.ceil(missing - 1e-9)) * item.price;
 }
 
 /**

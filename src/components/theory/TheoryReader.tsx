@@ -2,9 +2,11 @@
 
 import { ArrowLeft, ArrowRight, BookmarkPlus, ClipboardCheck, Eye, Play } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getLesson, UNITS } from "@/content/course";
 import { cn } from "@/lib/cn";
+import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { adjacentLessons, blockContext, conspectContext, infoSteps, pluralIndex, readableLessonIds, readingStats } from "@/lib/theory";
@@ -13,9 +15,12 @@ import { Markdown } from "@/components/Markdown";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { AskBit, InfoBlock, MD_WIDE, type WorkedMode } from "./TheoryBlocks";
 import { useHashScroll } from "./useHashScroll";
+import { TheoryLock, TheoryPayStatus } from "./TheoryPay";
+import { useTheoryPay } from "./useTheoryPay";
 
 const CARDS_KEY: DictKey[] = ["theory.cards.one", "theory.cards.few", "theory.cards.many"];
 const SUGGESTIONS: DictKey[] = ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"];
@@ -24,9 +29,13 @@ const ORDER = readableLessonIds(UNITS);
 /**
  * Чтение урока без заданий: все информационные шаги подряд, затем конспект.
  * Ничего не пишет в прогресс. Якоря: `#<id шага>` и `#conspect` — на них ведёт поиск.
+ * Чтение стоит 0,5 сердечка (этап 15, useTheoryPay): первый экран бесплатный, дальше — после прокрутки или ~15 секунд;
+ * пройденный урок, «Безлимит» и повторное чтение за сутки — бесплатно. Не хватает сердечек — остальное закрыто замком.
  */
 export function TheoryReader({ id }: { id: string }) {
   const { t, l, lang } = useT();
+  const router = useRouter();
+  const pay = useTheoryPay(id);
   const lesson = getLesson(id);
   const openSave = useSaveToNotes((s) => s.open);
   const done = useApp((s) => (s.lessons[id]?.completions ?? 0) > 0);
@@ -78,6 +87,7 @@ export function TheoryReader({ id }: { id: string }) {
         <p className="flex items-start gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm font-semibold text-muted">
           <Eye size={16} className="mt-0.5 shrink-0" aria-hidden /> {t("theory.readOnly")}
         </p>
+        <TheoryPayStatus state={pay.state} paidAt={pay.paidAt} />
       </header>
 
       {(steps.length > 1 || hasWorked) && (
@@ -121,7 +131,8 @@ export function TheoryReader({ id }: { id: string }) {
         </nav>
       )}
 
-      {steps.map((step) => (
+      {/* Первый блок — «первый экран», бесплатный; остальное и конспект закрываются, если не хватило сердечек. */}
+      {(pay.blocked ? steps.slice(0, 1) : steps).map((step) => (
         <InfoBlock
           key={step.id}
           step={step}
@@ -132,14 +143,18 @@ export function TheoryReader({ id }: { id: string }) {
         />
       ))}
 
-      <section id="conspect" className="flex min-w-0 scroll-mt-20 flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-surface p-4 sm:p-5">
-        <div>
-          <h2 className="text-2xl font-extrabold">{t("theory.conspect")}</h2>
-          <p className="text-sm font-semibold text-muted">{t("theory.conspectHint")}</p>
-        </div>
-        <Markdown className={cn("text-[17px]", MD_WIDE)}>{l(lesson.conspect)}</Markdown>
-        <AskBit onClick={() => setAskId("conspect")} label={t("theory.askConspect")} />
-      </section>
+      {pay.blocked ? (
+        <TheoryLock onOpen={() => pay.setSheetOpen(true)} />
+      ) : (
+        <section id="conspect" className="flex min-w-0 scroll-mt-20 flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-surface p-4 sm:p-5">
+          <div>
+            <h2 className="text-2xl font-extrabold">{t("theory.conspect")}</h2>
+            <p className="text-sm font-semibold text-muted">{t("theory.conspectHint")}</p>
+          </div>
+          <Markdown className={cn("text-[17px]", MD_WIDE)}>{l(lesson.conspect)}</Markdown>
+          <AskBit onClick={() => setAskId("conspect")} label={t("theory.askConspect")} />
+        </section>
+      )}
 
       <div className="flex flex-col gap-3">
         <ButtonLink href={`/lesson/${lesson.id}`} size="lg" block icon={<Play size={20} />}>
@@ -177,6 +192,15 @@ export function TheoryReader({ id }: { id: string }) {
           )}
         </nav>
       )}
+
+      <OutOfHearts
+        open={pay.sheetOpen}
+        need={ENTRY_COST.theory}
+        what="theory"
+        onClose={() => pay.setSheetOpen(false)}
+        onResume={pay.resume}
+        onExit={() => router.push("/theory")}
+      />
 
       {askId && askTask && (
         <AiPanel key={askId} open onClose={() => setAskId(null)} mode="ask" task={askTask} noteKey={lesson.id} suggestions={SUGGESTIONS} />

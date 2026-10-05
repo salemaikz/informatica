@@ -1,6 +1,7 @@
 "use client";
 
 import { Heart, Infinity as InfinityIcon, Rocket } from "lucide-react";
+import { formatHearts } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { useChips, useHeartsLive } from "./useEconomy";
 import { formatCountdown, formatMult, heartWaitMs, showBoostLine } from "./shop-helpers";
@@ -27,7 +28,7 @@ export function ShopStatus() {
           <>
             <Heart size={20} fill="currentColor" className="shrink-0 text-heart" aria-hidden />
             <span className="min-w-0">
-              <span className="font-extrabold tabular-nums text-heart-strong">{t("shop.status.heartsOf", { n: view.count, max: view.max })}</span>
+              <span className="font-extrabold tabular-nums text-heart-strong">{t("shop.status.heartsOf", { n: formatHearts(view.count), max: view.max })}</span>
               <span className="text-muted">
                 {" · "}
                 {view.nextAt === null ? (

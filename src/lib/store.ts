@@ -42,6 +42,7 @@ import {
 } from "./notebook";
 import type { GameMode, GameResult } from "@/games/types";
 import { dropRun, putRun, sanitizeLessonRuns, type LessonRun } from "./lesson-run";
+import { putTheoryPaid, sanitizeTheoryPaid, shouldPayTheory, theoryCost, type TheoryPaid } from "./theory-pay";
 import {
   addHearts,
   applyAiUsage,
@@ -263,6 +264,8 @@ export interface AppState {
   practiceHearts: { day: string; count: number };
   /** Незаконченные уроки (#41): id урока → сохранённое прохождение (lib/lesson-run.ts). В резервную копию не входит. */
   lessonRuns: Record<string, LessonRun>;
+  /** Чтение конспекта урока оплачено (этап 15, lib/theory-pay.ts): id урока → когда (мс); старше суток отбрасывается. */
+  theoryPaid: TheoryPaid;
   /** Дневной срез по навыкам за 60 дней (#71): динамика, время и точность по темам (lib/skill-days.ts). */
   skillDays: SkillDays;
   /** Когда показывали окно тарифов. */
@@ -347,6 +350,11 @@ export interface AppActions {
    * ok: false — сердечек не хватает, ничего не списано. view — запас после.
    */
   payEntry: (cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /**
+   * Плата за чтение конспекта урока (0,5 сердечка, lib/theory-pay.ts): бесплатно, если урок пройден, «Безлимит» или тот же
+   * конспект уже оплачен за последние сутки (paid 0). Иначе списывает и запоминает в theoryPaid. ok: false — не хватает, ничего не списано.
+   */
+  payTheory: (lessonId: string) => { ok: boolean; paid: number; view: HeartsView };
   /** Сохранить незаконченный урок (плеер — после каждого шага). */
   saveLessonRun: (run: LessonRun) => void;
   /** Узел курса 3.0 пройден (практика, повторение) или сдан мини-тест группы — точность 0..1. */
@@ -450,6 +458,7 @@ const initialState: AppState = {
   boost: null,
   practiceHearts: { day: "", count: 0 },
   lessonRuns: {},
+  theoryPaid: {},
   skillDays: {},
   paywall: { lastShownAt: 0, views: 0 },
   pushAsk: EMPTY_PUSH_ASK,
@@ -661,6 +670,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
         ? p.practiceHearts
         : { day: "", count: 0 },
     lessonRuns: sanitizeLessonRuns(p.lessonRuns),
+    theoryPaid: sanitizeTheoryPaid(p.theoryPaid, Date.now()),
     skillDays: sanitizeSkillDays(p.skillDays),
     // #67: у старых навыков нет clean и дней — migrateSkillStat переводит их на новое правило (и проверяет данные).
     skills: cleanSkills(p.skills),
@@ -1023,6 +1033,21 @@ export const useApp = create<AppState & AppActions>()(
         const hearts = spendHearts(s.hearts, cost, tier, now, today);
         if (!hearts) return { ok: false, paid: 0, view };
         set({ hearts });
+        return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
+      },
+
+      payTheory: (lessonId) => {
+        const s = get();
+        const now = Date.now();
+        const today = todayKey();
+        const tier = tierOf(s, now);
+        const view = heartsView(s.hearts, tier, now, today);
+        const done = (s.lessons[lessonId]?.completions ?? 0) > 0;
+        if (!shouldPayTheory({ done, unlimited: tier === "unlimited", paidAt: s.theoryPaid[lessonId], now })) return { ok: true, paid: 0, view };
+        const cost = theoryCost();
+        const hearts = spendHearts(s.hearts, cost, tier, now, today);
+        if (!hearts) return { ok: false, paid: 0, view };
+        set({ hearts, theoryPaid: putTheoryPaid(s.theoryPaid, lessonId, now) });
         return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
       },
 

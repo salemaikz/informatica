@@ -11,14 +11,15 @@ import {
   type PlanTier,
   type ShopItem,
 } from "@/lib/economy";
+import type { DictKey } from "@/i18n/dict";
 import { heartsGain } from "./shop-helpers";
 
 // Чистые помощники магазина про сердечки (без React): блок «Как работают сердечки» и цена «Полного запаса».
 // Все числа — из lib/economy.ts: в текстах и разметке они не вписываются.
 
-export type EntryRuleId = "lesson" | "bigLesson" | "check" | "exam" | "checkpoint" | "extern" | "game";
+export type EntryRuleId = "lesson" | "bigLesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory";
 
-/** За что платятся сердечки и сколько (#40, #60): строки списка «Вход стоит сердечко». */
+/** За что платятся сердечки и сколько (#40, #60; теория — этап 15): строки списка «Вход стоит сердечко». */
 export function entryRules(): { id: EntryRuleId; cost: number }[] {
   return [
     { id: "lesson", cost: ENTRY_COST.lesson },
@@ -28,12 +29,33 @@ export function entryRules(): { id: EntryRuleId; cost: number }[] {
     { id: "checkpoint", cost: ENTRY_COST.checkpoint },
     { id: "extern", cost: ENTRY_COST.extern },
     { id: "game", cost: ENTRY_COST.game },
+    { id: "theory", cost: ENTRY_COST.theory },
   ];
 }
 
-/** Что бесплатно: тренировка, повторение, работа над ошибками, практикум кода, теория, чат с Битом. */
-export const FREE_ENTRIES = ["practice", "review", "mistakes", "code", "theory", "chat"] as const;
+/** Что бесплатно: тренировка, повторение, работа над ошибками, практикум кода, шпаргалка и формулы, чат с Битом (теория урока теперь за 0,5). */
+export const FREE_ENTRIES = ["practice", "review", "mistakes", "code", "cheatsheet", "chat"] as const;
 export type FreeEntryId = (typeof FREE_ENTRIES)[number];
+
+/** Подписи строк правил в словаре. */
+export const ENTRY_RULE_KEYS: Record<EntryRuleId, DictKey> = {
+  lesson: "shop.rules.lesson",
+  bigLesson: "shop.rules.bigLesson",
+  check: "shop.rules.check",
+  exam: "shop.rules.exam",
+  checkpoint: "shop.rules.checkpoint",
+  extern: "shop.rules.extern",
+  game: "shop.rules.game",
+  theory: "hearts15.rules.theory",
+};
+export const FREE_ENTRY_KEYS: Record<FreeEntryId, DictKey> = {
+  practice: "shop.rules.free.practice",
+  review: "shop.rules.free.review",
+  mistakes: "shop.rules.free.mistakes",
+  code: "shop.rules.free.code",
+  cheatsheet: "hearts15.rules.free.cheatsheet",
+  chat: "shop.rules.free.chat",
+};
 
 export interface RegenRule {
   tier: PlanTier;

@@ -5,6 +5,7 @@ import { m } from "motion/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
+import { formatHearts } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { CountUp } from "@/components/motion/CountUp";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
@@ -25,7 +26,7 @@ export function HeartsChip({ className }: { className?: string }) {
   const v = useHearts();
   const reduce = useReduceMotion();
   const empty = !v.unlimited && v.count <= 0;
-  const label = v.unlimited ? t("shop.chip.heartsUnlimited") : t("shop.chip.hearts", { n: v.count });
+  const label = v.unlimited ? t("shop.chip.heartsUnlimited") : t("shop.chip.hearts", { n: formatHearts(v.count) });
 
   return (
     <Link
@@ -45,7 +46,7 @@ export function HeartsChip({ className }: { className?: string }) {
       >
         <Heart size={20} fill={empty ? "none" : "currentColor"} />
       </m.span>
-      {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="tabular-nums">{v.count}</span>}
+      {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="tabular-nums">{formatHearts(v.count)}</span>}
     </Link>
   );
 }

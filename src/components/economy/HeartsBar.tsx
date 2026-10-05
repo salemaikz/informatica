@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 import { cn } from "@/lib/cn";
-import { effectiveTier, heartsView, type HeartsView } from "@/lib/economy";
+import { effectiveTier, formatHearts, heartsView, type HeartsView } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useHearts } from "./useEconomy";
@@ -41,7 +41,7 @@ export function HeartsBar({ className }: { className?: string }) {
   }
 
   const empty = !v.unlimited && v.count <= 0;
-  const label = v.unlimited ? t("hearts.bar.ariaUnlimited") : t("hearts.bar.aria", { n: v.count });
+  const label = v.unlimited ? t("hearts.bar.ariaUnlimited") : t("hearts.bar.aria", { n: formatHearts(v.count) });
   const lost = anim.id > 0 && anim.dir === "down" && !reduce;
   const gained = anim.id > 0 && anim.dir === "up" && !reduce;
 
@@ -93,7 +93,7 @@ export function HeartsBar({ className }: { className?: string }) {
           </m.span>
         )}
       </m.span>
-      {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="min-w-[1ch] tabular-nums">{v.count}</span>}
+      {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="min-w-[1ch] tabular-nums">{formatHearts(v.count)}</span>}
       {lost && (
         <m.span
           key={`lost-${anim.id}`}
@@ -103,7 +103,7 @@ export function HeartsBar({ className }: { className?: string }) {
           animate={{ opacity: [0, 1, 1, 0], y: [-4, 4, 14, 26], scale: [0.6, 1.12, 1, 1] }}
           transition={{ duration: 1, times: [0, 0.2, 0.7, 1], ease: "easeOut" }}
         >
-          −{anim.diff}
+          −{formatHearts(anim.diff)}
         </m.span>
       )}
     </div>

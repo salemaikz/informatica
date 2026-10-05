@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowRight, BookOpen, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
+import { ArrowRight, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
-import { PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
+import { ENTRY_COST, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, formatHearts, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -122,15 +122,15 @@ function LinkCard({ href, icon, title, desc, tone }: { href: string; icon: React
 function Content({
   layout,
   need,
+  what,
   onResume,
   onExit,
-  theoryHref,
 }: {
   layout: "sheet" | "screen";
   need: number;
+  what: "entry" | "theory";
   onResume: () => void;
   onExit: () => void;
-  theoryHref?: string;
 }) {
   const { t, lang } = useT();
   const hearts = useHearts();
@@ -171,9 +171,11 @@ function Content({
           )}
           {back ? t("hearts.out.back") : short ? t("hearts.out.titleShort") : t("hearts.out.title")}
         </h2>
-        <p className="font-semibold text-muted">{back ? t("hearts.out.backText") : t("hearts.out.text")}</p>
-        {!back && need > 1 && (
-          <p className="text-sm font-extrabold text-heart-strong">{t("hearts.out.need", { need, have: hearts.count })}</p>
+        <p className="font-semibold text-muted">
+          {back ? t("hearts.out.backText") : what === "theory" ? t("hearts15.out.theoryText", { cost: formatHearts(ENTRY_COST.theory) }) : t("hearts.out.text")}
+        </p>
+        {!back && need !== 1 && (
+          <p className="text-sm font-extrabold text-heart-strong">{t("hearts.out.need", { need: formatHearts(need), have: formatHearts(hearts.count) })}</p>
         )}
         {!back && remaining && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-heart-soft px-3 py-1 text-sm font-extrabold text-heart-strong">
@@ -213,9 +215,10 @@ function Content({
             />
           )}
           <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc")} />
-          {theoryHref && (
-            <ButtonLink href={theoryHref} variant="ghost" block icon={<BookOpen size={18} />}>
-              {t("hearts.out.theory")}
+          {/* Запасной путь: тренировка бесплатна (теория теперь платная). Если она уже вернёт сердечко — это карточка выше. */}
+          {practiceLeft <= 0 && (
+            <ButtonLink href="/practice" variant="ghost" block icon={<Dumbbell size={18} />}>
+              {t("hearts15.out.practiceFree")}
             </ButtonLink>
           )}
         </m.div>
@@ -232,7 +235,8 @@ function Content({
  * «Сердечки закончились» / «Не хватает сердечек» (#40: сердечки — плата за вход в урок, тест или игру):
  * купить за чипы (+1, +3, полный запас), вернуть тренировкой (бесплатно), взять «Безлимит» или выйти.
  * layout="sheet" — шторка поверх экрана (open/onClose); layout="screen" — полноэкранно на входе.
- * need — цена входа (1 или 2): окно предлагает продолжить, когда сердечек хватает на вход.
+ * need — цена входа (0,5, 1 или 2): окно предлагает продолжить, когда сердечек хватает на вход.
+ * what="theory" — окно чтения конспекта (0,5): другой текст. Запасной путь — «Тренировка — бесплатно».
  * onResume — сердечек хватает (куплены или восстановились): окно закрывается, вызывающий продолжает вход.
  */
 export function OutOfHearts({
@@ -240,30 +244,29 @@ export function OutOfHearts({
   open = true,
   need = 1,
   onClose,
+  what = "entry",
   onResume,
   onExit,
-  theoryHref,
 }: {
   layout?: "sheet" | "screen";
   open?: boolean;
   need?: number;
   onClose?: () => void;
+  what?: "entry" | "theory";
   onResume: () => void;
   onExit: () => void;
-  /** Ссылка «пока почитай теорию» (теория не блокируется сердечками). */
-  theoryHref?: string;
 }) {
   const { t } = useT();
   if (layout === "screen") {
     return (
       <main className="mx-auto flex min-h-dvh w-full items-center justify-center px-4 py-8">
-        <Content layout="screen" need={need} onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
+        <Content layout="screen" need={need} what={what} onResume={onResume} onExit={onExit} />
       </main>
     );
   }
   return (
     <Modal open={open} onClose={onClose ?? onExit} label={t("hearts.out.title")}>
-      <Content layout="sheet" need={need} onResume={onResume} onExit={onExit} theoryHref={theoryHref} />
+      <Content layout="sheet" need={need} what={what} onResume={onResume} onExit={onExit} />
     </Modal>
   );
 }

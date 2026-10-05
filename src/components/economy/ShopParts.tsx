@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { feedback } from "@/lib/feedback";
-import { shopItem, type ShopItem } from "@/lib/economy";
+import { formatHearts, shopItem, type ShopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
@@ -117,7 +117,7 @@ export function ChipItemRow({
   const blocked = !av.ok && av.reason !== "chips";
   const price = shownPrice(item, hearts);
   const gain = refillGain(item, hearts);
-  const name = gain > 0 ? t("shop.item.hearts-full.plus", { n: gain }) : t(nameKey);
+  const name = gain > 0 ? t("shop.item.hearts-full.plus", { n: formatHearts(gain) }) : t(nameKey);
   const desc = t(descKey, { p: item.price });
 
   const onBuy = () => {

@@ -32,7 +32,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
-import { AiCost } from "@/components/economy/AiCost";
+import { AiCost, AiFreeDot, useAiQuotaText } from "@/components/economy/AiCost";
 import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
@@ -78,7 +78,7 @@ export interface PlayerProps {
   onSessionFinish?: (result: SessionResult) => void;
   /** Блок на экране итогов (например, «Раздел засчитан»). */
   resultsExtra?: ReactNode;
-  /** Цена входа в сердечках (#40): списывается при первом ответе (или «Пропустить»). Нет или 0 — бесплатно (тренировка). */
+  /** Цена входа в сердечках (#40): списывается, когда урок начался — первый переход «дальше», первый ответ или «Пропустить». Нет или 0 — бесплатно (тренировка). */
   entryCost?: number;
   /** Продолжить сохранённое прохождение (#41) — только урок в режиме «Учиться». */
   resume?: LessonRun;
@@ -163,9 +163,13 @@ function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 self-start rounded-xl bg-ai-soft px-3 py-2 text-sm font-extrabold text-ai hover:brightness-95"
+      className="flex max-w-full flex-col items-start gap-1 self-start rounded-xl bg-ai-soft px-3 py-2 text-left text-sm font-extrabold text-ai hover:brightness-95"
     >
-      <Sparkles size={16} /> {label}
+      <span className="flex items-center gap-1.5">
+        <Sparkles size={16} /> {label}
+      </span>
+      {/* Счётчик бесплатных на сегодня виден всегда (этап 15). */}
+      <AiCost kind="ask" className="-ml-1" />
     </button>
   );
 }
@@ -190,6 +194,8 @@ export function LessonPlayer({
 }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
+  // Сколько бесплатных ИИ осталось сегодня — для подписи кнопки «Спросить Бита» в шапке (значок с числом рисует AiFreeDot).
+  const askQuota = useAiQuotaText("ask");
   const recordAnswer = useApp((s) => s.recordAnswer);
   const noteCombo = useApp((s) => s.noteCombo);
   const finishSession = useApp((s) => s.finishSession);
@@ -372,8 +378,9 @@ export function LessonPlayer({
     [persist, lessonId, steps, xpFactor, earnedAtStart, entryCost, lessonMs],
   );
 
-  // Плата за вход (#40) — при первом ответе (или «Пропустить»), один раз. Только из обработчиков: в эффектах двойной вызов спишет дважды.
-  // Не хватает сердечек — шторка «Не хватает сердечек», ответ не проверяем (после покупки ученик нажмёт «Проверить» снова).
+  // Плата за вход (#40, этап 15) — когда урок начался: первый переход «дальше» на любом шаге, первый ответ или «Пропустить»; один раз.
+  // Открыл и сразу закрыл — бесплатно. Только из обработчиков: в эффектах двойной вызов спишет дважды.
+  // Не хватает сердечек — шторка «Не хватает сердечек», шаг не двигаем (после покупки ученик нажмёт кнопку снова).
   const ensurePaid = useCallback((): boolean => {
     if (entryCost <= 0 || paidAtRef.current !== null) return true;
     const res = useApp.getState().payEntry(entryCost);
@@ -438,13 +445,16 @@ export function LessonPlayer({
   const advanceInfo = useCallback(() => {
     if (!step) return;
     if (step.type === "worked" && revealed < step.steps.length) {
+      if (!ensurePaid()) return;
       giveFeedback("tap");
       setRevealed(revealed + 1);
       return;
     }
     if (infoBlocked) return;
+    // Первое «дальше» — урок начался: вход оплачен (как при первом ответе).
+    if (!ensurePaid()) return;
     next();
-  }, [step, revealed, infoBlocked, next]);
+  }, [step, revealed, infoBlocked, next, ensurePaid]);
 
   const apply = useCallback(
     (res: StepResult) => {
@@ -730,11 +740,12 @@ export function LessonPlayer({
             <button
               type="button"
               onClick={() => openAi("ask")}
-              aria-label={t("tutor.askButton")}
-              title={t("tutor.askButton")}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-ai-soft text-ai hover:brightness-95"
+              aria-label={askQuota ? `${t("tutor.askButton")}: ${askQuota}` : t("tutor.askButton")}
+              title={askQuota ? `${t("tutor.askButton")}: ${askQuota}` : t("tutor.askButton")}
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-ai-soft text-ai hover:brightness-95"
             >
               <Sparkles size={20} />
+              <AiFreeDot kind="ask" />
             </button>
           )}
           <ToolboxButton variant="icon" />
@@ -1050,7 +1061,6 @@ export function LessonPlayer({
           onClose={() => setOutOpen(false)}
           onResume={() => setOutOpen(false)}
           onExit={() => router.push(exitHref)}
-          theoryHref={kind === "lesson" && lessonId ? `/theory/${lessonId}` : undefined}
         />
       )}
 

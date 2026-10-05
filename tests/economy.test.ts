@@ -32,7 +32,9 @@ import {
   earnAmount,
   effectiveTier,
   extendBoost,
+  formatHearts,
   formatTenge,
+  halfFloor,
   heartsNow,
   heartsView,
   ENTRY_COST,
@@ -292,7 +294,9 @@ describe("сердечки: spendHearts / addHearts / refill", () => {
     expect(addHearts(h(2, T0), 1, "free", T0, TODAY).updatedAt).toBe(T0);
     expect(addHearts(h(4, T0), 5, "free", T0 + 1, TODAY)).toEqual({ count: 5, updatedAt: T0 + 1, day: TODAY });
     expect(addHearts(h(2, T0), -3, "free", T0, TODAY).count).toBe(2);
-    expect(addHearts(h(2, T0), 1.9, "free", T0, TODAY).count).toBe(3);
+    // шаг 0,5: 1,9 → 1,5; 1,4 → 1
+    expect(addHearts(h(2, T0), 1.9, "free", T0, TODAY).count).toBe(3.5);
+    expect(addHearts(h(2, T0), 1.4, "free", T0, TODAY).count).toBe(3);
   });
 
   it("addHearts при безлимите — без изменений", () => {
@@ -312,9 +316,80 @@ describe("сердечки: spendHearts / addHearts / refill", () => {
   });
 });
 
+describe("сердечки с шагом 0,5 (этап 15)", () => {
+  const h = (count: number, updatedAt: number, day = TODAY): Hearts => ({ count, updatedAt, day });
+
+  it("halfFloor: вниз до 0,5, целые не трогает", () => {
+    expect(halfFloor(2)).toBe(2);
+    expect(halfFloor(2.5)).toBe(2.5);
+    expect(halfFloor(2.49)).toBe(2);
+    expect(halfFloor(0.99)).toBe(0.5);
+    expect(halfFloor(0.4)).toBe(0);
+    expect(halfFloor(-1)).toBe(-1);
+  });
+
+  it("formatHearts: запятая и в русском, и в казахском; целые без дроби", () => {
+    expect(formatHearts(4.5)).toBe("4,5");
+    expect(formatHearts(0.5)).toBe("0,5");
+    expect(formatHearts(5)).toBe("5");
+    expect(formatHearts(0)).toBe("0");
+    expect(formatHearts(4.9)).toBe("4,5");
+    expect(formatHearts(Infinity)).toBe("∞");
+  });
+
+  it("теория 0,5: с полного запаса таймер стартует с момента списания, потом не сбрасывается", () => {
+    const a = spendHearts(h(5, T0 - 10 * HOUR), 0.5, "free", T0, TODAY)!;
+    expect(a).toEqual({ count: 4.5, updatedAt: T0, day: TODAY });
+    const b = spendHearts(a, 0.5, "free", T0 + HOUR, TODAY)!;
+    expect(b).toEqual({ count: 4, updatedAt: T0, day: TODAY });
+  });
+
+  it("не хватает 0,5 — null; ровно 0,5 — списывается до нуля; дробь цены округляется вниз до 0,5", () => {
+    expect(spendHearts(h(0, T0), 0.5, "free", T0, TODAY)).toBeNull();
+    expect(spendHearts(h(0.5, T0), 0.5, "free", T0, TODAY)?.count).toBe(0);
+    expect(spendHearts(h(0.5, T0), 1, "free", T0, TODAY)).toBeNull();
+    expect(spendHearts(h(3, T0), 0.7, "free", T0, TODAY)?.count).toBe(2.5);
+  });
+
+  it("восстановление — целыми: 4,5 + одно за 6 ч = 5 (потолок), 3,5 + одно = 4,5", () => {
+    expect(heartsNow(h(4.5, T0), "free", T0 + 6 * HOUR, TODAY).count).toBe(5);
+    expect(heartsNow(h(3.5, T0), "free", T0 + 6 * HOUR, TODAY).count).toBe(4.5);
+    expect(heartsNow(h(0.5, T0), "free", T0 + 12 * HOUR, TODAY).count).toBe(2.5);
+    // до срока — без изменений
+    expect(heartsNow(h(3.5, T0), "free", T0 + 5 * HOUR, TODAY).count).toBe(3.5);
+  });
+
+  it("canAfford и heartsView с половинками", () => {
+    const v = heartsView(h(0.5, T0), "free", T0, TODAY);
+    expect(v.count).toBe(0.5);
+    expect(canAfford(v, 0.5)).toBe(true);
+    expect(canAfford(v, 1)).toBe(false);
+    expect(v.nextAt).toBe(T0 + 6 * HOUR);
+  });
+
+  it("безлимит не тратит и половинки", () => {
+    const x = h(3, T0);
+    expect(spendHearts(x, 0.5, "unlimited", T0, TODAY)).toBe(x);
+  });
+
+  it("покупки целые: +1 при 4,5 из 5 даёт полный запас; полный запас считается по целым за каждое недостающее", () => {
+    const state: BuyState = { wallet: { chips: 500, earned: 500, spent: 0 }, hearts: h(4.5, T0), boost: null };
+    const bought = buyItem(state, "heart-1", "free", T0, TODAY);
+    expect(bought.ok && bought.hearts.count).toBe(5);
+    // 0,5 из 5: не хватает 4,5 → платим за 5 (вверх), а не за 4
+    expect(refillPrice(4.5)).toBe(5 * 45);
+    expect(refillPrice(0.5)).toBe(45);
+    expect(refillPrice(4)).toBe(4 * 45);
+    const refill = buyItem({ ...state, hearts: h(0.5, T0) }, "hearts-full", "free", T0, TODAY);
+    expect(refill.ok && refill.wallet.chips).toBe(500 - 5 * 45);
+    expect(refill.ok && refill.hearts.count).toBe(5);
+  });
+});
+
 describe("плата за вход (#40)", () => {
-  it("цены входа: урок, проверка, пробник, игра — 1; контрольная и экстерн — 2", () => {
-    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1 });
+  it("цены входа: урок, проверка, пробник, игра — 1; контрольная и экстерн — 2; теория урока — 0,5", () => {
+    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 });
+    expect(entryCost("theory")).toBe(0.5);
   });
   it("большой урок (hearts: 2) — 2; «урок игрой» стоит как урок", () => {
     expect(lessonCost(undefined)).toBe(1);
@@ -861,7 +936,12 @@ describe("sanitize*: мусор на входе", () => {
     }
     expect(sanitizeHearts({ count: -4, updatedAt: 5, day: "2027-01-01" })).toEqual({ count: 0, updatedAt: 5, day: "2027-01-01" });
     expect(sanitizeHearts({ count: 1000 }).count).toBe(99);
-    expect(sanitizeHearts({ count: 2.9 }).count).toBe(2);
+    // половинки (этап 15): дробь — вниз до 0,5; целые из старых сохранений читаются как есть
+    expect(sanitizeHearts({ count: 2.9 }).count).toBe(2.5);
+    expect(sanitizeHearts({ count: 4.5 }).count).toBe(4.5);
+    expect(sanitizeHearts({ count: 4.2 }).count).toBe(4);
+    expect(sanitizeHearts({ count: 3 }).count).toBe(3);
+    expect(sanitizeHearts({ count: 0.5 }).count).toBe(0.5);
     expect(sanitizeHearts({ count: Infinity }).count).toBe(START_HEARTS.count);
     expect(sanitizeHearts({ day: "завтра" }).day).toBe("");
     expect(sanitizeHearts({ updatedAt: Infinity }).updatedAt).toBe(0);
