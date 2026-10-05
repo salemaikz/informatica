@@ -30,6 +30,8 @@ describe("sw: стратегия для запроса", () => {
   });
   it("переходы по страницам — network-first", () => {
     expect(sw.routeFor(req("/learn", { mode: "navigate" }), ORIGIN)).toBe("page");
+    expect(sw.routeFor(req("/owner", { mode: "navigate" }), ORIGIN)).toBe("ignore");
+    expect(sw.routeFor(req("/owner/x", { mode: "navigate" }), ORIGIN)).toBe("ignore");
     expect(sw.routeFor(req("/", { mode: "navigate" }), ORIGIN)).toBe("page");
   });
   it("шрифты и картинки — stale-while-revalidate", () => {

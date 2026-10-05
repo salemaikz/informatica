@@ -11,6 +11,7 @@ import { Toolbox } from "@/components/tools/Toolbox";
 import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
 import { ActiveTimeAgent } from "@/components/app/ActiveTimeAgent";
+import { AnalyticsAgent } from "@/components/app/AnalyticsAgent";
 import { SwRegister } from "@/components/app/SwRegister";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { StorageBanner } from "@/components/app/StorageBanner";
@@ -102,6 +103,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <OfflineBanner />
       {/* Браузер не сохраняет прогресс (приватный режим, память заполнена) — полоса с крестиком. */}
       <StorageBanner />
+      {/* Обезличенная статистика (#69): приёмник событий — до экранов, чтобы их первые события не терялись. */}
+      <AnalyticsAgent />
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />

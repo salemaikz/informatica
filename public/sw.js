@@ -27,6 +27,8 @@ function routeFor(req, origin) {
   var path = url.pathname;
   if (path === "/api" || path.indexOf("/api/") === 0) return "ignore";
   if (path === "/sw.js") return "ignore";
+  // Страница владельца (#69) — не кэшируем.
+  if (path === "/owner" || path.indexOf("/owner/") === 0) return "ignore";
   var headers = req.headers && typeof req.headers.get === "function" ? req.headers : null;
   // Запросы с Range (аудио/видео) — мимо: частичные ответы (206) не кэшируются, а полный ответ из кэша ломает перемотку.
   if (headers && headers.get("Range")) return "ignore";

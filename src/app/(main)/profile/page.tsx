@@ -26,6 +26,8 @@ import { PlanStatusCard } from "@/components/plans/PlanStatusCard";
 import { TrackSettings } from "@/components/school/TrackSettings";
 import { useEntVisible } from "@/components/school/useEntVisible";
 import { LegalLinks } from "@/components/legal/LegalLinks";
+import { AnalyticsToggle } from "@/components/profile/AnalyticsToggle";
+import { FeedbackLink } from "@/components/issue/FeedbackLink";
 
 const NAME_MAX = 30;
 const WEEKLY = [2, 3, 4, 5, 7];
@@ -288,6 +290,10 @@ export default function ProfilePage() {
           <OnOff label={t("prof.reduceMotion")} value={profile.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} />
         </Row>
       </Card>
+
+      {/* Статистика (#69, сама скрыта, пока сбор выключен) и отзывы */}
+      <AnalyticsToggle />
+      <FeedbackLink />
 
       {/* Документы: политика и условия */}
       <Card>

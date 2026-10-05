@@ -2,7 +2,8 @@
 // Онбординг не навязываем: человек пришёл посмотреть конкретную вещь.
 
 /** Точные адреса. */
-const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/exam/print", "/offline"]);
+// /owner — страница владельца (#69): своя защита секретом, онбординг ученика не нужен.
+const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/exam/print", "/offline", "/owner"]);
 
 /** Префиксы (адрес совпадает или продолжается через «/»). */
 const PREFIXES: string[] = [];
