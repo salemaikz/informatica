@@ -108,7 +108,8 @@ export function expectedText(step: QuestionStep, lang: Lang): string {
     case "entmatch":
       return step.items.map((_, i) => `${LETTERS[i]} — ${tx(step.choices[step.answer[i]] ?? "", lang)}`).join("; ");
     case "code":
-      return lang === "kk" ? "барлық тест өтеді" : "все тесты пройдены";
+      // «Почти!» (со второй проверки) и «неверно» объясняют, за что полный балл: тесты с первой проверки.
+      return lang === "kk" ? "программа бірінші тексеруден-ақ барлық тесттен өтеді" : "программа проходит все тесты с первой проверки";
   }
 }
 
