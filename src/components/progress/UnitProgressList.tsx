@@ -36,11 +36,12 @@ export function UnitProgressList({ className }: { className?: string }) {
   const skipBasics = useApp((s) => s.profile.skipBasics);
   const track = useApp((s) => s.profile.track);
   const gradeRaw = useApp((s) => s.profile.grade);
+  const direction = useApp((s) => s.profile.direction);
 
   const school = !entVisible({ track }) && !!toSchoolGrade(gradeRaw);
   const rows = useMemo<Row[]>(() => {
     if (school) {
-      const plan = schoolPlan(toSchoolGrade(gradeRaw)!);
+      const plan = schoolPlan(toSchoolGrade(gradeRaw)!, direction);
       if (plan) {
         return schoolSectionRows(plan, lessons).map((r, i) => ({
           id: r.id,

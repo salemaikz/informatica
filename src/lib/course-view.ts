@@ -2,7 +2,7 @@
 // Общая для хука useCourseView (экраны прогресса), карточки «поделиться» и отчёта родителю (#72–#74).
 
 import { schoolPlan } from "@/content/school-program";
-import type { Grade } from "./types";
+import type { Grade, SchoolDirection } from "./types";
 import { courseProgress } from "./progress";
 import { entVisible, gradeProgress, toSchoolGrade, type LessonsDone } from "./school";
 import type { Profile } from "./store";
@@ -20,6 +20,8 @@ export interface CourseViewInput {
   lessons: LessonsDone;
   track: Profile["track"];
   grade: Grade | undefined;
+  /** Направление 10–11 классов (ЕМН по умолчанию). */
+  direction?: SchoolDirection;
   skipBasics: boolean | undefined;
 }
 
@@ -27,10 +29,10 @@ export interface CourseViewInput {
  * Ученик ЕНТ — готовые уроки на карте курса (раздел «Старт» не входит, если основы знакомы);
  * школьник — уроки своего класса. Класс не выбран («другое») — как курс.
  */
-export function courseViewOf({ lessons, track, grade: gradeRaw, skipBasics }: CourseViewInput): CourseView {
+export function courseViewOf({ lessons, track, grade: gradeRaw, direction, skipBasics }: CourseViewInput): CourseView {
   if (!entVisible({ track })) {
     const grade = toSchoolGrade(gradeRaw);
-    const plan = grade ? schoolPlan(grade) : undefined;
+    const plan = grade ? schoolPlan(grade, direction) : undefined;
     if (grade && plan) {
       const g = gradeProgress(plan, lessons);
       return { kind: "class", grade, done: g.lessonsDone, total: g.lessonsTotal, soon: g.topics - g.readyTopics, ratio: g.ratio, anyDone: g.lessonsDone > 0 };

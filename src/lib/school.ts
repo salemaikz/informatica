@@ -1,5 +1,5 @@
 import type { Grade, Track } from "./types";
-import { SCHOOL_PROGRAM, type SchoolGrade, type SchoolGradePlan, type SchoolSection, type SchoolTopic } from "@/content/school-program";
+import { DIRECTION_GRADES, SCHOOL_PROGRAM, type SchoolGrade, type SchoolGradePlan, type SchoolSection, type SchoolTopic } from "@/content/school-program";
 
 // Школьный трек: прогресс по классу, следующий урок, проверка данных программы.
 // Чистая логика без React; данные — content/school-program.ts. Урок «пройден», если у него есть хотя бы одно завершение.
@@ -152,8 +152,10 @@ export function validateSchoolProgram(program: SchoolGradePlan[], knownLessonIds
     seen.add(id);
   };
   for (const plan of program) {
-    if (gradesSeen.has(plan.grade)) note(`grade ${plan.grade}`, "класс повторяется");
-    gradesSeen.add(plan.grade);
+    const key = plan.direction ? `${plan.grade}-${plan.direction}` : plan.grade;
+    if (gradesSeen.has(key)) note(`grade ${key}`, "класс повторяется");
+    gradesSeen.add(key);
+    if (plan.direction && !DIRECTION_GRADES.includes(plan.grade)) note(`grade ${key}`, "направление бывает только у 10–11 классов");
     if (!plan.sections.length) note(`grade ${plan.grade}`, "нет разделов");
     for (const s of plan.sections) {
       unique(s.id);
@@ -170,8 +172,12 @@ export function validateSchoolProgram(program: SchoolGradePlan[], knownLessonIds
   return problems;
 }
 
-/** Готова ли программа для проверок: все классы 5–11 на месте и по порядку. */
-export function missingGrades(program: SchoolGradePlan[] = SCHOOL_PROGRAM): SchoolGrade[] {
-  const have = new Set(program.map((p) => p.grade));
-  return SCHOOL_GRADES.filter((g) => !have.has(g));
+/** Готова ли программа для проверок: все классы 5–11 на месте (10–11 — оба направления, ЕМН и ОГН). */
+export function missingGrades(program: SchoolGradePlan[] = SCHOOL_PROGRAM): string[] {
+  const have = new Set(program.map((p) => (p.direction ? `${p.grade}-${p.direction}` : p.grade)));
+  const need = SCHOOL_GRADES.flatMap((g) => (DIRECTION_GRADES.includes(g) ? [`${g}-emn`, `${g}-ogn`] : [g]));
+  return need.filter((k) => !have.has(k));
 }
+
+/** Есть ли у класса выбор направления (ЕМН / ОГН). */
+export const hasDirections = (grade: SchoolGrade | null): boolean => !!grade && DIRECTION_GRADES.includes(grade);

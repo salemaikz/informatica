@@ -4,11 +4,12 @@ import { Link2, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { UNITS } from "@/content/course";
 import { schoolPlan } from "@/content/school-program";
-import { gradeProgress, nextSchoolLesson, toSchoolGrade } from "@/lib/school";
+import { gradeProgress, hasDirections, nextSchoolLesson, toSchoolGrade } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { MascotSays } from "@/components/mascot/Mascot";
+import { DirectionPicker } from "./DirectionPicker";
 import { GradePicker } from "./GradePicker";
 import { GradeProgressCard } from "./GradeProgressCard";
 import { SchoolSectionCard } from "./SchoolSectionCard";
@@ -19,10 +20,11 @@ import { SchoolSectionCard } from "./SchoolSectionCard";
 export function SchoolMap() {
   const { t } = useT();
   const gradeRaw = useApp((s) => s.profile.grade);
+  const direction = useApp((s) => s.profile.direction);
   const lessons = useApp((s) => s.lessons);
   const updateProfile = useApp((s) => s.updateProfile);
   const grade = toSchoolGrade(gradeRaw);
-  const plan = grade ? schoolPlan(grade) : undefined;
+  const plan = grade ? schoolPlan(grade, direction) : undefined;
 
   const progress = useMemo(() => (plan ? gradeProgress(plan, lessons) : null), [plan, lessons]);
   const next = useMemo(() => (plan ? nextSchoolLesson(plan, lessons) : null), [plan, lessons]);
@@ -36,6 +38,13 @@ export function SchoolMap() {
       <div className="flex flex-col gap-2">
         <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("school.grade.label")}</p>
         <GradePicker />
+        {hasDirections(grade) && (
+          <>
+            <p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-muted">{t("school.dir.label")}</p>
+            <DirectionPicker />
+            <p className="text-sm font-semibold text-muted">{t("school.dir.hint")}</p>
+          </>
+        )}
       </div>
 
       {!plan || !grade || !progress ? (
@@ -45,7 +54,6 @@ export function SchoolMap() {
       ) : (
         <>
           <GradeProgressCard grade={grade} progress={progress} nextLessonId={next?.lessonId ?? null} />
-          {(grade === "10" || grade === "11") && <p className="text-sm font-semibold text-muted">{t("school.direction")}</p>}
           <div className="flex flex-col gap-3">
             {plan.sections.map((section, i) => (
               <SchoolSectionCard

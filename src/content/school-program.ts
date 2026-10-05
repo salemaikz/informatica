@@ -1,4 +1,4 @@
-import type { Grade, L } from "@/lib/types";
+import type { Grade, L, SchoolDirection } from "@/lib/types";
 
 // Школьная программа по информатике РК, 5–11 классы: класс → разделы → темы → готовые уроки курса.
 // Структура и формулировки — по типовой учебной программе РК; источники и степень проверки — docs/SCHOOL.md.
@@ -20,11 +20,15 @@ export interface SchoolTopic {
 export interface SchoolSection {
   id: string;
   title: L;
+  /** Четверть долгосрочного плана (1–4). */
+  quarter?: 1 | 2 | 3 | 4;
   topics: SchoolTopic[];
 }
 
 export interface SchoolGradePlan {
   grade: SchoolGrade;
+  /** Только 10–11 классы: ЕМН (прил. 108) или ОГН (прил. 109). У 5–9 — нет. */
+  direction?: SchoolDirection;
   sections: SchoolSection[];
 }
 
@@ -287,7 +291,11 @@ export const SCHOOL_PROGRAM: SchoolGradePlan[] = [
   },
 ];
 
-/** План класса; undefined — если данных нет. */
-export function schoolPlan(grade: SchoolGrade): SchoolGradePlan | undefined {
-  return SCHOOL_PROGRAM.find((p) => p.grade === grade);
+/** Классы с двумя направлениями (ЕМН / ОГН). */
+export const DIRECTION_GRADES: readonly SchoolGrade[] = ["10", "11"];
+
+/** План класса (для 10–11 — нужного направления, по умолчанию ЕМН); undefined — если данных нет. */
+export function schoolPlan(grade: SchoolGrade, direction: SchoolDirection = "emn"): SchoolGradePlan | undefined {
+  if (!DIRECTION_GRADES.includes(grade)) return SCHOOL_PROGRAM.find((p) => p.grade === grade);
+  return SCHOOL_PROGRAM.find((p) => p.grade === grade && (p.direction ?? "emn") === direction);
 }

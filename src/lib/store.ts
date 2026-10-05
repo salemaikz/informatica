@@ -13,6 +13,7 @@ import type {
   LessonVia,
   SessionResult,
   Theme,
+  SchoolDirection,
   Track,
 } from "./types";
 import { bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
@@ -129,6 +130,8 @@ export interface Profile {
   weeklyLessons: number;
   /** Что проходим: ЕНТ или школьная программа (карта на главной). */
   track: Track;
+  /** Направление 10–11 классов в школьной программе: ЕМН или ОГН (этап 15). */
+  direction: SchoolDirection;
   /** Знает основы — раздел «Компьютер с нуля» не рекомендуется первым (по диагностике или в профиле). */
   skipBasics: boolean;
   /** Целевой балл выбран учеником; false — «пока не знаю» (targetScore — значение по умолчанию). */
@@ -410,6 +413,7 @@ export const defaultProfile: Profile = {
   targetScore: 35,
   weeklyLessons: 4,
   track: "ent",
+  direction: "emn",
   skipBasics: false,
   targetScoreSet: false,
   diagnostic: null,
@@ -572,6 +576,7 @@ function cleanProfile(raw: unknown): Profile {
     targetScore: isNum(p.targetScore) && p.targetScore >= 5 && p.targetScore <= 50 ? Math.round(p.targetScore) : d.targetScore,
     weeklyLessons: isNum(p.weeklyLessons) && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : d.weeklyLessons,
     track,
+    direction: p.direction === "ogn" ? "ogn" : "emn",
     skipBasics: p.skipBasics === true,
     // Старые сохранения без поля: цель считается выбранной, если её меняли или задана дата ЕНТ.
     targetScoreSet:

@@ -59,7 +59,7 @@ export function buildParentReport(state: ReportInput, now: number, opts: ReportO
   const a7 = activity(days, keys7);
   const a30 = activity(days, keys30);
 
-  const view = courseViewOf({ lessons: state.lessons ?? {}, track: profile.track, grade: profile.grade, skipBasics: profile.skipBasics });
+  const view = courseViewOf({ lessons: state.lessons ?? {}, track: profile.track, grade: profile.grade, direction: profile.direction, skipBasics: profile.skipBasics });
   const cur = liveStreak(state.streak, todayKey(new Date(now)));
   const isEnt = entVisible(profile);
   const name = opts.withName ? cleanName(profile.name) : "";

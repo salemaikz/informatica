@@ -11,6 +11,7 @@ export function useCourseView(): CourseView {
   const lessons = useApp((s) => s.lessons);
   const track = useApp((s) => s.profile.track);
   const grade = useApp((s) => s.profile.grade);
+  const direction = useApp((s) => s.profile.direction);
   const skipBasics = useApp((s) => s.profile.skipBasics);
-  return useMemo(() => courseViewOf({ lessons, track, grade, skipBasics }), [lessons, track, grade, skipBasics]);
+  return useMemo(() => courseViewOf({ lessons, track, grade, direction, skipBasics }), [lessons, track, grade, direction, skipBasics]);
 }

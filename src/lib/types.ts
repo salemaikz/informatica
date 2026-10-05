@@ -600,6 +600,9 @@ export type Grade = "5" | "6" | "7" | "8" | "9" | "10" | "11" | "other";
 /** Что проходим: подготовка к ЕНТ или школьная программа по классам. */
 export type Track = "ent" | "school";
 
+/** Направление 10–11 классов (приказ № 399): ЕМН — естественно-математическое (прил. 108), ОГН — общественно-гуманитарное (прил. 109). */
+export type SchoolDirection = "emn" | "ogn";
+
 /** Цвет аватара-инициала (токены темы, см. components/app/Avatar.tsx). */
 export type AvatarColor = "primary" | "success" | "warning" | "danger" | "ai" | "gold" | "streak";
 
