@@ -2,7 +2,8 @@
 
 import { CalendarDays, ClipboardCheck, ClipboardList, Dumbbell, ListChecks, Play, Target } from "lucide-react";
 import { useMemo } from "react";
-import { UNITS, getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { cn } from "@/lib/cn";
 import { DIAGNOSTIC_MARGIN } from "@/lib/forecast";
@@ -120,7 +121,7 @@ export function GoalsPanel({ className }: { className?: string }) {
   const plan = useMemo(() => weeklyPlan(planBasis, 3), [planBasis]);
   const ready = useMemo(
     // Только готовые уроки: черновики «скоро» могут уже лежать в реестре.
-    () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (r.status === "available" && getLesson(r.id) ? [getLesson(r.id)!] : [])),
+    () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (r.status === "available" && lessonMeta(r.id) ? [lessonMeta(r.id)!] : [])),
     [],
   );
   const trend = useMemo(() => examTrend(exams), [exams]);

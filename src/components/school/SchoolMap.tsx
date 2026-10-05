@@ -2,7 +2,7 @@
 
 import { Link2, Target } from "lucide-react";
 import { useMemo, useState } from "react";
-import { UNITS } from "@/content/course";
+import { UNITS } from "@/content/course-map";
 import { schoolPlan } from "@/content/school-program";
 import { gradeProgress, hasDirections, nextSchoolLesson, toSchoolGrade } from "@/lib/school";
 import { useApp } from "@/lib/store";

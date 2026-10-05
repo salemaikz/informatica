@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { UNITS } from "@/content/course";
+import { UNITS } from "@/content/course-map";
 import { schoolPlan } from "@/content/school-program";
 import { cn } from "@/lib/cn";
 import { schoolSectionRows, unitRows } from "@/lib/progress";

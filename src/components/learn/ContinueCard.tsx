@@ -1,8 +1,8 @@
 "use client";
 
-import { lessonStepCount } from "@/lib/lesson-size";
 import { BookOpen, ClipboardCheck, Clock, Layers, Play, RotateCcw, Trophy } from "lucide-react";
-import { getLesson, lessonNumber } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
+import { lessonNumber } from "@/content/course-map";
 import type { LessonRef, Unit } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -47,9 +47,9 @@ export function ContinueCard({
   }
 
   const { unit, ref } = target;
-  const lesson = getLesson(ref.id);
+  const lesson = lessonMeta(ref.id);
   const Icon = unit.icon ? ICONS[unit.icon] : BookOpen;
-  const steps = lesson ? lessonStepCount(lesson) : 0;
+  const steps = lesson ? lesson.stepCount : 0;
   const cta = kind === "due" ? t("learn2.hero.review") : firstTime ? t("learn2.hero.start") : t("learn2.hero.continue");
 
   return (

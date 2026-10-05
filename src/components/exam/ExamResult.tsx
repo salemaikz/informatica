@@ -3,7 +3,8 @@
 import { ArrowRight, BookOpen, Clock, Dumbbell, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { LESSONS, UNITS, lessonNumber } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
+import { UNITS, lessonNumber } from "@/content/course-map";
 import { entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import type { DictKey } from "@/i18n/dict";
@@ -113,7 +114,7 @@ export function ExamResult({ id }: { id: string }) {
   // Уроки на карте — в порядке курса (старые уроки вне карты не предлагаем).
   const lessons = useMemo(
     () =>
-      Object.values(LESSONS)
+      Object.values(LESSON_META)
         .filter((x) => lessonNumber(x.id) > 0)
         .sort((a, b) => lessonNumber(a.id) - lessonNumber(b.id)),
     [],

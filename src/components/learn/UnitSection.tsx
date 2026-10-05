@@ -5,7 +5,8 @@ import { memo, useMemo, useState } from "react";
 import type { Unit } from "@/lib/types";
 import type { LessonStat } from "@/lib/review";
 import type { SkillStat } from "@/lib/mastery";
-import { LESSONS, lessonNumber } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
+import { lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
 import { ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
@@ -43,7 +44,7 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
   const { t, l } = useT();
   const Icon = unit.icon ? ICONS[unit.icon] : BookOpen;
   const p = unitProgress(unit, lessons);
-  const mastery = averageMastery(unitSkillIds(unit, LESSONS, SKILLS), skills);
+  const mastery = averageMastery(unitSkillIds(unit, LESSON_META, SKILLS), skills);
   const soon = p.total - p.ready;
   const pct = Math.round(mastery * 100);
   return (

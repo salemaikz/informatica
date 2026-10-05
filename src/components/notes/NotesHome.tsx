@@ -4,7 +4,9 @@ import { ChevronDown, ChevronRight, Check, FolderPlus, Plus, Search, X } from "l
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { LESSONS, UNITS } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
+import { useConspects } from "./useConspects";
 import { ICONS } from "@/components/scenes/icons";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -37,19 +39,26 @@ export function NotesHome() {
     return m;
   }, [notebook.notes]);
 
-  // Индекс поиска: записи ученика + шпаргалки готовых уроков. Пересобирается при смене записей или языка.
+  const q = query.trim();
+  // Поиск — с двух символов; на одной букве показываем обычный экран, а не «ничего не найдено».
+  const searching = q.length >= 2;
+  // Шпаргалки уроков грузятся отдельным куском, когда ученик начал искать.
+  const conspects = useConspects(searching);
+
+  // Индекс поиска: записи ученика + шпаргалки готовых уроков. Пересобирается при смене записей, языка и после загрузки шпаргалок.
   const index = useMemo(() => {
     // Без своего заголовка — как в карточке: первая строка текста (иначе в выдаче «Без названия»).
     const docs: SearchDoc[] = noteDocs(notebook.notes.map((n) => (n.title.trim() ? n : { ...n, title: titleFromBody(n.body) })));
     for (const unit of UNITS) {
       for (const ref of unit.lessons) {
-        const lesson = LESSONS[ref.id];
-        if (!lesson) continue;
+        const lesson = LESSON_META[ref.id];
+        const conspect = conspects?.[ref.id];
+        if (!lesson || !conspect) continue;
         docs.push({
           id: `conspect:${lesson.id}`,
           kind: "conspect",
           title: lesson.title[lang],
-          text: lesson.conspect[lang],
+          text: conspect[lang],
           href: `/notes/lesson/${lesson.id}`,
           lessonId: lesson.id,
           unitId: unit.id,
@@ -57,10 +66,7 @@ export function NotesHome() {
       }
     }
     return buildIndex(docs);
-  }, [notebook.notes, lang]);
-  const q = query.trim();
-  // Поиск — с двух символов; на одной букве показываем обычный экран, а не «ничего не найдено».
-  const searching = q.length >= 2;
+  }, [notebook.notes, lang, conspects]);
   const results = useMemo(() => (searching ? search(index, q, 40) : []), [index, q, searching]);
   const noteResults = results.filter((r) => r.doc.kind === "note");
   const lessonResults = results.filter((r) => r.doc.kind === "conspect");
@@ -188,7 +194,7 @@ export function NotesHome() {
 /** Конспекты готовых уроков, сгруппированные по разделам (раздел сворачивается). */
 function LessonConspects({ lessons }: { lessons: Record<string, unknown> }) {
   const { t, l } = useT();
-  const groups = UNITS.map((u) => ({ unit: u, items: u.lessons.filter((r) => LESSONS[r.id]) })).filter((g) => g.items.length);
+  const groups = UNITS.map((u) => ({ unit: u, items: u.lessons.filter((r) => LESSON_META[r.id]) })).filter((g) => g.items.length);
   // Открыты разделы с пройденными уроками; если таких нет — первый.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const defaultOpen = (unitId: string, items: { id: string }[], i: number) => items.some((r) => lessons[r.id]) || (i === 0 && !groups.some((g) => g.items.some((r) => lessons[r.id])));

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { Unit } from "@/lib/types";
 import type { LessonStat } from "@/lib/review";
-import { LESSONS } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { bestUnitResult, type Stars } from "@/lib/exam";
@@ -32,12 +32,11 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
   const best = useMemo(() => bestUnitResult(exams, unit.id), [exams, unit.id]);
 
   if (cp === null) return null;
-  const loading = cp === "loading";
   const title = l(unit.title);
   const stars: Stars = best?.stars ?? 0;
   const status = best ? t("exam.unit.best", { a: best.points, b: best.max }) : t("exam.unit.new");
   // Считаем те же уроки, что и в total: готовые и есть в курсе.
-  const ready = unit.lessons.filter((r) => r.status === "available" && !!LESSONS[r.id]);
+  const ready = unit.lessons.filter((r) => r.status === "available" && !!LESSON_META[r.id]);
   const total = ready.length;
   const done = ready.filter((r) => (lessons[r.id]?.completions ?? 0) > 0).length;
   const allDone = done >= total;
@@ -52,10 +51,8 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
     <div className="flex flex-col items-center px-4 pb-2 pt-1 text-center" style={unitVars(unit.color)}>
       <button
         type="button"
-        disabled={loading}
-        aria-busy={loading}
         aria-haspopup="dialog"
-        aria-label={t("exam.unit.node.aria", { unit: title, state: loading ? t("common.loading") : `${status}, ${t("exam.unit.stars", { n: stars })}` })}
+        aria-label={t("exam.unit.node.aria", { unit: title, state: `${status}, ${t("exam.unit.stars", { n: stars })}` })}
         onClick={() => setOpen(true)}
         className={cn(
           "flex h-[76px] w-[76px] items-center justify-center rounded-[28px] border-b-[6px] text-white transition-[translate,border-width] duration-75",

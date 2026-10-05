@@ -5,18 +5,18 @@ import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, ScanSearch,
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
-import { getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
 import { dueLessons } from "@/lib/review";
 import { ENTRY_COST } from "@/lib/economy";
-import { gameOpen, gameSkillsFor, skillsByUnit, skillsOfLessons } from "@/lib/drill";
+import { gameOpen, gameSkillsFor, skillsByUnit, skillsOfLessons } from "@/lib/drill-meta";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
-import { MASTERY_COLOR } from "@/components/lesson/Results";
+import { MASTERY_COLOR } from "@/components/progress/mastery-color";
 import { HistoryPracticeCard } from "@/components/history/HistoryCards";
 import { useSkillStats } from "@/components/progress/useSkillStats";
 import { iconFor } from "@/components/scenes/icons";
@@ -36,7 +36,7 @@ export default function PracticePage() {
   const [now] = useState(() => Date.now());
   const [openUnits, setOpenUnits] = useState<ReadonlySet<string>>(new Set());
   // Только уроки, которые есть в курсе (в старых сохранениях бывают удалённые id): разминка их не соберёт.
-  const due = dueLessons(lessons, now).filter((d) => getLesson(d.id)).length;
+  const due = dueLessons(lessons, now).filter((d) => lessonMeta(d.id)).length;
   const completedSkills = skillsOfLessons(Object.keys(lessons).filter((id) => (lessons[id]?.completions ?? 0) > 0));
 
   const toggle = (id: string) =>

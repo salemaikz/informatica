@@ -3,7 +3,7 @@
 import { FolderInput, GraduationCap, Pin, PinOff, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/useT";
@@ -44,7 +44,7 @@ function MenuBody({ id, onClose, onDeleted }: { id: string; onClose: () => void;
   const updateNote = useApp((s) => s.updateNote);
   const [step, setStep] = useState<"main" | "move" | "delete">("main");
   if (!note) return null;
-  const lesson = note.lessonId ? getLesson(note.lessonId) : undefined;
+  const lesson = note.lessonId ? lessonMeta(note.lessonId) : undefined;
 
   if (step === "move")
     return (

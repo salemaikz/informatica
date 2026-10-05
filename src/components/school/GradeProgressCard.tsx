@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, GraduationCap, PartyPopper } from "lucide-react";
-import { LESSONS } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
 import type { SchoolGrade } from "@/content/school-program";
 import type { GradeProgress } from "@/lib/school";
 import { useT } from "@/i18n/useT";
@@ -12,7 +12,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export function GradeProgressCard({ grade, progress, nextLessonId }: { grade: SchoolGrade; progress: GradeProgress; nextLessonId: string | null }) {
   const { t, l } = useT();
-  const next = nextLessonId ? LESSONS[nextLessonId] : undefined;
+  const next = nextLessonId ? LESSON_META[nextLessonId] : undefined;
   const none = progress.lessonsTotal === 0;
   const finished = !none && !next;
   return (

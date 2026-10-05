@@ -1,6 +1,6 @@
 "use client";
 
-import { UNITS } from "@/content/course";
+import { UNITS } from "@/content/course-map";
 import { REVIEW_ANSWERS, type PlanTask } from "@/lib/plan";
 import { useT } from "@/i18n/useT";
 

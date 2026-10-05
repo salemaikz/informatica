@@ -23,7 +23,7 @@ import { ENT_TOPICS } from "@/content/ent-topics";
 import { decodeChallenge, withChallenge, type Challenge } from "@/lib/challenge";
 import type { ExamSummary } from "@/lib/store";
 import { plain, tx } from "@/lib/text";
-import type { EntTopicId, Lang, Lesson, Text } from "@/lib/types";
+import type { EntTopicId, Lang, Lesson, LessonInfo, Text } from "@/lib/types";
 
 const KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
 const UNIT_ID = /^[a-z][a-z0-9]{0,15}$/;
@@ -353,7 +353,7 @@ export function noteVariant(n: ExamNote, hasContext: boolean): NoteVariant {
 // ---------- Уроки по теме ----------
 
 /** Готовые уроки темы ЕНТ: сначала те, где тема указана явно, затем те, чьи навыки относятся к теме. */
-export function lessonsForTopic(lessons: Lesson[], topic: EntTopicId, skillTopic: (skillId: string) => EntTopicId | undefined): Lesson[] {
+export function lessonsForTopic<T extends LessonInfo>(lessons: T[], topic: EntTopicId, skillTopic: (skillId: string) => EntTopicId | undefined): T[] {
   const explicit = lessons.filter((l) => l.entTopics?.includes(topic));
   const bySkill = lessons.filter((l) => !explicit.includes(l) && l.skills.some((s) => skillTopic(s) === topic));
   return [...explicit, ...bySkill];

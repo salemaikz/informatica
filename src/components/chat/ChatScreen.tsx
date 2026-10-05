@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { ArrowLeft, Ellipsis, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -13,7 +14,6 @@ import { useT } from "@/i18n/useT";
 import { useTutor } from "@/components/ai/useTutor";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { ChatQuiz } from "./quiz/ChatQuiz";
 import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
 import { Composer } from "./Composer";
@@ -21,6 +21,9 @@ import { displayTitle, firstUserText, lastPreview, MODE_NAME_KEY, quizInHistory,
 import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
 import { QuizCard } from "./QuizCard";
+
+// «Дай задачи» собирает задания из банка навыков — тяжёлый кусок, грузится только когда ученик открыл задачи (этап 16).
+const ChatQuiz = dynamic(() => import("./quiz/ChatQuiz").then((m) => m.ChatQuiz), { ssr: false });
 
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 

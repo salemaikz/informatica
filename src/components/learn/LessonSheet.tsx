@@ -1,6 +1,5 @@
 "use client";
 
-import { lessonStepCount } from "@/lib/lesson-size";
 import { AnimatePresence, m } from "motion/react";
 import {
   BookOpen,
@@ -19,10 +18,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LESSONS, UNITS, getLesson, lessonNumber } from "@/content/course";
+import { LESSON_META, lessonMeta } from "@/content/catalog";
+import { UNITS, lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
-import { gameSkillsFor } from "@/lib/drill";
+import { gameSkillsFor } from "@/lib/drill-meta";
 import { ENTRY_COST, entryCost, formatHearts, lessonCost } from "@/lib/economy";
 import { theoryPayState } from "@/lib/theory-pay";
 import { shortDate } from "@/lib/date";
@@ -118,7 +118,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const theoryPaidAt = useApp((s) => s.theoryPaid[lessonId]);
   const [gamesOpen, setGamesOpen] = useState(false);
   const place = findLessonRef(lessonId);
-  const lesson = getLesson(lessonId);
+  const lesson = lessonMeta(lessonId);
   const games = useMemo(
     () => (lesson ? GAMES.filter((g) => (g.shape || g.source) && gameSkillsFor(g, lesson.skills).length > 0) : []),
     [lesson],
@@ -146,7 +146,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
 
   if (!lesson) {
     // Урок «скоро»: теория темы (если у темы есть готовые уроки) и тест по теме.
-    const hasTheory = topic ? topicLessons(topic, UNITS, LESSONS, SKILLS).some((x) => x.ref.status === "available") : false;
+    const hasTheory = topic ? topicLessons(topic, UNITS, LESSON_META, SKILLS).some((x) => x.ref.status === "available") : false;
     return (
       <div className="flex flex-col gap-4" style={unitVars(unit.color)}>
         {header}
@@ -176,7 +176,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
 
   const due = isDue(stat, now);
   const xp = xpKind(stat, now);
-  const steps = lessonStepCount(lesson);
+  const steps = lesson.stepCount;
   const step = lessonStep(stat, now);
   const stepDays = stepReviewDays(stat, now);
   // «Урок игрой» стоит как сам урок (1 или 2 сердечка).

@@ -11,9 +11,9 @@ import { gameStatKey, type GameReward } from "@/lib/games";
 import { track } from "@/lib/analytics";
 import { gameFinishEvent } from "@/lib/player-events";
 import { useApp } from "@/lib/store";
-import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
+import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill-meta";
 import { entryCost } from "@/lib/economy";
-import { getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -67,7 +67,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const stat = useApp((s) => (statKey ? s.games[statKey] : undefined));
   const recordGame = useApp((s) => s.recordGame);
   const completeLessons = useApp((s) => s.completeLessons);
-  const lesson = lessonId ? getLesson(lessonId) : undefined;
+  const lesson = lessonId ? lessonMeta(lessonId) : undefined;
   const hasContext = !!lesson || (skills?.length ?? 0) > 0;
   // Урок без навыков (или навыки без нужной формы) — игре нечего проверять: зачёт урока «чужими» заданиями нечестен.
   const supported = !hasContext || (!!skills?.length && gameSupportsSkills(meta, skills));

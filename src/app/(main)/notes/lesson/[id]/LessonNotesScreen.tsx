@@ -3,7 +3,8 @@
 import { BookOpen, ChevronLeft, NotebookPen, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { UNITS, getLesson } from "@/content/course";
+import { UNITS } from "@/content/course-map";
+import type { Lesson } from "@/lib/types";
 import { Markdown } from "@/components/Markdown";
 import { NoteCard } from "@/components/notes/NoteCard";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -14,11 +15,13 @@ import { useT } from "@/i18n/useT";
 import { systemFolderId } from "@/lib/notebook";
 import { useApp } from "@/lib/store";
 
-/** Конспект урока: шпаргалка (lesson.conspect), под ней — записи ученика к уроку. */
-export function LessonNotesScreen({ id }: { id: string }) {
+/** Шпаргалка урока для экрана конспекта: приходит с сервера, клиент не грузит содержимое всех уроков (этап 16). */
+export type LessonConspect = Pick<Lesson, "title" | "conspect">;
+
+/** Конспект урока: шпаргалка (lesson.conspect), под ней — записи ученика к уроку. lesson null — урока ещё нет («скоро»). */
+export function LessonNotesScreen({ id, lesson }: { id: string; lesson: LessonConspect | null }) {
   const { t, l, lang } = useT();
   const router = useRouter();
-  const lesson = getLesson(id);
   const passed = useApp((s) => !!s.lessons[id]);
   const notes = useApp((s) => s.notebook.notes);
   const createNote = useApp((s) => s.createNote);

@@ -4,7 +4,8 @@ import { BookOpen, ClipboardCheck, Clock, Dumbbell, Lock, Play, Sigma, Star } fr
 import { useMemo, useState } from "react";
 import type { EntTopicId } from "@/lib/types";
 import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_POINTS, ENT_TOPICS, ORDINARY_COUNT, topicTaskShare, type EntTopic } from "@/content/ent-topics";
-import { LESSONS, UNITS, lessonNumber } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
+import { UNITS, lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
 import { masteryLevel } from "@/lib/mastery";
 import { ENTRY_COST } from "@/lib/economy";
@@ -108,7 +109,7 @@ function TopicSheet({
         (() => {
           const skillIds = topicSkillIds(topic.id, SKILLS);
           const { value, level } = topicMastery(skillIds, skills);
-          const list = topicLessons(topic.id, UNITS, LESSONS, SKILLS);
+          const list = topicLessons(topic.id, UNITS, LESSON_META, SKILLS);
           const Icon = topicIcon(topic.id);
           const firstSkill = skillIds[0];
           return (
@@ -231,7 +232,7 @@ export function EntMap({ recommendedId, now, onLesson }: { recommendedId: string
     () =>
       ENT_TOPICS.map((tp) => ({
         topic: tp,
-        lessons: topicLessons(tp.id, UNITS, LESSONS, SKILLS).length,
+        lessons: topicLessons(tp.id, UNITS, LESSON_META, SKILLS).length,
         ...topicMastery(topicSkillIds(tp.id, SKILLS), skills),
       })),
     [skills],

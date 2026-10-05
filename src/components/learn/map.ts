@@ -1,9 +1,9 @@
-import type { EntTopicId, Lesson, LessonRef, Skill, Unit } from "@/lib/types";
+import type { EntTopicId, LessonInfo, LessonRef, Skill, Unit } from "@/lib/types";
 import { DAY_MS, lessonXpFactor, REPLAY_XP, type LessonStat } from "@/lib/review";
 import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "@/lib/mastery";
 import { isPassedStat } from "@/lib/school";
 import { nodeDone, type CourseNodeStat } from "@/lib/course-nodes";
-import { skillsOfLessons } from "@/lib/drill";
+import { skillsOfLessons } from "@/lib/drill-meta";
 import { practiceNodeId, recapNodeId, unitGroups, type CourseGroup } from "@/content/groups";
 
 // Чистая логика карты курса (без React): состояния узлов, прогресс раздела, освоение тем ЕНТ,
@@ -80,7 +80,7 @@ export function canExtern(unit: Unit, stats: Record<string, LessonStat>): boolea
 }
 
 /** Навыки раздела: навыки его готовых уроков + навыки тем ЕНТ раздела. */
-export function unitSkillIds(unit: Unit, lessons: Record<string, Lesson>, skills: Skill[]): string[] {
+export function unitSkillIds(unit: Unit, lessons: Record<string, LessonInfo>, skills: Skill[]): string[] {
   const set = new Set<string>();
   for (const ref of unit.lessons) lessons[ref.id]?.skills.forEach((s) => set.add(s));
   const topics = new Set(unit.entTopics ?? []);
@@ -89,12 +89,12 @@ export function unitSkillIds(unit: Unit, lessons: Record<string, Lesson>, skills
 }
 
 /** Готовые уроки раздела (есть на карте как «доступен» и найдены в курсе): без них контрольной раздела нет. */
-export function readyLessonCount(unit: Unit, lessons: Record<string, Lesson>): number {
+export function readyLessonCount(unit: Unit, lessons: Record<string, LessonInfo>): number {
   return unit.lessons.filter((r) => r.status === "available" && !!lessons[r.id]).length;
 }
 
 /** Навыки контрольной раздела: как `unitSkillIds`; раздел без готовых уроков — пусто (контрольной нет). */
-export function checkpointSkillIds(unit: Unit, lessons: Record<string, Lesson>, skills: Skill[]): string[] {
+export function checkpointSkillIds(unit: Unit, lessons: Record<string, LessonInfo>, skills: Skill[]): string[] {
   return readyLessonCount(unit, lessons) > 0 ? unitSkillIds(unit, lessons, skills) : [];
 }
 
@@ -129,7 +129,7 @@ export function topicMastery(skillIds: string[], stats: Record<string, SkillStat
  * Темы ЕНТ урока. Готовый урок — по `entTopics` или темам его навыков. Урок «скоро» — по навыку,
  * угаданному из id (`py-3-loops` → `py.loops`, `data-1-sheets` → `sheets.*`), иначе — темы раздела.
  */
-export function lessonTopics(ref: LessonRef, unit: Unit, lesson: Lesson | undefined, skills: Skill[]): EntTopicId[] {
+export function lessonTopics(ref: LessonRef, unit: Unit, lesson: LessonInfo | undefined, skills: Skill[]): EntTopicId[] {
   const uniq = (xs: (EntTopicId | undefined)[]) => [...new Set(xs.filter((x): x is EntTopicId => !!x))];
   if (lesson) {
     if (lesson.entTopics?.length) return uniq(lesson.entTopics);
@@ -151,7 +151,7 @@ export function lessonTopics(ref: LessonRef, unit: Unit, lesson: Lesson | undefi
 export function topicLessons(
   topic: EntTopicId,
   units: Unit[],
-  lessons: Record<string, Lesson>,
+  lessons: Record<string, LessonInfo>,
   skills: Skill[],
 ): { unit: Unit; ref: LessonRef }[] {
   const out: { unit: Unit; ref: LessonRef }[] = [];

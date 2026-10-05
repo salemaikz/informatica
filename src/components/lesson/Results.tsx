@@ -31,13 +31,7 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { CountUp } from "@/components/motion/CountUp";
 import { Reveal } from "@/components/motion/Reveal";
 import { springBouncy } from "@/components/motion/presets";
-
-export const MASTERY_COLOR = {
-  new: "var(--border)",
-  weak: "var(--danger)",
-  progress: "var(--warning)",
-  mastered: "var(--success)",
-} as const;
+import { MASTERY_COLOR } from "@/components/progress/mastery-color";
 
 /** Плитка точности по смыслу цвета (токены, обе темы). */
 const ACC_TILE = {

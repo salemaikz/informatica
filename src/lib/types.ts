@@ -443,6 +443,20 @@ export interface Lesson {
   school?: true;
 }
 
+/** Урок без шагов и конспекта: под этот тип подходят и полный урок (Lesson), и запись каталога (LessonMeta). */
+export type LessonInfo = Omit<Lesson, "steps" | "conspect">;
+
+/**
+ * Лёгкое описание урока без шагов и конспекта (этап 16): карта, профиль, статистика и меню не грузят содержимое всех уроков.
+ * Генерируется в content/catalog.generated.ts (npm run catalog), сверку с уроками держит tests/catalog.test.ts.
+ */
+export type LessonMeta = LessonInfo & {
+  /** Сколько шагов увидит ученик (lib/lesson-size.ts: шаги урока + «босс»). */
+  stepCount: number;
+  /** Чтение теории урока на каждом языке (lib/theory.ts → readingStats): карточек и минут. */
+  reading: Record<Lang, { cards: number; minutes: number }>;
+};
+
 export interface LessonRef {
   id: string;
   title: L;

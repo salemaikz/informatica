@@ -4,23 +4,19 @@ import { BookOpen, Dumbbell, FileText, ListChecks, NotebookPen, SearchX, Target 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { canGenerate } from "@/lib/generators";
-import { bankFor } from "@/lib/bank";
-import { ENT_TOPICS } from "@/content/ent-topics";
-import { getLesson, UNITS } from "@/content/course";
-import { SKILLS } from "@/content/skills";
+import { lessonMeta } from "@/content/catalog";
 import { useApp } from "@/lib/store";
 import { titleFromBody } from "@/lib/notebook";
-import { buildIndex, lessonDocs, noteDocs, queryTokens, skillDocs, topicDocs, type SearchResult } from "@/lib/search";
-import { groupResults, highlightRanges, readableLessonIds, searchAll, searchHref, type SearchGroup } from "@/lib/theory";
+import { buildIndex, noteDocs, queryTokens, type SearchResult } from "@/lib/search";
+import { groupResults, highlightRanges, searchAll, searchHref, type SearchGroup } from "@/lib/theory";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
-import type { Lesson } from "@/lib/types";
 import { Mascot } from "@/components/mascot/Mascot";
 import { ButtonLink } from "@/components/ui/Button";
 import { Highlight } from "./Highlight";
 import { SearchField } from "./SearchField";
+import { useCourseIndex } from "./useCourseIndex";
 import { useRecentQueries } from "./useRecentQueries";
 
 const GROUP_ICON: Record<SearchGroup, typeof BookOpen> = {
@@ -49,7 +45,7 @@ function Chip({ children, onClick }: { children: string; onClick: () => void }) 
 function ResultItem({ r, query, onOpen }: { r: SearchResult; query: string; onOpen: () => void }) {
   const { t, l } = useT();
   const { doc } = r;
-  const lesson = doc.lessonId ? getLesson(doc.lessonId) : undefined;
+  const lesson = doc.lessonId ? lessonMeta(doc.lessonId) : undefined;
   const Icon = doc.kind === "topic" ? Target : GROUP_ICON[doc.kind === "skill" ? "skill" : doc.kind];
   // Куда ведёт: у теории и конспектов — урок, у навыка/темы — вид записи.
   const meta =
@@ -93,14 +89,9 @@ export function SearchScreen() {
   const [expanded, setExpanded] = useState<Set<SearchGroup>>(new Set());
   const { recent, remember, clear } = useRecentQueries();
 
-  // Индекс курса строится один раз на язык; записи ученика — отдельный маленький индекс (меняется при правках).
-  const courseIndex = useMemo(() => {
-    const lessons = readableLessonIds(UNITS)
-      .map((id) => getLesson(id))
-      .filter((x): x is Lesson => !!x);
-    const skills = SKILLS.filter((s) => bankFor(s.id) || canGenerate(s.id));
-    return buildIndex([...lessonDocs(lessons, UNITS, lang), ...skillDocs(skills, lang), ...topicDocs(ENT_TOPICS, lang)]);
-  }, [lang]);
+  // Индекс курса строится один раз на язык (грузится отдельным куском, null — ещё грузится);
+  // записи ученика — отдельный маленький индекс (меняется при правках).
+  const courseIndex = useCourseIndex(lang);
   const noteIndex = useMemo(
     () =>
       buildIndex(
@@ -117,7 +108,7 @@ export function SearchScreen() {
 
   // Популярные темы — только те, по которым в курсе уже что-то есть (готовы не все уроки).
   const popular = useMemo(
-    () => POPULAR.map((key) => t(key)).filter((q) => searchAll([{ index: courseIndex, limit: 1 }], q, 1).results.length > 0),
+    () => (courseIndex ? POPULAR.map((key) => t(key)).filter((q) => searchAll([{ index: courseIndex, limit: 1 }], q, 1).results.length > 0) : []),
     [courseIndex, t],
   );
 
@@ -128,7 +119,7 @@ export function SearchScreen() {
     if (!tokens.length) return { groups: [], matched: deferred };
     const found = searchAll(
       [
-        { index: courseIndex, limit: 120 },
+        ...(courseIndex ? [{ index: courseIndex, limit: 120 }] : []),
         { index: noteIndex, limit: 30 },
       ],
       deferred,
@@ -145,6 +136,7 @@ export function SearchScreen() {
   }, [query]);
 
   const typed = query.trim().length > 0;
+  const courseLoading = !courseIndex;
   const toggle = (g: SearchGroup) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -158,7 +150,7 @@ export function SearchScreen() {
       <SearchField value={query} onChange={setQuery} onSubmit={() => remember(query)} placeholder={t("search.placeholder")} autoFocus={!query} />
       {/* Для экранного диктора: сколько найдено (весь список в live-регион не кладём — его зачитывало бы на каждую букву). */}
       <p role="status" className="sr-only">
-        {tokens.length > 0 ? (total > 0 ? t("search.found", { n: total }) : t("search.empty")) : ""}
+        {tokens.length > 0 ? (total > 0 ? t("search.found", { n: total }) : courseLoading ? t("common.loading") : t("search.empty")) : ""}
       </p>
 
       {!typed && (
@@ -197,7 +189,9 @@ export function SearchScreen() {
 
       {typed && tokens.length === 0 && <p className="font-semibold text-muted">{t("search.short")}</p>}
 
-      {tokens.length > 0 && total === 0 && (
+      {tokens.length > 0 && total === 0 && courseLoading && <p className="font-semibold text-muted">{t("common.loading")}</p>}
+
+      {tokens.length > 0 && total === 0 && !courseLoading && (
         <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-border px-4 py-8 text-center">
           <Mascot mood="thinking" size={88} />
           <p className="flex items-center gap-2 text-lg font-extrabold">

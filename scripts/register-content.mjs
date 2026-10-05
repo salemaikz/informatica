@@ -1,4 +1,5 @@
 // Подключает новые уроки, банки заданий и задания ЕНТ: node scripts/register-content.mjs
+// После реестров сам пересобирает лёгкий каталог курса (scripts/catalog.ts, npm run catalog).
 // Ищет файлы с нужными экспортами и пишет три реестра (их не правят руками):
 //   src/content/lessons/generated.ts  — export const lesson     (src/content/lessons/<id>.ts)
 //   src/lib/bank/generated.ts         — export const BANKS      (src/lib/bank/<id>.ts)
@@ -6,6 +7,7 @@
 // Аргументы: --only=id1,id2 — подключить только эти уроки (остальные новые — пропустить);
 //            --add=id1,id2 — добавить эти уроки к уже подключённым (недописанные файлы других авторов не трогать).
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -53,3 +55,6 @@ write("src/content/lessons/generated.ts", lessons, "lesson", "Lesson", "@/lib/ty
 write("src/lib/bank/generated.ts", banks, "BANKS", "SkillBank", "./types", "GENERATED_BANKS");
 write("src/content/ent/generated.ts", ent, "ITEMS", "EntItem", "@/lib/types", "GENERATED_ENT");
 console.log(`уроков: ${lessons.length}, банков: ${banks.length}, файлов ЕНТ: ${ent.length}`);
+
+// Лёгкий каталог (карта, профиль, меню — этап 16) пересобирается вслед за реестрами: npm run catalog.
+execFileSync("npx", ["tsx", "scripts/catalog.ts"], { cwd: root, stdio: "inherit" });

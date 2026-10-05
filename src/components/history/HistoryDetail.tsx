@@ -2,7 +2,7 @@
 
 import { Check, ChevronLeft, CircleCheck, Clock, Flag, RotateCcw, Sparkles, X } from "lucide-react";
 import Link from "next/link";
-import { getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
 import { useNow } from "@/components/economy/useEconomy";
 import { formatClock, formatDay } from "@/components/exam/logic";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -115,7 +115,7 @@ export function HistoryDetail({ id }: { id: string }) {
   const tone = entryTone(entry);
   const counts = mistakeCounts(entry);
   const replay = replayHref(entry);
-  const canReplay = replay !== null && !!entry.lessonId && !!getLesson(entry.lessonId);
+  const canReplay = replay !== null && !!entry.lessonId && !!lessonMeta(entry.lessonId);
   const clock = entryClock(entry.at);
   const day = formatDay(entry.at, lang, false, now);
   const examNote = entry.kind === "exam" && counts.total === 0 && entryScore(entry) < 1;

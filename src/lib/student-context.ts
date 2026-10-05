@@ -7,7 +7,7 @@ import { weakSpots } from "./progress";
 import { todayKey, tx } from "./text";
 import { ownNotesText } from "./notebook";
 import { skillById } from "@/content/skills";
-import { LESSONS } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
 
 /** Сжатый портрет ученика для ИИ: только то, что помогает персонализации. */
 export function buildStudentContext(s: AppState): StudentContext & WithTrack {
@@ -48,6 +48,6 @@ export function buildStudentContext(s: AppState): StudentContext & WithTrack {
     mistakes: s.mistakes.slice(0, 5).map((m) => ({ q: m.prompt.slice(0, 200), given: m.given, expected: m.expected })),
     memory: s.memory,
     notes,
-    lessons: Object.keys(s.lessons).map((id) => (LESSONS[id] ? tx(LESSONS[id].title, lang) : id)),
+    lessons: Object.keys(s.lessons).map((id) => (LESSON_META[id] ? tx(LESSON_META[id].title, lang) : id)),
   };
 }

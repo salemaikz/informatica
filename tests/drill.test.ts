@@ -60,7 +60,7 @@ const isSorted = (a: number[]) => a.every((x, i) => i === 0 || a[i - 1] <= x);
 
 /** Готовый урок раздела u1 (системы счисления) — стабильная опора тестов. */
 const u1 = UNITS.find((u) => u.id === "u1")!;
-const u1Lessons = readyLessons(u1);
+const u1Lessons = readyLessons(u1).map((l) => LESSONS[l.id]);
 const u1Banked = u1Lessons.filter((l) => l.skills.length > 0 && l.skills.every(hasBank));
 
 describe("разбор адреса", () => {

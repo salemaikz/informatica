@@ -303,7 +303,7 @@ describe("карта курса: контрольные реальных раз�
     const unit = fakeUnit(["nope-1", "nope-2"], "soon");
     expect(readyLessonCount(unit, LESSONS)).toBe(0);
     expect(checkpointSkillIds(unit, LESSONS, SKILLS)).toEqual([]);
-    expect(checkpointOf(unit, LESSONS, SKILLS, ENT_POOL)).toBeNull();
+    expect(checkpointOf(unit, LESSONS, SKILLS)).toBeNull();
   });
 
   it("статус «доступен» без урока в курсе не считается готовым", () => {
@@ -312,7 +312,7 @@ describe("карта курса: контрольные реальных раз�
 
   it("у каждого раздела с контрольной: размер 10–15, вариант собирается из навыков раздела", () => {
     for (const unit of UNITS) {
-      const cp = checkpointOf(unit, LESSONS, SKILLS, ENT_POOL);
+      const cp = checkpointOf(unit, LESSONS, SKILLS);
       if (!cp) continue;
       expect(cp.size).toBeGreaterThanOrEqual(10);
       expect(cp.size).toBeLessThanOrEqual(15);
@@ -325,9 +325,9 @@ describe("карта курса: контрольные реальных раз�
   });
 
   it("checkpointById: запуск по ссылке — только раздел с контрольной", () => {
-    expect(checkpointById(undefined, ENT_POOL)).toBeNull();
-    expect(checkpointById("nope", ENT_POOL)).toBeNull();
-    for (const unit of UNITS) expect(checkpointById(unit.id, ENT_POOL)).toEqual(checkpointOf(unit, LESSONS, SKILLS, ENT_POOL));
+    expect(checkpointById(undefined)).toBeNull();
+    expect(checkpointById("nope")).toBeNull();
+    for (const unit of UNITS) expect(checkpointById(unit.id)).toEqual(checkpointOf(unit, LESSONS, SKILLS));
   });
 
   it("examTitle: у контрольной — название раздела, у остальных и неизвестного раздела — вид теста", () => {

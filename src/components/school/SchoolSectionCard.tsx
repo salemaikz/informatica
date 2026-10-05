@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronRight, CircleCheckBig, Clock, Play } from "lucide-react";
 import Link from "next/link";
-import { LESSONS } from "@/content/course";
+import { LESSON_META } from "@/content/catalog";
 import type { SchoolSection, SchoolTopic } from "@/content/school-program";
 import { sectionProgress, topicProgress, type LessonsDone } from "@/lib/school";
 import { cn } from "@/lib/cn";
@@ -19,7 +19,7 @@ function TopicRow({ topic, lessons }: { topic: SchoolTopic; lessons: LessonsDone
   const p = topicProgress(topic, lessons);
   const started = p.done > 0 && !p.complete;
   const target = p.nextLessonId ?? topic.lessonIds[0];
-  const lesson = target ? LESSONS[target] : undefined;
+  const lesson = target ? LESSON_META[target] : undefined;
 
   const icon = p.complete ? (
     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success text-white">

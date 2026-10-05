@@ -1,4 +1,4 @@
-import { firstParam, parseDrillMode } from "@/lib/drill";
+import { firstParam, parseDrillMode } from "@/lib/drill-meta";
 import { DrillScreen } from "./DrillScreen";
 
 // Тренировка: ?mode=smart | mistakes | review | skill&skill=ns.dec2bin | extern&unit=u2 | topic&topic=t05 | history&entry=<id теста>

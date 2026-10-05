@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { getLesson, UNITS } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
-import { readingStats, searchHref } from "@/lib/theory";
+import { searchHref } from "@/lib/theory";
 import { iconFor } from "@/components/scenes/icons";
 import { LessonCard } from "./LessonCard";
 import { SearchField } from "./SearchField";
@@ -23,10 +24,10 @@ export function TheoryHome() {
     () =>
       UNITS.map((unit) => {
         const ready = unit.lessons.flatMap((ref) => {
-          const lesson = ref.status === "available" ? getLesson(ref.id) : undefined;
-          return lesson ? [{ lesson, stats: readingStats(lesson, lang) }] : [];
+          const lesson = ref.status === "available" ? lessonMeta(ref.id) : undefined;
+          return lesson ? [{ lesson, stats: lesson.reading[lang] }] : [];
         });
-        const soon = unit.lessons.filter((ref) => ref.status !== "available" || !getLesson(ref.id));
+        const soon = unit.lessons.filter((ref) => ref.status !== "available" || !lessonMeta(ref.id));
         return { unit, ready, soon };
       }),
     [lang],

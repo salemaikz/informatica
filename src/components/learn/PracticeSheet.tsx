@@ -4,7 +4,7 @@ import { ClipboardCheck, CircleCheckBig, Dumbbell, RefreshCw } from "lucide-reac
 import { useMemo, useState } from "react";
 import type { Unit } from "@/lib/types";
 import { ENTRY_COST } from "@/lib/economy";
-import { MINITEST_COUNT, PRACTICE_COUNT, RECAP_COUNT, miniTestPool } from "@/lib/course-mix";
+import { MINITEST_MIN, PRACTICE_COUNT, RECAP_COUNT, miniTestSize } from "@/lib/course-mix-meta";
 import { practiceNodeId, recapNodeId } from "@/content/groups";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
@@ -26,8 +26,8 @@ function SheetBody({ item, unit, unitIndex }: { item: NodeItem; unit: Unit; unit
   const title = practice ? t("course3.practice.title", { group: l(item.group.title) }) : t("course3.recap.title", { unit: l(unit.title) });
   const runs = stat?.runs ?? 0;
   // Заданий ЕНТ в группе должно хватать на мини-тест (не меньше трёх).
-  const testSize = useMemo(() => (practice ? Math.min(MINITEST_COUNT, miniTestPool(item.group).length) : 0), [practice, item]);
-  const hasTest = practice && testSize >= 3;
+  const testSize = useMemo(() => (practice ? miniTestSize(item.group) : 0), [practice, item]);
+  const hasTest = practice && testSize >= MINITEST_MIN;
   const testRuns = stat?.testRuns ?? 0;
 
   return (

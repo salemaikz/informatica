@@ -11,7 +11,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "voiceover": "node --experimental-strip-types --no-warnings scripts/generate-voiceover.mts",
     "e2e": "playwright test",
-    "review:kk": "tsx scripts/review-kk.mts"
+    "review:kk": "tsx scripts/review-kk.mts",
+    "catalog": "tsx scripts/catalog.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

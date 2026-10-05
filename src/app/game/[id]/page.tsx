@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { gameById } from "@/games/registry";
 import { GameShell } from "@/components/games/GameShell";
-import { firstParam, resolveGameContext } from "@/lib/drill";
+import { firstParam, resolveGameContext } from "@/lib/drill-meta";
 
 // Игра: /game/<id>; «урок игрой» — ?lesson=<урок> или ?skills=a,b (навыки темы, без зачёта урока).
 export default async function GamePage(props: PageProps<"/game/[id]">) {

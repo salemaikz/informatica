@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import type { LessonRef, Unit } from "@/lib/types";
-import { UNITS } from "@/content/course";
+import { UNITS } from "@/content/course-map";
 import { dueLessons } from "@/lib/review";
 import { useApp } from "@/lib/store";
 import { isDarkColor, pluralForm, recommendedLesson } from "./map";

@@ -14,6 +14,11 @@ export function bankFor(skill: SkillId): SkillBank | undefined {
   return BANKS[skill];
 }
 
+/** Все навыки, у которых есть банк (для генератора лёгкого каталога, scripts/catalog.ts). */
+export function bankSkills(): SkillId[] {
+  return Object.keys(BANKS);
+}
+
 export function hasShape(skill: SkillId, shape: Shape): boolean {
   const b = BANKS[skill];
   return !!b && typeof b[shape] === "function";

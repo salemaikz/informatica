@@ -20,7 +20,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getLesson } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
 import { Markdown } from "@/components/Markdown";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -87,7 +87,7 @@ function EditorBody({ note }: { note: Note }) {
   const id = note.id;
   const folder = useApp((s) => s.notebook.folders.find((f) => f.id === note.folderId));
   const folderName = useFolderName();
-  const lesson = note.lessonId ? getLesson(note.lessonId) : undefined;
+  const lesson = note.lessonId ? lessonMeta(note.lessonId) : undefined;
 
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);

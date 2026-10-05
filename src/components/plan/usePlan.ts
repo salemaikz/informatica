@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { LESSONS, UNITS } from "@/content/course";
-import { SKILLS } from "@/content/skills";
-import { checkpointOf, useEntPool } from "@/components/exam/checkpoint";
+import { LESSON_META } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
+import { checkpointOf } from "@/components/exam/checkpoint";
 import { useMinuteClock } from "@/components/goals/useClock";
 import { buildPlan, parseAnchor, resolveAnchor, todayPlan, type Plan, type PlanUnit, type SavedAnchor, type TodayPlan } from "@/lib/plan";
 import { useApp } from "@/lib/store";
@@ -44,10 +44,10 @@ function parseSaved(raw: string | null): SavedAnchor | null {
 // Урок «доступен» на карте, но ещё не добавлен в курс (пишется параллельно) — для плана он «скоро»: ссылка вела бы в 404.
 const PLAN_UNITS: PlanUnit[] = UNITS.map((u) => ({
   id: u.id,
-  lessons: u.lessons.map((r) => ({ id: r.id, status: r.status === "available" && LESSONS[r.id] ? "available" : "soon" })),
+  lessons: u.lessons.map((r) => ({ id: r.id, status: r.status === "available" && LESSON_META[r.id] ? "available" : "soon" })),
 }));
 
-/** План подготовки ученика; null, пока часы не готовы (первый кадр на клиенте) или грузится банк ЕНТ (нужен для контрольных). */
+/** План подготовки ученика; null, пока часы не готовы (первый кадр на клиенте). */
 export function usePlan(): Plan | null {
   const examDate = useApp((s) => s.profile.examDate);
   const skipBasics = useApp((s) => s.profile.skipBasics);
@@ -59,12 +59,8 @@ export function usePlan(): Plan | null {
   const now = useMinuteClock();
   const today = now ? todayKey(new Date(now)) : "";
 
-  const pool = useEntPool();
   // Контрольная есть не у каждого раздела: нужны готовые уроки и не меньше UNIT_MIN_ITEMS заданий ЕНТ.
-  const checkpoints = useMemo(
-    () => (pool ? new Set(UNITS.filter((u) => checkpointOf(u, LESSONS, SKILLS, pool)).map((u) => u.id)) : null),
-    [pool],
-  );
+  const checkpoints = useMemo(() => new Set(UNITS.filter((u) => checkpointOf(u)).map((u) => u.id)), []);
 
   const raw = useSyncExternalStore(subscribe, read, () => null);
   const saved = useMemo(() => parseSaved(raw), [raw]);

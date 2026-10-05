@@ -8,6 +8,7 @@ import { buildFromBank, skillsOfLessons, sortByLevel, stepKey } from "./drill";
 import { entRef, entStepFromRef } from "./ent-steps";
 import { shuffleEntItem } from "./exam";
 import { seeded, shuffle } from "./text";
+import { MINITEST_COUNT, MINITEST_MIN, PRACTICE_COUNT, RECAP_COUNT, RECENT_GROUPS } from "./course-mix-meta";
 
 // Практика после группы и повторение раздела собираются кодом из банков: 50% текущая группа (раздел),
 // 30% три предыдущие группы, 20% всё с начала курса; слабые и давние навыки — чаще (#46, #81).
@@ -15,14 +16,7 @@ import { seeded, shuffle } from "./text";
 // stats — уже с затуханием (decaySkills): давно не тренированные навыки выглядят слабее и выпадают чаще.
 // Чистая логика без React (тесты — tests/course-mix.test.ts).
 
-/** Заданий в «Практике», «Повторении» и мини-тесте. */
-export const PRACTICE_COUNT = 12;
-export const RECAP_COUNT = 15;
-export const MINITEST_COUNT = 6;
-/** В мини-тесте меньше стольких заданий ЕНТ быть не может — тогда мини-теста нет. */
-export const MINITEST_MIN = 3;
-/** Сколько групп перед текущей считаются «недавними». */
-export const RECENT_GROUPS = 3;
+export * from "./course-mix-meta";
 
 // ---------- Доли «текущее / недавнее / давнее» ----------
 

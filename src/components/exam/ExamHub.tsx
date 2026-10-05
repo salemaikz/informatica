@@ -4,10 +4,9 @@ import { BookOpen, ChevronRight, ClipboardCheck, ListChecks, Play, Timer, Zap, t
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { LESSONS, UNITS } from "@/content/course";
-import { SKILLS } from "@/content/skills";
+import { ENT_TOPIC_COUNTS } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
 import { ENT_TOPICS } from "@/content/ent-topics";
-import { ENT_POOL } from "@/content/ent";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
@@ -30,12 +29,6 @@ import { ExamChart } from "./ExamChart";
 import { StarRow } from "./StarRow";
 import { EXAM_FORMAT, examLink, formatDay, historyPoints, randomSeed, ratioOf, toneOf, toggleTopic, MAX_TOPIC_PICK } from "./logic";
 
-/** Сколько заданий каждой темы в банке (вопросы контекстных считаем по одному). */
-function poolCounts(): Record<EntTopicId, number> {
-  const out = Object.fromEntries(ENT_TOPICS.map((tp) => [tp.id, 0])) as Record<EntTopicId, number>;
-  for (const it of ENT_POOL) out[it.topic] += it.kind === "context" ? it.questions.length : 1;
-  return out;
-}
 
 const MODE_ICON: Record<ExamKind, LucideIcon> = { mini: Zap, full: ClipboardCheck, topic: ListChecks, unit: BookOpen };
 const TONE_PILL = { danger: "danger", warning: "warning", success: "success" } as const;
@@ -109,8 +102,8 @@ export function ExamHub() {
     };
   }, []);
 
-  const counts = useMemo(() => poolCounts(), []);
-  const empty = ENT_POOL.length === 0;
+  const counts = ENT_TOPIC_COUNTS;
+  const empty = Object.values(ENT_TOPIC_COUNTS).every((n) => n === 0);
   const forecast = useMemo(
     () =>
       forecastScore({
@@ -131,7 +124,7 @@ export function ExamHub() {
   // Контрольные разделов: только у тех, где есть готовые уроки и хватает заданий.
   const checkpoints = useMemo(
     () =>
-      UNITS.map((unit, i) => ({ unit, index: i, cp: checkpointOf(unit, LESSONS, SKILLS, ENT_POOL) }))
+      UNITS.map((unit, i) => ({ unit, index: i, cp: checkpointOf(unit) }))
         .filter((x) => x.cp)
         .map((x) => ({ ...x, best: bestUnitResult(exams, x.unit.id) })),
     [exams],

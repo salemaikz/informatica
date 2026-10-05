@@ -5,12 +5,12 @@
 // - Темы ЕНТ и слабые места — по дневному срезу навыков (skillDays, 60 дней) и оценкам освоения (skills).
 // - Данных мало — честно «нет данных», а не 0%: порог слабых мест — MIN_ANSWERS ответов.
 
-import { UNITS, getLesson } from "@/content/course";
+import { UNITS } from "@/content/course-map";
+import { hasBank as bankExists, lessonMeta } from "@/content/catalog";
 import { ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import { SKILLS } from "@/content/skills";
 import type { SchoolGradePlan } from "@/content/school-program";
 import { daysAccuracy, type DaysAccuracy } from "./accuracy";
-import { hasBank as bankExists } from "./drill";
 import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "./mastery";
 import type { LessonsDone } from "./school";
 import type { SkillDays } from "./skill-days";
@@ -59,7 +59,7 @@ export interface ProgressOptions {
 
 const isDone = (lessons: LessonsDone, id: string): boolean => num(lessons?.[id]?.completions) > 0;
 /** Урок на карте готов: помечен «доступен» и действительно есть в курсе. */
-const isReady = (ref: { id: string; status: string }): boolean => ref.status === "available" && !!getLesson(ref.id);
+const isReady = (ref: { id: string; status: string }): boolean => ref.status === "available" && !!lessonMeta(ref.id);
 
 function shownUnits(opts: ProgressOptions): Unit[] {
   const units = opts.units ?? UNITS;
@@ -106,7 +106,7 @@ export function unitRows(lessons: LessonsDone, skills: Record<string, SkillStat>
       if (!isReady(ref)) continue;
       ready++;
       if (isDone(lessons, ref.id)) done++;
-      getLesson(ref.id)?.skills.forEach((s) => skillIds.add(s));
+      lessonMeta(ref.id)?.skills.forEach((s) => skillIds.add(s));
     }
     return {
       id: unit.id,

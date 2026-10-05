@@ -87,7 +87,7 @@ function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], u
   const s = seed ?? randomSeed();
   // Контрольная: навыки раздела. Неизвестный раздел или раздел без контрольной (нет готовых уроков, < 10 заданий)
   // даёт пустой вариант — экран условий скажет об этом.
-  const cp = kind === "unit" ? checkpointById(unit, ENT_POOL) : null;
+  const cp = kind === "unit" ? checkpointById(unit) : null;
   return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [] }), seed: s, topics, unit: cp?.unitId };
 }
 

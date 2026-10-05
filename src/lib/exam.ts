@@ -320,8 +320,13 @@ function unitItems(pool: readonly EntItem[], skillIds: readonly string[] | undef
 /** Сколько заданий войдёт в контрольную раздела (до 15): контекстное даёт один вопрос. */
 export function unitPaperSize(pool: readonly EntItem[], skillIds: readonly string[] | undefined): number {
   const { plain, contexts } = unitItems(pool, skillIds);
+  return unitPaperSizeOf(plain.length, contexts.length > 0);
+}
+
+/** То же по числам: обычных заданий и есть ли контекстное (лёгкий каталог, content/catalog.ts). */
+export function unitPaperSizeOf(plain: number, hasContext: boolean): number {
   const total = UNIT_COUNTS.single + UNIT_COUNTS.multi + UNIT_COUNTS.match + UNIT_COUNTS.context;
-  return Math.min(total, plain.length + (contexts.length ? 1 : 0));
+  return Math.min(total, plain + (hasContext ? 1 : 0));
 }
 
 /** Есть ли у раздела контрольная: хватает заданий его навыков. */

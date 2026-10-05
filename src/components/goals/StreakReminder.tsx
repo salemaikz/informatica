@@ -2,7 +2,7 @@
 
 import { Dumbbell, Flame, Play, X } from "lucide-react";
 import { useState } from "react";
-import { UNITS } from "@/content/course";
+import { UNITS } from "@/content/course-map";
 import { liveStreak, streakAtRisk } from "@/lib/gamification";
 import { nextLessonId } from "@/lib/goals";
 import { parseTime, reminderText } from "@/lib/reminders";

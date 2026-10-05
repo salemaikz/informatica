@@ -4,11 +4,13 @@ import { ArrowLeft, ArrowRight, BookmarkPlus, ClipboardCheck, Eye, Play } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { getLesson, UNITS } from "@/content/course";
+import { lessonMeta } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
 import { cn } from "@/lib/cn";
 import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
+import type { Lesson } from "@/lib/types";
 import { adjacentLessons, blockContext, conspectContext, infoSteps, pluralIndex, readableLessonIds, readingStats } from "@/lib/theory";
 import { useApp } from "@/lib/store";
 import { Markdown } from "@/components/Markdown";
@@ -31,37 +33,36 @@ const ORDER = readableLessonIds(UNITS);
  * Ничего не пишет в прогресс. Якоря: `#<id шага>` и `#conspect` — на них ведёт поиск.
  * Чтение стоит 0,5 сердечка (этап 15, useTheoryPay): первый экран бесплатный, дальше — после прокрутки или ~15 секунд;
  * пройденный урок, «Безлимит» и повторное чтение за сутки — бесплатно. Не хватает сердечек — остальное закрыто замком.
+ * Урок приходит с сервера (страница /theory/[id]): клиент не грузит содержимое всех уроков (этап 16).
  */
-export function TheoryReader({ id }: { id: string }) {
+export function TheoryReader({ lesson }: { lesson: Lesson }) {
+  const id = lesson.id;
   const { t, l, lang } = useT();
   const router = useRouter();
   const pay = useTheoryPay(id);
-  const lesson = getLesson(id);
   const openSave = useSaveToNotes((s) => s.open);
   const done = useApp((s) => (s.lessons[id]?.completions ?? 0) > 0);
   const [mode, setMode] = useState<WorkedMode>("all");
   const [revealed, setRevealed] = useState<Record<string, number>>({});
   const [askId, setAskId] = useState<string | null>(null);
 
-  const steps = useMemo(() => (lesson ? infoSteps(lesson) : []), [lesson]);
-  const stats = useMemo(() => (lesson ? readingStats(lesson, lang) : null), [lesson, lang]);
-  const unit = UNITS.find((u) => u.id === lesson?.unitId);
+  const steps = useMemo(() => infoSteps(lesson), [lesson]);
+  const stats = useMemo(() => readingStats(lesson, lang), [lesson, lang]);
+  const unit = UNITS.find((u) => u.id === lesson.unitId);
   const { prev, next } = adjacentLessons(ORDER, id);
-  const prevLesson = prev ? getLesson(prev) : undefined;
-  const nextLesson = next ? getLesson(next) : undefined;
+  const prevLesson = prev ? lessonMeta(prev) : undefined;
+  const nextLesson = next ? lessonMeta(next) : undefined;
   const hasWorked = steps.some((s) => s.type === "worked");
 
   // Переход по ссылке с якорем (из поиска): доскролл и короткая подсветка блока.
   useHashScroll(id);
 
   const askTask = useMemo(() => {
-    if (!lesson || !askId) return null;
+    if (!askId) return null;
     if (askId === "conspect") return conspectContext(lesson, lang);
     const step = steps.find((s) => s.id === askId);
     return step ? blockContext(step, lesson, lang) : null;
   }, [lesson, steps, askId, lang]);
-
-  if (!lesson || !stats) return null;
 
   const saveConspect = () => openSave({ source: "lesson", lessonId: lesson.id, title: l(lesson.title), text: l(lesson.conspect) });
   const reveal = (stepId: string, total: number) => setRevealed((r) => ({ ...r, [stepId]: Math.min(total, (r[stepId] ?? 1) + 1) }));
