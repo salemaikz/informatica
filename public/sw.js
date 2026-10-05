@@ -29,6 +29,8 @@ function routeFor(req, origin) {
   if (path === "/sw.js") return "ignore";
   // Страница владельца (#69) — не кэшируем.
   if (path === "/owner" || path.indexOf("/owner/") === 0) return "ignore";
+  // Результат, которым поделились (#72): каждая ссылка /r/<код> уникальна — кэшировать нечего.
+  if (path === "/r" || path.indexOf("/r/") === 0) return "ignore";
   var headers = req.headers && typeof req.headers.get === "function" ? req.headers : null;
   // Запросы с Range (аудио/видео) — мимо: частичные ответы (206) не кэшируются, а полный ответ из кэша ломает перемотку.
   if (headers && headers.get("Range")) return "ignore";
