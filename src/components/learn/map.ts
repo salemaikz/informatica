@@ -2,6 +2,9 @@ import type { EntTopicId, Lesson, LessonRef, Skill, Unit } from "@/lib/types";
 import { DAY_MS, lessonXpFactor, REPLAY_XP, type LessonStat } from "@/lib/review";
 import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "@/lib/mastery";
 import { isPassedStat } from "@/lib/school";
+import { nodeDone, type CourseNodeStat } from "@/lib/course-nodes";
+import { skillsOfLessons } from "@/lib/drill";
+import { practiceNodeId, recapNodeId, unitGroups, type CourseGroup } from "@/content/groups";
 
 // Чистая логика карты курса (без React): состояния узлов, прогресс раздела, освоение тем ЕНТ,
 // раскладка дороги. Покрыто тестами в tests/learn-map.test.ts.
@@ -256,4 +259,84 @@ export function segmentDone(seg: PathSegment, passed: boolean[]): boolean {
   const a = seg.from < 0 ? passed[seg.to] : passed[seg.from];
   const b = seg.to < 0 ? passed[seg.from] : passed[seg.to];
   return !!a && !!b;
+}
+
+// ---------- Узлы курса 3.0: «Практика» после группы и «Повторение» в конце раздела (#46, #81) ----------
+
+/** Что стоит на дороге раздела: урок или узел курса 3.0. */
+export type PathItem =
+  | { kind: "lesson"; ref: LessonRef }
+  /** «Практика» после группы (не последней в разделе). */
+  | { kind: "practice"; group: CourseGroup }
+  /** «Повторение» в конце раздела — перед контрольной. */
+  | { kind: "recap"; unitId: string };
+
+/** Узел курса 3.0 (не урок). */
+export type NodeItem = Exclude<PathItem, { kind: "lesson" }>;
+
+export interface PathItemsOpts {
+  /** Группы раздела (по умолчанию — из content/groups). */
+  groups?: CourseGroup[];
+  /** Урок можно тренировать: готов и у его навыков есть банк (по умолчанию — по курсу). */
+  trainable?: (ref: LessonRef) => boolean;
+}
+
+const defaultTrainable = (ref: LessonRef): boolean => ref.status === "available" && skillsOfLessons([ref.id]).length > 0;
+
+/**
+ * Дорога раздела: уроки по порядку карты; после каждой не последней группы — «Практика» (если в группе есть готовый
+ * урок с банком); в конце раздела — «Повторение» (если есть хоть один такой урок). Узлы ничего не блокируют.
+ */
+export function unitPathItems(unit: Unit, opts: PathItemsOpts = {}): PathItem[] {
+  const groups = opts.groups ?? unitGroups(unit);
+  const trainable = opts.trainable ?? defaultTrainable;
+  const refs = new Map(unit.lessons.map((r) => [r.id, r]));
+  const groupOf = new Map<string, CourseGroup>();
+  for (const g of groups) for (const id of g.lessons) groupOf.set(id, g);
+  const items: PathItem[] = [];
+  const closeGroup = (g: CourseGroup | undefined) => {
+    if (g && !g.last && g.lessons.some((id) => refs.has(id) && trainable(refs.get(id)!))) items.push({ kind: "practice", group: g });
+  };
+  let prev: CourseGroup | undefined;
+  for (const ref of unit.lessons) {
+    const g = groupOf.get(ref.id);
+    if (g !== prev) closeGroup(prev);
+    items.push({ kind: "lesson", ref });
+    prev = g;
+  }
+  closeGroup(prev);
+  if (unit.lessons.some(trainable)) items.push({ kind: "recap", unitId: unit.id });
+  return items;
+}
+
+/** id узла в сторе (`courseNodes`); у урока узла нет. */
+export function pathItemNodeId(item: PathItem): string | undefined {
+  if (item.kind === "practice") return practiceNodeId(item.group);
+  if (item.kind === "recap") return recapNodeId(item.unitId);
+  return undefined;
+}
+
+/** Уроки, к которым относится узел: группы («Практика») или всего раздела («Повторение»). */
+export function nodeLessonRefs(item: PathItem, unit: Pick<Unit, "lessons">): LessonRef[] {
+  if (item.kind === "lesson") return [item.ref];
+  if (item.kind === "recap") return unit.lessons;
+  const ids = new Set(item.group.lessons);
+  return unit.lessons.filter((r) => ids.has(r.id));
+}
+
+/** Пройденность каждого элемента дороги: урок — по своему состоянию, узел — `nodeDone` (для отрезков дороги). */
+export function pathPassed(items: PathItem[], lessonPassed: (ref: LessonRef) => boolean, nodes: Record<string, CourseNodeStat | undefined>): boolean[] {
+  return items.map((it) => (it.kind === "lesson" ? lessonPassed(it.ref) : nodeDone(nodes[pathItemNodeId(it)!])));
+}
+
+export type NodeKindState = "done" | "recommended" | "available";
+
+/**
+ * Состояние узла: пройден (хотя бы раз); рекомендуется — когда все готовые уроки узла пройдены, а сам узел ещё нет;
+ * иначе доступен (узлы ничего не блокируют).
+ */
+export function practiceNodeState(refs: LessonRef[], lessons: Record<string, LessonStat>, node: CourseNodeStat | undefined): NodeKindState {
+  if (nodeDone(node)) return "done";
+  const ready = refs.filter((r) => r.status === "available");
+  return ready.length > 0 && ready.every((r) => isPassedStat(lessons[r.id])) ? "recommended" : "available";
 }

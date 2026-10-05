@@ -1,23 +1,42 @@
 "use client";
 
 import { BookOpen, GraduationCap } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import type { Unit } from "@/lib/types";
 import type { LessonStat } from "@/lib/review";
 import type { SkillStat } from "@/lib/mastery";
 import { LESSONS, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { ENTRY_COST } from "@/lib/economy";
+import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
-import { averageMastery, canExtern, isPassed, nodeState, pathLayout, pluralForm, segmentDone, unitProgress, unitSkillIds } from "./map";
+import {
+  averageMastery,
+  canExtern,
+  isPassed,
+  nodeLessonRefs,
+  nodeState,
+  pathItemNodeId,
+  pathLayout,
+  pathPassed,
+  practiceNodeState,
+  pluralForm,
+  segmentDone,
+  unitPathItems,
+  unitProgress,
+  unitSkillIds,
+  type NodeItem,
+} from "./map";
 import { unitVars } from "./useLearn";
 import { UnitArt } from "./UnitArt";
 import { LessonNode } from "./LessonNode";
 import { CheckpointNode } from "./CheckpointNode";
+import { PracticeNode } from "./PracticeNode";
+import { PracticeSheet } from "./PracticeSheet";
 
 // Раздел на карте = «местность»: шапка с иллюстрацией, прогрессом и освоением + извилистая дорога через уроки.
 
@@ -91,10 +110,14 @@ function UnitSectionImpl({
   onOpen: (lessonId: string) => void;
 }) {
   const { l } = useT();
+  const courseNodes = useApp((s) => s.courseNodes);
+  const [sheet, setSheet] = useState<NodeItem | null>(null);
+  // Дорога раздела: уроки и узлы «Практика» (после группы) и «Повторение» (в конце раздела), этап 14.
+  const items = useMemo(() => unitPathItems(unit), [unit]);
   // Соседние разделы начинают змейку с разных сторон.
-  const layout = useMemo(() => pathLayout(unit.lessons.length, index % 2 ? 3 : 0), [unit.lessons.length, index]);
-  const states = unit.lessons.map((ref) => nodeState(ref, lessons[ref.id], recommendedId, now));
-  const passed = states.map(isPassed);
+  const layout = useMemo(() => pathLayout(items.length, index % 2 ? 3 : 0), [items.length, index]);
+  const lessonStates = new Map(unit.lessons.map((ref) => [ref.id, nodeState(ref, lessons[ref.id], recommendedId, now)]));
+  const passed = pathPassed(items, (ref) => isPassed(lessonStates.get(ref.id)!), courseNodes);
   const rest = layout.segments.filter((s) => !segmentDone(s, passed)).map((s) => s.d).join("");
   const done = layout.segments.filter((s) => segmentDone(s, passed)).map((s) => s.d).join("");
   // Широкая «обочина» — только между уроками (вход и выход к мостику — тонким пунктиром).
@@ -118,21 +141,34 @@ function UnitSectionImpl({
           {rest && <path d={rest} stroke="var(--border)" strokeWidth={7} strokeDasharray="1 14" />}
           {done && <path d={done} stroke="var(--u)" strokeWidth={9} />}
         </svg>
-        {unit.lessons.map((ref, i) => (
-          <LessonNode
-            key={ref.id}
-            node={layout.nodes[i]}
-            index={i}
-            number={lessonNumber(ref.id)}
-            lesson={ref}
-            state={states[i]}
-            completions={lessons[ref.id]?.completions ?? 0}
-            onOpen={() => onOpen(ref.id)}
-          />
-        ))}
+        {items.map((it, i) =>
+          it.kind === "lesson" ? (
+            <LessonNode
+              key={it.ref.id}
+              node={layout.nodes[i]}
+              index={i}
+              number={lessonNumber(it.ref.id)}
+              lesson={it.ref}
+              state={lessonStates.get(it.ref.id)!}
+              completions={lessons[it.ref.id]?.completions ?? 0}
+              onOpen={() => onOpen(it.ref.id)}
+            />
+          ) : (
+            <PracticeNode
+              key={pathItemNodeId(it)}
+              node={layout.nodes[i]}
+              index={i}
+              item={it}
+              title={l(it.kind === "practice" ? it.group.title : unit.title)}
+              state={practiceNodeState(nodeLessonRefs(it, unit), lessons, courseNodes[pathItemNodeId(it)!])}
+              onOpen={() => setSheet(it)}
+            />
+          ),
+        )}
       </div>
       {/* Контрольная раздела — после последнего урока (нет готовых уроков или заданий — узла нет). */}
       <CheckpointNode unit={unit} lessons={lessons} />
+      <PracticeSheet item={sheet} unit={unit} unitIndex={index} onClose={() => setSheet(null)} />
     </section>
   );
 }
