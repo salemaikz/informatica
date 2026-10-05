@@ -104,15 +104,30 @@ export interface UnitSkills {
   skills: { id: SkillId; hasBank: boolean }[];
 }
 
-/** Навыки, сгруппированные по разделам курса (пустые разделы не возвращаются). */
+/**
+ * Навык только школьных уроков (этап 15): без темы ЕНТ и ни в одном готовом уроке карты ЕНТ. В разделах курса ЕНТ
+ * его не показываем (он попал бы в последний раздел «Как решать ЕНТ»); его тренируют со школьной карты.
+ */
+export function isSchoolOnlySkill(skill: SkillId): boolean {
+  if (SKILLS.find((s) => s.id === skill)?.ent) return false;
+  if (UNITS.some((u) => readyLessons(u).some((l) => l.skills.includes(skill)))) return false;
+  return Object.values(LESSONS).some((l) => l.school && l.skills.includes(skill));
+}
+
+/** Навыки, сгруппированные по разделам курса (пустые разделы не возвращаются; навыки только школьных уроков — нет). */
 export function skillsByUnit(): UnitSkills[] {
   const groups = new Map<string, UnitSkills>(UNITS.map((u) => [u.id, { unit: u, skills: [] }]));
-  for (const s of SKILLS) groups.get(unitOfSkill(s.id).id)!.skills.push({ id: s.id, hasBank: hasBank(s.id) });
+  for (const s of SKILLS) {
+    if (isSchoolOnlySkill(s.id)) continue;
+    groups.get(unitOfSkill(s.id).id)?.skills.push({ id: s.id, hasBank: hasBank(s.id) });
+  }
   return [...groups.values()].filter((g) => g.skills.length > 0);
 }
 
 /** Следующий готовый урок курса после текущего: сначала ещё не пройденный, иначе просто следующий. Null — урок последний. */
 export function nextLessonId(lessonId: string, done: Record<string, LessonStat> = {}): string | null {
+  // Школьный урок (этап 15) — не на карте ЕНТ: «следующий урок» с карты ЕНТ увёл бы школьника в ЕНТ.
+  if (LESSONS[lessonId]?.school) return null;
   const ready = UNITS.flatMap((u) => u.lessons).filter((r) => r.status === "available" && LESSONS[r.id]);
   const idx = ready.findIndex((r) => r.id === lessonId);
   const after = idx >= 0 ? ready.slice(idx + 1) : ready;

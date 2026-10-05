@@ -118,7 +118,8 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
 }
 
 function skillAnswers(skills: Record<string, SkillStat>): number {
-  const known = new Set(SKILLS.map((s) => s.id));
+  // Только навыки ЕНТ: ответы по школьным урокам (навык без темы ЕНТ, этап 15) прогноз ЕНТ не двигают.
+  const known = new Set(SKILLS.filter((s) => s.ent).map((s) => s.id));
   return Object.entries(skills).reduce((acc, [id, s]) => acc + (known.has(id) ? attemptsOf(s) : 0), 0);
 }
 

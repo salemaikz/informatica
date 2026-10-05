@@ -64,12 +64,14 @@ async function load<T>(rel: string, exportName: string): Promise<T | undefined> 
 
 async function main() {
   const knownSkills = new Set(SKILLS.map((s) => s.id));
-  const unit = UNITS.find((u) => u.lessons.some((l) => l.id === id));
-  if (!unit) err(`урока ${id} нет в UNITS (src/content/course.ts)`);
-  const ref = unit?.lessons.find((l) => l.id === id);
-
   // ---------- Урок ----------
   const lesson = await load<Lesson>(`src/content/lessons/${id}.ts`, "lesson");
+  // Школьный урок (этап 15): не на карте ЕНТ, без заданий ЕНТ; навыки — без темы ЕНТ, банк — свой.
+  const school = !!lesson?.school;
+  const unit = UNITS.find((u) => u.lessons.some((l) => l.id === id));
+  if (!unit && !school) err(`урока ${id} нет в UNITS (src/content/course.ts)`);
+  if (unit && school) err(`школьный урок ${id} не должен стоять на карте ЕНТ (UNITS)`);
+  const ref = unit?.lessons.find((l) => l.id === id);
   if (!lesson) {
     err(`нет файла src/content/lessons/${id}.ts с export const lesson`);
   } else {
@@ -86,7 +88,11 @@ async function main() {
     if (lesson.conspect.ru.length < 300 || lesson.conspect.kk.length < 300) err("конспект короче 300 символов");
     // Микроурок (этап 14): навык общий с родительским уроком — у навыка уже должен быть банк.
     if (lesson.micro) for (const s of lesson.skills) if (!bankFor(s)) err(`микроурок: у навыка ${s} нет банка (навык должен быть общим с родительским уроком)`);
-    if (!lesson.entTopics?.length) warn("не указаны entTopics");
+    if (school) {
+      if (lesson.unitId !== "school") err(`школьный урок: unitId = ${lesson.unitId}, ожидается school`);
+      if (lesson.entTopics?.length) err("школьный урок: entTopics не нужны");
+      for (const s of lesson.skills) if (SKILLS.find((k) => k.id === s)?.ent) err(`школьный урок: у навыка ${s} не должно быть темы ЕНТ (ent)`);
+    } else if (!lesson.entTopics?.length) warn("не указаны entTopics");
     const questions = lesson.steps.filter(isQuestion) as QuestionStep[];
     if (questions.length < 4) err(`заданий ${questions.length} — нужно минимум 4`);
     if (lesson.micro) {
@@ -104,7 +110,8 @@ async function main() {
       if (!q.level) warn(`${q.id}: нет level`);
       if (!q.skill) err(`${q.id}: нет skill`);
     }
-    if (!questions.some((q) => q.ent)) err("нет ни одного задания с ent: true");
+    if (school && questions.some((q) => q.ent)) err("школьный урок: пометка ent: true не нужна");
+    if (!school && !questions.some((q) => q.ent)) err("нет ни одного задания с ent: true");
     const infoTypes = new Set(lesson.steps.filter((s) => !isQuestion(s)).map((s) => s.type));
     if (!infoTypes.has("worked")) warn("нет пошагового разбора (worked)");
     if (!infoTypes.has("story")) warn("нет ситуации (story) в начале");
@@ -184,9 +191,9 @@ async function main() {
   }
 
   // ---------- Задания ЕНТ ----------
-  const items = micro ? undefined : await load<EntItem[]>(`src/content/ent/${id}.ts`, "ITEMS");
-  if (micro) {
-    // пропускаем
+  const items = micro || school ? undefined : await load<EntItem[]>(`src/content/ent/${id}.ts`, "ITEMS");
+  if (micro || school) {
+    // пропускаем: микроурок — навык общий с родительским, школьный урок — без заданий ЕНТ
   } else if (!items) {
     err(`нет файла src/content/ent/${id}.ts с export const ITEMS`);
   } else {

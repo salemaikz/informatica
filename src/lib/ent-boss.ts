@@ -1,6 +1,6 @@
 import { ENT_POOL } from "@/content/ent";
 import { readKindOf } from "./code-read";
-import { entRef, entStepFromRef } from "./ent-steps";
+import { entRef, entStepFromRef, parseEntRef } from "./ent-steps";
 import { REVIEW_LESSON_RE } from "./lesson-size";
 import { shuffleEntItem } from "./exam";
 import { isQuestion } from "./evaluate";
@@ -54,6 +54,13 @@ const isReview = (item: EntItem): boolean => {
   return k !== null && REVIEW_KINDS.includes(k);
 };
 
+/** В уроке уже есть задание ЕНТ «где ошибка / что поменять / что вставить / зачем строка» (повторный вызов ничего не добавит). */
+const hasReviewStep = (lesson: Lesson, pool: readonly EntItem[]): boolean =>
+  lesson.steps.some((s) => {
+    const parsed = parseEntRef(s.id, pool);
+    return !!parsed && parsed.n === undefined && isReview(parsed.item);
+  });
+
 /** Куда вставлять: сразу после последнего задания ЕНТ, а если таких нет — перед хвостом из шагов без ответа. */
 export function entBossIndex(steps: readonly Step[]): number {
   let lastEnt = -1;
@@ -74,7 +81,7 @@ export function entBossIndex(steps: readonly Step[]): number {
  * если добавлять нечего (задание уже есть или в банке нет подходящего) — возвращается тот же объект.
  */
 export function withEntBoss(lesson: Lesson, pool: readonly EntItem[] = ENT_POOL): Lesson {
-  if (lesson.micro) return lesson;
+  if (lesson.micro || lesson.school) return lesson;
   const taken = new Set(lesson.steps.map((s) => s.id));
   const add: Step[] = [];
 
@@ -88,7 +95,7 @@ export function withEntBoss(lesson: Lesson, pool: readonly EntItem[] = ENT_POOL)
     const step = item && item.options.length === 6 ? bossStep(lesson, item) : undefined;
     if (step) add.push(step);
   }
-  if (REVIEW_LESSON_RE.test(lesson.id)) {
+  if (REVIEW_LESSON_RE.test(lesson.id) && !hasReviewStep(lesson, pool)) {
     const item = pickFor(lesson, pool.filter((i): i is EntSingle => i.kind === "single" && isReview(i)), taken);
     const step = item && bossStep(lesson, item);
     if (step) add.push(step);

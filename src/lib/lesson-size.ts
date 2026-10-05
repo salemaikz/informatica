@@ -14,8 +14,8 @@ const NO_ENT_SKILLS: readonly string[] = ["ent.strategy"];
  */
 export const REVIEW_LESSON_RE = /^(py|algo|db|data|web)-/;
 
-export function lessonStepCount(lesson: Pick<Lesson, "id" | "steps" | "micro" | "skills">): number {
-  if (lesson.micro || lesson.skills.every((s) => NO_ENT_SKILLS.includes(s))) return lesson.steps.length;
+export function lessonStepCount(lesson: Pick<Lesson, "id" | "steps" | "micro" | "school" | "skills">): number {
+  if (lesson.micro || lesson.school || lesson.skills.every((s) => NO_ENT_SKILLS.includes(s))) return lesson.steps.length;
   const match = lesson.steps.some((s) => s.type === "entmatch") ? 0 : 1;
   const multi = lesson.steps.some(isEntMulti) ? 0 : 1;
   const review = REVIEW_LESSON_RE.test(lesson.id) ? 1 : 0;
