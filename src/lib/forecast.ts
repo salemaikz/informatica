@@ -58,6 +58,12 @@ export const DIAGNOSTIC_MARGIN = 8;
  * прогноз остаётся диагностическим. 30 — граница, до которой интервал по навыкам тоже ±8 (`forecastMargin`).
  */
 export const DIAGNOSTIC_UNTIL_ANSWERS = 30;
+/**
+ * Тема считается «натренированной», когда по её навыкам набралось столько ответов. До этого её вклад в прогноз
+ * по навыкам берётся из диагностики (если она была), а не ноль — иначе после 30 ответов прогноз обваливался
+ * (непройденные темы давали 0).
+ */
+export const TOPIC_PRACTICE_MIN = 5;
 
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
 
@@ -76,6 +82,13 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
     const sum = ids.reduce((acc, s) => acc + (attemptsOf(skills[s.id]) ? clamp01(skills[s.id].mastery) : 0), 0);
     out[t] = sum / ids.length;
   }
+  return out;
+}
+
+/** Ответов по навыкам каждой темы. */
+function topicAnswers(skills: Record<string, SkillStat>): Record<EntTopicId, number> {
+  const out = Object.fromEntries(TOPIC_IDS.map((t) => [t, 0])) as Record<EntTopicId, number>;
+  for (const s of SKILLS) if (s.ent && s.ent in out) out[s.ent as EntTopicId] += attemptsOf(skills[s.id]);
   return out;
 }
 
@@ -113,9 +126,15 @@ export function forecastFromDiagnostic(d: DiagnosticSummary | null | undefined):
 }
 
 export function forecastScore(input: ForecastInput): Forecast {
-  const mastery = topicMastery(input.skills);
   const masteryAnswers = skillAnswers(input.skills);
   const hasMastery = masteryAnswers > 0;
+  const diagnostic = forecastFromDiagnostic(input.diagnostic);
+  // Освоение по темам; тема, которую почти не тренировали, — по диагностике (плавный переход, без обвала прогноза).
+  const mastery = topicMastery(input.skills);
+  if (diagnostic) {
+    const perTopic = topicAnswers(input.skills);
+    for (const t of TOPIC_IDS) if (perTopic[t] < TOPIC_PRACTICE_MIN) mastery[t] = diagnostic.byTopic[t];
+  }
   const masteryScore = TOPIC_IDS.reduce((s, t) => s + topicWeight(t) * mastery[t], 0) * MAX_SCORE;
 
   // Последние 3 попытки: новее — весомее (3, 2, 1) и ещё затухание по возрасту.
@@ -136,7 +155,7 @@ export function forecastScore(input: ForecastInput): Forecast {
   const examAnswers = used.reduce((s, x) => s + Math.round(x.e.maxPoints * QUESTIONS_PER_POINT), 0);
 
   // Диагностика — только пока нет пробников и ответов по навыкам набралось мало (посеянные диагностикой — тоже «мало»).
-  const diag = !hasExams && masteryAnswers < DIAGNOSTIC_UNTIL_ANSWERS ? forecastFromDiagnostic(input.diagnostic) : null;
+  const diag = !hasExams && masteryAnswers < DIAGNOSTIC_UNTIL_ANSWERS ? diagnostic : null;
   if (diag) return { score: diag.score, low: diag.low, high: diag.high, basis: "diagnostic", answers: Math.round(input.diagnostic!.max), byTopic: diag.byTopic };
 
   const basis: ForecastBasis = hasMastery && hasExams ? "both" : hasExams ? "exams" : hasMastery ? "mastery" : "none";

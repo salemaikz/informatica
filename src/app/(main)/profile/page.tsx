@@ -15,6 +15,7 @@ import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
+import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
 import { Row, Segmented } from "@/components/goals/controls";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
@@ -143,6 +144,8 @@ export default function ProfilePage() {
       </Card>
 
       <LevelCard />
+      {/* % курса (у школьника — % класса, #71) */}
+      <CourseProgressBadge />
 
       {/* Цели */}
       {/* Тариф: бесплатный / Лайт / Безлимит (пробный) */}

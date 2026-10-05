@@ -10,6 +10,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { MascotSays } from "@/components/mascot/Mascot";
 import { QuickActions } from "@/components/learn/QuickActions";
 import { ContinueCard } from "@/components/learn/ContinueCard";
+import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
 import { PlanCard } from "@/components/plan/PlanCard";
 import { ViewSwitch, useMapView } from "@/components/learn/ViewSwitch";
 import { PathView } from "@/components/learn/PathView";
@@ -80,6 +81,8 @@ export default function LearnPage() {
         <SchoolMap />
       ) : (
         <>
+          {/* «Пройдено X% курса» (#71): одна строка, ведёт в «Прогресс». */}
+          <CourseProgressBadge />
           <ContinueCard
             target={hero}
             kind={recommended ? "next" : "due"}

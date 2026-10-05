@@ -258,7 +258,12 @@ describe("прогноз по входной диагностике (#70)", () =
     const enough = { [SKILLS[0].id]: stat(0.45, DIAGNOSTIC_UNTIL_ANSWERS) };
     const f = forecastScore({ skills: enough, exams: [], now: NOW, diagnostic: diag(ALL, 1) });
     expect(f.basis).toBe("mastery");
-    expect(f.score).toBeLessThan(10);
+    // Натренирована одна тема (её навык — 0,45), остальные — по диагностике (всё верно): без обвала прогноза.
+    const t0 = SKILLS[0].ent!;
+    expect(f.byTopic[t0]).toBeLessThan(0.5);
+    expect(f.score).toBeGreaterThan(40);
+    // Без диагностики непройденные темы — 0.
+    expect(forecastScore({ skills: enough, exams: [], now: NOW }).score).toBeLessThan(10);
   });
 
   it("диагностики нет, пустая или мусор — как раньше", () => {
@@ -277,5 +282,24 @@ describe("прогноз по входной диагностике (#70)", () =
     expect(f.basis).toBe("diagnostic");
     expect(f.score).toBe(25);
     for (const v of [f.score, f.low, f.high, f.answers, ...Object.values(f.byTopic)]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe("прогноз после диагностики: без обвала на 30 ответах", () => {
+  it("непройденные темы берутся из диагностики, а не нулём", async () => {
+    const { forecastScore, DIAGNOSTIC_UNTIL_ANSWERS } = await import("@/lib/forecast");
+    const { SKILLS } = await import("@/content/skills");
+    const diagnostic = { at: 1, points: 6, max: 10, byTopic: { t04: { points: 2, max: 2 }, t05: { points: 1, max: 2 } } };
+    // 40 ответов по одному навыку темы t04 — данных навыков уже больше порога диагностики
+    const skill = SKILLS.find((s) => s.ent === "t04")!.id;
+    const skills = { [skill]: { attempts: DIAGNOSTIC_UNTIL_ANSWERS + 10, correct: 30, mastery: 0.8, lastSeen: 1 } };
+    const before = forecastScore({ skills: {}, exams: [], now: 2, diagnostic });
+    const after = forecastScore({ skills, exams: [], now: 2, diagnostic });
+    const without = forecastScore({ skills, exams: [], now: 2 });
+    expect(before.basis).toBe("diagnostic");
+    expect(after.basis).toBe("mastery");
+    // без диагностики непройденные темы — 0, прогноз низкий; с диагностикой — близко к прежнему
+    expect(without.score).toBeLessThan(5);
+    expect(Math.abs(after.score - before.score)).toBeLessThanOrEqual(6);
   });
 });
