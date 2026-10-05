@@ -49,7 +49,7 @@ const { createMemoryKv, kzDay } = await import("@/server/kv");
 const { POST } = await import("@/app/api/ai/tutor/route");
 const { crisisReply } = await import("@/lib/safety");
 const { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, splitStreamTail } = await import("@/lib/ai-stream");
-const { MAX_TOKENS } = await import("@/server/openai");
+const { INPUT_BUDGET, MAX_TOKENS } = await import("@/server/openai");
 const { maxDuration } = await import("@/app/api/ai/tutor/route");
 const { aiDict } = await import("@/i18n/parts/ai");
 
@@ -340,6 +340,79 @@ describe("токены и вес запроса", () => {
     expect(sent.reduce((a, m) => a + m.content.length, 0)).toBeLessThanOrEqual(8000);
     expect(Math.max(...sent.map((m) => m.content.length))).toBeLessThanOrEqual(2000);
     expect(sent[sent.length - 1].content).toBe("последний вопрос");
+  });
+});
+
+describe("бюджет входа одного запроса (v0.9.1)", () => {
+  const logLine = (needle: string) => vi.mocked(console.info).mock.calls.map((c) => String(c[0])).find((l) => l.includes(needle));
+  /** Текст всего, что ушло в модель. */
+  const sentChars = () =>
+    (create.mock.calls[0][0].messages as { content: unknown }[]).reduce((a, m) => a + (typeof m.content === "string" ? m.content.length : 0), 0);
+  const heavyContext = () => ({
+    lang: "ru",
+    name: "Т".repeat(40),
+    grade: "9",
+    goal: "ent",
+    style: "steps",
+    weak: Array.from({ length: 8 }, () => "а".repeat(60)),
+    strong: Array.from({ length: 8 }, () => "б".repeat(60)),
+    mistakes: Array.from({ length: 6 }, () => ({ q: "в".repeat(220), given: "г".repeat(80), expected: "д".repeat(80) })),
+    memory: "м".repeat(1500),
+    notes: "н".repeat(800),
+    lessons: Array.from({ length: 20 }, () => "у".repeat(80)),
+  });
+
+  it("обычный чат: вход не обрезан, в логе расхода есть chars", async () => {
+    create.mockImplementation(() => fakeStream(["ок"]));
+    await (await POST(post(chatBody("Что такое бит?")))).text();
+    const line = logLine("route=tutor:chat model=") ?? "";
+    expect(line).toMatch(/in=10 out=5 chars=\d+$/);
+    expect(Number(/chars=(\d+)/.exec(line)![1])).toBe(sentChars());
+    expect(line).not.toContain("trimmed");
+  });
+
+  it("тяжёлый чат (большой контекст и длинная история): в модель уходит не больше 16 000 символов, последний вопрос цел", async () => {
+    create.mockImplementation(() => fakeStream(["ок"]));
+    const long = "я".repeat(2000);
+    const messages = [...Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: long })), { role: "user", content: "последний вопрос ".repeat(100) }];
+    await (await POST(post({ mode: "chat", messages, context: heavyContext() }))).text();
+    expect(sentChars()).toBeLessThanOrEqual(INPUT_BUDGET.tutor);
+    const sent = create.mock.calls[0][0].messages as { role: string; content: string }[];
+    expect(sent[sent.length - 1]).toEqual({ role: "user", content: "последний вопрос ".repeat(100).slice(0, 2000) });
+    // правила целы: общая часть промпта и строки про стек на месте, память наставника и заметки ужаты последними из необязательного
+    expect(sent[0].content).toContain("Ты — Бит, ИИ-помощник платформы Informatica.");
+    expect(sent[0].content).toContain("Не говори лишнего");
+    const line = logLine("route=tutor:chat model=") ?? "";
+    expect(line).toMatch(/chars=\d+ trimmed=1$/);
+    expect(Number(/chars=(\d+)/.exec(line)![1])).toBe(sentChars());
+  });
+
+  it("чат с фото: тот же бюджет текста, изображение в него не входит", async () => {
+    create.mockImplementation(() => fakeStream(["ок"]));
+    const image = `data:image/png;base64,${"A".repeat(30_000)}`;
+    const long = "я".repeat(2000);
+    const messages = [...Array.from({ length: 6 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: long })), { role: "user", content: "проверь" }];
+    await (await POST(post({ mode: "chat", chatMode: "check", messages, image, context: heavyContext() }))).text();
+    expect(sentChars()).toBeLessThanOrEqual(INPUT_BUDGET.tutor);
+    const sent = create.mock.calls[0][0].messages as { role: string; content: unknown }[];
+    expect(JSON.stringify(sent[sent.length - 1].content)).toContain("image_url");
+  });
+
+  it("подсказка с потолочным заданием (кэшируемый путь): обращение к модели в бюджете, в логе chars", async () => {
+    create.mockResolvedValue({ choices: [{ message: { content: "Подумай о степенях двойки." }, finish_reason: "stop" }], usage: { prompt_tokens: 9, completion_tokens: 4 } });
+    const task = {
+      prompt: "в".repeat(600),
+      options: Array.from({ length: 8 }, (_, i) => `${i}`.repeat(120)),
+      correct: "5".repeat(200),
+      explanation: "э".repeat(800),
+      theory: "т".repeat(1500),
+      hint: "п".repeat(500),
+    };
+    const res = await POST(post({ mode: "hint", messages: [], context: heavyContext(), task }));
+    expect(res.status).toBe(200);
+    expect(sentChars()).toBeLessThanOrEqual(INPUT_BUDGET.tutor);
+    const line = logLine("route=tutor:hint chars=") ?? "";
+    expect(Number(/chars=(\d+)/.exec(line)![1])).toBe(sentChars());
   });
 });
 

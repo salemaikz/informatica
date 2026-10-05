@@ -19,7 +19,7 @@ vi.mock("@/server/openai", async (importOriginal) => {
 const { createMemoryKv, kzDay } = await import("@/server/kv");
 const check = await import("@/app/api/ai/check-solution/route");
 const feedback = await import("@/app/api/ai/lesson-feedback/route");
-const { MAX_TOKENS } = await import("@/server/openai");
+const { INPUT_BUDGET, MAX_TOKENS } = await import("@/server/openai");
 
 let ipN = 0;
 const freshIp = () => `10.3.${Math.floor(++ipN / 250)}.${ipN % 250}`;
@@ -74,6 +74,30 @@ describe("POST /api/ai/check-solution — страж лимитов", () => {
     expect(MAX_TOKENS.check).toBeLessThan(2500);
     // таймаут вызова короче maxDuration маршрута
     expect((create.mock.calls[0][1] as { timeout: number }).timeout).toBe((check.maxDuration - 5) * 1000);
+  });
+
+  it("бюджет входа: сообщения собраны как раньше (текст / фото), в логе расхода chars, потолочные поля ≤ INPUT_BUDGET.check", async () => {
+    create.mockResolvedValue(reply(good));
+    const logLine = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[ai] route=check-solution"));
+    await check.POST(post("/api/ai/check-solution", body));
+    const [sys, usr] = create.mock.calls[0][0].messages as { role: string; content: unknown }[];
+    expect(sys.role).toBe("system");
+    expect(usr).toEqual({ role: "user", content: "101" });
+    expect(logLine()[0]).toMatch(new RegExp(`in=5 out=5 chars=${(sys.content as string).length + 3}$`));
+
+    const image = `data:image/png;base64,${"A".repeat(40)}`;
+    await check.POST(post("/api/ai/check-solution", { ...body, typedAnswer: "", image }));
+    const photo = (create.mock.calls[1][0].messages as { content: unknown }[])[1];
+    expect(photo.content).toEqual([
+      { type: "text", text: "Моё решение:" },
+      { type: "image_url", image_url: { url: image, detail: "high" } },
+    ]);
+
+    const heavy = { lang: "kk", context: {}, task: { prompt: "в".repeat(900), reference: "э".repeat(3000), answer: "о".repeat(300) }, typedAnswer: "т".repeat(300) };
+    await check.POST(post("/api/ai/check-solution", heavy));
+    const sent = create.mock.calls[2][0].messages as { content: string }[];
+    expect(sent.reduce((a, m) => a + m.content.length, 0)).toBeLessThanOrEqual(INPUT_BUDGET.check);
+    expect(logLine()[2]).not.toContain("trimmed");
   });
 
   it("ошибка до вызова модели возвращает обращения: битый JSON, нет условия, ИИ не настроен", async () => {
@@ -168,6 +192,40 @@ describe("POST /api/ai/lesson-feedback — бесплатно для устро�
     expect(third.status).toBe(429);
     expect(await code(third)).toBe("daily_limit");
     expect(create.mock.calls[0][0].max_completion_tokens).toBe(MAX_TOKENS.feedback);
+  });
+
+  it("бюджет входа: тяжёлый контекст и сводка ужимаются до INPUT_BUDGET.feedback, память наставника цела, в логе chars и trimmed", async () => {
+    create.mockResolvedValue(reply(good));
+    const memory = "м".repeat(1500);
+    const heavy = {
+      context: {
+        lang: "ru",
+        name: "Т".repeat(40),
+        weak: Array.from({ length: 8 }, () => "а".repeat(60)),
+        strong: Array.from({ length: 8 }, () => "б".repeat(60)),
+        mistakes: Array.from({ length: 6 }, () => ({ q: "в".repeat(220), given: "г".repeat(80), expected: "д".repeat(80) })),
+        memory,
+        notes: "н".repeat(800),
+        lessons: Array.from({ length: 20 }, () => "у".repeat(80)),
+      },
+      lesson: "Системы счисления",
+      accuracy: 0.4,
+      durationSec: 900,
+      mistakes: Array.from({ length: 10 }, () => ({ q: "ч".repeat(300), given: "г".repeat(100), expected: "д".repeat(100) })),
+      skills: Array.from({ length: 10 }, () => ({ title: "н".repeat(80), mastery: 0.5 })),
+    };
+    expect((await feedback.POST(post("/api/ai/lesson-feedback", heavy))).status).toBe(200);
+    const sent = create.mock.calls[0][0].messages as { role: string; content: string }[];
+    expect(sent.reduce((a, m) => a + m.content.length, 0)).toBeLessThanOrEqual(INPUT_BUDGET.feedback);
+    expect(sent[0].content).toContain(memory);
+    expect(sent[1].content).toContain("Ошибки:\n- «");
+    const line = vi.mocked(console.info).mock.calls.map((c) => String(c[0])).find((l) => l.startsWith("[ai] route=lesson-feedback")) ?? "";
+    expect(line).toMatch(/chars=\d+ trimmed=1$/);
+
+    // обычный запрос: ничего не ужато
+    await feedback.POST(post("/api/ai/lesson-feedback", body));
+    const small = vi.mocked(console.info).mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[ai] route=lesson-feedback"))[1];
+    expect(small).toMatch(/chars=\d+$/);
   });
 
   it("ошибка до вызова модели и HTTP-ошибка OpenAI возвращают счёт", async () => {
