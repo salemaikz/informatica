@@ -1,4 +1,4 @@
-import type { EntItem, L, Scene, Step, Text } from "@/lib/types";
+import type { EntItem, L, ReadKind, Scene, Step, Text } from "@/lib/types";
 import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
 import { isKnownKey } from "@/components/scenes/keyboard";
@@ -143,6 +143,8 @@ export function validateScene(scene: Scene): string[] {
   return errors;
 }
 
+const READ_KIND_LIST: readonly ReadKind[] = ["output", "bug", "fix", "fill", "purpose", "schema"];
+
 /** Проблемы задания ЕНТ (пустой список — задание корректно). */
 export function validateEnt(item: EntItem): string[] {
   const errors: string[] = [];
@@ -151,6 +153,22 @@ export function validateEnt(item: EntItem): string[] {
   need(/^[a-z0-9-]+:[a-z0-9-]+$/.test(item.id), "id вида <урок>:<имя> (латиница, цифры, дефис)");
   need([1, 2, 3].includes(item.level), "level 1|2|3");
   if (item.scene) errors.push(...validateScene(item.scene).map((e) => `${item.id}: ${e}`));
+  // «Чтение кода» (#87): известный вид; у обычного задания есть что читать; у «где ошибка» строка с ошибкой не подсвечена.
+  const readOk = (r: ReadKind | undefined) => r === undefined || READ_KIND_LIST.includes(r);
+  if (item.kind !== "context" && item.read) {
+    need(readOk(item.read), `read — один из ${READ_KIND_LIST.join(", ")}`);
+    const sc = item.scene?.kind;
+    need(
+      sc === "code" || sc === "web" || sc === "flow" || sc === "table" || /`[^`]+`/.test(item.prompt.ru),
+      "read: нужен материал для чтения — сцена code/web/flow/table или `код` в условии",
+    );
+  }
+  if (item.kind !== "context" && (item.read === "bug" || item.read === "fix")) {
+    need(!(item.scene?.kind === "code" && item.scene.marks?.length), "read bug/fix: не подсвечивай строку с ошибкой (marks выдают ответ)");
+  }
+  if (item.kind === "context") {
+    for (const q of item.questions) need(readOk(q.read), `${q.id}: read — один из ${READ_KIND_LIST.join(", ")}`);
+  }
   if (item.kind === "context") {
     need(filledL(item.text), "text ru/kk");
     need(item.questions.length === 5, "ровно 5 вопросов");

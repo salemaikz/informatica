@@ -5,14 +5,19 @@
 import { ENT_POOL } from "@/content/ent";
 import type { EntItem } from "./types";
 import { poolTag } from "./challenge";
+import { readKindOf } from "./code-read";
 
-/** Версия алгоритма сборки варианта. 2 — подпись задания вместо одного id. */
-export const EXAM_BUILD_VERSION = 2;
+/** Версия алгоритма сборки варианта. 2 — подпись задания вместо одного id; 3 — квота заданий «на чтение кода» (#87). */
+export const EXAM_BUILD_VERSION = 3;
 
-/** Подпись задания для тега: всё, от чего зависят выбор в вариант и перемешивание (id, вид, тема, уровень, число вариантов). */
+/**
+ * Подпись задания для тега: всё, от чего зависят выбор в вариант и перемешивание (id, вид, тема, уровень, число вариантов,
+ * вид «чтения» — квота #87).
+ */
 export function itemSignature(i: EntItem): string {
   const n = i.kind === "context" ? i.questions.map((q) => q.options.length).join(".") : i.kind === "match" ? `${i.items.length}x${i.choices.length}` : String(i.options.length);
-  return `${i.id}:${i.kind}:${i.topic}:${i.level}:${n}`;
+  const read = i.kind === "context" ? "" : `:${readKindOf(i) ?? "-"}`;
+  return `${i.id}:${i.kind}:${i.topic}:${i.level}:${n}${read}`;
 }
 
 let cached: string | null = null;

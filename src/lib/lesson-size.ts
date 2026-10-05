@@ -8,10 +8,16 @@ import type { Lesson, Step } from "./types";
 const isEntMulti = (s: Step): boolean => s.type === "multi" && !!s.ent && s.options.length === 6;
 /** Навыки без заданий ЕНТ в банке: урок о стратегии сам экзаменационных заданий не даёт. */
 const NO_ENT_SKILLS: readonly string[] = ["ent.strategy"];
+/**
+ * Уроки, куда «босс» добавляет «чтение кода» (#87): программирование, алгоритмы, БД и SQL, электронные таблицы, веб.
+ * В банке ЕНТ каждого такого урока есть single «где ошибка / что поменять / что вставить / зачем строка».
+ */
+export const REVIEW_LESSON_RE = /^(py|algo|db|data|web)-/;
 
-export function lessonStepCount(lesson: Pick<Lesson, "steps" | "micro" | "skills">): number {
+export function lessonStepCount(lesson: Pick<Lesson, "id" | "steps" | "micro" | "skills">): number {
   if (lesson.micro || lesson.skills.every((s) => NO_ENT_SKILLS.includes(s))) return lesson.steps.length;
   const match = lesson.steps.some((s) => s.type === "entmatch") ? 0 : 1;
   const multi = lesson.steps.some(isEntMulti) ? 0 : 1;
-  return lesson.steps.length + match + multi;
+  const review = REVIEW_LESSON_RE.test(lesson.id) ? 1 : 0;
+  return lesson.steps.length + match + multi + review;
 }

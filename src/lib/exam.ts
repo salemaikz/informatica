@@ -1,7 +1,8 @@
 import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_TOPICS } from "@/content/ent-topics";
+import { isReadItem, leastUsedRead, readKindOf, readTarget, UNIT_READ_MIN_POOL, UNIT_READ_SHARE } from "./code-read";
 import { matchPoints, multiPoints } from "./ent";
 import { hashString, seeded, shuffle } from "./text";
-import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Level, Text } from "./types";
+import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Level, ReadKind, Text } from "./types";
 
 // Пробный ЕНТ: сборка варианта из банка, подсчёт баллов, советы по результату.
 // Чистая логика без React. Формат ЕНТ — docs/ENT.md, раздел 1.
@@ -273,10 +274,22 @@ function planFlexible(
   return { plan, notes };
 }
 
-function nearestLevelPick<T extends { level: Level }>(cands: T[], want: Level, rand: () => number): T {
+/**
+ * Задание ближайшего уровня. readUsed — слот «на чтение» (#87): среди равных по уровню берём вид чтения, который
+ * в варианте встречался реже (вывод, ошибка, исправление, пропуск — а не три «что выведет» подряд).
+ */
+function nearestLevelPick<T extends EntItem>(cands: T[], want: Level, rand: () => number, readUsed?: ReadonlyMap<ReadKind, number>): T {
   const best = Math.min(...cands.map((c) => Math.abs(c.level - want)));
-  const tied = cands.filter((c) => Math.abs(c.level - want) === best);
+  let tied = cands.filter((c) => Math.abs(c.level - want) === best);
+  if (readUsed) tied = leastUsedRead(tied, readUsed);
   return tied[Math.floor(rand() * tied.length)];
+}
+
+/** Учесть вид «чтения» выбранного задания. */
+function countRead(item: EntItem, readUsed: Map<ReadKind, number>): boolean {
+  const k = readKindOf(item);
+  if (k) readUsed.set(k, (readUsed.get(k) ?? 0) + 1);
+  return k !== null;
 }
 
 function expand(item: EntItem): ExamQuestion[] {
@@ -361,14 +374,21 @@ function buildUnitExam(opts: BuildExamOpts): ExamPaper {
     const min = Math.min(...cands.map((c) => skillUse.get(c.skill) ?? 0));
     return cands.filter((c) => (skillUse.get(c.skill) ?? 0) === min);
   };
+  // «Чтение кода» (#87): в практическом разделе (заданий «на чтение» ≥ 20%) не меньше половины single — они.
+  const readPool = plain.filter(isReadItem).length;
+  let readLeft = plain.length && readPool / plain.length >= UNIT_READ_MIN_POOL ? Math.ceil(n.single * UNIT_READ_SHARE) : 0;
+  const readUsed = new Map<ReadKind, number>();
   const chosen: Record<PlainKind, UnitPlain[]> = { single: [], multi: [], match: [] };
   for (const k of PLAIN_KINDS) {
     for (const level of levelPlan(n[k], rand)) {
-      const cands = plain.filter((i) => i.kind === k && !used.has(i.id));
+      let cands = plain.filter((i) => i.kind === k && !used.has(i.id));
       if (!cands.length) break;
-      const picked = nearestLevelPick(least(cands), level, rand);
+      const reads = k === "single" && readLeft > 0 ? cands.filter(isReadItem) : [];
+      if (reads.length) cands = reads;
+      const picked = nearestLevelPick(least(cands), level, rand, reads.length ? readUsed : undefined);
       used.add(picked.id);
       bump(picked.skill);
+      if (countRead(picked, readUsed) && k === "single") readLeft--;
       chosen[k].push(picked);
     }
   }
@@ -478,12 +498,21 @@ export function buildExam(opts: BuildExamOpts): ExamPaper {
     }
     return n;
   };
+  // «Чтение кода» (#87): в практических темах (Python, алгоритмы, БД, SQL, таблицы, веб) доля слотов — только задания
+  // «на чтение» (что выведет, где ошибка, что поменять, что вставить, где ключ); слоты single идут первыми.
+  const slotsPerTopic = new Map<EntTopicId, number>();
+  for (const s of slots) slotsPerTopic.set(s.topic, (slotsPerTopic.get(s.topic) ?? 0) + 1);
+  const readLeft = new Map<EntTopicId, number>([...slotsPerTopic].map(([t, n]) => [t, readTarget(t, n)]));
+  const readUsed = new Map<ReadKind, number>();
   const chosen: Record<PlainKind, EntItem[]> = { single: [], multi: [], match: [] };
   const take = (s: Slot, topic: EntTopicId) => {
-    const c = plain.filter((i) => i.kind === s.kind && i.topic === topic && !used.has(i.id));
-    const picked = c.length ? nearestLevelPick(c, s.level, rand) : null;
+    let c = plain.filter((i) => i.kind === s.kind && i.topic === topic && !used.has(i.id));
+    const reads = (readLeft.get(topic) ?? 0) > 0 ? c.filter(isReadItem) : [];
+    if (reads.length) c = reads;
+    const picked = c.length ? nearestLevelPick(c, s.level, rand, reads.length ? readUsed : undefined) : null;
     if (picked) {
       used.add(picked.id);
+      if (countRead(picked, readUsed)) readLeft.set(topic, (readLeft.get(topic) ?? 0) - 1);
       chosen[s.kind].push(picked);
     }
     return picked;
