@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AI_DAILY_CAP } from "@/lib/economy";
 
 vi.mock("server-only", () => ({}));
 
@@ -53,9 +54,11 @@ afterEach(() => {
 });
 
 describe("числа лимитов из env", () => {
-  it("по умолчанию: устройство 100, IP 1000, сайт 3000, новых устройств с IP 300 (школьный Wi-Fi), бесплатных 30", () => {
-    expect(readLimits({})).toEqual({ deviceDaily: 100, ipDaily: 1000, siteDaily: 3000, newDevicesPerIp: 300, freeDeviceDaily: 30 });
-    expect(AI_LIMIT_DEFAULTS.deviceDaily).toBe(100);
+  it("по умолчанию: устройство 65, IP 1000, сайт 3000, новых устройств с IP 300 (школьный Wi-Fi), бесплатных 30", () => {
+    expect(readLimits({})).toEqual({ deviceDaily: 65, ipDaily: 1000, siteDaily: 3000, newDevicesPerIp: 300, freeDeviceDaily: 30 });
+    expect(AI_LIMIT_DEFAULTS.deviceDaily).toBe(65);
+    // тот же потолок, что на клиенте у всех тарифов (правка v0.9.1)
+    for (const cap of Object.values(AI_DAILY_CAP)) expect(cap).toBe(AI_LIMIT_DEFAULTS.deviceDaily);
     expect(AI_LIMIT_DEFAULTS.newDevicesPerIp).toBe(300);
   });
 
@@ -214,7 +217,7 @@ describe("новые устройства с одного IP", () => {
 });
 
 describe("потолки в обращениях", () => {
-  it("устройство: AI_DEVICE_DAILY_UNITS в сутки (по умолчанию 100); следующее — 429 daily_limit с той же cookie; другое устройство не задето", async () => {
+  it("устройство: AI_DEVICE_DAILY_UNITS в сутки (по умолчанию 65); следующее — 429 daily_limit с той же cookie; другое устройство не задето", async () => {
     // Всплеск (20 запросов tutor за 10 минут с устройства) — отдельная защита; здесь проверяем дневной потолок на малом числе.
     vi.stubEnv("AI_DEVICE_DAILY_UNITS", "15");
     const ip = freshIp();
@@ -232,7 +235,18 @@ describe("потолки в обращениях", () => {
     expect((await guardAi(req({ ip: freshIp() }), { route: "tutor", units: 1 })).ok).toBe(true);
   });
 
-  it("вес запроса: фото — 2, голос — 4; на 99 из 100 фото не помещается, подсказка помещается", async () => {
+  it("по умолчанию устройству — 65 обращений в сутки: ровно 65 проходят, 66-е — 429 daily_limit", async () => {
+    const ip = freshIp();
+    const { cookie } = await newDevice(ip, 13); // 13
+    for (let i = 0; i < 4; i++) expect((await guardAi(req({ ip, cookie }), { route: "tutor", units: 13 })).ok).toBe(true); // до 65
+    const over = await guardAi(req({ ip, cookie }), { route: "tutor", units: 1 });
+    expect(over.ok).toBe(false);
+    if (over.ok) return;
+    expect(over.response.status).toBe(429);
+    expect(await bodyCode(over.response)).toBe("daily_limit");
+  });
+
+  it("вес запроса: фото — 2, голос — 4; при лимите 10 после трёх фото подсказка уже не помещается", async () => {
     vi.stubEnv("AI_DEVICE_DAILY_UNITS", "10");
     const ip = freshIp();
     const { cookie } = await newDevice(ip, 4); // голос: 4

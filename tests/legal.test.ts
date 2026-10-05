@@ -338,8 +338,10 @@ describe("правовые документы", () => {
     expect(kk).toContain("ЖИ-ге күніне жүгіну саны шектелген — кез келген тарифте ең көбі 65 жүгіну; дайын кеңестер мен талдаулар шектеусіз.");
     // Вес обращений — как в коде (AI_UNITS): фото и «Разбор от Бита» одинаково, голос дороже.
     expect(AI_UNITS.review).toBe(AI_UNITS.photo);
-    expect(ru).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${AI_UNITS.voice}`);
-    expect(kk).toContain(`${AI_UNITS.photo} жүгіну, дауыспен қойылған сұрақ ${AI_UNITS.voice} жүгіну`);
+    // Голосовой вопрос = распознавание (voice) + ответ в чате (chat).
+    const voiceTotal = AI_UNITS.voice + AI_UNITS.chat;
+    expect(ru).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${voiceTotal} (${AI_UNITS.voice} — распознавание голоса и ${AI_UNITS.chat} — ответ)`);
+    expect(kk).toContain(`${AI_UNITS.photo} жүгіну, дауыспен қойылған сұрақ ${voiceTotal} жүгіну (${AI_UNITS.voice} — дауысты тану, ${AI_UNITS.chat} — жауап)`);
     // Своих потолков у тарифов в документах нет, ИИ «без ограничений» не обещаем.
     for (const doc of docs) {
       expect(fullText(doc, "ru"), doc.id).not.toMatch(/до (?:50|100)\b|неограниченн|безгранично|без лимита/i);

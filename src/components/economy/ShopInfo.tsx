@@ -3,7 +3,7 @@
 import { BadgeCheck, BookOpen, Bot, Camera, Cpu, GraduationCap, Lightbulb, MessageCircle, Mic, Sparkles, Target, Trophy, Wand2, Zap, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { AI_COST, AI_DAILY_CAP, CHIP_BONUS, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { AI_COST, CHIP_BONUS, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -87,7 +87,7 @@ export function AiPricing() {
           <Sparkles size={24} />
         </IconTile>
         <div className="min-w-0 flex-1">
-          <p className="font-extrabold leading-tight">{unlimited ? t("shop.ai.unlimited", { n: AI_DAILY_CAP.unlimited }) : t("shop.ai.freeLeft", { n: freeLeft, max })}</p>
+          <p className="font-extrabold leading-tight">{unlimited ? t("shop.ai.unlimited") : t("shop.ai.freeLeft", { n: freeLeft, max })}</p>
           {!unlimited && <ProgressBar value={max > 0 ? freeLeft / max : 0} color="var(--ai)" height={10} className="mt-2" label={t("shop.ai.title")} />}
         </div>
       </div>
