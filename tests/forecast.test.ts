@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_POINTS, ENT_TOPICS, ORDINARY_COUNT, topicTaskShare, topicWeight } from "@/content/ent-topics";
 import { SKILLS } from "@/content/skills";
-import { forecastMargin, forecastScore, topicMastery, type ForecastExam } from "@/lib/forecast";
+import { DIAGNOSTIC_MARGIN, DIAGNOSTIC_UNTIL_ANSWERS, forecastFromDiagnostic, forecastMargin, forecastScore, topicMastery, type ForecastExam } from "@/lib/forecast";
 import type { SkillStat } from "@/lib/mastery";
+import type { DiagnosticSummary } from "@/lib/store";
 import type { EntTopicId } from "@/lib/types";
 
 const NOW = 1_800_000_000_000;
@@ -187,6 +188,94 @@ describe("forecastScore: данные из сохранения", () => {
     expect(f.score).toBe(50);
     expect(f.byTopic.t01).toBe(0);
     expect(f.byTopic.t02).toBe(1);
+    for (const v of [f.score, f.low, f.high, f.answers, ...Object.values(f.byTopic)]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe("прогноз по входной диагностике (#70)", () => {
+  /** Диагностика: на каждой из перечисленных тем одинаковая доля верных. */
+  const diag = (topics: EntTopicId[], ratio: number, per = 2): DiagnosticSummary => ({
+    at: NOW,
+    points: topics.length * per * ratio,
+    max: topics.length * per,
+    byTopic: Object.fromEntries(topics.map((t) => [t, { points: per * ratio, max: per }])) as DiagnosticSummary["byTopic"],
+  });
+  const ALL: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
+
+  it("нет навыков и пробников — basis diagnostic; все верно по всем темам — 50, все неверно — 0", () => {
+    const full = forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: diag(ALL, 1) });
+    expect(full).toMatchObject({ basis: "diagnostic", score: 50, high: 50 });
+    expect(full.low).toBe(50 - DIAGNOSTIC_MARGIN);
+    const zero = forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: diag(ALL, 0) });
+    expect(zero).toMatchObject({ basis: "diagnostic", score: 0, low: 0, high: DIAGNOSTIC_MARGIN });
+  });
+
+  it("диапазон ±8, обрезан 0..50; ответов — столько же, сколько заданий диагностики", () => {
+    const f = forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: diag(ALL, 0.5) });
+    expect(f.score).toBe(25);
+    expect(f.low).toBe(17);
+    expect(f.high).toBe(33);
+    expect(f.answers).toBe(ALL.length * 2);
+    expect(DIAGNOSTIC_MARGIN).toBe(8);
+  });
+
+  it("баллы по темам с весами topicWeight: верна только t06 из шести тем диагностики", () => {
+    const six: EntTopicId[] = ["t03", "t04", "t05", "t06", "t07", "t10"];
+    const d: DiagnosticSummary = {
+      at: NOW,
+      points: 2,
+      max: 12,
+      byTopic: Object.fromEntries(six.map((t) => [t, { points: t === "t06" ? 2 : 0, max: 2 }])) as DiagnosticSummary["byTopic"],
+    };
+    const f = forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: d });
+    // Оценённые темы — шесть, среднее 1/6; неоценённые получают его же.
+    const mean = 1 / 6;
+    const expected = ENT_TOPICS.reduce((s, t) => s + topicWeight(t.id) * (t.id === "t06" ? 1 : six.includes(t.id) ? 0 : mean), 0) * 50;
+    expect(f.score).toBe(Math.round(expected));
+    expect(f.byTopic.t06).toBe(1);
+    expect(f.byTopic.t03).toBe(0);
+    expect(f.byTopic.t12).toBeCloseTo(mean, 3);
+  });
+
+  it("неоценённые темы — по среднему оценённых", () => {
+    const f = forecastFromDiagnostic({ at: NOW, points: 3, max: 4, byTopic: { t03: { points: 2, max: 2 }, t04: { points: 1, max: 2 } } });
+    expect(f).not.toBeNull();
+    expect(f!.byTopic.t03).toBe(1);
+    expect(f!.byTopic.t04).toBe(0.5);
+    expect(f!.byTopic.t13).toBe(0.75);
+    expect(f!.byTopic.t01).toBe(0.75);
+  });
+
+  it("как только есть пробник — диагностика не используется", () => {
+    const f = forecastScore({ skills: {}, exams: [exam(20, 1)], now: NOW, diagnostic: diag(ALL, 1) });
+    expect(f.basis).toBe("exams");
+    expect(f.score).toBe(20);
+  });
+
+  it("мало ответов по навыкам (посеянные диагностикой тоже) — всё ещё диагностика; набралось — навыки", () => {
+    const few = { [SKILLS[0].id]: stat(0.45, DIAGNOSTIC_UNTIL_ANSWERS - 1) };
+    expect(forecastScore({ skills: few, exams: [], now: NOW, diagnostic: diag(ALL, 1) }).basis).toBe("diagnostic");
+    const enough = { [SKILLS[0].id]: stat(0.45, DIAGNOSTIC_UNTIL_ANSWERS) };
+    const f = forecastScore({ skills: enough, exams: [], now: NOW, diagnostic: diag(ALL, 1) });
+    expect(f.basis).toBe("mastery");
+    expect(f.score).toBeLessThan(10);
+  });
+
+  it("диагностики нет, пустая или мусор — как раньше", () => {
+    expect(forecastScore({ skills: {}, exams: [], now: NOW }).basis).toBe("none");
+    expect(forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: null }).basis).toBe("none");
+    expect(forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: { at: NOW, points: 0, max: 0, byTopic: {} } }).basis).toBe("none");
+    const junk = { at: NOW, points: NaN, max: 10, byTopic: {} } as unknown as DiagnosticSummary;
+    expect(forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: junk }).basis).toBe("none");
+    // навыки без диагностики: mastery, как раньше
+    expect(forecastScore({ skills: allSkills(1), exams: [], now: NOW }).basis).toBe("mastery");
+  });
+
+  it("мусор в byTopic не даёт NaN; нет оценённых тем — берётся общая доля", () => {
+    const junk = { at: NOW, points: 5, max: 10, byTopic: { t03: { points: NaN, max: 2 }, t04: { points: 1, max: 0 } } } as unknown as DiagnosticSummary;
+    const f = forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: junk });
+    expect(f.basis).toBe("diagnostic");
+    expect(f.score).toBe(25);
     for (const v of [f.score, f.low, f.high, f.answers, ...Object.values(f.byTopic)]) expect(Number.isFinite(v)).toBe(true);
   });
 });

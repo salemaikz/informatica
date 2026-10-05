@@ -286,6 +286,10 @@ function expand(item: EntItem): ExamQuestion[] {
   return [{ key: item.id, item, maxPoints: item.kind === "single" ? 1 : 2 }];
 }
 
+// Помощники для входной диагностики (lib/diagnostic.ts): те же соседние темы и развёртка задания, что у пробника.
+// Только экспорт — поведение buildExam не меняется.
+export { neighbors as neighborTopics, expand as expandEntItem };
+
 // ---------- Контрольная по разделу ----------
 
 type UnitPlain = Exclude<EntItem, EntContext>;

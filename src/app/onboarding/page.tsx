@@ -1,59 +1,58 @@
 "use client";
 
-import clsx from "clsx";
-import { BookOpen, ChevronLeft, Laptop, Rocket, Lightbulb, ListOrdered, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronLeft, Target, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { ExplainStyle, Goal, Grade, Lang } from "@/lib/types";
+import type { Lang, Track } from "@/lib/types";
+import { track } from "@/lib/analytics";
+import { TARGET_CHOICES, isExamDateValid } from "@/lib/goals";
+import { toSchoolGrade } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import { markLangChosen } from "@/lib/guest-lang";
 import { requestPersistentStorage } from "@/lib/safe-storage";
+import { cn } from "@/lib/cn";
+import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MascotSays } from "@/components/mascot/Mascot";
 import { LegalConsentNote } from "@/components/legal/LegalConsentNote";
+import { useNow } from "@/components/economy/useEconomy";
+import { GradePicker } from "@/components/school/GradePicker";
 
-const GRADES: Grade[] = ["5", "6", "7", "8", "9", "10", "11", "other"];
-const GOALS: { id: Goal; icon: LucideIcon; key: DictKey }[] = [
-  { id: "ent", icon: Target, key: "goal.ent" },
-  { id: "school", icon: BookOpen, key: "goal.school" },
-  { id: "interest", icon: Lightbulb, key: "goal.interest" },
-];
-/** «С чего начнём?»: с нуля (раздел «Старт» первым) или сразу к темам ЕНТ (profile.skipBasics). */
-const BASICS: { skip: boolean; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
-  { skip: false, icon: Laptop, key: "onb.basics.zero", desc: "onb.basics.zero.desc" },
-  { skip: true, icon: Rocket, key: "onb.basics.know", desc: "onb.basics.know.desc" },
-];
-const STYLES: { id: ExplainStyle; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
-  { id: "short", icon: Zap, key: "style.short", desc: "style.short.desc" },
-  { id: "examples", icon: Puzzle, key: "style.examples", desc: "style.examples.desc" },
-  { id: "steps", icon: ListOrdered, key: "style.steps", desc: "style.steps.desc" },
+// Короткий онбординг (#70): язык → имя → ЕНТ или школа → (ЕНТ) дата → (ЕНТ) цель | (школа) класс. Остальное — по умолчанию, меняется в профиле.
+// Экранов: у ЕНТ — 5, у школы — 4. «Поехали» — кнопка последнего экрана (под ней — согласие с условиями).
+
+type StepId = "lang" | "name" | "track" | "date" | "target" | "grade";
+const STEPS: Record<Track, StepId[]> = {
+  ent: ["lang", "name", "track", "date", "target"],
+  school: ["lang", "name", "track", "grade"],
+};
+
+const TRACKS: { id: Track; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
+  { id: "ent", icon: Target, key: "onb.track.ent", desc: "onb.track.ent.desc" },
+  { id: "school", icon: BookOpen, key: "onb.track.school", desc: "onb.track.school.desc" },
 ];
 
 function ChoiceIcon({ icon: Icon, selected }: { icon: LucideIcon; selected: boolean }) {
   return (
-    <span className={clsx("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", selected ? "bg-primary text-white" : "bg-primary-soft text-primary")}>
+    <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", selected ? "bg-primary text-white" : "bg-primary-soft text-primary")}>
       <Icon size={22} strokeWidth={2.4} />
     </span>
   );
 }
-const DAILY: { xp: number; key: DictKey; min: number }[] = [
-  { xp: 20, key: "daily.20", min: 5 },
-  { xp: 50, key: "daily.50", min: 10 },
-  { xp: 100, key: "daily.100", min: 20 },
-];
 
-function Choice({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+function Choice({ selected, onClick, className, children }: { selected: boolean; onClick: () => void; className?: string; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={clsx(
-        "flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left font-bold transition-colors active:translate-y-[2px]",
+      className={cn(
+        "flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left font-bold transition-colors active:translate-y-[2px] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
         selected ? "border-primary bg-primary-soft text-primary shadow-[0_3px_0_var(--primary)]" : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
+        className,
       )}
     >
       {children}
@@ -67,24 +66,77 @@ export default function OnboardingPage() {
   const updateProfile = useApp((s) => s.updateProfile);
   const completeOnboarding = useApp((s) => s.completeOnboarding);
   const profile = useApp((s) => s.profile);
+  const now = useNow();
+  const today = now > 0 ? todayKey(new Date(now)) : "";
+
   const [step, setStep] = useState(0);
   const [name, setName] = useState(profile.name);
+  /** Трек выбран на этом экране (до выбора ничего не подсвечено, хотя в профиле по умолчанию «ЕНТ»). */
+  const [trackPicked, setTrackPicked] = useState<Track | null>(null);
+  const [examDate, setExamDate] = useState("");
+  const [dateUnknown, setDateUnknown] = useState(false);
+  const [target, setTarget] = useState<number | null>(null);
+  const [targetUnknown, setTargetUnknown] = useState(false);
 
-  const total = 7;
-  const canNext = step !== 1 || name.trim().length > 0;
+  const trackNow: Track = profile.track === "school" ? "school" : "ent";
+  const steps = STEPS[trackNow];
+  const stepId = steps[Math.min(step, steps.length - 1)];
+  const isLast = step >= steps.length - 1;
+  const dateOk = isExamDateValid(examDate, today);
 
-  const next = () => {
-    if (step === 1) updateProfile({ name: name.trim().slice(0, 30) });
-    if (step < total - 1) setStep(step + 1);
-    else {
-      // Цель «школа» — школьный трек, остальные — подготовка к ЕНТ.
-      completeOnboarding({ name: name.trim().slice(0, 30), track: profile.goal === "school" ? "school" : "ent" });
-      // Просим браузер не стирать данные сайта — из нажатия кнопки, иначе Firefox на компьютере покажет окно «из ниоткуда».
-      requestPersistentStorage();
-      // Сразу после онбординга — окно тарифов (один показ учитывается в статистике).
+  const canNext =
+    stepId === "name"
+      ? name.trim().length > 0
+      : stepId === "date"
+        ? dateUnknown || dateOk
+        : stepId === "target"
+          ? target !== null || targetUnknown
+          : stepId === "grade"
+            ? toSchoolGrade(profile.grade) !== null
+            : true;
+
+  /** Аналитика (#69): шаг пройден. Имя шага — обезличенное, без введённых данных. */
+  const passed = (id: StepId) => track({ e: "onb_step", step: id });
+
+  const finish = () => {
+    const ent = trackNow === "ent";
+    const cleanName = name.trim().slice(0, 30);
+    if (ent) {
+      completeOnboarding({
+        name: cleanName,
+        track: "ent",
+        goal: "ent",
+        grade: "11",
+        examDate: !dateUnknown && dateOk ? examDate : null,
+        // «Пока не знаю» — targetScore остаётся значением по умолчанию, но цель не считается выбранной.
+        ...(target !== null ? { targetScore: target } : {}),
+        targetScoreSet: target !== null,
+      });
+    } else {
+      completeOnboarding({ name: cleanName, track: "school", goal: "school", examDate: null, targetScoreSet: false });
+    }
+    track({ e: "onb_done", track: trackNow });
+    // Просим браузер не стирать данные сайта — из нажатия кнопки, иначе Firefox на компьютере покажет окно «из ниоткуда».
+    requestPersistentStorage();
+    if (ent) {
+      // ЕНТ: сначала входная диагностика (окно тарифов — после неё или её пропуска).
+      router.replace("/diagnostic?from=onboarding");
+    } else {
+      // Школа: сразу окно тарифов (один показ учитывается в статистике).
       useApp.getState().notePaywallShown();
       router.replace("/plans?from=onboarding");
     }
+  };
+
+  const next = () => {
+    if (!canNext) return;
+    if (isLast) {
+      finish();
+      return;
+    }
+    if (stepId === "name") updateProfile({ name: name.trim().slice(0, 30) });
+    passed(stepId);
+    setStep(step + 1);
   };
 
   const setLang = (lang: Lang) => {
@@ -95,7 +147,24 @@ export default function OnboardingPage() {
     } catch {
       // хранилище недоступно (доступ к window.localStorage бросает) — выбор остаётся только в профиле
     }
+    passed("lang");
     setStep(1);
+  };
+
+  const pickTrack = (tr: Track) => {
+    // ЕНТ — 11 класс по умолчанию; школа — класс выбирается на следующем экране (при смене трека сбрасываем).
+    if (tr === "ent") updateProfile({ goal: "ent", track: "ent", grade: "11" });
+    else updateProfile({ goal: "school", track: "school", ...(profile.track !== "school" ? { grade: "other" as const } : {}) });
+    setTrackPicked(tr);
+    passed("track");
+    setStep(step + 1);
+  };
+
+  const skipDate = () => {
+    setDateUnknown(true);
+    setExamDate("");
+    passed("date");
+    setStep(step + 1);
   };
 
   return (
@@ -104,16 +173,16 @@ export default function OnboardingPage() {
         <button
           type="button"
           onClick={() => setStep(Math.max(0, step - 1))}
-          className={clsx("flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2", step === 0 && "invisible")}
+          className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2", step === 0 && "invisible")}
           aria-label={t("common.back")}
         >
           <ChevronLeft size={26} />
         </button>
-        <ProgressBar value={(step + 1) / total} color="var(--primary)" className="flex-1" />
+        <ProgressBar value={(step + 1) / steps.length} color="var(--primary)" className="flex-1" label={t("onb.step", { n: step + 1, total: steps.length })} />
       </div>
 
-      <div key={step} className="flex flex-1 flex-col gap-6 pt-6 animate-fade-in">
-        {step === 0 && (
+      <div key={stepId} className="flex flex-1 flex-col gap-6 pt-6 animate-fade-in">
+        {stepId === "lang" && (
           <>
             <MascotSays mood="happy" size={88}>
               <span className="block">Привет! Сәлем!</span>
@@ -135,7 +204,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 1 && (
+        {stepId === "name" && (
           <>
             <MascotSays mood="happy" size={88}>
               <span className="block">{t("onb.hello")}</span>
@@ -145,102 +214,111 @@ export default function OnboardingPage() {
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && canNext && next()}
+              onKeyDown={(e) => e.key === "Enter" && next()}
               placeholder={t("onb.name.placeholder")}
+              aria-label={t("onb.name.title")}
               maxLength={30}
               className="h-14 rounded-2xl border-2 border-border bg-surface px-4 text-xl font-bold outline-none focus:border-primary"
             />
           </>
         )}
 
-        {step === 2 && (
+        {stepId === "track" && (
+          <>
+            <MascotSays size={88}>{t("onb.track.title")}</MascotSays>
+            <div className="flex flex-col gap-3">
+              {TRACKS.map((tr) => (
+                <Choice key={tr.id} selected={trackPicked === tr.id} onClick={() => pickTrack(tr.id)}>
+                  <ChoiceIcon icon={tr.icon} selected={trackPicked === tr.id} />
+                  <span>
+                    <span className="block text-lg">{t(tr.key)}</span>
+                    <span className="block text-sm font-semibold text-muted">{t(tr.desc)}</span>
+                  </span>
+                </Choice>
+              ))}
+            </div>
+          </>
+        )}
+
+        {stepId === "grade" && (
           <>
             <MascotSays size={88}>{t("onb.grade.title")}</MascotSays>
-            <div className="grid grid-cols-2 gap-3">
-              {GRADES.map((g) => (
-                <Choice key={g} selected={profile.grade === g} onClick={() => updateProfile({ grade: g })}>
-                  <span className="w-full text-center text-lg">{g === "other" ? t("onb.grade.other") : t("onb.grade.n", { n: g })}</span>
-                </Choice>
-              ))}
-            </div>
+            <GradePicker />
+            <p className="text-center text-sm font-semibold text-muted">{t("onb.grade.hint")}</p>
           </>
         )}
 
-        {step === 3 && (
-          <>
-            <MascotSays size={88}>{t("onb.goal.title")}</MascotSays>
-            <div className="flex flex-col gap-3">
-              {GOALS.map((g) => (
-                <Choice key={g.id} selected={profile.goal === g.id} onClick={() => updateProfile({ goal: g.id, track: g.id === "school" ? "school" : "ent" })}>
-                  <ChoiceIcon icon={g.icon} selected={profile.goal === g.id} />
-                  <span className="text-lg">{t(g.key)}</span>
-                </Choice>
-              ))}
-            </div>
-          </>
-        )}
-
-        {step === 4 && (
+        {stepId === "date" && (
           <>
             <MascotSays mood="thinking" size={88}>
-              {t("onb.basics.title")}
+              {t("onb.date.title")}
             </MascotSays>
             <div className="flex flex-col gap-3">
-              {BASICS.map((b) => (
-                <Choice key={String(b.skip)} selected={profile.skipBasics === b.skip} onClick={() => updateProfile({ skipBasics: b.skip })}>
-                  <ChoiceIcon icon={b.icon} selected={profile.skipBasics === b.skip} />
-                  <span>
-                    <span className="block text-lg">{t(b.key)}</span>
-                    <span className="block text-sm font-semibold text-muted">{t(b.desc)}</span>
-                  </span>
-                </Choice>
-              ))}
+              <input
+                type="date"
+                value={examDate}
+                min={today || undefined}
+                onChange={(e) => {
+                  setExamDate(e.target.value);
+                  setDateUnknown(false);
+                }}
+                aria-label={t("onb.date.label")}
+                aria-invalid={examDate !== "" && !dateOk}
+                className="h-14 w-full rounded-2xl border-2 border-border bg-surface px-4 text-xl font-bold outline-none focus:border-primary"
+              />
+              {examDate !== "" && !dateOk && today !== "" && <p className="text-sm font-bold text-warning-strong">{t("onb.date.past")}</p>}
+              <Choice selected={dateUnknown} onClick={skipDate} className="justify-center text-center">
+                <span className="text-lg">{t("onb.unknown")}</span>
+              </Choice>
+              <p className="text-center text-sm font-semibold text-muted">{t("onb.date.hint")}</p>
             </div>
           </>
         )}
 
-        {step === 5 && (
-          <>
-            <MascotSays mood="thinking" size={88}>
-              {t("onb.style.title")}
-            </MascotSays>
-            <div className="flex flex-col gap-3">
-              {STYLES.map((s) => (
-                <Choice key={s.id} selected={profile.style === s.id} onClick={() => updateProfile({ style: s.id })}>
-                  <ChoiceIcon icon={s.icon} selected={profile.style === s.id} />
-                  <span>
-                    <span className="block text-lg">{t(s.key)}</span>
-                    <span className="block text-sm font-semibold text-muted">{t(s.desc)}</span>
-                  </span>
-                </Choice>
-              ))}
-            </div>
-          </>
-        )}
-
-        {step === 6 && (
+        {stepId === "target" && (
           <>
             <MascotSays mood="happy" size={88}>
-              {t("onb.daily.title")}
+              {t("onb.target.title")}
             </MascotSays>
             <div className="flex flex-col gap-3">
-              {DAILY.map((d) => (
-                <Choice key={d.xp} selected={profile.dailyGoalXp === d.xp} onClick={() => updateProfile({ dailyGoalXp: d.xp })}>
-                  <span className="flex-1 text-lg">{t(d.key)}</span>
-                  <span className="text-sm font-bold text-muted">{t("daily.desc", { xp: d.xp, min: d.min })}</span>
-                </Choice>
-              ))}
+              <div className="grid grid-cols-5 gap-2" role="group" aria-label={t("onb.target.title")}>
+                {TARGET_CHOICES.map((n) => (
+                  <Choice
+                    key={n}
+                    selected={target === n}
+                    onClick={() => {
+                      setTarget(n);
+                      setTargetUnknown(false);
+                    }}
+                    className="h-16 justify-center gap-0 px-0 py-0 text-center"
+                  >
+                    <span className="text-2xl">{n}</span>
+                  </Choice>
+                ))}
+              </div>
+              <p className="text-center text-sm font-bold text-muted">{t("onb.target.of")}</p>
+              <Choice
+                selected={targetUnknown}
+                onClick={() => {
+                  setTargetUnknown(true);
+                  setTarget(null);
+                }}
+                className="justify-center text-center"
+              >
+                <span className="text-lg">{t("onb.unknown")}</span>
+              </Choice>
+              <p className="text-center text-sm font-semibold text-muted">{t("onb.target.hint")}</p>
             </div>
           </>
         )}
       </div>
 
-      {step > 0 && (
+      {stepId !== "lang" && stepId !== "track" && (
         <Button size="lg" block disabled={!canNext} onClick={next} className="mt-6">
-          {step === total - 1 ? t("onb.finish") : t("common.continue")}
+          {isLast ? t("onb.finish") : t("common.continue")}
         </Button>
       )}
-      {step === total - 1 && <LegalConsentNote className="mt-3" />}
+      {isLast && <LegalConsentNote className="mt-3" />}
     </div>
   );
 }

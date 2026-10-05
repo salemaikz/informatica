@@ -19,10 +19,16 @@ export function useWeekData() {
   return useMemo(() => weekProgress(days, weeklyLessons, today), [days, weeklyLessons, today]);
 }
 
-/** Всё, что нужно карточке и панели целей: дни до ЕНТ, прогноз, статус против цели, неделя. */
+/**
+ * Всё, что нужно карточке и панели целей: дни до ЕНТ, прогноз, статус против цели, неделя.
+ * Прогноз учитывает входную диагностику (пока нет пробников и ответов по навыкам); цель «пока не выбрана»
+ * (`targetScoreSet` = false) — без статуса и разрыва до цели.
+ */
 export function useGoalData() {
   const examDate = useApp((s) => s.profile.examDate);
   const targetScore = useApp((s) => s.profile.targetScore);
+  const targetScoreSet = useApp((s) => s.profile.targetScoreSet);
+  const diagnostic = useApp((s) => s.profile.diagnostic);
   const skills = useApp((s) => s.skills);
   const exams = useApp((s) => s.exams);
   const week = useWeekData();
@@ -31,15 +37,18 @@ export function useGoalData() {
   const today = todayKey(new Date(now || 0));
 
   return useMemo(() => {
-    const forecast = forecastScore({ skills, exams, now });
+    const forecast = forecastScore({ skills, exams, now, diagnostic });
     return {
       today,
       examDate,
       targetScore,
+      targetScoreSet,
+      /** Итог входной диагностики: нужен кнопке «Пройти диагностику заново». */
+      diagnostic,
       daysLeft: daysUntil(examDate, today),
       forecast,
-      goal: goalStatus(forecast, targetScore),
+      goal: goalStatus(forecast, targetScore, targetScoreSet),
       week,
     };
-  }, [skills, exams, week, examDate, targetScore, now, today]);
+  }, [skills, exams, diagnostic, week, examDate, targetScore, targetScoreSet, now, today]);
 }
