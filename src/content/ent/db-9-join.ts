@@ -885,18 +885,10 @@ export const ITEMS: EntItem[] = [
     level: 3,
     read: "purpose",
     prompt: {
-      ru: "Даны таблицы Customers (4 клиента) и Orders (7 заказов). Запрос выводит 7 строк. Установите соответствие между изменением запроса и числом строк результата после него.",
-      kk: "Customers (4 клиент) және Orders (7 тапсырыс) кестелері берілген. Сұраныс 7 жол шығарады. Сұраныстағы өзгеріс пен одан кейінгі нәтиже жолдарының саны арасындағы сәйкестікті орнатыңыз.",
+      ru: `Даны таблицы Customers (4 клиента) и Orders (7 заказов). Запрос \`SELECT Customers.Name, Orders.Sum ${J_CO};\` выводит 7 строк. Установите соответствие между изменением запроса и числом строк результата после него.`,
+      kk: `Customers (4 клиент) және Orders (7 тапсырыс) кестелері берілген. \`SELECT Customers.Name, Orders.Sum ${J_CO};\` сұранысы 7 жол шығарады. Сұраныстағы өзгеріс пен одан кейінгі нәтиже жолдарының саны арасындағы сәйкестікті орнатыңыз.`,
     },
-    scene: {
-      kind: "code",
-      lang: "sql",
-      lines: [
-        "SELECT Customers.Name, Orders.Sum",
-        "FROM Customers JOIN Orders",
-        "ON Customers.CustID = Orders.CustID;",
-      ],
-    },
+    scene: custOrders,
     items: [{ ru: "Добавить WHERE Customers.City = 'Астана'", kk: "WHERE Customers.City = 'Астана' қосу" }, { ru: "Заменить = в условии связи на <>", kk: "Байланыс шартындағы = белгісін <> белгісіне ауыстыру" }],
     choices: [
       { ru: "5 строк", kk: "5 жол" },

@@ -887,19 +887,10 @@ export const ITEMS: EntItem[] = [
     level: 3,
     read: "purpose",
     prompt: {
-      ru: "Дана таблица Students(ID, Name, Class, Mark). Установите соответствие между изменением запроса и тем, что изменится в результате.",
-      kk: "Students(ID, Name, Class, Mark) кестесі берілген. Сұраныстағы өзгеріс пен нәтижедегі өзгеріс арасындағы сәйкестікті орнатыңыз.",
+      ru: "Дана таблица Students и запрос `SELECT DISTINCT Class FROM Students WHERE Mark >= 4 ORDER BY Class DESC;`. Установите соответствие между изменением запроса и тем, что изменится в результате.",
+      kk: "Students кестесі және `SELECT DISTINCT Class FROM Students WHERE Mark >= 4 ORDER BY Class DESC;` сұранысы берілген. Сұраныстағы өзгеріс пен нәтижедегі өзгеріс арасындағы сәйкестікті орнатыңыз.",
     },
-    scene: {
-      kind: "code",
-      lang: "sql",
-      lines: [
-        "SELECT DISTINCT Class",
-        "FROM Students",
-        "WHERE Mark >= 4",
-        "ORDER BY Class DESC;",
-      ],
-    },
+    scene: students,
     items: [{ ru: "Убрать слово DISTINCT", kk: "DISTINCT сөзін алып тастау" }, { ru: "Убрать условие WHERE Mark >= 4", kk: "WHERE Mark >= 4 шартын алып тастау" }],
     choices: [
       { ru: "строк станет 7: класс повторится для каждой записи", kk: "жол 7 болады: сынып әр жазба үшін қайталанады" },
