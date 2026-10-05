@@ -16,15 +16,20 @@ type DbTable = DbSchemaScene["tables"][number];
 export const DB_GEO = {
   /** Рамка карточки (border-2) — входит в её размеры. */
   border: 2,
+  /** Заголовок в одну строку (если имя таблицы не влезло — выше, см. DbLayout.headH). */
   headH: 30,
   rowH: 26,
-  /** Строка, где тип не влез рядом с именем: имя над типом. */
-  rowStackH: 40,
+  /** Вертикальные поля строки, где имя и тип стоят в несколько строк. */
+  stackPad: 10,
+  /** Межстрочный множитель: строки считаются целыми пикселями, чтобы оценка высоты совпадала с вёрсткой. */
+  lineMul: 1.2,
   padX: 8,
   /** Значок ключа / ссылки: всегда занимает колонку, чтобы имена полей выстраивались. */
   icon: 14,
   iconGap: 5,
   typeGap: 8,
+  /** Зазор между значками ключа и ссылки у поля, которое одновременно PK и FK. */
+  iconPairGap: 2,
   /** Зазор между рядами карточек. */
   rowGap: 18,
   minCard: 104,
@@ -50,7 +55,8 @@ export const DB_HEAD_PX = [14, 13, 12, 11] as const;
 /** Поправка оценки (она для начертания 700) на начертание 800. */
 const EXTRA = 1.04;
 
-const ICON_COL = DB_GEO.icon + DB_GEO.iconGap;
+/** Ширина колонки значков поля: один значок (ключ или ссылка) или два (поле — и PK, и FK: связь 1:1). */
+export const iconColWidth = (f: { pk?: boolean; fk?: string }) => (f.pk && f.fk ? 2 * DB_GEO.icon + DB_GEO.iconPairGap : DB_GEO.icon) + DB_GEO.iconGap;
 
 export interface DbFieldBox {
   name: string;
@@ -62,8 +68,11 @@ export interface DbFieldBox {
   h: number;
   /** Тип под именем (не влез в одну строку). */
   stacked: boolean;
-  /** Даже в минимальном кегле не влезает — компонент обрежет с «…». */
-  clipped: boolean;
+  /** Число строк имени (имя переносится по словам, по дефису и, если слово длиннее строки, по буквам — без обрезания). */
+  nameLines: number;
+  /** Высоты строк имени и типа (px): по ним посчитана высота поля. */
+  nameLineH: number;
+  typeLineH: number;
   highlighted: boolean;
 }
 
@@ -76,7 +85,6 @@ export interface DbCard {
   col: 0 | 1;
   row: 0 | 1;
   headFont: number;
-  headClipped: boolean;
   highlighted: boolean;
   fields: DbFieldBox[];
 }
@@ -114,6 +122,11 @@ export interface DbLayout {
   labels: DbLabel[];
   /** Выбранный масштаб шрифта строк (1 — без сжатия). */
   scale: number;
+  /** Высота заголовка карточек и число строк в нём (имя таблицы переносится, если не влезло и в мелком кегле). */
+  headH: number;
+  headLines: number;
+  /** Сколько полос коридора занято (непересекающиеся по высоте связи делят одну полосу). */
+  lanes: number;
   cols: 1 | 2;
 }
 
@@ -135,16 +148,55 @@ export function orderTables(tables: DbTable[]): DbTable[] {
 }
 
 /** Ширина строки поля в одну строку при масштабе s (px, без отступов карточки). */
-export function fieldOneLineWidth(f: { name: string; type?: string; pk?: boolean }, s: number): number {
+export function fieldOneLineWidth(f: { name: string; type?: string; pk?: boolean; fk?: string }, s: number): number {
   const nameW = estimateTextWidth(f.name, DB_GEO.namePx * s) * (f.pk ? EXTRA : 1);
-  return ICON_COL + nameW + (f.type ? DB_GEO.typeGap + estimateTextWidth(f.type, DB_GEO.typePx * s) : 0);
+  return iconColWidth(f) + nameW + (f.type ? DB_GEO.typeGap + estimateTextWidth(f.type, DB_GEO.typePx * s) : 0);
 }
 
-/** Ширина строки, когда тип стоит под именем. */
-export function fieldStackedWidth(f: { name: string; type?: string; pk?: boolean }, s: number): number {
-  const nameW = estimateTextWidth(f.name, DB_GEO.namePx * s) * (f.pk ? EXTRA : 1);
-  const typeW = f.type ? estimateTextWidth(f.type, DB_GEO.typePx * s) : 0;
-  return ICON_COL + Math.max(nameW, typeW);
+/**
+ * Сколько строк займёт текст при ширине width: перенос по пробелам и дефисам, слово длиннее строки ломается по буквам
+ * (в вёрстке — `overflow-wrap: anywhere`). mult — поправка на жирность.
+ */
+export function wrapLines(text: string, px: number, width: number, mult = 1): number {
+  if (width <= 0) return 1;
+  const w = (x: string) => estimateTextWidth(x, px) * mult;
+  let lines = 1;
+  let cur = 0;
+  for (const tok of text.split(/(?<=[ -])/)) {
+    const word = tok.replace(/ $/, "");
+    const ww = w(word);
+    const full = w(tok);
+    if (ww > width) {
+      if (cur > 0) lines++;
+      let c = 0;
+      for (const ch of word) {
+        const cw = w(ch);
+        if (c + cw > width) {
+          lines++;
+          c = 0;
+        }
+        c += cw;
+      }
+      cur = c + (full - ww);
+      continue;
+    }
+    if (cur > 0 && cur + ww > width) {
+      lines++;
+      cur = 0;
+    }
+    cur += full;
+  }
+  return lines;
+}
+
+/** Как поле ляжет в карточку: в одну строку, либо имя (с переносом) и тип под ним. Высота — по числу строк. */
+export function fitField(f: { name: string; type?: string; pk?: boolean; fk?: string }, s: number, inner: number) {
+  const nameLineH = Math.ceil(DB_GEO.namePx * s * DB_GEO.lineMul);
+  const typeLineH = Math.ceil(DB_GEO.typePx * s * DB_GEO.lineMul);
+  if (fieldOneLineWidth(f, s) <= inner) return { stacked: false, nameLines: 1, nameLineH, typeLineH, h: DB_GEO.rowH };
+  const nameLines = wrapLines(f.name, DB_GEO.namePx * s, inner - iconColWidth(f), f.pk ? EXTRA : 1);
+  const h = Math.max(DB_GEO.rowH, DB_GEO.stackPad + nameLines * nameLineH + (f.type ? typeLineH : 0));
+  return { stacked: !!f.type, nameLines, nameLineH, typeLineH, h };
 }
 
 const headWidth = (name: string, px: number) => estimateTextWidth(name, px) * EXTRA;
@@ -192,20 +244,45 @@ export function roundedPath(pts: [number, number][], r: number): string {
   return `${d} L${last[0]} ${last[1]}`;
 }
 
+/** Запас между вертикалями одной полосы (px). */
+const LANE_PAD = 6;
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Заголовок: кегль (самый крупный, где имена всех таблиц влезают в строку) или, если не влезли и в мелком, — перенос имени. */
+function headFit(tables: DbTable[], inner: number): { font: number; lines: number; h: number } {
+  for (const px of DB_HEAD_PX) {
+    if (tables.every((t) => headWidth(t.name, px) <= inner)) return { font: px, lines: 1, h: DB_GEO.headH };
+  }
+  const font = DB_HEAD_PX[2];
+  const lines = Math.max(...tables.map((t) => wrapLines(t.name, font, inner, EXTRA)));
+  return { font, lines, h: Math.max(DB_GEO.headH, DB_GEO.stackPad + lines * Math.ceil(font * DB_GEO.lineMul)) };
+}
 
 /**
  * Раскладка схемы. avail — ширина контейнера (px). Ширина результата не больше avail (кроме совсем узких экранов, где карточки
- * уже не сжимаются ниже 80 px), высота — по самому длинному ряду.
+ * уже не сжимаются ниже 80 px), высота — по самому длинному ряду. Текст не обрезается: длинные имена переносятся на следующую строку.
+ * Связи, чьи вертикальные участки не пересекаются по высоте, делят одну полосу коридора — он не растёт с числом связей зря.
  */
 export function layoutDbSchema(scene: DbSchemaScene, avail: number): DbLayout {
+  const relCount = scene.tables.reduce((s, t) => s + t.fields.filter((f) => f.fk).length, 0);
+  const first = buildLayout(scene, avail, relCount);
+  if (first.lanes < relCount) {
+    const second = buildLayout(scene, avail, first.lanes);
+    if (second.lanes <= first.lanes) return second;
+  }
+  return first;
+}
+
+/** Раскладка при заданном числе полос коридора (по нему считается ширина коридора, а значит, и карточек). */
+function buildLayout(scene: DbSchemaScene, avail: number, lanesAllowed: number): DbLayout {
   const tables = orderTables(scene.tables);
   const n = tables.length;
   const cols: 1 | 2 = n === 1 ? 1 : 2;
   const hi = new Set(scene.highlight ?? []);
-  const relCount = tables.reduce((s, t) => s + t.fields.filter((f) => f.fk).length, 0);
+  const hasRel = tables.some((t) => t.fields.some((f) => f.fk));
+  const laneSlots = hasRel ? Math.max(1, lanesAllowed) : 0;
   // Одна таблица: поля по бокам нужны только самосвязям (поле таблицы ссылается на её же ключ) — по одному запасу слева и справа.
-  const gutter = cols === 2 ? gutterWidth(relCount) : relCount > 0 ? gutterWidth(relCount) - 8 : 0;
+  const gutter = cols === 2 ? gutterWidth(laneSlots) : hasRel ? gutterWidth(laneSlots) - 8 : 0;
 
   // --- ширина карточки ---
   const cap = avail <= DB_GEO.wideFrom ? DB_GEO.maxNarrow : DB_GEO.maxWide;
@@ -224,33 +301,28 @@ export function layoutDbSchema(scene: DbSchemaScene, avail: number): DbLayout {
       break;
     }
   }
-  // --- кегль заголовка: общий ---
-  let headFont: number = DB_HEAD_PX[DB_HEAD_PX.length - 1];
-  for (const px of DB_HEAD_PX) {
-    if (tables.every((t) => headWidth(t.name, px) <= inner)) {
-      headFont = px;
-      break;
-    }
-  }
+  // --- заголовок: общий кегль и высота ---
+  const head = headFit(tables, inner);
 
   // --- карточки ---
   const protos = tables.map((t) => {
-    let y = DB_GEO.border + DB_GEO.headH;
+    let y = DB_GEO.border + head.h;
     const fields: DbFieldBox[] = t.fields.map((f) => {
-      const stacked = !!f.type && fieldOneLineWidth(f, scale) > inner;
-      const h = stacked ? DB_GEO.rowStackH : DB_GEO.rowH;
+      const fit = fitField(f, scale, inner);
       const box: DbFieldBox = {
         name: f.name,
         type: f.type,
         pk: !!f.pk,
         fk: f.fk,
         y,
-        h,
-        stacked,
-        clipped: (stacked ? fieldStackedWidth(f, scale) : fieldOneLineWidth(f, scale)) > inner,
+        h: fit.h,
+        stacked: fit.stacked,
+        nameLines: fit.nameLines,
+        nameLineH: fit.nameLineH,
+        typeLineH: fit.typeLineH,
         highlighted: hi.has(`${t.name}.${f.name}`),
       };
-      y += h;
+      y += fit.h;
       return box;
     });
     return { table: t, fields, h: y + DB_GEO.border };
@@ -273,8 +345,7 @@ export function layoutDbSchema(scene: DbSchemaScene, avail: number): DbLayout {
       h: p.h,
       col,
       row,
-      headFont,
-      headClipped: headWidth(p.table.name, headFont) > inner,
+      headFont: head.font,
       highlighted: hi.has(p.table.name),
       fields: p.fields,
     };
@@ -316,12 +387,25 @@ export function layoutDbSchema(scene: DbSchemaScene, avail: number): DbLayout {
   const hi2 = gr - DB_GEO.edge;
   const laneX = (k: number, total: number) => (total <= 1 ? Math.round((lo + hi2) / 2) : Math.round(lo + ((hi2 - lo) * k) / (total - 1)));
 
-  const lanesTotal = rels.length;
-  const links: DbLink[] = rels.map((r, k) => {
+  // Полосы: связи по возрастанию верхней точки; связь идёт в первую полосу, где её вертикаль (с запасом) не задевает уже стоящие.
+  const geo = rels.map((r) => {
     const a = anchor(r.fkTable, r.fkField);
     const b = anchor(r.pkTable, r.pkField);
-    const straight = a.y === b.y && a.side !== b.side;
-    const lx = laneX(k, lanesTotal);
+    return { r, a, b, straight: a.y === b.y && a.side !== b.side, top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };
+  });
+  const laneEnd: number[] = [];
+  const laneOf = new Map<string, number>();
+  for (const g of [...geo].filter((x) => !x.straight).sort((p, q) => p.top - q.top || p.bottom - q.bottom)) {
+    let k = laneEnd.findIndex((end) => end + LANE_PAD < g.top);
+    if (k < 0) k = laneEnd.length;
+    laneEnd[k] = g.bottom;
+    laneOf.set(g.r.id, k);
+  }
+  const lanes = laneEnd.length;
+  const slots = Math.max(laneSlots, lanes);
+
+  const links: DbLink[] = geo.map(({ r, a, b, straight }) => {
+    const lx = laneX(Math.min(laneOf.get(r.id) ?? 0, slots - 1), slots);
     const points: [number, number][] = straight ? [[a.x, a.y], [b.x, b.y]] : [[a.x, a.y], [lx, a.y], [lx, b.y], [b.x, b.y]];
     return {
       id: r.id,
@@ -360,7 +444,7 @@ export function layoutDbSchema(scene: DbSchemaScene, avail: number): DbLayout {
     put(l.fkTable, l.fkField, l.fk, l.card === "1:1" ? "1" : "N", l.highlighted);
   }
 
-  return { width, height, cards, links, labels, scale, cols };
+  return { width, height, cards, links, labels, scale, cols, headH: head.h, headLines: head.lines, lanes };
 }
 
 /** Короткий пересказ схемы для скринридера (`t` — перевод интерфейса на язык ученика). */

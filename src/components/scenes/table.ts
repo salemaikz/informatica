@@ -1,6 +1,7 @@
 // Таблица: буквы столбцов электронной таблицы, признак «столбец из нулей и единиц» и расширения волны 3
 // (состояния строк, «было → стало», тона, рамка диапазона, стрелки, JOIN) — чистая логика без React.
 
+import type { DictKey } from "@/i18n/dict";
 import type { Scene, SceneTone, Text } from "@/lib/types";
 
 export type TableScene = Extract<Scene, { kind: "table" }>;
@@ -215,25 +216,52 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
   };
 }
 
-// ----- JOIN: тоны совпавших строк и вид раскладки -----
+// ----- JOIN: тон совпавших строк и вид раскладки -----
 
-/** Тоны пар JOIN: свой для каждой строки левой таблицы (по кругу), правая строка берёт тон первой связи. */
-const JOIN_TONES: SceneTone[] = ["primary", "warning", "success"];
+/**
+ * Совпавшие строки двух таблиц — одним тоном (primary, «основное действие»): у всех строк, у которых есть пара, он один,
+ * строки без пары остаются без тона. Разные цвета для разных пар не берём: цвета success/warning/danger в схеме значат другое,
+ * а пары различает линия между строками (широкий вид) или порядок строк.
+ */
+export const JOIN_TONE: SceneTone = "primary";
 
 export function joinTones(links: [number, number][]): { left: Map<number, SceneTone>; right: Map<number, SceneTone> } {
   const left = new Map<number, SceneTone>();
   const right = new Map<number, SceneTone>();
-  const order = [...new Set(links.map(([a]) => a))].sort((a, b) => a - b);
   for (const [a, b] of links) {
-    const tone = JOIN_TONES[order.indexOf(a) % JOIN_TONES.length];
-    left.set(a, tone);
-    if (!right.has(b)) right.set(b, tone);
+    left.set(a, JOIN_TONE);
+    right.set(b, JOIN_TONE);
   }
   return { left, right };
 }
 
-/** Ширина, начиная с которой таблицы JOIN стоят рядом и соединяются линиями (на телефоне — друг под другом). */
+/** Ширина контейнера, начиная с которой таблицы JOIN стоят рядом и соединяются линиями (на телефоне — друг под другом). */
 export const JOIN_WIDE_FROM = 540;
+
+/** Прямоугольник, обрезанный по видимой области `clip` (прокручиваемый блок таблицы); ширина и высота не отрицательные. */
+export function clipRect(r: Rect, clip: Rect): Rect {
+  const x1 = Math.max(r.x, clip.x);
+  const x2 = Math.min(r.x + r.w, clip.x + clip.w);
+  const y1 = Math.max(r.y, clip.y);
+  const y2 = Math.min(r.y + r.h, clip.y + clip.h);
+  return { x: x1, y: y1, w: Math.max(0, x2 - x1), h: Math.max(0, y2 - y1) };
+}
+
+// ----- Текстовая замена рисунка для скринридера -----
+
+/** Имя ячейки как в электронной таблице: столбец-буква и номер строки (в sheet — с учётом rowNumbers). */
+export function cellName(scene: TableScene, [r, c]: [number, number]): string {
+  return `${colLetter(c)}${scene.sheet ? sheetRowNumber(scene, r) : r + 1}`;
+}
+
+/** Фразы для скринридера о том, что только нарисовано: рамка диапазона, стрелки, совпавшие строки JOIN. */
+export function tableExtDescription(scene: TableScene, t: (key: DictKey, params?: Record<string, string | number>) => string): string[] {
+  const out: string[] = [];
+  if (scene.range) out.push(t("scene.table.range", { range: `${cellName(scene, scene.range.from)}:${cellName(scene, scene.range.to)}` }));
+  for (const a of scene.arrows ?? []) out.push(t("scene.table.arrow", { from: cellName(scene, a.from), to: cellName(scene, a.to) }));
+  if (scene.join?.links.length) out.push(t("scene.table.joinMatch", { pairs: scene.join.links.map(([a, b]) => `${a + 1}–${b + 1}`).join(", ") }));
+  return out;
+}
 
 /** Кривая-связка между строками левой и правой таблиц (от правого края строки к левому): путь SVG. */
 export function joinLinkPath(a: Rect, b: Rect): { d: string; from: Pt; to: Pt } {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { KeyRound, Link as LinkIcon } from "lucide-react";
 import { m } from "motion/react";
 import { springSoft } from "@/components/motion/presets";
@@ -12,11 +12,12 @@ import { DB_GEO, dbSchemaAria, layoutDbSchema, roundedPath, type DbCard, type Db
 
 type DbSchemaSceneData = Extract<Scene, { kind: "db-schema" }>;
 
-/** Строка поля: значок (ключ / ссылка), имя (PK — жирнее), тип приглушённо; не влезло рядом — тип под именем. */
+/** Строка поля: значки (ключ и/или ссылка), имя (PK — жирнее), тип приглушённо; не влезло рядом — тип под именем, длинное имя переносится. */
 function FieldRow({ f, scale, first }: { f: DbFieldBox; scale: number; first: boolean }) {
-  const nameStyle = { fontSize: DB_GEO.namePx * scale };
-  const typeStyle = { fontSize: DB_GEO.typePx * scale };
-  const Icon = f.pk ? KeyRound : f.fk ? LinkIcon : null;
+  const nameStyle = { fontSize: DB_GEO.namePx * scale, lineHeight: `${f.nameLineH}px` };
+  const typeStyle = { fontSize: DB_GEO.typePx * scale, lineHeight: `${f.typeLineH}px` };
+  const nameCls = cn("[overflow-wrap:anywhere]", f.pk ? "font-extrabold" : "font-semibold", f.highlighted ? "text-primary-strong" : "text-text");
+  const multi = f.stacked || f.nameLines > 1;
   return (
     <div
       className={cn(
@@ -26,25 +27,28 @@ function FieldRow({ f, scale, first }: { f: DbFieldBox; scale: number; first: bo
       )}
       style={{ height: f.h, paddingLeft: DB_GEO.padX, paddingRight: DB_GEO.padX, gap: DB_GEO.iconGap }}
     >
-      <span className="flex shrink-0 items-center justify-center text-primary-strong" style={{ width: DB_GEO.icon }} aria-hidden="true">
-        {Icon && <Icon size={DB_GEO.icon} strokeWidth={2.4} />}
+      <span className="flex shrink-0 items-center justify-center text-primary-strong" style={{ gap: DB_GEO.iconPairGap, minWidth: DB_GEO.icon }} aria-hidden="true">
+        {f.pk && <KeyRound size={DB_GEO.icon} strokeWidth={2.4} />}
+        {f.fk && <LinkIcon size={DB_GEO.icon} strokeWidth={2.4} />}
       </span>
-      {f.stacked ? (
-        <span className="flex min-w-0 flex-1 flex-col justify-center leading-tight">
-          <span className={cn("truncate", f.pk ? "font-extrabold" : "font-semibold", f.highlighted ? "text-primary-strong" : "text-text")} style={nameStyle}>
-            {f.name}
-          </span>
-          <span className="truncate font-semibold text-muted" style={typeStyle}>
-            {f.type}
-          </span>
-        </span>
-      ) : (
-        <>
-          <span className={cn("min-w-0 truncate leading-none", f.pk ? "font-extrabold" : "font-semibold", f.highlighted ? "text-primary-strong" : "text-text")} style={nameStyle}>
+      {multi ? (
+        <span className="flex min-w-0 flex-1 flex-col justify-center">
+          <span className={nameCls} style={nameStyle}>
             {f.name}
           </span>
           {f.type && (
-            <span className="ml-auto shrink-0 pl-1 font-semibold leading-none text-muted" style={typeStyle}>
+            <span className="font-semibold text-muted" style={typeStyle}>
+              {f.type}
+            </span>
+          )}
+        </span>
+      ) : (
+        <>
+          <span className={cn("min-w-0", nameCls)} style={nameStyle}>
+            {f.name}
+          </span>
+          {f.type && (
+            <span className="ml-auto shrink-0 pl-1 font-semibold text-muted" style={typeStyle}>
               {f.type}
             </span>
           )}
@@ -54,8 +58,9 @@ function FieldRow({ f, scale, first }: { f: DbFieldBox; scale: number; first: bo
   );
 }
 
-function Card({ card, scale, reduce }: { card: DbCard; scale: number; reduce: boolean }) {
-  const t = reduce ? { duration: 0 } : springSoft;
+function Card({ card, scale, headH, headLineH, settled, reduce }: { card: DbCard; scale: number; headH: number; headLineH: number; settled: boolean; reduce: boolean }) {
+  // Первая подгонка под измеренную ширину (до первой отрисовки) — без пружины: анимируется только смена сцены.
+  const t = reduce ? { duration: 0 } : settled ? springSoft : { ...springSoft, x: { duration: 0 }, y: { duration: 0 } };
   return (
     <m.div
       initial={reduce ? false : { opacity: 0, scale: 0.96, x: card.x, y: card.y }}
@@ -69,12 +74,12 @@ function Card({ card, scale, reduce }: { card: DbCard; scale: number; reduce: bo
     >
       <div
         className={cn(
-          "flex items-center justify-center truncate px-2 text-center font-extrabold leading-none transition-colors duration-200",
+          "flex items-center justify-center px-2 text-center font-extrabold transition-colors duration-200",
           card.highlighted ? "bg-primary-soft text-primary-strong" : "bg-surface-2 text-text",
         )}
-        style={{ height: DB_GEO.headH, fontSize: card.headFont }}
+        style={{ height: headH, fontSize: card.headFont, lineHeight: `${headLineH}px` }}
       >
-        <span className="truncate">{card.name}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">{card.name}</span>
       </div>
       {card.fields.map((f, i) => (
         <FieldRow key={f.name} f={f} scale={scale} first={i === 0} />
@@ -93,12 +98,19 @@ export function DbSchemaScene({ scene }: { scene: DbSchemaSceneData }) {
   const ref = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(320);
 
-  useEffect(() => {
+  // Ширина измеряется до первой отрисовки (useLayoutEffect), поэтому карточки не прыгают с раскладки «на 320» на настоящую.
+  const [settled, setSettled] = useState(false);
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    setAvail(Math.max(120, Math.round(el.clientWidth)));
     const ro = new ResizeObserver(([entry]) => setAvail(Math.max(120, Math.round(entry.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const layout = useMemo(() => layoutDbSchema(scene, avail), [scene, avail]);
@@ -109,7 +121,7 @@ export function DbSchemaScene({ scene }: { scene: DbSchemaSceneData }) {
     <div ref={ref} className="mx-auto w-full max-w-xl">
       <div role="img" aria-label={dbSchemaAria(scene, t)} className="relative mx-auto" style={{ width: layout.width, height: layout.height }}>
         {layout.cards.map((c) => (
-          <Card key={c.name} card={c} scale={layout.scale} reduce={reduce} />
+          <Card key={c.name} card={c} scale={layout.scale} headH={layout.headH} headLineH={Math.ceil(c.headFont * DB_GEO.lineMul)} settled={settled} reduce={reduce} />
         ))}
         <svg width={layout.width} height={layout.height} className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden="true">
           {layout.links.map((l) => (

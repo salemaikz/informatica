@@ -11,7 +11,6 @@ export const SAMPLES: Scene[] = [
   {
     kind: "table",
     sheet: true,
-    columns: ["A", "B", "C"],
     rows: [["2", "3", "=A1*B1"], ["4", "5", "=A2*B2"]],
     formula: { cell: "C2", text: "=A2*B2" },
     arrows: [{ from: [1, 0], to: [1, 2] }, { from: [1, 1], to: [1, 2] }],

@@ -2,6 +2,7 @@ import type { EntItem, L, ReadKind, Scene, Step, Text } from "@/lib/types";
 import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
 import { isKnownKey } from "@/components/scenes/keyboard";
+import { usesTableExt } from "@/components/scenes/table";
 import { VENN_NAME_MAX, isVennRegion } from "@/components/scenes/venn";
 import { TASKS as PY_TASKS } from "@/lib/ide/python/tasks";
 
@@ -62,6 +63,8 @@ export function validateScene(scene: Scene): string[] {
       need((scene.tones ?? []).every((x) => x.cells.length > 0 && x.cells.every(inCell)), "tones: ячейка вне диапазона");
       need(!scene.range || (inCell(scene.range.from) && inCell(scene.range.to) && scene.range.from[0] <= scene.range.to[0] && scene.range.from[1] <= scene.range.to[1]), "range: углы вне таблицы или перевёрнуты");
       need((scene.arrows ?? []).every((a) => inCell(a.from) && inCell(a.to)), "arrows: ячейка вне диапазона");
+      // В sheet столбцы-заголовки становятся первой строкой сетки и сдвигают индексы строк: с расширениями — только без columns.
+      need(!(scene.sheet && scene.columns) || !usesTableExt(scene), "table: sheet с расширениями — без columns (индексы строк сдвигаются)");
       need(!scene.formula || (!!scene.sheet && scene.formula.cell.trim() !== "" && scene.formula.text.trim() !== ""), "formula — только в режиме sheet, поля не пустые");
       need(!scene.rowNumbers || (!!scene.sheet && scene.rowNumbers.length === scene.rows.length && scene.rowNumbers.every((n) => Number.isInteger(n) && n >= 1)), "rowNumbers — только в sheet, по одному на строку, целые ≥ 1");
       if (scene.join) {
@@ -295,6 +298,7 @@ export function validateScene(scene: Scene): string[] {
       };
       need(scene.tables.length >= 1 && scene.tables.length <= 4, "db-schema: 1–4 таблицы");
       need(tables.size === scene.tables.length, "db-schema: повтор имени таблицы");
+      need(scene.tables.reduce((n, t) => n + t.fields.filter((f) => f.fk).length, 0) <= 6, "db-schema: не больше 6 связей (внешних ключей)");
       for (const t of scene.tables) {
         need(t.name.trim() !== "" && t.name.length <= 14, `db-schema: имя таблицы ${t.name} — до 14 символов`);
         need(t.fields.length >= 1 && t.fields.length <= 7, `db-schema: ${t.name} — 1–7 полей`);

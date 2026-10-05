@@ -15,6 +15,8 @@ import {
   orderTables,
   roundedPath,
   splitRef,
+  wrapLines,
+  iconColWidth,
   type DbCard,
   type DbLayout,
   type DbSchemaScene,
@@ -69,16 +71,20 @@ describe("layoutDbSchema: геометрия на экранах телефон�
           for (const v of [L.width, L.height, ...L.cards.flatMap((c) => [c.x, c.y, c.w, c.h])]) expect(Number.isFinite(v)).toBe(true);
         });
 
-        it(`образец ${i}: текст не обрезается (в карточках на 296+ px)`, () => {
+        it(`образец ${i}: текст не обрезается — что не влезло в строку, переносится, а высота строки считана по числу строк`, () => {
           for (const c of L.cards) {
-            expect(c.headClipped, `${c.name}: заголовок`).toBe(false);
-            for (const f of c.fields) expect(f.clipped, `${c.name}.${f.name}`).toBe(false);
+            expect(c.h).toBeGreaterThan(0);
+            for (const f of c.fields) {
+              expect(f.nameLines, `${c.name}.${f.name}`).toBeGreaterThanOrEqual(1);
+              if (f.nameLines > 1 || f.stacked) expect(f.h, `${c.name}.${f.name}`).toBeGreaterThanOrEqual(DB_GEO.stackPad + f.nameLines * f.nameLineH + (f.type ? f.typeLineH : 0));
+              else expect(f.h).toBe(DB_GEO.rowH);
+            }
           }
         });
 
         it(`образец ${i}: строки полей лежат подряд внутри карточки`, () => {
           for (const c of L.cards) {
-            let y = DB_GEO.border + DB_GEO.headH;
+            let y = DB_GEO.border + L.headH;
             for (const f of c.fields) {
               expect(f.y).toBe(y);
               y += f.h;
@@ -205,10 +211,10 @@ describe("layoutDbSchema: краевые случаи", () => {
     const L = layoutDbSchema(long, 296);
     const f = L.cards[0].fields;
     expect(f[0].stacked).toBe(true);
-    expect(f[0].h).toBe(DB_GEO.rowStackH);
+    expect(f[0].nameLines).toBe(1);
+    expect(f[0].h).toBe(DB_GEO.stackPad + f[0].nameLineH + f[0].typeLineH);
     expect(f[1].stacked).toBe(false);
     expect(f[1].h).toBe(DB_GEO.rowH);
-    expect(f[0].clipped).toBe(false);
   });
 
   it("максимум полей (7) и 4 таблицы: высота ряда — по самой длинной карточке", () => {
@@ -228,12 +234,50 @@ describe("layoutDbSchema: краевые случаи", () => {
     expect(layoutDbSchema(SAMPLES[6], 576).scale).toBe(1);
   });
 
-  it("имя из 12 символов с типом не обрезается на 296 px; имя из 21 символа (предел validate без типа) — обрезается с «…»", () => {
-    const s = scene([{ name: "T", fields: [{ name: "AbcdefghijkL", type: "INT" }, { name: "AbcdefghijkLmnOpqrstu" }] }, { name: "U", fields: [{ name: "ID", pk: true }] }]);
+  it("длинное имя поля переносится на вторую строку, а не обрезается; высота строки растёт", () => {
+    const s = scene([{ name: "T", fields: [{ name: "AbcdefghijkL", type: "INT" }, { name: "Оқушының аты-жөні", type: "INT" }, { name: "Жетекшінің коды", type: "INT" }] }, { name: "U", fields: [{ name: "ID", pk: true }] }]);
     expect(validateScene(s)).toEqual([]);
-    const L = layoutDbSchema(s, 296);
-    expect(L.cards[0].fields[0].clipped).toBe(false);
-    expect(L.cards[0].fields[1].clipped).toBe(true);
+    for (const avail of [296, 320, 336]) {
+      const f = layoutDbSchema(s, avail).cards[0].fields;
+      expect(f[0].nameLines).toBe(1);
+      expect(f[1].nameLines).toBeGreaterThanOrEqual(2);
+      expect(f[1].h).toBeGreaterThan(f[0].h);
+      expect(f[1].stacked).toBe(true);
+    }
+  });
+
+  it("имя таблицы из 14 широких букв переносится: заголовок выше, высота общая для всех карточек", () => {
+    const L = layoutDbSchema(SAMPLES[8], 296);
+    expect(L.headLines).toBeGreaterThanOrEqual(2);
+    expect(L.headH).toBeGreaterThan(DB_GEO.headH);
+    expect(layoutDbSchema(SAMPLES[0], 320).headLines).toBe(1);
+    expect(layoutDbSchema(SAMPLES[0], 320).headH).toBe(DB_GEO.headH);
+  });
+
+  it("wrapLines: по пробелам и дефисам, слово длиннее строки ломается по буквам", () => {
+    expect(wrapLines("ID", 13, 100)).toBe(1);
+    expect(wrapLines("Оқушының аты-жөні", 13, 300)).toBe(1);
+    expect(wrapLines("Оқушының аты-жөні", 13, 110)).toBe(2);
+    expect(wrapLines("ЖҰМЫСШЫЛАРДЫҢ", 14, 60)).toBeGreaterThanOrEqual(2);
+    expect(wrapLines("abc", 13, 0)).toBe(1);
+  });
+
+  it("в разметке нет обрезания (truncate / «…»): ни у заголовков, ни у полей", () => {
+    for (const s of SAMPLES) {
+      const out = renderToStaticMarkup(createElement(DbSchemaView, { scene: s }));
+      expect(out).not.toContain("truncate");
+      expect(out).not.toContain("text-ellipsis");
+    }
+  });
+
+  it("поле — и PK, и FK: колонка значков шире, в разметке оба значка", () => {
+    expect(iconColWidth({ pk: true, fk: "A.ID" })).toBeGreaterThan(iconColWidth({ pk: true }));
+    expect(iconColWidth({ fk: "A.ID" })).toBe(iconColWidth({ pk: true }));
+    expect(fieldOneLineWidth({ name: "UserID", pk: true, fk: "Users.ID" }, 1)).toBeGreaterThan(fieldOneLineWidth({ name: "UserID", pk: true }, 1));
+    const out = renderToStaticMarkup(createElement(DbSchemaView, { scene: SAMPLES[3] }));
+    // образец 1:1: Users.ID (PK), Profiles.UserID (PK и FK) — два значка ключа в карточках, один в легенде; ссылка — в карточке и в легенде
+    expect(out.match(/lucide-key-round/g)?.length).toBe(3);
+    expect(out.match(/lucide-link/g)?.length).toBe(2); 
   });
 
   it("при очень узком контейнере карточки не уже 80 px и не отрицательные", () => {
@@ -245,9 +289,35 @@ describe("layoutDbSchema: краевые случаи", () => {
     expect(gutterWidth(1)).toBe(2 * DB_GEO.edge + 8);
     expect(gutterWidth(5)).toBe(2 * DB_GEO.edge + 8 + 4 * DB_GEO.laneStep);
     const L = layoutDbSchema(SAMPLES[2], 320);
-    const lanes = L.links.map((l) => l.points[1][0]);
     expect(L.links.length).toBe(3);
-    expect(new Set(lanes).size).toBe(3);
+    expect(L.lanes).toBeGreaterThanOrEqual(1);
+    expect(L.lanes).toBeLessThanOrEqual(3);
+  });
+
+  it("связи с непересекающимися по высоте вертикалями делят одну полосу: коридор не растёт зря", () => {
+    // три независимые пары таблиц не нужны — достаточно двух рядов: связи в верхнем и нижнем ряду не пересекаются по высоте
+    const mk = (a: string, b: string) => [
+      { name: a, fields: [{ name: "ID", pk: true }] },
+      { name: b, fields: [{ name: "ID", pk: true }, { name: "AID", fk: `${a}.ID` }] },
+    ];
+    const s = scene([...mk("A", "B"), ...mk("C", "D")]);
+    expect(validateScene(s)).toEqual([]);
+    const L = layoutDbSchema(s, 320);
+    expect(L.links).toHaveLength(2);
+    expect(L.lanes).toBeLessThanOrEqual(1);
+    expect(L.width).toBeLessThanOrEqual(320);
+  });
+
+  it("предел validate (6 связей): схема не шире контейнера на всех ширинах телефона", () => {
+    const tables = [
+      { name: "Root", fields: [{ name: "ID", pk: true }] },
+      { name: "A", fields: [{ name: "ID", pk: true }, ...Array.from({ length: 3 }, (_, i) => ({ name: `R${i}ID`, fk: "Root.ID" }))] },
+      { name: "B", fields: [{ name: "ID", pk: true }, ...Array.from({ length: 3 }, (_, i) => ({ name: `S${i}ID`, fk: "Root.ID" }))] },
+    ];
+    const s = scene(tables);
+    expect(validateScene(s)).toEqual([]);
+    expect(validateScene(scene([...tables, { name: "C", fields: [{ name: "X", fk: "Root.ID" }] }]))).not.toEqual([]);
+    for (const avail of [296, 320, 336, 390]) expect(layoutDbSchema(s, avail).width, `${avail}`).toBeLessThanOrEqual(avail);
   });
 
   it("ширина строки в одну строку растёт с длиной имени и типа; у PK — чуть шире (жирный)", () => {

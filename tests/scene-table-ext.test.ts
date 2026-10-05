@@ -9,6 +9,10 @@ import {
   arrowGeometry,
   changeMap,
   joinLinkPath,
+  JOIN_TONE,
+  clipRect,
+  cellName,
+  tableExtDescription,
   joinTones,
   needsOverlay,
   rangeRect,
@@ -21,6 +25,7 @@ import {
   type Rect,
   type TableScene,
 } from "@/components/scenes/table";
+import type { DictKey } from "@/i18n/dict";
 import type { Scene } from "@/lib/types";
 import oldMarkup from "./fixtures/old-table-markup.json";
 import { validateScene } from "./validate";
@@ -201,18 +206,25 @@ describe("геометрия слоя: дуга остаётся внутри т
 });
 
 describe("JOIN: тоны и линии", () => {
-  it("каждая строка левой таблицы — свой тон по кругу; правая берёт тон первой связи", () => {
+  it("все совпавшие строки (обеих таблиц) — один тон primary; строки без пары — без тона; success/warning не берутся", () => {
+    // «многие к одному»: Erlan и Ali — в одном классе (строка 0 справа), пары разных строк не получают разных цветов
     const { left, right } = joinTones([[0, 0], [1, 1], [2, 0], [3, 2]]);
-    expect(left.get(0)).toBe("primary");
-    expect(left.get(1)).toBe("warning");
-    expect(left.get(2)).toBe("success");
-    expect(left.get(3)).toBe("primary");
-    expect(right.get(0)).toBe("primary");
-    expect(right.get(2)).toBe("primary");
-    // «один ко многим»: слева одна строка, справа две — тон один
-    const one = joinTones([[0, 0], [0, 1]]);
-    expect(one.right.get(0)).toBe(one.right.get(1));
+    expect([...left.keys()].sort()).toEqual([0, 1, 2, 3]);
+    expect([...right.keys()].sort()).toEqual([0, 1, 2]);
+    for (const tone of [...left.values(), ...right.values()]) expect(tone).toBe(JOIN_TONE);
+    expect(JOIN_TONE).toBe("primary");
+    // строка без пары — без тона
+    const part = joinTones([[1, 0]]);
+    expect(part.left.has(0)).toBe(false);
+    expect(part.right.has(1)).toBe(false);
     expect(joinTones([]).left.size).toBe(0);
+  });
+
+  it("clipRect обрезает прямоугольник по видимой области прокручиваемого блока", () => {
+    expect(clipRect({ x: 0, y: 0, w: 300, h: 30 }, { x: 0, y: 0, w: 200, h: 100 })).toEqual({ x: 0, y: 0, w: 200, h: 30 });
+    expect(clipRect({ x: -50, y: 10, w: 100, h: 30 }, { x: 0, y: 0, w: 200, h: 100 })).toEqual({ x: 0, y: 10, w: 50, h: 30 });
+    // целиком за краем — нулевая ширина, не отрицательная
+    expect(clipRect({ x: 400, y: 0, w: 50, h: 30 }, { x: 0, y: 0, w: 200, h: 100 }).w).toBe(0);
   });
 
   it("joinLinkPath: прямая при одной высоте, S-кривая при разной; концы — края строк", () => {
@@ -306,10 +318,43 @@ describe("TableScene: отрисовка расширений", () => {
     expect(out).toContain('data-join-row="L:0"');
     expect(out).toContain('data-join-row="R:1"');
     expect(out).toContain("bg-primary-soft");
-    expect(out).toContain("bg-warning-soft");
-    expect(out).toContain("bg-success-soft");
+    expect(out).not.toContain("bg-warning-soft");
+    expect(out).not.toContain("bg-success-soft");
     // первое отрисованное состояние — друг под другом (ширина ещё не измерена)
     expect(out).toContain("flex-col");
+  });
+
+  it("JOIN: тон строки не затирает подсветку столбца — выделенный столбец в совпавших строках жирный", () => {
+    const out = grid(table({ highlightCols: [1], join: { rows: [["10"]], links: [[0, 0]] } }));
+    expect(out).toContain("font-extrabold text-primary-strong");
+  });
+
+  it("расширения: дерево одно и то же на любом шаге (обёртка рисуется всегда), старая разметка без расширений не меняется", () => {
+    // состояния строк без стрелок и со стрелками — одна и та же обёртка (иначе таблица перемонтируется)
+    const a = grid(table({ rowStates: [{ row: 0, state: "dim" }] }));
+    const b = grid(table({ rowStates: [{ row: 0, state: "dim" }], arrows: [{ from: [0, 0], to: [1, 1] }] }));
+    for (const out of [a, b]) expect(out).toContain('class="relative"');
+    expect(grid(table({}))).not.toContain('class="relative"');
+  });
+
+  it("стрелки выше липкой колонки номеров строк (z-20): слой — z-[15]", () => {
+    const out = grid({ kind: "table", sheet: true, rows: [["a", "b"], ["c", "d"]], arrows: [{ from: [0, 0], to: [1, 1] }] });
+    expect(out).toContain("sticky left-0 z-20");
+    expect(out).not.toContain("z-30");
+  });
+
+  it("для скринридера: диапазон, стрелки и совпавшие строки названы текстом (ru и kk)", async () => {
+    const { dict } = await import("@/i18n/dict");
+    const { fmt } = await import("@/lib/text");
+    const tr = (lang: "ru" | "kk") => (key: DictKey, params?: Record<string, string | number>) => fmt(dict[key][lang], params);
+    const sc = table({ sheet: true, rowNumbers: [2, 5, 7], range: { from: [0, 0], to: [2, 1] }, arrows: [{ from: [1, 0], to: [1, 2] }], join: { rows: [["x"], ["y"]], links: [[0, 0], [2, 1]] } });
+    expect(cellName(sc, [1, 2])).toBe("C5");
+    expect(tableExtDescription(sc, tr("ru"))).toEqual(["Выделен диапазон A2:B7", "Стрелка: A5 → C5", "Совпадают строки: 1–1, 3–2"]);
+    expect(tableExtDescription(sc, tr("kk"))).toEqual(["A2:B7 ауқымы бөлектелген", "Көрсеткі: A5 → C5", "Сәйкес жолдар: 1–1, 3–2"]);
+    expect(tableExtDescription(table({}), tr("ru"))).toEqual([]);
+    const out = grid(sc);
+    expect(out).toContain("sr-only");
+    expect(out).toContain("Выделен диапазон A2:B7");
   });
 
   it("образцы: все рисуются без ошибок, hex-цветов, эмодзи и NaN", () => {

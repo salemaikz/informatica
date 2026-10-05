@@ -1,6 +1,6 @@
 import type { Scene } from "@/lib/types";
 
-/** Образцы сцены db-schema: 1:N, N:M через связку, четыре таблицы, 1:1, самосвязь, две связи в один ключ, длинные подписи, одна таблица. */
+/** Образцы сцены db-schema: 1:N, N:M через связку, четыре таблицы, 1:1, самосвязь, две связи в один ключ, длинные подписи, одна таблица, переносимые имена. */
 export const SAMPLES: Extract<Scene, { kind: "db-schema" }>[] = [
   {
     kind: "db-schema",
@@ -81,5 +81,22 @@ export const SAMPLES: Extract<Scene, { kind: "db-schema" }>[] = [
     kind: "db-schema",
     tables: [{ name: "Books", fields: [{ name: "ID", type: "INT", pk: true }, { name: "Title", type: "TEXT" }, { name: "Author", type: "TEXT" }, { name: "Year", type: "INT" }] }],
     highlight: ["Books.ID"],
+  },
+  // Длинные казахские имена (15–21 символ) и широкое имя таблицы: переносятся на вторую строку, не обрезаются.
+  {
+    kind: "db-schema",
+    tables: [
+      {
+        name: "ЖҰМЫСШЫЛАРДЫҢ",
+        fields: [
+          { name: "Коды", type: "INT", pk: true },
+          { name: "Оқушының аты-жөні", type: "INT" },
+          { name: "Сабақ кестесі коды", type: "INT", fk: "Кесте.Коды" },
+          { name: "Жетекшінің коды", type: "INT" },
+        ],
+      },
+      { name: "Кесте", fields: [{ name: "Коды", type: "INT", pk: true }, { name: "Оқушының аты-жөні" }] },
+    ],
+    highlight: ["ЖҰМЫСШЫЛАРДЫҢ.Сабақ кестесі коды"],
   },
 ];

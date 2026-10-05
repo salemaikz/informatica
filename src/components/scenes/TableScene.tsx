@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import {
+  JOIN_TONE,
   JOIN_WIDE_FROM,
   TONE_BG,
   TONE_FILL,
@@ -17,6 +18,7 @@ import {
   arrowGeometry,
   binaryColumns,
   cellKey,
+  clipRect,
   changeMap,
   colLetter,
   joinLinkPath,
@@ -26,7 +28,9 @@ import {
   rowStateMap,
   sheetRowNumber,
   tableData,
+  tableExtDescription,
   toneMap,
+  usesTableExt,
   type Rect,
   type RowState,
 } from "./table";
@@ -54,7 +58,7 @@ const sameGeo = (a: Geo, b: Geo) =>
  * Измеряет элементы с атрибутом `attr` внутри корня (координаты — от левого верхнего угла корня). Пересчёт — на любое изменение
  * размера корня или самих ячеек (ResizeObserver), поэтому слой не отстаёт от таблицы при смене шага и поворота экрана.
  */
-function useMeasured(active: boolean, attr: string, dep: unknown): [RefObject<HTMLDivElement | null>, Geo | null] {
+function useMeasured(active: boolean, attr: string, dep: unknown, clipToScroller = false): [RefObject<HTMLDivElement | null>, Geo | null] {
   const ref = useRef<HTMLDivElement>(null);
   const [geo, setGeo] = useState<Geo | null>(null);
   useEffect(() => {
@@ -65,7 +69,14 @@ function useMeasured(active: boolean, attr: string, dep: unknown): [RefObject<HT
       const rects = new Map<string, Rect>();
       root.querySelectorAll<HTMLElement>(`[${attr}]`).forEach((el) => {
         const b = el.getBoundingClientRect();
-        rects.set(el.getAttribute(attr)!, { x: b.left - rb.left, y: b.top - rb.top, w: b.width, h: b.height });
+        let rect: Rect = { x: b.left - rb.left, y: b.top - rb.top, w: b.width, h: b.height };
+        // Строка внутри прокручиваемой таблицы: считаем только видимую часть (линии JOIN идут от видимого края).
+        const clip = clipToScroller ? el.closest<HTMLElement>("[data-clip]") : null;
+        if (clip && root.contains(clip)) {
+          const cb = clip.getBoundingClientRect();
+          rect = clipRect(rect, { x: cb.left - rb.left, y: cb.top - rb.top, w: cb.width, h: cb.height });
+        }
+        rects.set(el.getAttribute(attr)!, rect);
       });
       const next: Geo = { rects, w: Math.max(rb.width, root.scrollWidth), h: Math.max(rb.height, root.scrollHeight) };
       setGeo((prev) => (prev && sameGeo(prev, next) ? prev : next));
@@ -73,8 +84,14 @@ function useMeasured(active: boolean, attr: string, dep: unknown): [RefObject<HT
     const ro = new ResizeObserver(measure);
     ro.observe(root);
     root.querySelectorAll(`[${attr}]`).forEach((el) => ro.observe(el));
-    return () => ro.disconnect();
-  }, [active, attr, dep]);
+    // Прокрутка внутри таблицы размер не меняет, но сдвигает видимый край строк — пересчитываем и на неё.
+    const clips = clipToScroller ? [...root.querySelectorAll<HTMLElement>("[data-clip]")] : [];
+    clips.forEach((c) => c.addEventListener("scroll", measure, { passive: true }));
+    return () => {
+      ro.disconnect();
+      clips.forEach((c) => c.removeEventListener("scroll", measure));
+    };
+  }, [active, attr, dep, clipToScroller]);
   return [ref, geo];
 }
 
@@ -218,6 +235,8 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                       hiCell(r, c) && "relative z-10 ring-2 ring-inset ring-primary",
                       bin[c] && (value === "1" ? "font-bold text-success" : "text-muted"),
                       extraClass(state, tone, c, width),
+                      // JOIN: тон строки закрывает заливку подсветки — выделенный столбец в совпавших строках остаётся жирным
+                      rowTone && hiBg(r, c) && "font-extrabold text-primary-strong",
                       anyRejected && last && "relative pr-9",
                     )}
                   >
@@ -245,7 +264,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
   );
 
   return (
-    <div className="mx-auto w-full max-w-xl overflow-x-auto rounded-2xl border border-border bg-surface">
+    <div {...(spec.joinSide ? { "data-clip": "" } : {})} className="mx-auto w-full max-w-xl overflow-x-auto rounded-2xl border border-border bg-surface">
       {wrapRef ? (
         <div ref={wrapRef} className="relative">
           {table}
@@ -264,7 +283,7 @@ function Overlay({ scene, geo, reduce }: { scene: TableScene; geo: Geo | null; r
   const frame = scene.range ? rangeRect(geo.rects, scene.range) : null;
   const spring = reduce ? { duration: 0 } : springSoft;
   return (
-    <svg width={geo.w} height={geo.h} className="pointer-events-none absolute left-0 top-0 z-30 overflow-visible" aria-hidden="true">
+    <svg width={geo.w} height={geo.h} className="pointer-events-none absolute left-0 top-0 z-[15] overflow-visible" aria-hidden="true">
       {frame && (
         <m.rect
           rx={4}
@@ -315,14 +334,16 @@ function FormulaBar({ cell, text }: { cell: string; text: string }) {
  * стрелки между ячейками, строка формул, свои номера строк и вторая таблица JOIN. Без них разметка — прежняя.
  */
 export function TableScene({ scene }: { scene: TableScene }) {
+  const { t } = useT();
   const { head, rows } = tableData(scene);
   const reduce = useReduceMotion();
+  const ext = usesTableExt(scene);
   const overlayOn = needsOverlay(scene);
   const [mainRef, mainGeo] = useMeasured(overlayOn, "data-cell", scene);
 
   const join = scene.join;
   const jt = join ? joinTones(join.links) : null;
-  const [joinRef, joinGeo] = useMeasured(!!join, "data-join-row", scene);
+  const [joinRef, joinGeo] = useMeasured(!!join, "data-join-row", scene, true);
   const wide = !!join && !!joinGeo && joinGeo.w >= JOIN_WIDE_FROM;
 
   const mainSpec: GridSpec = {
@@ -341,39 +362,33 @@ export function TableScene({ scene }: { scene: TableScene }) {
     measureCells: overlayOn,
     joinSide: join ? "L" : undefined,
   };
-  const grid = (
-    <TableGrid spec={mainSpec} wrapRef={overlayOn ? mainRef : undefined} overlay={overlayOn ? <Overlay scene={scene} geo={mainGeo} reduce={reduce} /> : undefined} />
-  );
+  // Без расширений — прежняя разметка (побайтно). С расширениями дерево одно и то же на любом шаге (обёртка рисуется всегда),
+  // поэтому включение рамки, стрелок, строки формул или JOIN между шагами не перемонтирует таблицу и подсветка меняется плавно.
+  if (!ext) return <TableGrid spec={mainSpec} />;
+
+  const grid = <TableGrid spec={mainSpec} wrapRef={mainRef} overlay={overlayOn ? <Overlay scene={scene} geo={mainGeo} reduce={reduce} /> : null} />;
   const bar = scene.formula ? <FormulaBar cell={scene.formula.cell} text={scene.formula.text} /> : null;
+  const said = tableExtDescription(scene, t);
 
-  if (!join) {
-    return bar ? (
-      <div>
-        {bar}
-        {grid}
-      </div>
-    ) : (
-      grid
-    );
-  }
-
-  const rightSpec: GridSpec = {
-    head: join.columns ?? null,
-    rows: join.rows,
-    sheet: false,
-    mono: !!scene.mono,
-    hiRows: new Set(),
-    hiCols: new Set(),
-    hiCells: new Set(),
-    states: new Map(),
-    changes: new Map(),
-    tones: new Map(),
-    rowTones: jt?.right ?? new Map(),
-    rowNumber: (r) => r + 1,
-    measureCells: false,
-    joinSide: "R",
-  };
-  const links = wide && joinGeo ? join.links : [];
+  const rightSpec: GridSpec | null = join
+    ? {
+        head: join.columns ?? null,
+        rows: join.rows,
+        sheet: false,
+        mono: !!scene.mono,
+        hiRows: new Set(),
+        hiCols: new Set(),
+        hiCells: new Set(),
+        states: new Map(),
+        changes: new Map(),
+        tones: new Map(),
+        rowTones: jt?.right ?? new Map(),
+        rowNumber: (r) => r + 1,
+        measureCells: false,
+        joinSide: "R",
+      }
+    : null;
+  const links = join && wide && joinGeo ? join.links : [];
 
   return (
     <div>
@@ -383,29 +398,31 @@ export function TableScene({ scene }: { scene: TableScene }) {
           <div className="min-w-0" style={wide ? { flex: `${Math.max(1, mainSpec.rows[0]?.length ?? 1)} 1 0%` } : undefined}>
             {grid}
           </div>
-          <div className="min-w-0" style={wide ? { flex: `${Math.max(1, rightSpec.rows[0]?.length ?? 1)} 1 0%` } : undefined}>
-            <TableGrid spec={rightSpec} />
-          </div>
+          {rightSpec && (
+            <div className="min-w-0" style={wide ? { flex: `${Math.max(1, rightSpec.rows[0]?.length ?? 1)} 1 0%` } : undefined}>
+              <TableGrid spec={rightSpec} />
+            </div>
+          )}
         </div>
         {joinGeo && links.length > 0 && (
-          <svg width={joinGeo.w} height={joinGeo.h} className="pointer-events-none absolute left-0 top-0 z-30 overflow-visible" aria-hidden="true">
+          <svg width={joinGeo.w} height={joinGeo.h} className="pointer-events-none absolute left-0 top-0 z-[15] overflow-visible" aria-hidden="true">
             {links.map(([a, b], i) => {
-              const ra = joinGeo!.rects.get(`L:${a}`);
-              const rb = joinGeo!.rects.get(`R:${b}`);
+              const ra = joinGeo.rects.get(`L:${a}`);
+              const rb = joinGeo.rects.get(`R:${b}`);
               if (!ra || !rb) return null;
-              const tone = jt!.left.get(a) ?? "primary";
               const p = joinLinkPath(ra, rb);
               return (
                 <m.g key={`${i}|${p.d}`} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.25, delay: reduce ? 0 : 0.1 }}>
-                  <path d={p.d} fill="none" strokeWidth={2.2} strokeLinecap="round" className={TONE_STROKE[tone]} />
-                  <circle cx={p.from[0]} cy={p.from[1]} r={3} className={TONE_FILL[tone]} />
-                  <circle cx={p.to[0]} cy={p.to[1]} r={3} className={TONE_FILL[tone]} />
+                  <path d={p.d} fill="none" strokeWidth={2.2} strokeLinecap="round" className={TONE_STROKE[JOIN_TONE]} />
+                  <circle cx={p.from[0]} cy={p.from[1]} r={3} className={TONE_FILL[JOIN_TONE]} />
+                  <circle cx={p.to[0]} cy={p.to[1]} r={3} className={TONE_FILL[JOIN_TONE]} />
                 </m.g>
               );
             })}
           </svg>
         )}
       </div>
+      {said.length > 0 && <p className="sr-only">{said.join(". ")}</p>}
     </div>
   );
 }

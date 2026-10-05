@@ -17,5 +17,8 @@ export const sceneDbDict = {
   "scene.table.rejected": { ru: "строка отклонена", kk: "жол қабылданбады" },
   "scene.table.new": { ru: "новая строка", kk: "жаңа жол" },
   "scene.table.was": { ru: "было", kk: "бұрын" },
+  "scene.table.range": { ru: "Выделен диапазон {range}", kk: "{range} ауқымы бөлектелген" },
+  "scene.table.arrow": { ru: "Стрелка: {from} → {to}", kk: "Көрсеткі: {from} → {to}" },
+  "scene.table.joinMatch": { ru: "Совпадают строки: {pairs}", kk: "Сәйкес жолдар: {pairs}" },
   "scene.table.formulaBar": { ru: "Строка формул", kk: "Формулалар жолы" },
 } satisfies Record<string, L>;
