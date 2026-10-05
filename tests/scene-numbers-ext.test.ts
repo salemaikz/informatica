@@ -24,6 +24,7 @@ import {
   weightLabel,
   weightMode,
 } from "@/components/scenes/numbers";
+import { estimateTextWidth } from "@/components/scenes/text-width";
 import type { Scene } from "@/lib/types";
 import { validateScene } from "./validate";
 
@@ -187,6 +188,26 @@ describe("binary: раскладка на 360 px", () => {
     expect(withB.height).toBeGreaterThan(plain.height);
     expect(withW.height).toBeGreaterThan(withB.height);
     expect(byte.height - byte.tileH).toBeGreaterThan(withB.height - withB.tileH);
+  });
+});
+
+describe("binary: группы вместе со сдвигом влево", () => {
+  it("приписанный ноль не входит в группу и не ломает раскладку", () => {
+    const units = binaryUnits("11010111", { groups: 4, shift: "left" });
+    expect(units[units.length - 1].key).toBe("x");
+    expect(units[units.length - 2].cells).toHaveLength(4);
+    expect(units[units.length - 2].bracket?.text).toBe("7");
+    const lay = layoutRows(binaryUnits("1".repeat(32), { groups: 8, shift: "left" }), { brackets: true });
+    expect(lay.rows).toHaveLength(2);
+    const last = lay.rows[1].units.find((u) => u.bracket);
+    expect(last).toBeTruthy();
+  });
+  it("подписи степеней «2ⁿ» соседних плиток не пересекаются", () => {
+    const exps = Array.from({ length: 32 }, (_, i) => 31 - i);
+    const wm = weightMode(exps, 16);
+    expect(wm.mode).toBe("pow");
+    const widest = Math.max(...exps.map((e) => estimateTextWidth(weightLabel(e, "pow"), wm.font)));
+    expect(widest).toBeLessThanOrEqual(16 + 3);
   });
 });
 

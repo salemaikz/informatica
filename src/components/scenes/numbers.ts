@@ -113,7 +113,8 @@ export function binaryUnits(bits: string, o: { groups?: 3 | 4 | 8; gap?: [number
         bracket: g === 8 ? { text: String(value), byte: u + 1, value } : { text: digitChar(value), value },
       });
     }
-    if (o.shift === "left") units[units.length - 1].cells.push({ key: "x", kind: "extra", ch: "0", index: -1, mark: "added" });
+    // Приписанный ноль — отдельная единица без скобки: группа и её подпись остаются как были
+    if (o.shift === "left") units.push({ key: "x", cells: [{ key: "x", kind: "extra", ch: "0", index: -1, mark: "added" }] });
     return units;
   }
 
@@ -175,14 +176,18 @@ export function layoutRows(
 ): RowsLayout {
   const W = o.width ?? NUM_W;
   const maxTiles = o.maxTiles ?? MAX_ROW_TILES;
-  const maxCells = Math.max(1, ...units.map((u) => u.cells.length));
+  // Приписанный сдвигом ноль («x») не считается ни в ширину группы, ни в число единиц на ряд: он едет в последний ряд
+  const extra = units.length > 1 && units[units.length - 1].key === "x" ? units[units.length - 1] : undefined;
+  const main = extra ? units.slice(0, -1) : units;
+  const maxCells = Math.max(1, ...main.map((u) => u.cells.length));
   // Одиночные разряды (без групп) — обычный зазор; зазор побольше — только между группами.
   const unitGap = o.unitGap ?? (maxCells === 1 ? CELL_GAP : UNIT_GAP);
   const cap = Math.max(1, Math.floor(maxTiles / maxCells));
-  const nRows = Math.max(1, Math.ceil(units.length / cap));
-  const perRow = Math.max(1, Math.ceil(units.length / nRows));
+  const nRows = Math.max(1, Math.ceil(main.length / cap));
+  const perRow = Math.max(1, Math.ceil(main.length / nRows));
   const chunks: UnitSpec[][] = [];
-  for (let i = 0; i < units.length; i += perRow) chunks.push(units.slice(i, i + perRow));
+  for (let i = 0; i < main.length; i += perRow) chunks.push(main.slice(i, i + perRow));
+  if (extra) chunks[chunks.length - 1] = [...chunks[chunks.length - 1], extra];
 
   const rowCells = (c: UnitSpec[]) => c.reduce((a, u) => a + u.cells.length, 0);
   const fixed = (c: UnitSpec[]) => CELL_GAP * (rowCells(c) - c.length) + unitGap * (c.length - 1);
@@ -222,9 +227,13 @@ export function layoutRows(
 
 /** Подпись веса: число или «2ⁿ», если число не влезает в плитку. Режим выбирается один на всю сцену. */
 export function weightMode(exps: number[], tileW: number): { mode: "value" | "pow"; font: number } {
-  const font = Math.max(9, Math.min(13, Math.round(tileW * 0.5)));
+  let font = Math.max(9, Math.min(13, Math.round(tileW * 0.5)));
   const widest = Math.max(0, ...exps.map((e) => estimateTextWidth(String(2 ** e), font)));
-  return { mode: widest <= tileW + CELL_GAP ? "value" : "pow", font };
+  if (widest <= tileW + CELL_GAP) return { mode: "value", font };
+  // «2ⁿ»: шрифт уменьшаем, пока подписи соседних плиток не разойдутся
+  const powWidest = (f: number) => Math.max(0, ...exps.map((e) => estimateTextWidth(`2${sup(e)}`, f)));
+  while (font > 6 && powWidest(font) > tileW + CELL_GAP - 2) font--;
+  return { mode: "pow", font };
 }
 
 export function weightLabel(exp: number, mode: "value" | "pow"): string {

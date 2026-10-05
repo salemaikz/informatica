@@ -17,7 +17,6 @@ function Chip({ children }: { children: string }) {
 function Panel({ panel, reduce }: { panel: WavePanel; reduce: boolean }) {
   const { t, l } = useT();
   const lay = waveLayout(panel);
-  const grid = hasGrid(panel.bits);
   const spring = reduce ? { duration: 0 } : springSoft;
   const dim = panel.digital; // при цифровой кривой исходная волна — бледная
 
@@ -83,7 +82,7 @@ function Panel({ panel, reduce }: { panel: WavePanel; reduce: boolean }) {
       <div className="flex flex-wrap justify-center gap-1.5">
         {panel.samples > 0 && <Chip>{t("scene.wave.samples", { n: panel.samples })}</Chip>}
         {panel.bits !== undefined && <Chip>{t("scene.wave.bits", { n: panel.bits })}</Chip>}
-        {grid && panel.bits !== undefined && <Chip>{t("scene.wave.levels", { f: levelsFormula(panel.bits) })}</Chip>}
+        {panel.bits !== undefined && <Chip>{t("scene.wave.levels", { f: levelsFormula(panel.bits) })}</Chip>}
       </div>
     </div>
   );

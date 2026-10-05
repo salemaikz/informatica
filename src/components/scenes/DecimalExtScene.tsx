@@ -84,16 +84,25 @@ export function DecimalExtScene({ scene }: { scene: DecimalData }) {
     const font = Math.min(15, monoFit(longest + 2, 250, 15));
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-2" role="group" aria-label={t("scene.decimal.ariaPeel", { number: scene.number, base })}>
+        {base !== 10 && (
+          <p className="text-center font-mono text-base font-bold text-text">
+            {scene.number}
+            {subscript(base)} = {valueInBase(scene.number, base)}
+          </p>
+        )}
         <ol className="flex flex-col gap-2">
           {steps.map((s, i) => (
             <PeelRow key={s.n} step={s} font={font} index={i} wide />
           ))}
         </ol>
-        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+        <div className="flex flex-col items-center gap-1.5 pt-1">
           <span className="text-sm font-extrabold text-muted">{t("scene.decimal.peelDigits")}</span>
-          {steps.map((s, i) => (
-            <WeightChip key={s.n} label={s.ch} tone="gold" delay={0.3 + i * 0.12} fontSize={15} className="min-w-8" />
-          ))}
+          {/* Первая найденная цифра — справа: ряд читается как исходная запись */}
+          <div className="flex flex-row-reverse flex-wrap items-center justify-center gap-1.5">
+            {steps.map((s, i) => (
+              <WeightChip key={s.n} label={s.ch} tone="gold" delay={0.3 + i * 0.12} fontSize={15} className="min-w-8" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -110,7 +119,7 @@ export function DecimalExtScene({ scene }: { scene: DecimalData }) {
   const chipsDone = 0.2 + n * 0.1;
 
   return (
-    <div className="flex w-full flex-col gap-2" role="group" aria-label={t("scene.decimal.ariaBase", { number: scene.number, base })}>
+    <div className="flex w-full flex-col gap-2" role="img" aria-label={`${t("scene.decimal.ariaBase", { number: scene.number, base })} = ${total}`}>
       <ColumnRow
         keys={keys}
         max={mt.max}

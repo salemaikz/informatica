@@ -16,15 +16,15 @@ export const sceneSignalDict = {
   "scene.binary.andIp": { ru: "IP", kk: "IP" },
   "scene.binary.andMask": { ru: "Маска", kk: "Маска" },
   "scene.binary.andNet": { ru: "Сеть", kk: "Желі" },
-  "scene.binary.shiftLeft": { ru: "влево: ×2, справа приписан 0", kk: "солға: ×2, оң жағына 0 жазылады" },
-  "scene.binary.shiftRight": { ru: "вправо: :2, правый разряд отброшен", kk: "оңға: :2, оң жақ разряд тасталады" },
+  "scene.binary.shiftLeft": { ru: "влево — умножаем на 2, справа приписан 0", kk: "солға — 2-ге көбейтеміз, оң жағына 0 жазылады" },
+  "scene.binary.shiftRight": { ru: "вправо — делим на 2, правый разряд отброшен", kk: "оңға — 2-ге бөлеміз, оң жақ разряд тасталады" },
   "scene.binary.shiftResult": { ru: "получится:", kk: "нәтиже:" },
   "scene.binary.ariaGroups": { ru: "разрядов в группе: {g}", kk: "топтағы разряд: {g}" },
-  "scene.binary.ariaGap": { ru: "середина пропущена", kk: "ортасы жіберілген" },
+  "scene.binary.ariaGap": { ru: "середина пропущена", kk: "ортасы көрсетілмеген" },
 
   // decimal: основание и «отрываем цифру»
   "scene.decimal.peelStep": { ru: "шаг {n}", kk: "{n}-қадам" },
   "scene.decimal.peelDigits": { ru: "цифры справа налево:", kk: "цифрлар оңнан солға:" },
   "scene.decimal.ariaBase": { ru: "Число {number}, основание системы счисления: {base}", kk: "{number} саны, санау жүйесінің негізі: {base}" },
-  "scene.decimal.ariaPeel": { ru: "Отделение цифр числа {number}, основание: {base}", kk: "{number} санының цифрларын бөлу, негіз: {base}" },
+  "scene.decimal.ariaPeel": { ru: "Отделение цифр числа {number}, основание: {base}", kk: "{number} санының цифрларын бөліп алу, негіз: {base}" },
 } satisfies Record<string, L>;

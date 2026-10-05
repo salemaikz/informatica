@@ -229,14 +229,14 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
         />
         {scene.shift && (
           <g>
-            <line x1={left + 6} x2={right - 6} y1={ay} y2={ay} strokeWidth={3} strokeLinecap="round" className={scene.shift === "left" ? "stroke-success" : "stroke-danger"} />
+            <line x1={left + 6} x2={right - 6} y1={ay} y2={ay} strokeWidth={3} strokeLinecap="round" className="stroke-primary" />
             <path
               d={scene.shift === "left" ? `M${left + 14} ${ay - 7} L${left + 5} ${ay} L${left + 14} ${ay + 7}` : `M${right - 14} ${ay - 7} L${right - 5} ${ay} L${right - 14} ${ay + 7}`}
               fill="none"
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className={scene.shift === "left" ? "stroke-success" : "stroke-danger"}
+              className="stroke-primary"
             />
             <text x={NUM_W / 2} y={ay + 24} textAnchor="middle" fontSize={14} fontWeight={800} className="fill-muted">
               {t(scene.shift === "left" ? "scene.binary.shiftLeft" : "scene.binary.shiftRight")}

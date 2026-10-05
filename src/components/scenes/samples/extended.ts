@@ -2,6 +2,8 @@ import type { Scene } from "@/lib/types";
 
 /** Образцы расширений старых сцен (binary, decimal, table, circuit, hardware). Дополняют исполнители расширений. */
 export const SAMPLES: Scene[] = [
+  { kind: "binary", bits: "11000000101010000000000100001010", groups: 8, shift: "left" },
+  { kind: "binary", bits: "11111111111111111111111111111111", groups: 3, weights: true },
   { kind: "binary", bits: "11010111", groups: 4 },
   { kind: "binary", bits: "1011010", groups: 3, weights: true },
   { kind: "binary", bits: "11000000101010000000000100001010", groups: 8 },
