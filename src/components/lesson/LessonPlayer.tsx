@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { AnswerRecord, Lang, Lesson, LessonVia, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
+import { taskSecrets } from "@/lib/task-secrets";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
 import type { LessonRun } from "@/lib/lesson-run";
 import { lessonXpFactorNow, useApp } from "@/lib/store";
@@ -665,6 +666,8 @@ export function LessonPlayer({
       prompt: promptText(question, lang),
       options: question.type === "choice" || question.type === "multi" ? question.options.map((o) => tx(o, lang)) : undefined,
       correct: expectedText(question, lang),
+      // Пока задание не решено, ответы уходят стоп-словами: сервер не отдаст ответ ИИ, в котором они названы (#100).
+      secrets: phase === "feedback" ? undefined : taskSecrets(question, lang),
       // У задачи с кодом ИИ видит сам код ученика (обрезается сервером по бюджету), а не только «тесты пройдены».
       given: answer?.type === "code" && answer.code.trim() ? answer.code.slice(0, 1500) : result?.given,
       explanation: plain(tx(question.explanation, lang)),

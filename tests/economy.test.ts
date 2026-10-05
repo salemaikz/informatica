@@ -732,7 +732,8 @@ describe("pushLedger", () => {
 });
 
 describe("ИИ: quoteAi", () => {
-  const usage = (free: number, count = free, day = TODAY): AiUsage => ({ day, count, free });
+  /** free — дневной счётчик («Лайт»), freeTotal — за всё время («Бесплатный»): в тестах квот они совпадают, если не задано иное. */
+  const usage = (free: number, count = free, day = TODAY, freeTotal = free): AiUsage => ({ day, count, free, freeTotal });
 
   it("бесплатный лимит по тарифу, потом чипы", () => {
     expect(quoteAi("hint", "free", undefined, 100, TODAY)).toEqual({ ok: true, kind: "hint", day: TODAY, pay: "free", cost: 0 });
@@ -753,7 +754,7 @@ describe("ИИ: quoteAi", () => {
     expect(quoteAi("voice", "free", usage(0), 0, TODAY)).toMatchObject({ ok: true, pay: "free", cost: 0 });
     expect(quoteAi("voice", "unlimited", usage(500, 10), 0, TODAY)).toMatchObject({ ok: true, pay: "plan", cost: 0 });
     // голос съедает бесплатный лимит как одно обращение, а в дневной потолок идёт за 4 (AI_UNITS)
-    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 4, free: 1 });
+    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 4, free: 1, freeTotal: 1 });
   });
 
   it("не хватает чипов — причина chips и цена", () => {
@@ -816,17 +817,32 @@ describe("ИИ: quoteAi", () => {
     expect(quoteAi("feedback", "lite", usage(0, AI_DAILY_CAP.lite + 1), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
   });
 
-  it("использование за вчера не считается", () => {
-    expect(quoteAi("hint", "free", usage(3, 99, "2027-01-14"), 0, TODAY).pay).toBe("free");
+  it("использование за вчера не считается: дневной счёт «Лайт» обнуляется, дневной потолок тоже", () => {
+    expect(quoteAi("hint", "lite", usage(30, 99, "2027-01-14", 0), 0, TODAY).pay).toBe("free");
+    expect(quoteAi("hint", "free", usage(0, 99, "2027-01-14", 0), 0, TODAY).pay).toBe("free");
+  });
+
+  it("«Бесплатный»: 3 бесплатных обращения за всё время, а не в день (#99)", () => {
+    // Потрачены вчера — сегодня их всё равно нет.
+    expect(aiFreeLeft("free", usage(3, 3, "2027-01-14", 3), TODAY)).toBe(0);
+    expect(quoteAi("hint", "free", usage(3, 3, "2027-01-14", 3), 100, TODAY)).toMatchObject({ ok: true, pay: "chips", cost: AI_COST.hint });
+    expect(quoteAi("hint", "free", usage(3, 3, "2027-01-14", 3), 2, TODAY)).toMatchObject({ ok: false, reason: "chips" });
+    // Осталось одно из трёх — и завтра останется одно.
+    expect(aiFreeLeft("free", usage(2, 2, "2027-01-14", 2), TODAY)).toBe(1);
+    expect(aiFreeLeft("free", usage(0, 0, TODAY, 3), TODAY)).toBe(0);
+    // «Лайт» считает по дням: вчерашние 30 не мешают.
+    expect(aiFreeLeft("lite", usage(30, 30, "2027-01-14", 30), TODAY)).toBe(30);
+    expect(aiFreeLeft("lite", usage(10, 10, TODAY, 10), TODAY)).toBe(20);
   });
 
   it("aiFreeLeft / usageToday", () => {
     expect(aiFreeLeft("free", undefined, TODAY)).toBe(3);
     expect(aiFreeLeft("free", usage(1), TODAY)).toBe(2);
     expect(aiFreeLeft("free", usage(7), TODAY)).toBe(0);
-    expect(aiFreeLeft("free", usage(2, 2, "2027-01-14"), TODAY)).toBe(3);
+    expect(aiFreeLeft("lite", usage(2, 2, "2027-01-14"), TODAY)).toBe(30);
     expect(aiFreeLeft("unlimited", undefined, TODAY)).toBe(Infinity);
-    expect(usageToday(usage(2), "2027-01-16")).toEqual({ day: "2027-01-16", count: 0, free: 0 });
+    // Дневные счётчики сбрасываются, «всего» — нет.
+    expect(usageToday(usage(2), "2027-01-16")).toEqual({ day: "2027-01-16", count: 0, free: 0, freeTotal: 2 });
   });
 });
 
@@ -834,61 +850,62 @@ describe("ИИ: applyAiUsage / refundAiUsage", () => {
   const rc = (over: Partial<AiReceipt> = {}): AiReceipt => ({ ok: true, kind: "hint", day: TODAY, pay: "free", cost: 0, ...over });
 
   it("бесплатное обращение: count и free растут", () => {
-    expect(applyAiUsage(undefined, rc())).toEqual({ day: TODAY, count: 1, free: 1 });
+    expect(applyAiUsage(undefined, rc())).toEqual({ day: TODAY, count: 1, free: 1, freeTotal: 1 });
   });
 
   it("за чипы — только count; по тарифу — только count", () => {
-    expect(applyAiUsage({ day: TODAY, count: 3, free: 3 }, rc({ pay: "chips", cost: 5 }))).toEqual({ day: TODAY, count: 4, free: 3 });
-    expect(applyAiUsage({ day: TODAY, count: 0, free: 0 }, rc({ pay: "plan" }))).toEqual({ day: TODAY, count: 1, free: 0 });
+    expect(applyAiUsage({ day: TODAY, count: 3, free: 3, freeTotal: 3 }, rc({ pay: "chips", cost: 5 }))).toEqual({ day: TODAY, count: 4, free: 3, freeTotal: 3 });
+    expect(applyAiUsage({ day: TODAY, count: 0, free: 0, freeTotal: 0 }, rc({ pay: "plan" }))).toEqual({ day: TODAY, count: 1, free: 0, freeTotal: 0 });
   });
 
   it("отзыв: вес 0 — в count не идёт и бесплатный лимит не съедает", () => {
-    expect(applyAiUsage(undefined, rc({ kind: "feedback" }))).toEqual({ day: TODAY, count: 0, free: 0 });
+    expect(applyAiUsage(undefined, rc({ kind: "feedback" }))).toEqual({ day: TODAY, count: 0, free: 0, freeTotal: 0 });
   });
 
   it("вес обращения в count: фото +2, голос +4, подсказка +1; бесплатные — штуками", () => {
-    expect(applyAiUsage(undefined, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 2, free: 1 });
-    expect(applyAiUsage(undefined, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 4, free: 0 });
-    expect(applyAiUsage({ day: TODAY, count: 5, free: 3 }, rc({ kind: "review", pay: "plan" }))).toEqual({ day: TODAY, count: 7, free: 3 });
+    expect(applyAiUsage(undefined, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 2, free: 1, freeTotal: 1 });
+    expect(applyAiUsage(undefined, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 4, free: 0, freeTotal: 0 });
+    expect(applyAiUsage({ day: TODAY, count: 5, free: 3, freeTotal: 3 }, rc({ kind: "review", pay: "plan" }))).toEqual({ day: TODAY, count: 7, free: 3, freeTotal: 3 });
   });
 
   it("возврат вычитает тот же вес, не уходя ниже нуля", () => {
-    const u: AiUsage = { day: TODAY, count: 6, free: 1 };
-    expect(refundAiUsage(u, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 2, free: 1 });
-    expect(refundAiUsage({ day: TODAY, count: 1, free: 1 }, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 0, free: 0 });
+    const u: AiUsage = { day: TODAY, count: 6, free: 1, freeTotal: 1 };
+    expect(refundAiUsage(u, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 2, free: 1, freeTotal: 1 });
+    expect(refundAiUsage({ day: TODAY, count: 1, free: 1, freeTotal: 1 }, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 0, free: 0, freeTotal: 0 });
   });
 
   it("неудачная квитанция ничего не меняет", () => {
-    expect(applyAiUsage({ day: TODAY, count: 2, free: 1 }, rc({ ok: false, reason: "chips" }))).toEqual({ day: TODAY, count: 2, free: 1 });
+    expect(applyAiUsage({ day: TODAY, count: 2, free: 1, freeTotal: 1 }, rc({ ok: false, reason: "chips" }))).toEqual({ day: TODAY, count: 2, free: 1, freeTotal: 1 });
   });
 
-  it("вчерашнее использование обнуляется", () => {
-    expect(applyAiUsage({ day: "2027-01-14", count: 9, free: 3 }, rc())).toEqual({ day: TODAY, count: 1, free: 1 });
+  it("вчерашнее дневное использование обнуляется, а бесплатные «за всё время» копятся", () => {
+    expect(applyAiUsage({ day: "2027-01-14", count: 9, free: 3, freeTotal: 3 }, rc())).toEqual({ day: TODAY, count: 1, free: 1, freeTotal: 4 });
   });
 
   it("возврат: обратный applyAiUsage", () => {
-    const u0: AiUsage = { day: TODAY, count: 2, free: 2 };
+    const u0: AiUsage = { day: TODAY, count: 2, free: 2, freeTotal: 2 };
     for (const r of [rc(), rc({ pay: "chips", cost: 5 }), rc({ pay: "plan" }), rc({ kind: "feedback" })]) {
       expect(refundAiUsage(applyAiUsage(u0, r), r)).toEqual(u0);
     }
   });
 
   it("возврат не уходит ниже нуля", () => {
-    expect(refundAiUsage({ day: TODAY, count: 0, free: 0 }, rc())).toEqual({ day: TODAY, count: 0, free: 0 });
+    expect(refundAiUsage({ day: TODAY, count: 0, free: 0, freeTotal: 0 }, rc())).toEqual({ day: TODAY, count: 0, free: 0, freeTotal: 0 });
   });
 
-  it("возврат в другой день не происходит", () => {
-    const u: AiUsage = { day: "2027-01-16", count: 4, free: 3 };
-    expect(refundAiUsage(u, rc())).toEqual(u);
+  it("возврат в другой день: дневные счётчики не трогаем, бесплатное «за всё время» возвращается (#99)", () => {
+    const u: AiUsage = { day: "2027-01-16", count: 4, free: 3, freeTotal: 3 };
+    expect(refundAiUsage(u, rc())).toEqual({ day: "2027-01-16", count: 4, free: 3, freeTotal: 2 });
+    expect(refundAiUsage(u, rc({ pay: "chips", cost: 3 }))).toEqual(u);
   });
 
   it("возврат неудачной квитанции ничего не меняет", () => {
-    const u: AiUsage = { day: TODAY, count: 4, free: 3 };
+    const u: AiUsage = { day: TODAY, count: 4, free: 3, freeTotal: 3 };
     expect(refundAiUsage(u, rc({ ok: false, reason: "cap" }))).toEqual(u);
   });
 
   it("возврат без учёта за день — нули", () => {
-    expect(refundAiUsage(undefined, rc())).toEqual({ day: TODAY, count: 0, free: 0 });
+    expect(refundAiUsage(undefined, rc())).toEqual({ day: TODAY, count: 0, free: 0, freeTotal: 0 });
   });
 });
 
@@ -955,9 +972,22 @@ describe("sanitize*: мусор на входе", () => {
   });
 
   it("sanitizeAiUsage", () => {
-    for (const g of garbage) expect(sanitizeAiUsage(g)).toEqual({ day: "", count: 0, free: 0 });
-    expect(sanitizeAiUsage({ day: TODAY, count: -3, free: 2.7 })).toEqual({ day: TODAY, count: 0, free: 2 });
-    expect(sanitizeAiUsage({ day: 5, count: Infinity })).toEqual({ day: "", count: 0, free: 0 });
+    for (const g of garbage) expect(sanitizeAiUsage(g)).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
+    expect(sanitizeAiUsage({ day: TODAY, count: -3, free: 2.7, freeTotal: 1 })).toEqual({ day: TODAY, count: 0, free: 2, freeTotal: 1 });
+    expect(sanitizeAiUsage({ day: 5, count: Infinity })).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
+    expect(sanitizeAiUsage({ day: TODAY, count: 1, free: 1, freeTotal: -4 })).toMatchObject({ freeTotal: 0 });
+  });
+
+  it("sanitizeAiUsage: миграция (#99) — потраченное сегодня считается потраченным из «трёх навсегда»", () => {
+    // Старое сохранение без freeTotal: сегодняшние бесплатные становятся потраченными навсегда.
+    expect(sanitizeAiUsage({ day: TODAY, count: 3, free: 3 }, TODAY)).toEqual({ day: TODAY, count: 3, free: 3, freeTotal: 3 });
+    expect(aiFreeLeft("free", sanitizeAiUsage({ day: TODAY, count: 2, free: 2 }, TODAY), TODAY)).toBe(1);
+    // Вчерашние не считаем (их нельзя отличить от «уже восстановленных»), без «сегодня» — тоже ноль.
+    expect(sanitizeAiUsage({ day: "2027-01-14", count: 3, free: 3 }, TODAY).freeTotal).toBe(0);
+    expect(sanitizeAiUsage({ day: TODAY, count: 3, free: 3 }).freeTotal).toBe(0);
+    // Повторная загрузка уже мигрированных данных их не меняет.
+    const once = sanitizeAiUsage({ day: TODAY, count: 3, free: 3 }, TODAY);
+    expect(sanitizeAiUsage(once, "2027-01-20")).toEqual(once);
   });
 
   it("sanitizePaywall", () => {

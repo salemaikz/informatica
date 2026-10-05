@@ -138,11 +138,11 @@ export function useChips() {
   };
 }
 
-/** Как будет оплачен запрос к ИИ этого вида прямо сейчас (без списания) и сколько бесплатных осталось. */
-export function useAiQuote(kind: AiKind): { quote: AiReceipt; freeLeft: number; tier: PlanTier } {
+/** Как будет оплачен запрос к ИИ этого вида прямо сейчас (без списания), сколько бесплатных осталось и сколько у ученика чипов. */
+export function useAiQuote(kind: AiKind): { quote: AiReceipt; freeLeft: number; tier: PlanTier; chips: number } {
   const usage = useApp((s) => s.aiUsage);
   const chips = useApp((s) => s.wallet.chips);
   const tier = usePlanTier();
   const today = todayKey();
-  return { quote: quoteAi(kind, tier, usage, chips, today), freeLeft: aiFreeLeft(tier, usage, today), tier };
+  return { quote: quoteAi(kind, tier, usage, chips, today), freeLeft: aiFreeLeft(tier, usage, today), tier, chips };
 }

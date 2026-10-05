@@ -9,6 +9,7 @@ import { callTimeoutMs, getOpenAI, INPUT_BUDGET, jsonError, logUsage, MAX_TOKENS
 import { guardAi, preCheckAi, withGuardHeaders, type GuardOk } from "@/server/ai-guard";
 import { fitInput, messagesChars, sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask, type HistoryMsg } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
+import { LEAK_FALLBACK, leaksUnsolved, unsolvedSecrets } from "@/server/answer-guard";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
 import { CHAT_MODES, type ChatMode } from "@/lib/chats";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
@@ -20,6 +21,8 @@ import type { EntTopicId } from "@/lib/types";
 // обращение списывается до вызова модели; возвращается, только если модель точно не получила запрос).
 // Конец ответа: каждый текстовый ответ заканчивается маркером (lib/ai-stream.ts): OK — дошёл целиком, ERR — сбой потока,
 // CUT — обрезка по длине. Ответ без маркера OK клиент покажет как «оборвалось». Маркер ученику не виден.
+// Ответ к нерешённому заданию (#100): подсказка и вопрос к ещё не решённому заданию проверяются кодом (lib/answer-leak.ts) —
+// ответ модели без потока (целиком), при утечке один повтор с усиленной припиской, потом безопасный текст и лог `[ai] leak=1`.
 // Бюджет входа (INPUT_BUDGET.tutor, v0.9.1): fitInput укладывает системный промпт + данные ученика + историю в 16 000 символов —
 // сначала отбрасывает самые старые сообщения, потом ужимает заметки, память и ошибки; правила и последний вопрос целы.
 // Кэшируемый путь бюджет не превышает по построению (контекст нейтральный, вопрос — одна из быстрых кнопок, потолки полей
@@ -146,6 +149,36 @@ export async function POST(req: Request) {
     const timeoutMs = callTimeoutMs(maxDuration);
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(timeoutMs)]);
     sent = true;
+    // Нерешённое задание: ответ проверяем целиком до отправки (поток уже не отозвать), поэтому без потока.
+    const secrets = image ? [] : unsolvedSecrets(mode, task);
+    if (task && secrets.length > 0) {
+      const generate = async (noLeak: boolean): Promise<{ text: string; cut: boolean }> => {
+        const msgs: Msg[] = noLeak
+          ? [{ role: "system", content: tutorSystemPrompt(fit.ctx, mode, task, { ...promptOpts, noLeak: true }) }, ...userTurns(fit.history)]
+          : messages;
+        const res = await client.chat.completions.create(
+          { model, messages: msgs, reasoning_effort: "none", max_completion_tokens: maxTokens },
+          { signal, timeout: timeoutMs, maxRetries: 0 },
+        );
+        logUsage(route, model, res.usage, input);
+        const choice = res.choices[0];
+        return { text: stripStreamMark(choice?.message?.content?.trim() ?? ""), cut: choice?.finish_reason === "length" };
+      };
+      let res = await generate(false);
+      if (leaksUnsolved(res.text, task, secrets)) {
+        res = await generate(true);
+        if (leaksUnsolved(res.text, task, secrets)) {
+          console.info(`[ai] route=${route} leak=1`);
+          res = { text: LEAK_FALLBACK[ctx.lang], cut: false };
+        }
+      }
+      const mark = !res.text ? STREAM_ERROR_MARK : res.cut ? STREAM_CUT_MARK : STREAM_OK_MARK;
+      if (mark !== STREAM_OK_MARK) console.info(`[ai] route=${route} ${res.text ? "cut" : "empty"}=1`);
+      return withGuardHeaders(
+        new Response(res.text + mark, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } }),
+        g,
+      );
+    }
     const stream = await client.chat.completions.create(
       {
         model,
@@ -251,10 +284,13 @@ async function cachedTutor(
     return { text: stripStreamMark(choice?.message?.content?.trim() ?? ""), cut: choice?.finish_reason === "length" };
   };
 
+  // Нерешённое задание: проверка по ответам-стоп-словам (lib/answer-leak.ts) + прежняя проверка подсказки по верному ответу.
+  const secrets = unsolvedSecrets(mode, task);
   const leaks = (text: string) =>
-    mode === "hint" &&
-    !!task.correct &&
-    leaksAnswer(text, task.correct, { isOption: !!task.options?.includes(task.correct), options: task.options, known: task.prompt });
+    leaksUnsolved(text, task, secrets) ||
+    (mode === "hint" &&
+      !!task.correct &&
+      leaksAnswer(text, task.correct, { isOption: !!task.options?.includes(task.correct), options: task.options, known: task.prompt }));
 
   // Обрезанный по длине ответ в кэш не кладём (иначе оборванный текст жил бы 30 дней) и отдаём с маркером «оборвался».
   const cut = (text: string) => {
@@ -267,11 +303,14 @@ async function cachedTutor(
       let res = await generate(false);
       if (res.cut) throw cut(res.text);
       if (leaks(res.text)) {
-        // Подсказка выдала ответ: один повтор с припиской; если снова — статичный текст и без кэша.
+        // Подсказка или вопрос выдали ответ: один повтор с припиской; если снова — статичный текст и без кэша.
         // Подсказку автора ученик уже видел над кнопкой «Ещё подсказка» — повторять её нет смысла.
         res = await generate(true);
         if (res.cut) throw cut(res.text);
-        if (leaks(res.text)) throw new SkipCache(FALLBACK_HINT[ctx.lang]);
+        if (leaks(res.text)) {
+          console.info(`[ai] route=${route} leak=1`);
+          throw new SkipCache((mode === "hint" ? FALLBACK_HINT : LEAK_FALLBACK)[ctx.lang]);
+        }
       }
       return res.text;
     });

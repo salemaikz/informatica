@@ -77,9 +77,9 @@ describe("compareRows", () => {
     expect(kk.cells.free).toEqual({ kind: "text", text: "6 сағ" });
     expect(kk.cells.lite).toEqual({ kind: "text", text: "3 сағ" });
   });
-  it("ИИ 3 / 30 / ∞ (потолок 65 в таблице не пишем — он в кнопке «Ограничения ИИ») и множитель ×1 / ×1,5 / ×2", () => {
-    expect(byId("ai").cells.free).toEqual({ kind: "text", text: "3" });
-    expect(byId("ai").cells.lite).toEqual({ kind: "text", text: "30" });
+  it("ИИ: 3 всего / 30 в день / ∞ (#99; потолок 65 в таблице не пишем — он в кнопке «Ограничения ИИ») и множитель ×1 / ×1,5 / ×2", () => {
+    expect(byId("ai").cells.free).toEqual({ kind: "text", text: "3 всего" });
+    expect(byId("ai").cells.lite).toEqual({ kind: "text", text: "30 в день" });
     expect(byId("ai").cells.unlimited).toEqual({ kind: "text", text: "∞" });
     expect(byId("chips").cells.lite).toEqual({ kind: "text", text: "×1,5" });
     expect(byId("chips").cells.unlimited).toEqual({ kind: "text", text: "×2" });
@@ -101,9 +101,9 @@ describe("тексты тарифов без суточного пополнен
     expect(dict["plans.cmp.hearts"].ru).toBe("Запас сердечек");
   });
 
-  it("карточка профиля: запас, время возврата и ИИ в день", () => {
+  it("карточка профиля: запас, время возврата и бесплатный ИИ один раз (#99)", () => {
     const f = dict["plans.profile.freeText"];
-    expect(f.ru).toBe("{hearts} сердечек, новое каждые {time}; ИИ: {ai} в день");
+    expect(f.ru).toBe("{hearts} сердечек, новое каждые {time}; ИИ: {ai} бесплатных ответа один раз");
     for (const p of ["{hearts}", "{time}", "{ai}"]) {
       expect(f.ru).toContain(p);
       expect(f.kk).toContain(p);
@@ -126,7 +126,7 @@ describe("тексты тарифов про ИИ: прежний вид, без
   const RESTORED = {
     "plans.sub.ai": ["Спрашивай ИИ-помощника сколько нужно — без лимита и без чипов.", "ЖИ-көмекшіден қанша керек болса, сонша сұра — лимитсіз, чипсіз."],
     "plans.perk.unl.ai": ["ИИ-помощник без ограничений", "ЖИ-көмекші шектеусіз"],
-    "plans.cmp.ai": ["ИИ-помощник в день", "Күніне ЖИ-көмекші"],
+    "plans.cmp.ai": ["Бесплатный ИИ-помощник", "Тегін ЖИ-көмекші"],
     "plans.cmp.note": ["Сверх лимита ИИ — за чипы. Проверка решения по фото входит в лимит ИИ.", "ЖИ лимитінен тыс сұраулар чиппен төленеді. Шешімді фото арқылы тексеру ЖИ лимитіне кіреді."],
     "plans.card.unlimitedTag": ["Всё без ограничений", "Бәрі шектеусіз"],
     "shop.plan.freeTitle": ["Безлимит: ИИ и уроки без ограничений", "Шексіз: ЖИ мен сабақтар шектеусіз"],

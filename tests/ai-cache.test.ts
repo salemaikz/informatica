@@ -280,6 +280,21 @@ describe("клиентский кэш (LRU)", () => {
   });
 });
 
+describe("ключ кэша: ответы нерешённого задания (#100)", () => {
+  const key = (secrets?: string[][], answered?: boolean) =>
+    cacheKeyPayload({ mode: "ask", lang: "ru", style: "short", task: { prompt: "p", secrets, answered }, question: "объясни проще" });
+
+  it("стоп-слова входят в ключ: запрос без них не получит чужой ответ из кэша", () => {
+    expect(key([["ввод"]])).not.toBe(key());
+    expect(key([["ввод"]])).not.toBe(key([["вывод"]]));
+    expect(key([["ввод"]])).toBe(key([["ввод"]]));
+  });
+
+  it("у решённого задания стоп-слов нет — ключ их не хранит", () => {
+    expect(key([["ввод"]], true)).toBe(key(undefined, true));
+  });
+});
+
 describe("sameOrigin", () => {
   const req = (headers: Record<string, string>) => new Request("https://app.example/api/ai/tutor", { method: "POST", headers });
 
