@@ -9,13 +9,19 @@ import {
   currentWeekOf,
   formatWeekRange,
   layoutLessons,
+  nextOpenLesson,
+  normalizePace,
   parseAnchor,
   planWeekCount,
   resolveAnchor,
   reviewWeekCount,
   taskHref,
+  todayPlan,
+  todayQuota,
   type PlanInput,
+  type PlanTask,
   type PlanUnit,
+  type PlanWeek,
 } from "@/lib/plan";
 import { UNITS } from "@/content/course";
 import { groupOf, hubGroup } from "@/components/app/nav";
@@ -108,9 +114,10 @@ describe("layoutLessons", () => {
     expect(ids).toEqual(groups(4, 5, 3).flatMap((g) => g.ids));
     expect(r.overflow).toBe(0);
   });
-  it("не больше 7 уроков в неделю, остаток — overflow", () => {
-    const r = layoutLessons(groups(30), 2);
-    expect(counts(r.weeks)).toEqual([7, 7]);
+  it("не больше MAX_LESSONS_PER_WEEK (14) уроков в неделю, остаток — overflow", () => {
+    expect(MAX_LESSONS_PER_WEEK).toBe(14);
+    const r = layoutLessons(groups(44), 2);
+    expect(counts(r.weeks)).toEqual([14, 14]);
     expect(r.overflow).toBe(16);
   });
   it("равномерно: 12 уроков на 4 недели — по 3", () => {
@@ -139,10 +146,10 @@ describe("layoutLessons", () => {
     expect(counts(r.weeks)).toEqual([5, 5]);
   });
   it("перенос раздела не рождает overflow, если всё помещается", () => {
-    // 5 + 7 + 2 = 14 на 2 недели: раздел из 7 нельзя переносить так, чтобы последние 2 урока не влезли
-    const r = layoutLessons(groups(5, 7, 2), 2);
+    // 10 + 14 + 4 = 28 на 2 недели: раздел из 14 нельзя переносить так, чтобы последние 4 урока не влезли
+    const r = layoutLessons(groups(10, 14, 4), 2);
     expect(r.overflow).toBe(0);
-    expect(counts(r.weeks)).toEqual([7, 7]);
+    expect(counts(r.weeks)).toEqual([14, 14]);
   });
   it("раздел без контрольной (checkpoint: false) — уроки без узла контрольной", () => {
     const r = layoutLessons([{ unit: "a", ids: ["a1"], checkpoint: false }, { unit: "b", ids: ["b1"] }], 1);
@@ -241,11 +248,11 @@ describe("buildPlan: дата ЕНТ", () => {
     expect(p.totalWeeks).toBe(1);
     expect(p.weeks[0].tasks.some((t) => t.type === "exam" && t.exam === "mini")).toBe(true);
   });
-  it("не влезает — overflow и перегрузка не больше 7", () => {
-    const p = buildPlan(base({ units: course({ u1: 40 }), examDate: addDays(TODAY, 20) })); // 3 недели: 2 для уроков
-    p.weeks.forEach((w) => expect(w.tasks.filter((t) => t.type === "lesson").length).toBeLessThanOrEqual(7));
-    expect(p.overflow).toBe(26);
-    expect(p.lessonsLeft).toBe(40);
+  it("не влезает — overflow и перегрузка не больше 14", () => {
+    const p = buildPlan(base({ units: course({ u1: 50 }), examDate: addDays(TODAY, 20) })); // 3 недели: 2 для уроков
+    p.weeks.forEach((w) => expect(w.tasks.filter((t) => t.type === "lesson").length).toBeLessThanOrEqual(MAX_LESSONS_PER_WEEK));
+    expect(p.overflow).toBe(22);
+    expect(p.lessonsLeft).toBe(50);
   });
 });
 
@@ -402,5 +409,206 @@ describe("навигация", () => {
     expect(groupOf("/plan")).toBe("learn");
     expect(groupOf("/plans")).toBe("progress");
     expect(hubGroup("/plan")).toBeNull();
+  });
+});
+
+// ---------- Этап 15, F1: темп из профиля и план на день ----------
+
+/** Момент дня «ГГГГ-ММ-ДД», час — локальное время (как dayStartMs в плане). */
+const at = (day: string, hour = 10) => new Date(`${day}T${String(hour).padStart(2, "0")}:00:00`).getTime();
+const lessonsPerWeek = (p: ReturnType<typeof buildPlan>) => p.weeks.map((w) => w.tasks.filter((t) => t.type === "lesson").length);
+
+describe("normalizePace", () => {
+  it("целое 1…14; не число — null", () => {
+    expect([0, 1, 4.4, 14, 15, 99, -3].map(normalizePace)).toEqual([1, 1, 4, 14, 14, 14, 1]);
+    expect([Number.NaN, Number.POSITIVE_INFINITY, "4", null, undefined].map(normalizePace)).toEqual([null, null, null, null, null]);
+  });
+});
+
+describe("layoutLessons: темп из профиля", () => {
+  const groups = (...sizes: number[]) => sizes.map((n, i) => ({ unit: `u${i}`, ids: Array.from({ length: n }, (_, k) => `u${i}-${k}`) }));
+  const counts = (weeks: ReturnType<typeof layoutLessons>["weeks"]) => weeks.map((w) => w.filter((t) => t.type === "lesson").length);
+
+  it("без «подтягивания» (нет даты) — ровно темп, остаток — overflow", () => {
+    expect(counts(layoutLessons(groups(12), 6, { perWeek: 3, catchUp: false }).weeks)).toEqual([3, 3, 3, 3, 0, 0]);
+    const r = layoutLessons(groups(30), 4, { perWeek: 3, catchUp: false });
+    expect(counts(r.weeks)).toEqual([3, 3, 3, 3]);
+    expect(r.overflow).toBe(18);
+  });
+  it("с «подтягиванием» (есть дата) — не медленнее нужного, чтобы успеть", () => {
+    expect(counts(layoutLessons(groups(12), 4, { perWeek: 2 }).weeks)).toEqual([3, 3, 3, 3]);
+  });
+  it("темп выше нужного — не растягиваем: уроки заканчиваются раньше", () => {
+    expect(counts(layoutLessons(groups(12), 6, { perWeek: 4 }).weeks)).toEqual([4, 4, 4, 0, 0, 0]);
+  });
+  it("темп не выше 14; мусор в темпе игнорируется", () => {
+    const r = layoutLessons(groups(30), 1, { perWeek: 99, catchUp: false });
+    expect(counts(r.weeks)).toEqual([MAX_LESSONS_PER_WEEK]);
+    expect(r.overflow).toBe(30 - MAX_LESSONS_PER_WEEK);
+    expect(layoutLessons(groups(12), 4, { perWeek: Number.NaN })).toEqual(layoutLessons(groups(12), 4));
+  });
+  it("раздел не рвётся и в фиксированном темпе: по разделу в неделю", () => {
+    const r = layoutLessons(groups(3, 3, 3), 3, { perWeek: 3, catchUp: false });
+    r.weeks.forEach((w, i) => expect(new Set(w.map((t) => t.unit))).toEqual(new Set([`u${i}`])));
+  });
+});
+
+describe("buildPlan: weeklyLessons", () => {
+  const dated = (days: number) => addDays(TODAY, days);
+
+  it("без даты темп плана = weeklyLessons; нужный темп не подтягивает", () => {
+    const p = buildPlan(base({ units: course({ u1: 12 }), weeklyLessons: 3 }));
+    expect(lessonsPerWeek(p).slice(0, 5)).toEqual([3, 3, 3, 3, 0]);
+    expect(p.pace).toBe(3);
+    expect(p.needMore).toBeNull();
+    const slow = buildPlan(base({ units: course({ u1: 40 }), weeklyLessons: 2 })); // 10 недель уроков × 2
+    expect(lessonsPerWeek(slow).slice(0, 10)).toEqual(Array(10).fill(2));
+    expect(slow.overflow).toBe(20);
+    expect(slow.needMore).toBeNull(); // без даты «успеть к ЕНТ» не бывает
+  });
+  it("с датой: темп = max(weeklyLessons, нужный); если выбранного мало — needMore", () => {
+    // 41 день → 6 недель, 2 из них повторение, 4 — уроки; 12 уроков → нужно 3 в неделю
+    const slow = buildPlan(base({ units: course({ u1: 12 }), examDate: dated(41), weeklyLessons: 2 }));
+    expect(lessonsPerWeek(slow).slice(0, 4)).toEqual([3, 3, 3, 3]);
+    expect(slow.pace).toBe(2);
+    expect(slow.needMore).toBe(3);
+    // выбрано больше нужного — план идёт в выбранном темпе и заканчивается раньше
+    const fast = buildPlan(base({ units: course({ u1: 12 }), examDate: dated(41), weeklyLessons: 4 }));
+    expect(lessonsPerWeek(fast).slice(0, 4)).toEqual([4, 4, 4, 0]);
+    expect(fast.needMore).toBeNull();
+    // ровно столько, сколько нужно — предупреждения нет
+    expect(buildPlan(base({ units: course({ u1: 12 }), examDate: dated(41), weeklyLessons: 3 })).needMore).toBeNull();
+  });
+  it("отстал: нужный темп считается по оставшимся неделям — предупреждение растёт", () => {
+    const p = buildPlan(base({ units: course({ u1: 12 }), examDate: dated(41), weeklyLessons: 4, today: dated(14) })); // неделя 3, ничего не сделано
+    expect(p.currentWeek).toBe(3);
+    expect(p.needMore).toBe(6); // 12 уроков на 2 оставшиеся недели уроков
+  });
+  it("не передан или мусор — как раньше: pace и needMore пустые", () => {
+    const legacy = buildPlan(base({ units: course({ u1: 12 }), examDate: dated(41) }));
+    expect(legacy.pace).toBeNull();
+    expect(legacy.needMore).toBeNull();
+    expect(lessonsPerWeek(legacy).slice(0, 4)).toEqual([3, 3, 3, 3]);
+    expect(buildPlan(base({ weeklyLessons: Number.NaN })).pace).toBeNull();
+  });
+  it("темп из профиля больше 14 обрезается до 14", () => {
+    expect(buildPlan(base({ weeklyLessons: 21 })).pace).toBe(14);
+  });
+  it("дата прошла — плана нет, темп пустой", () => {
+    const p = buildPlan(base({ examDate: dated(-1), weeklyLessons: 4 }));
+    expect(p.state).toBe("past");
+    expect(p.pace).toBeNull();
+    expect(p.needMore).toBeNull();
+  });
+});
+
+describe("todayQuota", () => {
+  const lesson = (id: string, done = false, doneAt?: number): PlanTask => ({ key: `l:${id}`, type: "lesson", id, unit: "u1", done, at: doneAt });
+  const weekOf = (tasks: PlanTask[], start = TODAY): PlanWeek => ({
+    n: 1,
+    start,
+    end: addDays(start, 6),
+    status: "current",
+    review: false,
+    tasks,
+    done: tasks.filter((t) => t.done).length,
+    total: tasks.length,
+  });
+  const six = () => Array.from({ length: 6 }, (_, i) => lesson(`a${i + 1}`));
+
+  it("в понедельник: ceil(осталось / 7 дней)", () => {
+    const q = todayQuota(weekOf(six()), at(TODAY));
+    expect(q).toMatchObject({ total: 1, done: 0, left: 1, weekLeft: 6, daysLeft: 7 });
+    expect(q.lessons.map((t) => t.id)).toEqual(["a1"]);
+    expect(q.next?.id).toBe("a1");
+  });
+  it("к середине недели норма растёт: в среду 6 уроков на 5 дней — 2 в день", () => {
+    const q = todayQuota(weekOf(six()), at("2026-10-07"));
+    expect(q).toMatchObject({ total: 2, done: 0, left: 2, daysLeft: 5 });
+    expect(q.lessons.map((t) => t.id)).toEqual(["a1", "a2"]);
+  });
+  it("норма не «уезжает» после выполнения: пройдено 2 из 2 — осталось 0, а не снова 1", () => {
+    const today = at("2026-10-07");
+    const tasks = [lesson("a1", true, today), lesson("a2", true, today), ...six().slice(2)];
+    const q = todayQuota(weekOf(tasks), today);
+    expect(q).toMatchObject({ total: 2, done: 2, left: 0, weekLeft: 4 });
+    expect(q.lessons).toEqual([]);
+    expect(q.next?.id).toBe("a3"); // кнопка «ещё урок» есть, но норма выполнена
+  });
+  it("пройден один из двух — остался один", () => {
+    const today = at("2026-10-07");
+    const tasks = [lesson("a1", true, today), ...six().slice(1)];
+    expect(todayQuota(weekOf(tasks), today)).toMatchObject({ total: 2, done: 1, left: 1 });
+  });
+  it("пройденное вчера «сегодня» не считается, но уменьшает остаток", () => {
+    const tasks = [lesson("a1", true, at("2026-10-06")), lesson("a2", true, at("2026-10-06")), ...six().slice(2)];
+    expect(todayQuota(weekOf(tasks), at("2026-10-07"))).toMatchObject({ total: 1, done: 0, left: 1, weekLeft: 4 });
+  });
+  it("в последний день недели — всё, что осталось", () => {
+    const q = todayQuota(weekOf(six().slice(0, 3)), at("2026-10-11"));
+    expect(q).toMatchObject({ total: 3, left: 3, daysLeft: 1 });
+    expect(q.lessons).toHaveLength(3);
+  });
+  it("всё сделано — 0 и нет следующего урока", () => {
+    const today = at("2026-10-07");
+    const q = todayQuota(weekOf([lesson("a1", true, today), lesson("a2", true, at("2026-10-05"))]), today);
+    expect(q).toMatchObject({ total: 1, done: 1, left: 0, weekLeft: 0, next: null, lessons: [] });
+  });
+  it("в неделе без уроков (повторение, пробный) — 0; не-уроки норму не меняют", () => {
+    const review: PlanTask = { key: "r:1", type: "review", done: false };
+    expect(todayQuota(weekOf([review]), at(TODAY))).toMatchObject({ total: 0, left: 0, weekLeft: 0, next: null });
+    const q = todayQuota(weekOf([...six(), review, { key: "e:mini:2", type: "exam", exam: "mini", done: false }]), at(TODAY));
+    expect(q).toMatchObject({ total: 1, weekLeft: 6 });
+  });
+  it("неделя из будущего считается с её первого дня; устаревшая — минимум 1 день", () => {
+    expect(todayQuota(weekOf(six(), addDays(TODAY, 7)), at(TODAY)).daysLeft).toBe(7);
+    expect(todayQuota(weekOf(six()), at("2026-10-20")).daysLeft).toBe(1);
+  });
+  it("урок без отметки времени (старые данные) «сегодня» не считается", () => {
+    expect(todayQuota(weekOf([lesson("a1", true), ...six().slice(1)]), at("2026-10-07")).done).toBe(0);
+  });
+});
+
+describe("todayPlan и nextOpenLesson", () => {
+  it("buildPlan проставляет время прохождения урока: «сегодня пройдено» берётся из плана", () => {
+    const today = "2026-10-07"; // среда
+    const p = buildPlan(base({ units: course({ u1: 3 }), weeklyLessons: 3, today, lessons: { "u1-l1": { completions: 1, firstAt: at(today, 9) } } }));
+    const t = todayPlan(p, at(today));
+    // 3 урока недели, 1 пройден сегодня, 2 осталось, 5 дней: норма ceil(3/5) = 1 — уже выполнена
+    expect(t?.quota).toMatchObject({ total: 1, done: 1, left: 0, weekLeft: 2 });
+    expect(t?.state).toBe("quota");
+    expect(t?.target).toMatchObject({ type: "lesson", id: "u1-l2" });
+  });
+  it("todo: кнопка ведёт на первый урок на сегодня", () => {
+    const p = buildPlan(base({ units: course({ u1: 6 }), weeklyLessons: 6 }));
+    const t = todayPlan(p, at(TODAY));
+    expect(t?.state).toBe("todo");
+    expect(t?.target).toMatchObject({ type: "lesson", id: "u1-l1" });
+  });
+  it("weekDone: уроки недели пройдены — кнопка на следующий урок из будущих недель", () => {
+    const lessons = Object.fromEntries(["u1-l1", "u1-l2"].map((id) => [id, { completions: 1, firstAt: at(TODAY) }]));
+    const p = buildPlan(base({ units: course({ u1: 6 }), weeklyLessons: 2, lessons }));
+    const t = todayPlan(p, at(TODAY));
+    expect(t?.state).toBe("weekDone");
+    expect(t?.target).toMatchObject({ type: "lesson", id: "u1-l3" });
+  });
+  it("noLessons: неделя повторения — кнопка на первое непройденное дело", () => {
+    const p = buildPlan(base({ today: addDays(TODAY, 77) })); // 12-я неделя без даты — повторение
+    const t = todayPlan(p, at(addDays(TODAY, 77)));
+    expect(t?.state).toBe("noLessons");
+    expect(t?.target).toMatchObject({ type: "review" });
+  });
+  it("плана нет (дата прошла) — null", () => {
+    expect(todayPlan(buildPlan(base({ examDate: addDays(TODAY, -1) })), at(TODAY))).toBeNull();
+  });
+  it("nextOpenLesson: с текущей недели вперёд, затем хвост из прошедших недель; всё пройдено — null", () => {
+    const units = course({ u1: 4 });
+    const now = addDays(TODAY, 7); // вторая неделя, на первой остались непройденные
+    const p = buildPlan(base({ units, weeklyLessons: 2, today: now }));
+    expect(nextOpenLesson(p)?.id).toBe("u1-l3"); // текущая неделя
+    const done = Object.fromEntries(["u1-l3", "u1-l4"].map((id) => [id, { completions: 1, firstAt: at(now) }]));
+    expect(nextOpenLesson(buildPlan(base({ units, weeklyLessons: 2, today: now, lessons: done })))?.id).toBe("u1-l1"); // хвост
+    const all = Object.fromEntries(["u1-l1", "u1-l2", "u1-l3", "u1-l4"].map((id) => [id, { completions: 1, firstAt: at(now) }]));
+    expect(nextOpenLesson(buildPlan(base({ units, weeklyLessons: 2, today: now, lessons: all })))).toBeNull();
   });
 });

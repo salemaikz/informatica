@@ -133,8 +133,6 @@ const core = {
   "daily.desc": { ru: "{xp} XP · ~{min} мин в день", kk: "{xp} XP · күніне ~{min} мин" },
 
   // ---------- Главная ----------
-  "learn.greeting": { ru: "Привет, {name}!", kk: "Сәлем, {name}!" },
-  "learn.hello": { ru: "Привет!", kk: "Сәлем!" },
   "learn.photoCheck": { ru: "решение по фото", kk: "фото бойынша шешім" },
   "learn.dailyGoal": { ru: "Цель на день", kk: "Күндік мақсат" },
   "learn.dailyDone": { ru: "Цель на сегодня выполнена!", kk: "Бүгінгі мақсат орындалды!" },

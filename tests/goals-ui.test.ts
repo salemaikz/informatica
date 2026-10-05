@@ -6,6 +6,7 @@ import { ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import ProfilePage from "@/app/(main)/profile/page";
 import { GoalsPanel } from "@/components/goals/GoalsPanel";
 import { useApp, type DiagnosticSummary, type ExamSummary } from "@/lib/store";
+import { todayKey } from "@/lib/text";
 import type { EntTopicId } from "@/lib/types";
 
 // Панель «Цели» и блок цели в профиле (этап 12, исправления по ревью): план недели по диагностике (C29, C37),
@@ -156,5 +157,81 @@ describe("профиль: цель по баллам (C39)", () => {
     await render(createElement(ProfilePage));
     expect(text()).toContain("40 из 50");
     expect(slider().className).not.toContain("opacity-60");
+  });
+});
+
+describe("профиль: точные значения целей (этап 15, F1)", () => {
+  const btn = (label: string) => host.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+  const press = (label: string) =>
+    act(async () => {
+      btn(label).click();
+    });
+  const slider = () => host.querySelector("#prof-target") as HTMLInputElement;
+  const dateInput = () => host.querySelector('input[type="date"]') as HTMLInputElement;
+  /** Ввод в поле даты в обход отслеживания значения React. */
+  const typeDate = (v: string) =>
+    act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(dateInput(), v);
+      dateInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  const inDays = (n: number) => todayKey(new Date(Date.now() + n * 86_400_000));
+
+  it("уроков в неделю: степпер −/+ с шагом 1, от 1 до 14", async () => {
+    await setProfile({ track: "ent", weeklyLessons: 4 });
+    await render(createElement(ProfilePage));
+    await press("Больше уроков в неделю");
+    expect(useApp.getState().profile.weeklyLessons).toBe(5);
+    await press("Меньше уроков в неделю");
+    await press("Меньше уроков в неделю");
+    expect(useApp.getState().profile.weeklyLessons).toBe(3);
+
+    await setProfile({ weeklyLessons: 14 });
+    expect(btn("Больше уроков в неделю").disabled).toBe(true);
+    expect(btn("Меньше уроков в неделю").disabled).toBe(false);
+    await setProfile({ weeklyLessons: 1 });
+    expect(btn("Меньше уроков в неделю").disabled).toBe(true);
+    expect(btn("Больше уроков в неделю").disabled).toBe(false);
+  });
+
+  it("целевой балл: шаг 1; первое нажатие −/+ подтверждает цель; границы 5 и 50", async () => {
+    await setProfile({ track: "ent", targetScore: 35, targetScoreSet: false });
+    await render(createElement(ProfilePage));
+    expect(slider().step).toBe("1");
+    await press("Увеличить цель на 1 балл");
+    expect(useApp.getState().profile).toMatchObject({ targetScore: 36, targetScoreSet: true });
+    expect(text()).toContain("36 из 50");
+    await press("Уменьшить цель на 1 балл");
+    await press("Уменьшить цель на 1 балл");
+    expect(useApp.getState().profile.targetScore).toBe(34);
+
+    await setProfile({ targetScore: 5 });
+    expect(btn("Уменьшить цель на 1 балл").disabled).toBe(true);
+    await setProfile({ targetScore: 50 });
+    expect(btn("Увеличить цель на 1 балл").disabled).toBe(true);
+  });
+
+  it("дата ЕНТ: верная сохраняется; прошедшая — подсказка и не сохраняется; «Убрать дату» сбрасывает", async () => {
+    await setProfile({ track: "ent", examDate: null });
+    await render(createElement(ProfilePage));
+    const good = inDays(40);
+    await typeDate(good);
+    expect(useApp.getState().profile.examDate).toBe(good);
+    expect(host.querySelector("#prof-date-bad")).toBeNull();
+
+    await typeDate(inDays(-3));
+    expect(useApp.getState().profile.examDate).toBe(good); // прошедшая дата не сохранилась
+    expect(host.querySelector("#prof-date-bad")?.textContent).toContain("не раньше сегодняшнего дня");
+
+    await typeDate(inDays(10));
+    expect(useApp.getState().profile.examDate).toBe(inDays(10));
+    expect(host.querySelector("#prof-date-bad")).toBeNull();
+
+    const clear = [...host.querySelectorAll("button")].find((b) => b.textContent === "Убрать дату")!;
+    await act(async () => {
+      clear.click();
+    });
+    expect(useApp.getState().profile.examDate).toBeNull();
+    expect(dateInput().value).toBe("");
   });
 });

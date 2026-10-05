@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { ACHIEVEMENTS } from "@/lib/gamification";
-import { daysText, daysUntil } from "@/lib/goals";
+import { TARGET_MAX, TARGET_MIN, WEEKLY_MAX, WEEKLY_MIN, daysText, daysUntil, isExamDateValid } from "@/lib/goals";
 import { cn } from "@/lib/cn";
 import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
@@ -17,6 +17,7 @@ import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
 import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
 import { Row, Segmented } from "@/components/goals/controls";
+import { NumberStepper } from "@/components/goals/NumberStepper";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +32,6 @@ import { FeedbackLink } from "@/components/issue/FeedbackLink";
 import { ReportEntry } from "@/components/report/ReportShareSheet";
 
 const NAME_MAX = 30;
-const WEEKLY = [2, 3, 4, 5, 7];
 /** Клавиши, которыми двигают ползунок: только они подтверждают цель (Tab на ползунок — нет). */
 const CONFIRM_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
@@ -65,6 +65,8 @@ export default function ProfilePage() {
   const [pickAvatar, setPickAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState("");
+  /** Дата ЕНТ, введённая вручную, но не принятая (раньше сегодняшнего дня / слишком далеко); null — поле показывает сохранённую дату. */
+  const [dateDraft, setDateDraft] = useState<string | null>(null);
 
   /** Цель «пока не выбрана»: любое касание ползунка подтверждает текущее значение. */
   const confirmTarget = () => {
@@ -83,6 +85,15 @@ export default function ProfilePage() {
   };
 
   const daysLeft = daysUntil(profile.examDate, today);
+
+  /** Дата ЕНТ: пусто — сбросить; верная — сохранить; неверная — показать подсказку и не сохранять. */
+  const changeDate = (v: string) => {
+    if (v === "" || isExamDateValid(v, today)) {
+      setDateDraft(null);
+      update({ examDate: v || null });
+    } else setDateDraft(v);
+  };
+  const dateBad = dateDraft !== null && dateDraft !== "";
 
   return (
     <div className="flex flex-col gap-5">
@@ -169,43 +180,69 @@ export default function ProfilePage() {
         {/* Дата и целевой балл — только для подготовки к ЕНТ (#52). */}
         {ent && (
           <>
-            <Row label={t("prof2.goals.examDate")} hint={
-                daysLeft === null ? t("prof2.goals.examDate.hint") : daysLeft > 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : daysLeft === 0 ? t("goals.card.today") : t("goals.card.past")
-              }>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={profile.examDate ?? ""}
-                  min={today}
-                  onChange={(e) => update({ examDate: e.target.value || null })}
-                  aria-label={t("prof2.goals.examDate")}
-                  className="h-11 rounded-xl border-2 border-border bg-surface px-3 font-extrabold outline-none focus:border-primary"
-                />
-                {profile.examDate && (
-                  <Button size="sm" variant="ghost" className="h-auto min-h-10" onClick={() => update({ examDate: null })}>
-                    {t("prof2.goals.examClear")}
-                  </Button>
-                )}
-              </div>
-            </Row>
+            <div>
+              <Row label={t("prof2.goals.examDate")} hint={
+                  daysLeft === null ? t("prof2.goals.examDate.hint") : daysLeft > 0 ? t("prof2.goals.daysLeft", { days: daysText(daysLeft, lang) }) : daysLeft === 0 ? t("goals.card.today") : t("goals.card.past")
+                }>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <input
+                    type="date"
+                    value={dateDraft ?? profile.examDate ?? ""}
+                    min={today}
+                    onChange={(e) => changeDate(e.target.value)}
+                    aria-label={t("prof2.goals.examDate")}
+                    aria-invalid={dateBad}
+                    aria-describedby={dateBad ? "prof-date-bad" : undefined}
+                    className={cn(
+                      "h-11 min-w-0 rounded-xl border-2 bg-surface px-3 font-extrabold outline-none focus:border-primary",
+                      dateBad ? "border-warning" : "border-border",
+                    )}
+                  />
+                  {(profile.examDate || dateBad) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-auto min-h-10"
+                      onClick={() => {
+                        setDateDraft(null);
+                        update({ examDate: null });
+                      }}
+                    >
+                      {t("prof2.goals.examClear")}
+                    </Button>
+                  )}
+                </div>
+              </Row>
+              {dateBad && (
+                <p id="prof-date-bad" role="alert" className="-mt-1 pb-3 text-sm font-bold text-warning-strong">
+                  {t("goals15.date.range")}
+                </p>
+              )}
+            </div>
             <div className="py-3">
-              <div className="flex items-baseline justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <label htmlFor="prof-target" className="font-extrabold">
                   {t("prof2.goals.target")}
                 </label>
-                {profile.targetScoreSet ? (
-                  <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
-                ) : (
-                  // Цель ещё не выбрана («Пока не знаю» в онбординге): число на ползунке — просто положение по умолчанию.
-                  <span className="min-w-0 text-right text-sm font-extrabold text-muted">{t("goals.target.unset")}</span>
-                )}
+                <NumberStepper
+                  value={profile.targetScore}
+                  min={TARGET_MIN}
+                  max={TARGET_MAX}
+                  onChange={(targetScore) => update({ targetScore, targetScoreSet: true })}
+                  decLabel={t("goals15.target.minus")}
+                  incLabel={t("goals15.target.plus")}
+                  suffix={profile.targetScoreSet ? t("goals15.target.of") : undefined}
+                  // Цель ещё не выбрана («Пока не знаю» в онбординге): число — просто значение по умолчанию.
+                  dim={!profile.targetScoreSet}
+                />
               </div>
+              {!profile.targetScoreSet && <p className="mt-1 text-sm font-extrabold text-muted">{t("goals.target.unset")}</p>}
               <input
                 id="prof-target"
                 type="range"
-                min={5}
-                max={50}
-                step={5}
+                min={TARGET_MIN}
+                max={TARGET_MAX}
+                step={1}
                 value={profile.targetScore}
                 onChange={(e) => update({ targetScore: Number(e.target.value), targetScoreSet: true })}
                 // Любое касание ползунка подтверждает цель, даже если значение не изменилось (onChange в этом случае не сработает).
@@ -223,8 +260,15 @@ export default function ProfilePage() {
             </div>
           </>
         )}
-        <Row label={t("prof2.goals.weekly")}>
-          <Segmented<number> label={t("prof2.goals.weekly")} value={profile.weeklyLessons} onChange={(weeklyLessons) => update({ weeklyLessons })} options={WEEKLY.map((n) => ({ id: n, label: String(n) }))} />
+        <Row label={t("prof2.goals.weekly")} hint={t("goals15.weekly.hint")}>
+          <NumberStepper
+            value={profile.weeklyLessons}
+            min={WEEKLY_MIN}
+            max={WEEKLY_MAX}
+            onChange={(weeklyLessons) => update({ weeklyLessons })}
+            decLabel={t("goals15.weekly.minus")}
+            incLabel={t("goals15.weekly.plus")}
+          />
         </Row>
       </Card>
 

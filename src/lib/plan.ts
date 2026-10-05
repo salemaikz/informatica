@@ -1,4 +1,4 @@
-import { daysUntil } from "./goals";
+import { WEEKLY_MAX, WEEKLY_MIN, daysUntil } from "./goals";
 import { dayDiff, todayKey } from "./text";
 import type { Lang } from "./types";
 
@@ -9,8 +9,8 @@ import type { Lang } from "./types";
 export const DEFAULT_WEEKS = 12;
 /** Потолок длины плана (ЕНТ может быть через год и больше). */
 export const MAX_WEEKS = 52;
-/** Не больше уроков в неделю. */
-export const MAX_LESSONS_PER_WEEK = 7;
+/** Не больше уроков в неделю (как верхняя граница «уроков в неделю» в профиле). */
+export const MAX_LESSONS_PER_WEEK = WEEKLY_MAX;
 /** Раздел «Старт: компьютер с нуля» — его пропускают те, кто знает основы (profile.skipBasics). */
 export const START_UNIT_ID = "u0";
 /** Ответов за неделю, чтобы засчитать «повторение» (разминка, работа над ошибками). */
@@ -45,6 +45,11 @@ export interface PlanInput {
   start: string;
   examDate: string | null | undefined;
   skipBasics: boolean;
+  /**
+   * Темп из профиля, уроков в неделю. Без даты ЕНТ план идёт ровно в этом темпе; с датой — не медленнее него
+   * и не медленнее нужного, чтобы успеть. Не задан — темп только «нужный» (как раньше).
+   */
+  weeklyLessons?: number;
   lessons: Record<string, PlanLessonStat | undefined>;
   exams: readonly PlanExam[];
   days: Record<string, { answers?: number } | undefined>;
@@ -58,7 +63,7 @@ export interface PlanInput {
 // ---------- Результат ----------
 
 export type PlanTask =
-  | { key: string; type: "lesson"; id: string; unit: string; done: boolean }
+  | { key: string; type: "lesson"; id: string; unit: string; done: boolean; /** Когда пройден впервые (мс) — для «сегодня уже пройдено». */ at?: number }
   | { key: string; type: "checkpoint"; unit: string; done: boolean }
   | { key: string; type: "exam"; exam: "mini" | "full"; done: boolean }
   | { key: string; type: "review"; done: boolean };
@@ -104,6 +109,13 @@ export interface Plan {
   perWeekNeeded: number | null;
   /** Дел в прошедших неделях, которые так и не сделаны. */
   behind: number;
+  /** Темп из профиля (уроков в неделю, 1…14) или null — не передан. */
+  pace: number | null;
+  /**
+   * Сколько уроков в неделю нужно, чтобы успеть к дате ЕНТ, — только когда это больше темпа из профиля
+   * (на /plan — предупреждение). Без даты, без темпа или если темпа хватает — null.
+   */
+  needMore: number | null;
 }
 
 // ---------- Даты ----------
@@ -195,19 +207,36 @@ function lessonGroups(input: PlanInput): { groups: LessonGroup[]; notReady: numb
 
 export type DraftTask = { type: "lesson"; id: string; unit: string } | { type: "checkpoint"; unit: string };
 
+export interface LayoutPace {
+  /** Темп из профиля, уроков в неделю. Не задан — темп только «нужный» (остаток / оставшиеся недели). */
+  perWeek?: number;
+  /** Подтягивать темп до нужного, чтобы уложиться в недели (с датой ЕНТ — да; без даты окно условное — нет). По умолчанию да. */
+  catchUp?: boolean;
+}
+
+/** Темп из профиля → целое 1…14; не число → null. */
+export function normalizePace(n: unknown): number | null {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  return Math.min(WEEKLY_MAX, Math.max(WEEKLY_MIN, Math.round(n)));
+}
+
 /**
- * Равномерная раскладка по `weeks` неделям: цель недели пересчитывается от остатка (ceil), не больше 7.
+ * Раскладка по `weeks` неделям. Цель недели: без темпа — остаток / оставшиеся недели (ceil); с темпом `perWeek` — он сам,
+ * а при `catchUp` не меньше нужного, чтобы успеть (`max(темп, ceil(остаток / недели))`). Не больше 14 (MAX_LESSONS_PER_WEEK).
  * Раздел не рвётся без нужды: целиком влезающий раздел не начинают в конце загруженной недели,
  * а последний урок раздела может «перелезть» цель на единицу (если цель недели от 2 уроков). Контрольная — сразу после последнего урока раздела.
  * overflow — сколько уроков не поместилось из-за потолка 7 в неделю.
  */
-export function layoutLessons(groups: readonly LessonGroup[], weeks: number): { weeks: DraftTask[][]; overflow: number } {
+export function layoutLessons(groups: readonly LessonGroup[], weeks: number, pace: LayoutPace = {}): { weeks: DraftTask[][]; overflow: number } {
+  const want = normalizePace(pace.perWeek);
+  const catchUp = pace.catchUp ?? true;
   const out: DraftTask[][] = Array.from({ length: Math.max(0, weeks) }, () => []);
   let remaining = groups.reduce((s, g) => s + g.ids.length, 0);
   let gi = 0;
   let li = 0; // следующий урок в группе gi
   for (let w = 0; w < out.length && remaining > 0; w++) {
-    const target = Math.min(MAX_LESSONS_PER_WEEK, Math.max(1, Math.ceil(remaining / (out.length - w))));
+    const needed = Math.max(1, Math.ceil(remaining / (out.length - w)));
+    const target = Math.min(MAX_LESSONS_PER_WEEK, want === null ? needed : catchUp ? Math.max(want, needed) : want);
     let load = 0;
     while (gi < groups.length) {
       const g = groups[gi];
@@ -216,7 +245,8 @@ export function layoutLessons(groups: readonly LessonGroup[], weeks: number): { 
         // Новый раздел в уже начатой неделе: если целиком не влезает и неделя наполовину занята — переносим,
         // но только если остаток всё равно помещается в следующие недели (иначе перенос родил бы overflow).
         const fits = load + left <= Math.min(MAX_LESSONS_PER_WEEK, target + 1);
-        const laterRoom = MAX_LESSONS_PER_WEEK * (out.length - w - 1);
+        // Без «подтягивания» (нет даты) остаток всё равно не влезет в окно — переносить раздел можно всегда.
+        const laterRoom = catchUp ? MAX_LESSONS_PER_WEEK * (out.length - w - 1) : Number.POSITIVE_INFINITY;
         if (!fits && load >= Math.ceil(target / 2) && g.ids.length <= MAX_LESSONS_PER_WEEK && remaining <= laterRoom) break;
       }
       const room = load < target || (target >= 2 && left === 1 && load < MAX_LESSONS_PER_WEEK && load < target + 1);
@@ -263,18 +293,25 @@ export function buildPlan(input: PlanInput): Plan {
       notReady: 0,
       perWeekNeeded: null,
       behind: 0,
+      pace: null,
+      needMore: null,
     };
   }
 
   const reviewWeeks = reviewWeekCount(totalWeeks);
   const lessonWeeks = totalWeeks - reviewWeeks;
   const { groups, notReady } = lessonGroups(input);
-  const layout = layoutLessons(groups, lessonWeeks);
+  const pace = normalizePace(input.weeklyLessons);
+  const layout = layoutLessons(groups, lessonWeeks, { perWeek: pace ?? undefined, catchUp: hasDate });
 
   const startMs = dayStartMs(start);
   const currentWeek = Math.min(totalWeeks, Math.floor(Math.max(0, dayDiff(start, today)) / 7) + 1);
   const unitExamDone = (unit: string) => input.exams.some((e) => e.kind === "unit" && e.unit === unit && e.at >= startMs);
   const lessonDone = (id: string) => (input.lessons[id]?.completions ?? 0) > 0;
+  const lessonAt = (id: string) => {
+    const at = input.lessons[id]?.firstAt;
+    return lessonDone(id) && typeof at === "number" && Number.isFinite(at) ? at : undefined;
+  };
 
   const weeks: PlanWeek[] = [];
   for (let i = 0; i < totalWeeks; i++) {
@@ -289,7 +326,7 @@ export function buildPlan(input: PlanInput): Plan {
 
     const draft = layout.weeks[i] ?? [];
     for (const t of draft) {
-      if (t.type === "lesson") tasks.push({ key: `l:${t.id}`, type: "lesson", id: t.id, unit: t.unit, done: lessonDone(t.id) });
+      if (t.type === "lesson") tasks.push({ key: `l:${t.id}`, type: "lesson", id: t.id, unit: t.unit, done: lessonDone(t.id), at: lessonAt(t.id) });
       else tasks.push({ key: `c:${t.unit}`, type: "checkpoint", unit: t.unit, done: unitExamDone(t.unit) });
     }
 
@@ -323,6 +360,7 @@ export function buildPlan(input: PlanInput): Plan {
   const lessonsDone = planned.filter((t) => t.done).length;
   const lessonsLeft = planned.length - lessonsDone + layout.overflow;
   const lessonWeeksLeft = Math.max(0, lessonWeeks - currentWeek + 1);
+  const perWeekNeeded = lessonsLeft > 0 && lessonWeeksLeft > 0 ? Math.ceil(lessonsLeft / lessonWeeksLeft) : null;
 
   return {
     state: "ok",
@@ -338,14 +376,91 @@ export function buildPlan(input: PlanInput): Plan {
     lessonsLeft,
     overflow: layout.overflow,
     notReady,
-    perWeekNeeded: lessonsLeft > 0 && lessonWeeksLeft > 0 ? Math.ceil(lessonsLeft / lessonWeeksLeft) : null,
+    perWeekNeeded,
     behind: weeks.filter((w) => w.status === "past").reduce((s, w) => s + (w.total - w.done), 0),
+    pace,
+    needMore: hasDate && pace !== null && perWeekNeeded !== null && perWeekNeeded > pace ? perWeekNeeded : null,
   };
 }
 
 /** Текущая неделя плана (null, если плана нет). */
 export function currentWeekOf(plan: Plan): PlanWeek | null {
   return plan.weeks[plan.currentWeek - 1] ?? null;
+}
+
+// ---------- План на день ----------
+
+export type LessonTask = Extract<PlanTask, { type: "lesson" }>;
+
+export interface TodayQuota {
+  /** Норма на сегодня, уроков: ceil((осталось + пройдено сегодня) / дней до конца недели, включая сегодня). */
+  total: number;
+  /** Сегодня уже пройдено (уроки этой недели). */
+  done: number;
+  /** Осталось пройти сегодня: total − done, не меньше 0. 0 — норма выполнена или все уроки недели пройдены. */
+  left: number;
+  /** Непройденных уроков в неделе. */
+  weekLeft: number;
+  /** Дней до конца недели, включая сегодня (не меньше 1). */
+  daysLeft: number;
+  /** Уроки на сегодня: первые `left` непройденных уроков недели по порядку. */
+  lessons: LessonTask[];
+  /** Первый непройденный урок недели (кнопка «Начать»), даже если норма на сегодня уже выполнена. */
+  next: LessonTask | null;
+}
+
+/**
+ * План на день: сколько уроков недели нужно пройти сегодня. Норма считается от остатка на начало дня
+ * (осталось + уже пройденные сегодня), поэтому после выполненной нормы она не «уезжает» вперёд.
+ * `now` — мс. Неделя из будущего считается с её первого дня. Чистая функция: время передаёт вызывающий.
+ */
+export function todayQuota(week: PlanWeek, now: number): TodayQuota {
+  const today = todayKey(new Date(now));
+  const dayStart = dayStartMs(today);
+  const dayEnd = dayStartMs(addDays(today, 1));
+  const lessons = week.tasks.filter((t): t is LessonTask => t.type === "lesson");
+  const open = lessons.filter((t) => !t.done);
+  const done = lessons.filter((t) => t.done && t.at !== undefined && t.at >= dayStart && t.at < dayEnd).length;
+  const first = today > week.start ? today : week.start;
+  const span = dayDiff(first, week.end);
+  const daysLeft = Number.isFinite(span) ? Math.max(1, span + 1) : 1;
+  const total = open.length === 0 ? done : Math.ceil((open.length + done) / daysLeft);
+  const left = Math.max(0, total - done);
+  return { total, done, left, weekLeft: open.length, daysLeft, lessons: open.slice(0, left), next: open[0] ?? null };
+}
+
+/** Первый непройденный урок плана: с текущей недели вперёд, а если там всё пройдено — из прошедших недель (хвост). */
+export function nextOpenLesson(plan: Plan): LessonTask | null {
+  const order = [...plan.weeks.slice(plan.currentWeek - 1), ...plan.weeks.slice(0, Math.max(0, plan.currentWeek - 1))];
+  for (const w of order) {
+    for (const t of w.tasks) if (t.type === "lesson" && !t.done) return t;
+  }
+  return null;
+}
+
+export interface TodayPlan {
+  week: PlanWeek;
+  quota: TodayQuota;
+  /**
+   * todo — есть уроки на сегодня; quota — норма выполнена, но в неделе ещё есть уроки;
+   * weekDone — уроки недели пройдены; noLessons — в неделе нет уроков (повторение, пробные).
+   */
+  state: "todo" | "quota" | "weekDone" | "noLessons";
+  /** Куда ведёт кнопка: первый урок на сегодня; при выполненной норме — следующий урок; в неделе без уроков — первое непройденное дело. */
+  target: PlanTask | null;
+}
+
+/** «Сегодня» для карточки на главной и блока на /plan; null — плана нет (дата ЕНТ прошла). */
+export function todayPlan(plan: Plan, now: number): TodayPlan | null {
+  const week = currentWeekOf(plan);
+  if (!week) return null;
+  const quota = todayQuota(week, now);
+  if (!week.tasks.some((t) => t.type === "lesson")) {
+    return { week, quota, state: "noLessons", target: week.tasks.find((t) => !t.done) ?? null };
+  }
+  if (quota.left > 0) return { week, quota, state: "todo", target: quota.lessons[0] ?? null };
+  if (quota.weekLeft > 0) return { week, quota, state: "quota", target: quota.next };
+  return { week, quota, state: "weekDone", target: nextOpenLesson(plan) };
 }
 
 // ---------- Ссылки ----------
