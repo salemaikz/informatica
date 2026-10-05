@@ -58,7 +58,7 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
 
   return (
     <div className="flex flex-col gap-4">
-      {step.scene && <SceneView scene={step.scene} />}
+      {/* Схему-условие (step.scene) рисует экран задания (плеер урока, чат «Дай задачи») — здесь не повторяем. */}
       <div className="flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface px-4 py-4">
         {rows.map((row, r) => (
           // Под неверным пропуском печатается верный ответ — оставляем ему место в строке.
