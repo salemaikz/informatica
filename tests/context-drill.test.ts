@@ -84,6 +84,23 @@ describe("buildContextDrill", () => {
     expect(buildContextDrill(item.id)[0].scene).toEqual(buildContextDrill(item.id)[0].scene);
   });
 
+  it("варианты перемешаны по seed, верный ответ — тот же текст, что в банке", () => {
+    const firstCorrect = new Set<number>();
+    for (const item of poolContext) {
+      for (const seed of [1, 7, 42]) {
+        buildContextDrill(item.id, seed).forEach((s, n) => {
+          if (s.type !== "choice") throw new Error("не choice");
+          const q = item.questions[n];
+          expect(s.options[s.correct]).toEqual(q.options[q.correct]);
+          const key = (o: unknown) => JSON.stringify(o);
+          expect(s.options.map(key).sort()).toEqual(q.options.map(key).sort());
+          firstCorrect.add(s.correct);
+        });
+      }
+    }
+    expect(firstCorrect.size).toBe(4);
+  });
+
   it("сцена не на Python (блок-схема) остаётся без запуска", () => {
     const flow = poolContext.find((i) => i.scene && i.scene.kind !== "code");
     if (!flow) return;
@@ -95,7 +112,7 @@ describe("buildContextDrill", () => {
       buildContextDrill(item.id).forEach((s, n) => {
         if (s.type !== "choice") throw new Error("ожидали choice");
         expect(s.options.length).toBe(item.questions[n].options.length);
-        expect(s.correct).toBe(item.questions[n].correct);
+        expect(s.options[s.correct]).toEqual(item.questions[n].options[item.questions[n].correct]);
         const prompt = typeof s.prompt === "string" ? s.prompt : s.prompt.ru;
         expect(prompt).toContain(item.questions[n].prompt.ru);
       });

@@ -77,7 +77,7 @@ function buildSession(mode: DrillMode, p: Params): Built {
     case "recap":
       return { steps: unitById(p.unit) ? buildRecap(p.unit!, s.lessons, s.skills, seed) : [] };
     case "context":
-      return { steps: p.item ? buildContextDrill(p.item) : [] };
+      return { steps: p.item ? buildContextDrill(p.item, seed) : [] };
     case "mistakes": {
       const { steps, map } = buildMistakes(s.mistakes, s.skills, seed);
       return { steps, mistakeMap: map };

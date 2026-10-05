@@ -55,7 +55,7 @@ import { OrderView } from "./steps/OrderView";
 import { SolutionView } from "./steps/SolutionView";
 import { ClozeView } from "./steps/ClozeView";
 import { EntMatchView } from "./steps/EntMatchView";
-import { CodeStepView } from "./steps/CodeStepView";
+import { CodeStepView, preloadCodeStep } from "./steps/CodeStepView";
 import { ExploreView } from "./steps/ExploreView";
 import { StoryView } from "./steps/StoryView";
 import { WorkedView } from "./steps/WorkedView";
@@ -202,7 +202,8 @@ export function LessonPlayer({
   const persist = saveRun && kind === "lesson" && !!lessonId && (via ?? "learn") === "learn";
   // Экстерн начинают с карты курса — туда и выход; остальные тренировки — в «Практику».
   // Урок, экстерн и узлы курса 3.0 (практика, повторение, мини-тест) начинаются с карты — туда и возвращаемся.
-  const exitHref = kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : "/practice";
+  const exitHref =
+    kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : mode === "context" ? "/code/context" : "/practice";
 
   const total = steps.length;
   const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));
@@ -268,6 +269,11 @@ export function LessonPlayer({
     runStartedAt.current = init?.startedAt ?? Date.now();
     stepClockAt.current = activeMs();
   }, [init]);
+
+  // Задача с кодом (этап 14): её кусок подгружаем сразу при открытии урока — пропадёт сеть посреди урока, шаг всё равно откроется.
+  useEffect(() => {
+    if (steps.some((s) => s.type === "code")) preloadCodeStep();
+  }, [steps]);
 
   // Вход (#69): один раз за показ плеера; resume — продолжение сохранённого прохождения. Событие, не state — setState не нужен.
   useEffect(() => {
@@ -647,7 +653,8 @@ export function LessonPlayer({
       prompt: promptText(question, lang),
       options: question.type === "choice" || question.type === "multi" ? question.options.map((o) => tx(o, lang)) : undefined,
       correct: expectedText(question, lang),
-      given: result?.given,
+      // У задачи с кодом ИИ видит сам код ученика (обрезается сервером по бюджету), а не только «тесты пройдены».
+      given: answer?.type === "code" && answer.code.trim() ? answer.code.slice(0, 1500) : result?.given,
       explanation: plain(tx(question.explanation, lang)),
       answered: phase === "feedback",
       // Лестница подсказок: бесплатное (hint автора, разбор неверного варианта) показывается до ИИ.
@@ -655,7 +662,7 @@ export function LessonPlayer({
       whyWrong: whyWrongText ? plain(whyWrongText) : undefined,
       stepKey: question.id,
     };
-  }, [step, question, lang, result, phase, whyWrongText]);
+  }, [step, question, lang, result, phase, whyWrongText, answer]);
   const askSuggestions: DictKey[] = !question
     ? ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"]
     : phase === "feedback"
@@ -941,7 +948,7 @@ export function LessonPlayer({
                 </div>
                 {!result.correct && (
                   <>
-                    {question.type !== "match" && question.type !== "cloze" && (
+                    {question.type !== "match" && question.type !== "cloze" && question.type !== "code" && (
                       <p className="mt-1 font-bold">
                         {t("fb.correctAnswer")} <span className="font-mono">{result.expected}</span>
                       </p>

@@ -37,14 +37,20 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
   const [step, setStep] = useState(0);
 
   const mounted = useRef(true);
+  // Идёт ли запуск — для остановки при уходе со страницы: воркер один, иначе следующая проверка (например, в уроке) ждала бы.
+  const busyRef = useRef(false);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      if (busyRef.current) stopPython();
     };
   }, []);
 
   const busy = phase !== "idle";
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   const onStatus = (s: RunStatus) => {
     if (mounted.current) setPhase(s);
   };

@@ -1,6 +1,7 @@
 import { UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { entRef, entStepFromRef } from "./ent-steps";
+import { shuffleEntItem } from "./exam";
 import type { EntContext, EntItem, QuestionStep } from "./types";
 
 // Контекстные задания в практикуме (этап 14, решение #85): программа на Python и 5 вопросов к ней, как на ЕНТ.
@@ -31,13 +32,17 @@ export function contextItems(): EntContext[] {
     .map((x) => x.item);
 }
 
-/** Сессия по одному контекстному заданию: 5 вопросов, у сцены с программой на Python — кнопка «Запустить» (scene.run). Неизвестный id — []. */
-export function buildContextDrill(itemId: string): QuestionStep[] {
+/**
+ * Сессия по одному контекстному заданию: 5 вопросов, у сцены с программой на Python — кнопка «Запустить» (scene.run).
+ * Варианты перемешаны по seed (в банке верный вариант чаще стоит первым). Неизвестный id — [].
+ */
+export function buildContextDrill(itemId: string, seed = 0): QuestionStep[] {
   const item = ENT_POOL.find((i): i is EntContext => isContext(i) && i.id === itemId);
   if (!item) return [];
+  const shuffled = [shuffleEntItem(item, seed)];
   const steps: QuestionStep[] = [];
   for (let n = 0; n < item.questions.length; n++) {
-    const step = entStepFromRef(entRef(item.id, n));
+    const step = entStepFromRef(entRef(item.id, n), shuffled);
     if (!step) continue;
     const scene = step.scene;
     // Сцену копируем: объект из банка ЕНТ общий, правка на месте попала бы в пробный ЕНТ.
