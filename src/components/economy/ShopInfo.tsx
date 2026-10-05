@@ -32,7 +32,7 @@ import {
 import { useState } from "react";
 import { XpIcon } from "./XpIcon";
 import { useApp } from "@/lib/store";
-import { AI_COST, CHIP_BONUS, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { AI_COST, CHIP_BONUS, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -239,7 +239,7 @@ export function AiPricing() {
           <Sparkles size={24} />
         </IconTile>
         <div className="min-w-0 flex-1">
-          <p className="font-extrabold leading-tight">{unlimited ? t("shop.ai.unlimited") : t("shop.ai.freeLeft", { n: freeLeft, max })}</p>
+          <p className="font-extrabold leading-tight">{unlimited ? t("shop.ai.unlimited") : t(aiFreeIsLifetime(tier) ? "shop.ai.freeLeft" : "ailimit.freeDay", { n: freeLeft, max })}</p>
           {!unlimited && <ProgressBar value={max > 0 ? freeLeft / max : 0} color="var(--ai)" height={10} className="mt-2" label={t("shop.ai.title")} />}
         </div>
       </div>

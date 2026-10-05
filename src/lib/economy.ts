@@ -524,8 +524,19 @@ export interface AiUsage {
   day: string;
   /** Обращений за день в «обращениях» (вес вида — AI_UNITS: фото 2, голос 4). */
   count: number;
-  /** Из них бесплатных по тарифу (считаются штуками). */
+  /** Из них бесплатных по тарифу за день (считаются штуками; для «Лайт» — дневной запас). */
   free: number;
+  /**
+   * Бесплатных обращений за всё время (решение #99): тариф «Бесплатный» получает {@link PLAN_FEATURES}.free.aiFree
+   * бесплатных ответов ИИ один раз, а не каждый день. Не сбрасывается со сменой дня. Нет поля — 0 (санитайзер хранилища
+   * добавляет его при загрузке).
+   */
+  freeTotal?: number;
+}
+
+/** Бесплатные ИИ-обращения тарифа даются один раз (всего), а не каждый день? Только «Бесплатный» (#99). */
+export function aiFreeIsLifetime(tier: PlanTier): boolean {
+  return tier === "free";
 }
 
 export type AiPay = "free" | "plan" | "chips";
@@ -543,14 +554,20 @@ export interface AiReceipt {
 }
 
 export function usageToday(u: AiUsage | undefined, today: string): AiUsage {
-  return u && u.day === today ? { day: today, count: u.count || 0, free: u.free || 0 } : { day: today, count: 0, free: 0 };
+  const total = u?.freeTotal || 0;
+  return u && u.day === today ? { day: today, count: u.count || 0, free: u.free || 0, freeTotal: total } : { day: today, count: 0, free: 0, freeTotal: total };
 }
 
-/** Сколько бесплатных обращений осталось сегодня (Infinity — без ограничений). */
+/**
+ * Сколько бесплатных обращений осталось (Infinity — без ограничений): у «Бесплатного» — за всё время (#99),
+ * у «Лайт» — на сегодня.
+ */
 export function aiFreeLeft(tier: PlanTier, u: AiUsage | undefined, today: string): number {
   const f = PLAN_FEATURES[tier].aiFree;
   if (!Number.isFinite(f)) return Infinity;
-  return Math.max(0, f - usageToday(u, today).free);
+  const cur = usageToday(u, today);
+  const used = aiFreeIsLifetime(tier) ? (cur.freeTotal ?? 0) : cur.free;
+  return Math.max(0, f - used);
 }
 
 /** Как будет оплачено обращение (без изменения состояния). */
@@ -570,22 +587,36 @@ export function applyAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
   const cur = usageToday(u, r.day);
   if (!r.ok) return cur;
   const usesFree = r.pay === "free" && r.kind !== "feedback";
-  return { day: r.day, count: cur.count + AI_UNITS[r.kind], free: cur.free + (usesFree ? 1 : 0) };
+  return { day: r.day, count: cur.count + AI_UNITS[r.kind], free: cur.free + (usesFree ? 1 : 0), freeTotal: (cur.freeTotal ?? 0) + (usesFree ? 1 : 0) };
 }
 
 /** Возврат обращения по квитанции (тот же день). */
 export function refundAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
-  const base: AiUsage = u ? { day: u.day, count: u.count || 0, free: u.free || 0 } : { day: r.day, count: 0, free: 0 };
-  // Неудачная квитанция ничего не списывала; за другой день не возвращаем.
-  if (!r.ok || base.day !== r.day) return base;
+  const base: AiUsage = u
+    ? { day: u.day, count: u.count || 0, free: u.free || 0, freeTotal: u.freeTotal || 0 }
+    : { day: r.day, count: 0, free: 0, freeTotal: 0 };
+  // Неудачная квитанция ничего не списывала.
+  if (!r.ok) return base;
   const usesFree = r.pay === "free" && r.kind !== "feedback";
-  return { day: r.day, count: Math.max(0, base.count - AI_UNITS[r.kind]), free: Math.max(0, base.free - (usesFree ? 1 : 0)) };
+  // Бесплатное «за всё время» возвращается и в другой день: ответ не получен — попытка не потрачена.
+  const freeTotal = Math.max(0, (base.freeTotal ?? 0) - (usesFree ? 1 : 0));
+  // Дневные счётчики за другой день не возвращаем.
+  if (base.day !== r.day) return { ...base, freeTotal };
+  return { day: r.day, count: Math.max(0, base.count - AI_UNITS[r.kind]), free: Math.max(0, base.free - (usesFree ? 1 : 0)), freeTotal };
 }
 
-export function sanitizeAiUsage(raw: unknown): AiUsage {
+/**
+ * Санитайзер учёта ИИ из хранилища. Миграция (#99): у старых данных нет `freeTotal` — считаем потраченными из «трёх навсегда»
+ * те бесплатные, что уже потрачены сегодня (`today` — ключ сегодняшнего дня).
+ */
+export function sanitizeAiUsage(raw: unknown, today = ""): AiUsage {
   const u = (raw ?? {}) as Partial<AiUsage>;
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
-  return { day: typeof u.day === "string" ? u.day : "", count: n(u.count), free: n(u.free) };
+  const day = typeof u.day === "string" ? u.day : "";
+  const free = n(u.free);
+  const hasTotal = typeof u.freeTotal === "number" && Number.isFinite(u.freeTotal);
+  const freeTotal = hasTotal ? n(u.freeTotal) : day !== "" && day === today ? free : 0;
+  return { day, count: n(u.count), free, freeTotal };
 }
 
 // ---------- Окно тарифов ----------

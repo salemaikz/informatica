@@ -65,7 +65,8 @@ function fullReset() {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2027, 0, 15, 12, 0, 0));
   st().resetProgress();
-  useApp.setState({ plan: { tier: "free" } });
+  // «Бесплатные навсегда» (#99) переживают resetProgress — для изоляции тестов обнуляем и их.
+  useApp.setState({ plan: { tier: "free" }, aiUsage: { day: "", count: 0, free: 0, freeTotal: 0 } });
 }
 afterEach(() => vi.useRealTimers());
 const chips = () => st().wallet.chips;
@@ -473,7 +474,7 @@ describe("стор: ИИ за чипы", () => {
   });
 
   it("потолок бесплатного тарифа — 65 обращений: фото на 65-м уже не помещается, подсказка помещается; чипы при отказе целы", () => {
-    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 }, aiUsage: { day: todayKey(), count: 64, free: 3 } });
+    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 }, aiUsage: { day: todayKey(), count: 64, free: 3, freeTotal: 3 } });
     expect(st().spendAi("photo")).toMatchObject({ ok: false, reason: "cap" });
     expect(chips()).toBe(999);
     expect(st().aiUsage.count).toBe(64);
@@ -495,8 +496,22 @@ describe("стор: ИИ за чипы", () => {
     expect(st().spendAi("hint")).toMatchObject({ ok: false, reason: "cap" });
   });
 
+  it("бесплатные даются один раз: назавтра их не прибавляется (#99)", () => {
+    useApp.setState({ aiUsage: { day: "2000-01-01", count: 3, free: 3, freeTotal: 3 } });
+    expect(st().spendAi("hint")).toMatchObject({ ok: true, pay: "chips", cost: 3 });
+    expect(st().aiUsage).toMatchObject({ day: todayKey(), count: 1, free: 0, freeTotal: 3 });
+  });
+
+  it("возврат бесплатного (ответ из кэша) возвращает попытку «навсегда» и в другой день", () => {
+    const r = st().spendAi("hint");
+    expect(r).toMatchObject({ pay: "free" });
+    expect(st().aiUsage.freeTotal).toBe(1);
+    st().refundAi(r);
+    expect(st().aiUsage).toMatchObject({ count: 0, free: 0, freeTotal: 0 });
+  });
+
   it("refundAi неудачной квитанции ничего не делает", () => {
-    useApp.setState({ wallet: { chips: 0, earned: 0, spent: 0 }, aiUsage: { day: todayKey(), count: 3, free: 3 } });
+    useApp.setState({ wallet: { chips: 0, earned: 0, spent: 0 }, aiUsage: { day: todayKey(), count: 3, free: 3, freeTotal: 3 } });
     const r = st().spendAi("hint");
     expect(r.ok).toBe(false);
     st().refundAi(r);
@@ -615,8 +630,15 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(st().history).toEqual([]);
     expect(st().xp).toBe(0);
     expect(st().boost).toBeNull();
-    expect(st().aiUsage).toEqual({ day: "", count: 0, free: 0 });
+    expect(st().aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
     expect(st().practiceHearts).toEqual({ day: "", count: 0 });
+  });
+
+  it("resetProgress не возвращает бесплатные обращения к ИИ «навсегда» (#99)", () => {
+    st().spendAi("hint");
+    st().spendAi("hint");
+    st().resetProgress();
+    expect(st().aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 2 });
   });
 
   it("resetProgress не даёт пробный период второй раз", () => {
@@ -636,7 +658,7 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(m.history).toEqual([]);
     expect(m.paywall).toEqual({ lastShownAt: 0, views: 0 });
     expect(m.practiceHearts).toEqual({ day: "", count: 0 });
-    expect(m.aiUsage).toEqual({ day: "", count: 0, free: 0 });
+    expect(m.aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
   });
 
   it("мусор в полях экономики не ломает загрузку", () => {
@@ -661,7 +683,7 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(m.boost).toBeNull();
     expect(m.practiceHearts).toEqual({ day: "", count: 0 });
     expect(m.paywall).toEqual({ lastShownAt: 0, views: 0 });
-    expect(m.aiUsage).toEqual({ day: "", count: 0, free: 0 });
+    expect(m.aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
     expect(m.history).toEqual([]);
   });
 

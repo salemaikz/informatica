@@ -454,7 +454,7 @@ const initialState: AppState = {
   notebook: emptyNotebook(),
   memory: "",
   chat: [],
-  aiUsage: { day: "", count: 0, free: 0 },
+  aiUsage: { day: "", count: 0, free: 0, freeTotal: 0 },
   maxCombo: 0,
   games: {},
   exams: [],
@@ -667,7 +667,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     streak: { ...current.streak, ...(p.streak ?? {}) },
     notebook: repairNotebook(p.notebook ?? current.notebook),
     exams: Array.isArray(p.exams) ? p.exams.slice(0, MAX_EXAMS) : [],
-    aiUsage: sanitizeAiUsage(p.aiUsage),
+    aiUsage: sanitizeAiUsage(p.aiUsage, todayKey()),
     plan: sanitizePlan(p.plan),
     hearts: sanitizeHearts(p.hearts),
     wallet: sanitizeWallet(p.wallet),
@@ -1311,7 +1311,14 @@ export const useApp = create<AppState & AppActions>()(
         }),
 
       // Тариф и пробный период сброс прогресса не трогает.
-      resetProgress: () => set((s) => ({ ...initialState, notebook: emptyNotebook(Date.now()), plan: s.plan })),
+      // Бесплатные обращения к ИИ даются один раз (#99): сброс прогресса их не возвращает.
+      resetProgress: () =>
+        set((s) => ({
+          ...initialState,
+          notebook: emptyNotebook(Date.now()),
+          plan: s.plan,
+          aiUsage: { ...initialState.aiUsage, freeTotal: s.aiUsage.freeTotal ?? 0 },
+        })),
     }),
     {
       name: STORAGE_KEY,

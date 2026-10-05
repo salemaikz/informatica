@@ -253,7 +253,7 @@ describe("клиентский кэш (LRU)", () => {
     const s = memStore();
     clientCachePut("a", "   ", s);
     expect(s.raw()).toBeNull();
-    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v3");
+    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v4");
   });
 
   it("v3: записи старых ключей v1 и v2 (ответы до правок промпта) не читаются и стираются при первой записи", () => {
@@ -277,6 +277,21 @@ describe("клиентский кэш (LRU)", () => {
   it("версия в ключе кэша ответов поднята: ключи прежних версий не совпадают", () => {
     expect(PROMPT_VERSION).toBeGreaterThanOrEqual(2);
     expect(JSON.parse(cacheKeyPayload({ mode: "hint", lang: "ru", style: "short", task: { prompt: "x" } })).v).toBe(PROMPT_VERSION);
+  });
+});
+
+describe("ключ кэша: ответы нерешённого задания (#100)", () => {
+  const key = (secrets?: string[][], answered?: boolean) =>
+    cacheKeyPayload({ mode: "ask", lang: "ru", style: "short", task: { prompt: "p", secrets, answered }, question: "объясни проще" });
+
+  it("стоп-слова входят в ключ: запрос без них не получит чужой ответ из кэша", () => {
+    expect(key([["ввод"]])).not.toBe(key());
+    expect(key([["ввод"]])).not.toBe(key([["вывод"]]));
+    expect(key([["ввод"]])).toBe(key([["ввод"]]));
+  });
+
+  it("у решённого задания стоп-слов нет — ключ их не хранит", () => {
+    expect(key([["ввод"]], true)).toBe(key(undefined, true));
   });
 });
 

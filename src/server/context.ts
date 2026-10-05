@@ -2,6 +2,7 @@ import "server-only";
 import type { StudentContext, TaskContext } from "@/lib/ai-types";
 import type { Lang } from "@/lib/types";
 import type { WithTrack } from "@/lib/school";
+import { clampSecrets } from "@/lib/answer-leak";
 
 // Всё, что пришло с клиента, — недоверенные данные: обрезаем длины и типы.
 
@@ -110,6 +111,7 @@ export function sanitizeTask(raw: unknown): TaskContext | undefined {
     prompt: str(t.prompt, 600),
     options: strArr(t.options, 8, 120),
     correct: str(t.correct, 200),
+    secrets: clampSecrets(t.secrets),
     given: str(t.given, 200),
     explanation: str(t.explanation, 800),
     theory: str(t.theory, 1500),

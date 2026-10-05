@@ -2,7 +2,7 @@
 
 import { Cpu, Infinity as InfinityIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { PLAN_FEATURES, type AiKind } from "@/lib/economy";
+import { aiFreeIsLifetime, PLAN_FEATURES, type AiKind } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { pluralForm } from "@/components/learn/map";
@@ -12,15 +12,18 @@ type Quote = ReturnType<typeof useAiQuote>;
 type Translate = (key: DictKey, params?: Record<string, string | number>) => string;
 
 /**
- * Предложение про бесплатный ИИ на сегодня (этап 15): «бесплатно, осталось 2 из 3 сегодня» или, когда бесплатные закончились,
- * «бесплатные на сегодня закончились, завтра снова 3; сейчас — за 5 чипов». null — безлимит, лимит дня и отзыв (счёта нет).
+ * Предложение про бесплатный ИИ (#99): у тарифа «Бесплатный» три обращения даны один раз — «бесплатно: осталось 2 из 3»,
+ * потом «бесплатные закончились; сейчас — за 5 чипов · у тебя 20». У «Лайт» счёт дневной («бесплатно, осталось 20 из 30 сегодня»).
+ * null — безлимит, лимит дня и отзыв (счёта нет).
  */
-function quotaSentence(t: Translate, kind: AiKind, { quote, freeLeft, tier }: Quote): string | null {
+function quotaSentence(t: Translate, kind: AiKind, { quote, freeLeft, tier, chips }: Quote): string | null {
   if (kind === "feedback" || quote.pay === "plan" || (!quote.ok && quote.reason === "cap")) return null;
   const max = PLAN_FEATURES[tier].aiFree;
   if (!Number.isFinite(max)) return null;
-  if (quote.pay === "free") return t("hearts15.ai.free", { n: freeLeft, max });
-  return t(`hearts15.ai.out.${pluralForm(quote.cost)}` as DictKey, { max, cost: quote.cost });
+  const life = aiFreeIsLifetime(tier);
+  if (quote.pay === "free") return life ? t("ailimit.free", { n: freeLeft, max }) : t("hearts15.ai.free", { n: freeLeft, max });
+  const head = life ? t("ailimit.out.free") : t("ailimit.out.day", { max });
+  return `${head}; ${t(`ailimit.now.${pluralForm(quote.cost)}` as DictKey, { cost: quote.cost, have: chips })}`;
 }
 
 /** Та же фраза для подписи кнопки (скринридер, title); null — счёта нет. */
@@ -71,7 +74,7 @@ export function AiCost({
 }) {
   const { t } = useT();
   const q = useAiQuote(kind);
-  const { quote, freeLeft, tier } = q;
+  const { quote, freeLeft, tier, chips } = q;
   if (kind === "feedback") return null;
 
   const solid = variant === "solid";
@@ -108,7 +111,7 @@ export function AiCost({
 
   // Платно чипами; если чипов не хватает — красная плашка (на насыщенной кнопке — светлая с красным текстом).
   const enough = quote.ok;
-  const label = t(enough ? "aicost.aria.chips" : "aicost.aria.need", { n: quote.cost });
+  const label = t(enough ? "ailimit.aria.price" : "ailimit.aria.need", { n: quote.cost, have: chips });
   const asText = !compact && !!sentence;
   return (
     <span
@@ -124,9 +127,26 @@ export function AiCost({
       {asText ? (
         <span>{sentence}</span>
       ) : (
-        <span className="tabular-nums" aria-hidden>
-          {quote.cost}
-        </span>
+        <>
+          <span className="tabular-nums" aria-hidden>
+            {quote.cost}
+          </span>
+          {/* Баланс рядом с ценой виден всегда: на узких кнопках (short, до 380px) — коротко «· 20», пошире — «· у тебя 20». */}
+          {short ? (
+            <>
+              <span className="font-bold tabular-nums opacity-80 min-[380px]:hidden" aria-hidden>
+                · {chips}
+              </span>
+              <span className="hidden font-bold tabular-nums opacity-80 min-[380px]:inline" aria-hidden>
+                · {t("ailimit.have", { n: chips })}
+              </span>
+            </>
+          ) : (
+            <span className="font-bold tabular-nums opacity-80" aria-hidden>
+              · {t("ailimit.have", { n: chips })}
+            </span>
+          )}
+        </>
       )}
     </span>
   );

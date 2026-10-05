@@ -1,6 +1,7 @@
-import type { DictKey } from "@/i18n/dict";
+import { dict, type DictKey } from "@/i18n/dict";
+import { fmt } from "@/lib/text";
 import type { Lang } from "@/lib/types";
-import { AI_DAILY_CAP, AI_UNITS, HOUR, PAID_TIERS, PLAN_FEATURES, yearSaving, type PlanTier } from "@/lib/economy";
+import { AI_DAILY_CAP, AI_UNITS, HOUR, PAID_TIERS, PLAN_FEATURES, aiFreeIsLifetime, yearSaving, type PlanTier } from "@/lib/economy";
 
 // Чистые помощники окна тарифов (без React): разбор адреса, сравнение тарифов, форматирование.
 
@@ -91,7 +92,12 @@ export function compareRows(lang: Lang): CompareRow[] {
     {
       id: "ai",
       label: "plans.cmp.ai",
-      cells: perTier((t) => ({ kind: "text", text: Number.isFinite(PLAN_FEATURES[t].aiFree) ? String(PLAN_FEATURES[t].aiFree) : "∞" })),
+      // «Бесплатный» — 3 обращения один раз (#99), «Лайт» — 30 в день, «Безлимит» — без счёта.
+      cells: perTier((t) => {
+        const n = PLAN_FEATURES[t].aiFree;
+        if (!Number.isFinite(n)) return { kind: "text", text: "∞" };
+        return { kind: "text", text: fmt(dict[aiFreeIsLifetime(t) ? "ailimit.cmp.total" : "ailimit.cmp.day"][lang], { n }) };
+      }),
     },
     { id: "chips", label: "plans.cmp.chips", cells: perTier((t) => ({ kind: "text", text: formatMult(PLAN_FEATURES[t].chipMultiplier) })) },
   ];
