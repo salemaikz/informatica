@@ -11,6 +11,7 @@ import {
   type CaseState,
 } from "@/lib/level-case";
 import { LEVEL_CASE_WEIGHTS, MINUTE, PLAN_FEATURES, START_HEARTS, START_WALLET, type CasePrizeId } from "@/lib/economy";
+import { COSMETICS, cosmeticDef, sanitizeCosmetics, type CosmeticId } from "@/lib/cosmetics";
 import { MAX_PENDING_CASES } from "@/lib/rewards-state";
 import { levelInfo } from "@/lib/gamification";
 
@@ -25,6 +26,7 @@ const base = (over: Partial<CaseState> = {}): CaseState => ({
   boost: null,
   ledger: [],
   pendingCases: [2],
+  cosmetics: sanitizeCosmetics(null),
   ...over,
 });
 const ctx = { now: NOW, today: TODAY, tier: "free" as const, ledgerId: "L1" };
@@ -61,7 +63,15 @@ describe("rollLevelCase", () => {
 
   it("pickPrizeId: границы [0, 1) покрывают все призы", () => {
     expect(pickPrizeId(0)).toBe("xp50");
-    expect(pickPrizeId(0.999999)).toBe("boost");
+    // boost — предпоследний (вес 8 из 110), украшение — последнее (вес 10)
+    expect(pickPrizeId(99 / 110)).toBe("boost");
+    expect(pickPrizeId(0.999999)).toBe("cosmetic");
+  });
+
+  it("веса: украшение 10, сумма 110, остальные не менялись", () => {
+    expect(LEVEL_CASE_WEIGHTS.cosmetic).toBe(10);
+    expect(Object.values(LEVEL_CASE_WEIGHTS).reduce((a, b) => a + b, 0)).toBe(110);
+    expect(LEVEL_CASE_WEIGHTS).toMatchObject({ xp50: 24, xp100: 8, hearts: 18, chips10: 22, chips20: 14, chips30: 6, boost: 8 });
   });
 
   it("полные сердечки: «все сердечки» заменяются чипами 15, и в ленте тоже", () => {
@@ -78,6 +88,105 @@ describe("rollLevelCase", () => {
     expect(sawSwap).toBe(true);
     // без замены сердечки встречаются
     expect(Array.from({ length: 400 }, (_, i) => rollLevelCase(2, i + 1).prize.kind)).toContain("hearts");
+  });
+});
+
+describe("приз «украшение»", () => {
+  const OWNED_ALL_RARE = COSMETICS.filter((c) => c.rarity !== "common").map((c) => c.id);
+
+  /** Первый seed, при котором выпадает украшение (сердечки полные, у ученика пусто / есть owned). */
+  const cosmeticSeed = (owned: CosmeticId[] = []): number => {
+    for (let seed = 1; seed < 20000; seed++) if (rollLevelCase(2, seed, true, owned).prize.kind === "cosmetic") return seed;
+    throw new Error("seed не найден");
+  };
+
+  it("выбор украшения — до анимации: приз несёт id, лента показывает тот же приз", () => {
+    const seed = cosmeticSeed();
+    const r = rollLevelCase(2, seed, true);
+    expect(r.prize.kind).toBe("cosmetic");
+    expect(r.prize.id).toBe("cosmetic");
+    expect(r.prize.amount).toBe(0);
+    const def = cosmeticDef(r.prize.cosmetic);
+    expect(def).toBeDefined();
+    expect(def!.rarity).not.toBe("common");
+    expect(r.strip[CASE_WIN_INDEX]).toEqual(r.prize);
+    // повтор с теми же входными — то же украшение
+    expect(rollLevelCase(2, seed, true).prize).toEqual(r.prize);
+  });
+
+  it("не выпадает то, что уже есть (и в призе, и в ленте)", () => {
+    const owned: CosmeticId[] = ["frame-neon", "frame-crown", "banner-night", "title-bug-hunter", "frame-orbit"];
+    let seen = 0;
+    for (let seed = 1; seed <= 600; seed++) {
+      const r = rollLevelCase(2, seed, true, owned);
+      for (const p of [r.prize, ...r.strip]) {
+        if (p.kind !== "cosmetic") continue;
+        seen++;
+        expect(owned).not.toContain(p.cosmetic);
+      }
+    }
+    expect(seen).toBeGreaterThan(50);
+  });
+
+  it("всё редкое уже есть — вместо украшения чипы 30, в ленте тоже", () => {
+    let swapped = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const r = rollLevelCase(2, seed, true, OWNED_ALL_RARE);
+      expect([r.prize, ...r.strip].some((p) => p.kind === "cosmetic")).toBe(false);
+      if (rollLevelCase(2, seed, true).prize.kind === "cosmetic") {
+        // тот же seed без owned дал бы украшение, а здесь — чипы 30
+        expect(r.prize).toEqual(prizeOf("chips30"));
+        swapped++;
+      }
+    }
+    expect(swapped).toBeGreaterThan(0);
+  });
+
+  it("prizeOf: cosmetic без id — чипы 30; с id — приз-украшение", () => {
+    expect(prizeOf("cosmetic")).toEqual(prizeOf("chips30"));
+    expect(prizeOf("cosmetic", "frame-neon")).toEqual({ id: "cosmetic", kind: "cosmetic", amount: 0, cosmetic: "frame-neon" });
+  });
+
+  it("доля украшений в кейсе близка к 10/110", () => {
+    const N = 20000;
+    let n = 0;
+    for (let seed = 1; seed <= N; seed++) if (rollLevelCase(2, seed * 7919, true).prize.kind === "cosmetic") n++;
+    expect(Math.abs(n / N - 10 / 110)).toBeLessThan(0.02);
+  });
+
+  it("claimLevelCase: украшение попадает в owned, не надевается; чипы, XP и история не тронуты", () => {
+    const seed = cosmeticSeed();
+    const s = base();
+    const c = claimLevelCase(s, 2, seed, ctx)!;
+    const id = c.roll.prize.cosmetic!;
+    expect(c.roll.prize.kind).toBe("cosmetic");
+    expect(c.state.cosmetics.owned).toEqual([id]);
+    expect(c.state.cosmetics.equipped).toEqual({ frame: null, banner: null, title: null });
+    expect(c.state.wallet).toEqual(s.wallet);
+    expect(c.state.ledger).toEqual([]);
+    expect(c.state.xp).toBe(s.xp);
+    expect(c.state.pendingCases).toEqual([]);
+    // исходное состояние не изменено
+    expect(s.cosmetics.owned).toEqual([]);
+  });
+
+  it("claimLevelCase: уже надетое остаётся надетым, новое добавляется к имеющемуся", () => {
+    const have = sanitizeCosmetics({ owned: ["frame-dots", "frame-wave"], equipped: { frame: "frame-wave" } });
+    const seed = cosmeticSeed(have.owned);
+    const c = claimLevelCase(base({ cosmetics: have }), 2, seed, ctx)!;
+    expect(c.roll.prize.kind).toBe("cosmetic");
+    expect(c.state.cosmetics.owned).toEqual(["frame-dots", "frame-wave", c.roll.prize.cosmetic]);
+    expect(c.state.cosmetics.equipped.frame).toBe("frame-wave");
+  });
+
+  it("claimLevelCase: всё редкое уже есть — выдаются чипы 30 вместо украшения", () => {
+    const have = sanitizeCosmetics({ owned: OWNED_ALL_RARE });
+    const seed = cosmeticSeed(); // seed, на котором без owned выпало бы украшение
+    const s = base({ cosmetics: have });
+    const c = claimLevelCase(s, 2, seed, ctx)!;
+    expect(c.roll.prize).toEqual(prizeOf("chips30"));
+    expect(c.state.wallet.chips).toBe(s.wallet.chips + 30);
+    expect(c.state.cosmetics.owned).toEqual(OWNED_ALL_RARE);
   });
 });
 

@@ -679,9 +679,12 @@ export function sanitizePaywall(raw: unknown): PaywallState {
 
 // ---------- Кейс за новый уровень (волна 1Б, R3: lib/level-case.ts) ----------
 
-export type CasePrizeId = "xp50" | "xp100" | "hearts" | "chips10" | "chips20" | "chips30" | "boost";
+export type CasePrizeId = "xp50" | "xp100" | "hearts" | "chips10" | "chips20" | "chips30" | "boost" | "cosmetic";
 
-/** Веса призов кейса (сумма 100). Кейс не продаётся и не покупается — награда за обучение. */
+/**
+ * Веса призов кейса (сумма 110). Кейс не продаётся и не покупается — награда за обучение.
+ * `cosmetic` — украшение профиля (lib/cosmetics.ts); когда выдавать нечего (всё редкое уже есть), вместо него `chips30`.
+ */
 export const LEVEL_CASE_WEIGHTS: Record<CasePrizeId, number> = {
   xp50: 24,
   xp100: 8,
@@ -690,6 +693,7 @@ export const LEVEL_CASE_WEIGHTS: Record<CasePrizeId, number> = {
   chips20: 14,
   chips30: 6,
   boost: 8,
+  cosmetic: 10,
 };
 /** Опыт и чипы в призах кейса (всё остальное — по id). */
 export const LEVEL_CASE_XP: Partial<Record<CasePrizeId, number>> = { xp50: 50, xp100: 100 };

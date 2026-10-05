@@ -1,0 +1,112 @@
+/*
+ * Анимации украшений профиля (этап 16В, пакет P1). Только transform/opacity.
+ * Выключаются двумя способами: компоненты не вешают эти классы при «Меньше анимаций» / prefers-reduced-motion
+ * (useReduceMotion), а глобальные правила globals.css в любом случае гасят CSS-анимации.
+ * Координаты рисунков — viewBox 120×120 у рамок и 320×120 у фонов; центр вращения задаётся в px этого viewBox.
+ */
+
+.spin {
+  transform-box: view-box;
+  transform-origin: 60px 60px;
+  animation: spin 16s linear infinite;
+}
+
+.spinSlow {
+  transform-box: view-box;
+  transform-origin: 60px 60px;
+  animation: spin 28s linear infinite;
+}
+
+.spinFast {
+  transform-box: view-box;
+  transform-origin: 60px 60px;
+  animation: spin 10s linear infinite;
+}
+
+/* Лучи золотого фона вращаются вокруг нижней середины поля 320×120. */
+.raysSpin {
+  transform-box: view-box;
+  transform-origin: 160px 132px;
+  animation: spin 60s linear infinite;
+}
+
+.pulse {
+  animation: pulse 2.6s ease-in-out infinite alternate;
+}
+
+.twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twinkle 3s ease-in-out infinite;
+}
+
+/* Занавесы северного сияния медленно «плывут» вбок. */
+.drift {
+  animation: drift 9s ease-in-out infinite alternate;
+}
+
+.driftSlow {
+  animation: drift 13s ease-in-out infinite alternate-reverse;
+}
+
+/* Блик на плашке легендарного титула: полоса света пробегает раз в несколько секунд. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--art-gloss) 70%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: shine 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translateX(-10px);
+  }
+  to {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes shine {
+  0%,
+  55% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}

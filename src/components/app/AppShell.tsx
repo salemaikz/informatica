@@ -14,6 +14,7 @@ import { StreakChipAnimated, XpChipAnimated } from "@/components/motion/Animated
 import { easeOut } from "@/components/motion/presets";
 import { DailyGoalCard, LevelCard, LevelChip, WeakTopicsCard } from "./Widgets";
 import { Avatar } from "./Avatar";
+import { AvatarFrame } from "@/components/cosmetics/AvatarFrame";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { ChipsChip, HeartsChip } from "@/components/economy/HeaderChips";
 import { useToolbox } from "@/components/tools/useToolbox";
@@ -29,7 +30,13 @@ import { dockVisible } from "@/lib/dock";
 function ProfileAvatar({ size = 36 }: { size?: number }) {
   const name = useApp((s) => s.profile.name);
   const config = useApp((s) => s.profile.avatar);
-  return <Avatar config={config} name={name} size={size} />;
+  const frame = useApp((s) => s.cosmetics.equipped.frame);
+  // Рамка из магазина: на маленьком аватаре (меню, 28 px) — тонкое кольцо цвета редкости.
+  return (
+    <AvatarFrame frame={frame} size={size}>
+      <Avatar config={config} name={name} size={size} />
+    </AvatarFrame>
+  );
 }
 
 function Logo() {
