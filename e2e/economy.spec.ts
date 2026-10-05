@@ -86,7 +86,8 @@ test("магазин: полный запас не продаётся, пока 
   await seed(page, { wallet: { chips: 300, earned: 300, spent: 0 }, hearts: { count: 3, updatedAt: Date.now(), day: "2099-01-01" } });
   await page.goto("/shop");
   await expect(page.getByRole("button", { name: "Купить: Полный запас (+2)" })).toBeDisabled();
-  await expect(page.getByText("Выгоднее по одному или тройкой")).toBeVisible();
+  // Не хватает двух: тройка тоже не поместится — «Выгоднее по одному».
+  await expect(page.getByText("Выгоднее по одному", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Купить: \+3 сердечка/ })).toBeDisabled();
   await expect(page.getByText("Столько не поместится — бери по одному")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Купить: \+1 сердечко/ })).toBeEnabled();
