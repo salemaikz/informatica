@@ -20,6 +20,7 @@ import { RecoveryScreen } from "@/components/app/RecoveryScreen";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
 import { PushAskAgent } from "@/components/reminders/PushAskAgent";
 import { TourAgent } from "@/components/tour/TourAgent";
+import { CaseAgent } from "@/components/rewards/CaseAgent";
 
 function subscribeHydration(cb: () => void): () => void {
   const offs = [useApp.persist.onHydrate(cb), useApp.persist.onFinishHydration(cb), subscribeStorage(cb)];
@@ -130,6 +131,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <PushAskAgent />
       {/* Проводник первого входа (#104): приветствие, обзор панели, карточки страниц; окна тарифов и напоминаний ждут его. */}
       <TourAgent />
+      {/* Кейс за новый уровень (волна 1Б, R3): открывается сам на «Учиться», «Профиле», «Прогрессе». */}
+      <CaseAgent />
     </MotionProvider>
   );
 }

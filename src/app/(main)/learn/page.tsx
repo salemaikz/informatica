@@ -10,6 +10,7 @@ import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { QuickActions } from "@/components/learn/QuickActions";
 import { ContinueCard } from "@/components/learn/ContinueCard";
+import { CaseWaiting } from "@/components/rewards/CaseWaiting";
 import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
 import { PlanCard } from "@/components/plan/PlanCard";
 import { ViewSwitch, useMapView } from "@/components/learn/ViewSwitch";
@@ -69,6 +70,8 @@ export default function LearnPage() {
       <TrackSwitch />
 
       <StreakReminder />
+      {/* Неоткрытый кейс за уровень (волна 1Б, R3): сам ничего не рисует, если кейсов нет. */}
+      <CaseWaiting />
       {/* Цель (дата ЕНТ, балл) — для трека ЕНТ; у школьной программы своя карточка прогресса класса. */}
       {ent && <GoalSummaryCard />}
 

@@ -14,7 +14,6 @@ import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
 import { isPerfectSession, PERFECT_RUN_SHOW_FROM } from "@/lib/perfect";
-import { playSound } from "@/lib/sound";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill-meta";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -27,6 +26,7 @@ import { Pill } from "@/components/ui/Pill";
 import { XpIcon } from "@/components/economy/XpIcon";
 import { useChips } from "@/components/economy/useEconomy";
 import { chipsKey } from "@/components/economy/xp-chips";
+import { ChipFlight } from "@/components/motion/ChipFlight";
 import { formatMult } from "@/components/economy/shop-helpers";
 import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
@@ -193,15 +193,7 @@ export function Results({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- конфетти запускаем один раз при показе итогов
   }, []);
 
-  // Звуки итогов: фанфара «идеально» и монетка чипов — после общего сигнала завершения урока.
-  useEffect(() => {
-    if (!useApp.getState().profile.sound) return;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    if (perfect) timers.push(setTimeout(() => playSound("perfect"), 450));
-    if (chips > 0) timers.push(setTimeout(() => playSound("chips"), perfect ? 1100 : 600));
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- звуки один раз при показе итогов
-  }, []);
+  // Звуки итогов: «идеально» играет плеер вместо обычного сигнала завершения, монетку — полёт чипов (ChipFlight).
 
   // Достижения «выскакивают» по одному — каждое со своим звуком.
   useEffect(() => {
@@ -279,14 +271,15 @@ export function Results({
       <div className="flex flex-wrap items-start justify-center gap-2">
         {(kind === "lesson" || chips > 0) && (
           <m.div
-            className="flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
+            className="relative flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ ...springBouncy, delay: 0.55 }}
           >
-            <span className="inline-flex items-center gap-1.5 font-extrabold">
+            <span data-chip-target className="inline-flex items-center gap-1.5 font-extrabold">
               <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
             </span>
+            {chips > 0 && <ChipFlight amount={chips} targetSelector="[data-chip-target]" />}
             {chipParts.length > 0 && <span className="text-xs font-bold text-muted">{chipParts.join(" · ")}{chipMult !== 1 ? ` · ${t("perfect.multNote", { mult: formatMult(chipMult) })}` : ""}</span>}
           </m.div>
         )}
@@ -328,7 +321,7 @@ export function Results({
         </div>
       )}
 
-      <StreakIgnite />
+      <StreakIgnite delay={1.7} />
 
       {/* Первый урок: короткое «что всё это значит» (проводник, #104); компонент сам решает, показываться ли. */}
       {kind === "lesson" && <AfterFirstLesson />}

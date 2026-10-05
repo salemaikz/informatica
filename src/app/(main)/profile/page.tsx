@@ -29,6 +29,7 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { AnalyticsToggle } from "@/components/profile/AnalyticsToggle";
 import { TipsReset } from "@/components/profile/TipsReset";
+import { CaseWaiting } from "@/components/rewards/CaseWaiting";
 import { FeedbackLink } from "@/components/issue/FeedbackLink";
 import { ReportEntry } from "@/components/report/ReportShareSheet";
 
@@ -99,6 +100,7 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col gap-5">
       <h1 className="sr-only">{t("prof.title")}</h1>
+      <CaseWaiting />
 
       {/* Аватар и имя */}
       <Card>
