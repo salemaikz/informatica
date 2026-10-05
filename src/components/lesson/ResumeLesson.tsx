@@ -68,7 +68,7 @@ export function ResumeLesson({
           <div className="flex items-center justify-between gap-3">
             <span className="font-extrabold">{t("hearts.resume.step", { n, m: all })}</span>
             {run.xp > 0 && (
-              <Pill tone="gold" icon={<XpIcon size={12} />}>
+              <Pill tone="gold" icon={<XpIcon size={16} decorative />}>
                 {t("hearts.resume.xp", { n: run.xp })}
               </Pill>
             )}

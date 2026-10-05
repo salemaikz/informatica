@@ -24,11 +24,12 @@ import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
-import { useHearts } from "@/components/economy/useEconomy";
+import { useChips, useHearts } from "@/components/economy/useEconomy";
 import { pluralKey } from "@/components/learn/useLearn";
 import { XpIcon } from "@/components/economy/XpIcon";
-import { xpChipRate } from "@/components/economy/xp-chips";
+import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
+import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 
 type Phase =
   | { name: "intro" }
@@ -63,6 +64,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const router = useRouter();
   const { t, l, lang } = useT();
   const meta = gameById(id)!;
+  const { multiplier: chipMult } = useChips();
   const sound = useApp((s) => s.profile.sound);
   const mode = useApp((s) => s.profile.gameMode);
   const updateProfile = useApp((s) => s.updateProfile);
@@ -95,6 +97,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
     }
     // Статистика (#69): каждый запуск — своё событие, «урок игрой» помечен.
     track({ e: "game_start", game: id, lesson: lesson ? 1 : 0 });
+    snapshotStreakStart();
     const next = round + 1;
     setRound(next);
     setPhase({ name: "playing", round: next });
@@ -103,7 +106,6 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const finish = (result: GameResult) => {
     const earned0 = useApp.getState().wallet.earned;
     const reward = recordGame(id, result, mode);
-    const chips = Math.max(0, useApp.getState().wallet.earned - earned0);
     const doneEvent = gameFinishEvent(id, result.correct, result.total);
     if (doneEvent) track(doneEvent);
     if (sound) playSound("complete");
@@ -118,6 +120,8 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
       credited = gamePassed(result.correct, result.total);
       if (credited && gameCanCredit(useApp.getState().lessons[lesson.id])) completeLessons([lesson.id], "game", result.correct / result.total);
     }
+    // Чипы — вместе с бонусами за «урок игрой» (достижения) из completeLessons.
+    const chips = Math.max(0, useApp.getState().wallet.earned - earned0);
     setPhase({ name: "result", result, reward, credited, chips });
   };
 
@@ -275,8 +279,8 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
               <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
                 <Cpu size={14} className="text-gold" aria-hidden /> {t("xp.chips")}
               </p>
-              <p className="text-2xl font-extrabold text-warning-strong">{t("xp.chipsPlus", { n: phase.chips })}</p>
-              <p className="text-xs font-bold text-muted">{t("xp.rate", { ...xpChipRate() })}</p>
+              <p className="text-2xl font-extrabold text-warning-strong">{t(chipsKey("xp.chipsPlus", phase.chips), { n: phase.chips })}</p>
+              <p className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</p>
             </div>
             <StreakIgnite />
             {!phase.reward.newBest && stat && statKey && (

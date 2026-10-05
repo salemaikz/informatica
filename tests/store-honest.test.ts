@@ -117,7 +117,7 @@ describe("стор: честные цифры (#66, #67, #68)", () => {
     expect(st().skills["ns.bin2dec"]).toMatchObject({ mastery: 0.45, attempts: 1, clean: 0 });
     expect(st().skills["x.y"]).toMatchObject({ mastery: 0.15 });
     expect(st().skills["logic.and"]).toBe(before);
-    expect(st().streak.current).toBe(1); // серия — от ответа выше, диагностика её не трогает
+    expect(st().streak.current).toBe(0); // серия — только за завершённое занятие: ни ответ, ни диагностика её не трогают
     expect(st().history).toHaveLength(0);
   });
   it("загрузка: профиль с новыми полями, старые навыки переводятся на #67, мусор отбрасывается", () => {

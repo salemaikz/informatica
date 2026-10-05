@@ -23,7 +23,8 @@ import { useT } from "@/i18n/useT";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { XpIcon } from "@/components/economy/XpIcon";
-import { xpChipRate } from "@/components/economy/xp-chips";
+import { useChips } from "@/components/economy/useEconomy";
+import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -127,6 +128,7 @@ export function Results({
 }) {
   const router = useRouter();
   const { t, l } = useT();
+  const { multiplier: chipMult } = useChips();
   const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
   const dueAt = useApp((s) => (lessonId ? s.lessons[lessonId]?.dueAt : undefined));
@@ -251,9 +253,9 @@ export function Results({
           transition={{ ...springBouncy, delay: 0.55 }}
         >
           <span className="inline-flex items-center gap-1.5 font-extrabold">
-            <Cpu size={18} className="text-gold" aria-hidden /> {t("xp.chipsPlus", { n: chips })}
+            <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
           </span>
-          <span className="text-xs font-bold text-muted">{t("xp.rate", { ...xpChipRate() })}</span>
+          <span className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</span>
         </m.div>
         {heart && (
           <m.span
