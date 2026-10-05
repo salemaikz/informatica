@@ -17,7 +17,8 @@ import type {
 } from "./types";
 import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
 import { sanitizeAvatar } from "./avatar";
-import { masteryLevel, updateSkill, type SkillStat } from "./mastery";
+import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
+import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
 import { gameReward, gameStatKey, type GameReward } from "./games";
 import { lessonXpFactor, scaleXp, scheduleAfter, type LessonStat } from "./review";
@@ -128,17 +129,45 @@ export interface Profile {
   weeklyLessons: number;
   /** Что проходим: ЕНТ или школьная программа (карта на главной). */
   track: Track;
-  /** Знает основы — раздел «Компьютер с нуля» не рекомендуется первым (выбор в онбординге). */
+  /** Знает основы — раздел «Компьютер с нуля» не рекомендуется первым (по диагностике или в профиле). */
   skipBasics: boolean;
+  /** Целевой балл выбран учеником; false — «пока не знаю» (targetScore — значение по умолчанию). */
+  targetScoreSet: boolean;
+  /** Итог входной диагностики (#70) или null — не проходили. */
+  diagnostic: DiagnosticSummary | null;
+  /** Помогать улучшать Informatica: обезличенная статистика (#69). Сбор включается ещё и на сервере. */
+  analytics: boolean;
+}
+
+/** Итог входной диагностики (#70): баллы всего и по темам ЕНТ. */
+export interface DiagnosticSummary {
+  at: number;
+  points: number;
+  max: number;
+  byTopic: Partial<Record<EntTopicId, { points: number; max: number }>>;
 }
 
 export interface DayStat {
   xp: number;
+  /** Старый счётчик ответов (все ответы, включая повторы и, до v0.11, игры) — для дней до #66. */
   answers: number;
   correct: number;
+  /** Время учёбы, с (#68: с v0.11 — только активное, пишет трекер addActiveSeconds). */
   seconds: number;
   /** Уроков засчитано за день. */
   lessons?: number;
+  /** #66: заданий предъявлено (первые попытки уроков, тренировок, практикума и пробников; пропуск тоже). */
+  asked?: number;
+  /** #66: сумма баллов этих заданий (частичный балл — как есть). */
+  score?: number;
+  /** #66: из них пропущено. */
+  skipped?: number;
+  /** #66: из них с подсказкой. */
+  hinted?: number;
+  /** Игры отдельно (#66, #68): действий, верных, секунд. */
+  games?: number;
+  gameCorrect?: number;
+  gameSeconds?: number;
 }
 
 export interface MistakeRecord {
@@ -186,6 +215,8 @@ export interface ExamSummary {
   unit?: string;
   /** Название для истории тестов («Контрольная: …») на языке ученика. */
   title?: string;
+  /** Заданий в варианте (знаменатель точности дня, #66; пропущенные — со счётом 0). */
+  questions?: number;
 }
 
 export interface AppState {
@@ -226,6 +257,8 @@ export interface AppState {
   practiceHearts: { day: string; count: number };
   /** Незаконченные уроки (#41): id урока → сохранённое прохождение (lib/lesson-run.ts). В резервную копию не входит. */
   lessonRuns: Record<string, LessonRun>;
+  /** Дневной срез по навыкам за 60 дней (#71): динамика, время и точность по темам (lib/skill-days.ts). */
+  skillDays: SkillDays;
   /** Когда показывали окно тарифов. */
   paywall: PaywallState;
 
@@ -308,6 +341,16 @@ export interface AppActions {
   saveLessonRun: (run: LessonRun) => void;
   /** Забыть незаконченный урок («Начать заново»; пройденный урок забывается сам в finishSession). */
   clearLessonRun: (lessonId: string) => void;
+  /**
+   * Активное время учёбы (#68) — единственный источник DayStat.seconds: пишет трекер (lib/active-clock.ts) каждые 15 с.
+   * Не больше 60 с за вызов; game — время игры (ещё и в gameSeconds). Серию, XP и чипы не трогает.
+   */
+  addActiveSeconds: (sec: number, game?: boolean) => void;
+  /**
+   * Итог входной диагностики (#70): сохраняет итог в профиль, мягко засевает навыки, которых ещё не было
+   * (seedSkill: не выше 0,45, «освоено» не даёт), и при необходимости — skipBasics. Серию, XP, чипы и историю не трогает.
+   */
+  recordDiagnostic: (summary: DiagnosticSummary, skillAnswers: Record<string, boolean[]>, opts?: { skipBasics?: boolean }) => void;
   /** Покупка за чипы: сердечко, полный запас, бустер. */
   buy: (id: ShopItemId) => BuyResult;
   /** Пробный период «Безлимита» (один раз). false — уже был или тариф платный. */
@@ -364,6 +407,9 @@ export const defaultProfile: Profile = {
   weeklyLessons: 4,
   track: "ent",
   skipBasics: false,
+  targetScoreSet: false,
+  diagnostic: null,
+  analytics: true,
 };
 
 const initialState: AppState = {
@@ -391,6 +437,7 @@ const initialState: AppState = {
   boost: null,
   practiceHearts: { day: "", count: 0 },
   lessonRuns: {},
+  skillDays: {},
   paywall: { lastShownAt: 0, views: 0 },
   history: [],
   chats: [],
@@ -521,7 +568,30 @@ function cleanProfile(raw: unknown): Profile {
     weeklyLessons: isNum(p.weeklyLessons) && p.weeklyLessons >= 1 && p.weeklyLessons <= 21 ? Math.round(p.weeklyLessons) : d.weeklyLessons,
     track,
     skipBasics: p.skipBasics === true,
+    // Старые сохранения без поля: цель считается выбранной, если её меняли или задана дата ЕНТ.
+    targetScoreSet:
+      typeof p.targetScoreSet === "boolean"
+        ? p.targetScoreSet
+        : (isNum(p.targetScore) && Math.round(p.targetScore) !== d.targetScore) || (typeof p.examDate === "string" && p.examDate.length > 0),
+    diagnostic: cleanDiagnostic(p.diagnostic),
+    analytics: bool(p.analytics, d.analytics),
   };
+}
+
+/** Итог диагностики из localStorage — недоверенные данные. */
+function cleanDiagnostic(raw: unknown): DiagnosticSummary | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Partial<DiagnosticSummary>;
+  if (!isNum(r.at) || !isNum(r.points) || !isNum(r.max) || r.max <= 0 || r.points < 0 || r.points > r.max) return null;
+  const byTopic: DiagnosticSummary["byTopic"] = {};
+  if (r.byTopic && typeof r.byTopic === "object") {
+    for (const [k, v] of Object.entries(r.byTopic)) {
+      if (!/^t\d{2}$/.test(k) || !v || typeof v !== "object") continue;
+      const x = v as { points?: unknown; max?: unknown };
+      if (isNum(x.points) && isNum(x.max) && x.max > 0 && x.points >= 0 && x.points <= x.max) byTopic[k as EntTopicId] = { points: x.points, max: x.max };
+    }
+  }
+  return { at: r.at, points: r.points, max: r.max, byTopic };
 }
 
 /** Миграции сохранений: v1 (конспекты по ключу урока) → v2 (папки и записи). */
@@ -538,6 +608,20 @@ export function migrateState(persisted: unknown, version: number): Partial<AppSt
     );
   }
   return s as Partial<AppState>;
+}
+
+/** Пробник с этим id ещё не записан (повторная запись той же попытки не удваивает точность дня). */
+const isNewExam = (s: Pick<AppState, "exams">, id: string) => !s.exams.some((e) => e.id === id);
+
+/** Навыки из сохранения: только корректные записи, переведённые на правило «освоено» #67. */
+function cleanSkills(raw: unknown): Record<string, SkillStat> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, SkillStat> = {};
+  for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+    const st = migrateSkillStat(v);
+    if (st) out[id] = st;
+  }
+  return out;
 }
 
 /** Собирает состояние из сохранения поверх текущего (новые поля — значения по умолчанию). */
@@ -561,6 +645,9 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
         ? p.practiceHearts
         : { day: "", count: 0 },
     lessonRuns: sanitizeLessonRuns(p.lessonRuns),
+    skillDays: sanitizeSkillDays(p.skillDays),
+    // #67: у старых навыков нет clean и дней — migrateSkillStat переводит их на новое правило (и проверяет данные).
+    skills: cleanSkills(p.skills),
     paywall: sanitizePaywall(p.paywall),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
@@ -589,7 +676,28 @@ export const useApp = create<AppState & AppActions>()(
         set((s) => {
           const today = todayKey();
           const day = s.days[today] ?? emptyDay();
-          const skills = rec.skill ? { ...s.skills, [rec.skill]: updateSkill(s.skills[rec.skill], rec.score) } : s.skills;
+          const first = !rec.retry;
+          const sec = Math.max(0, rec.timeMs) / 1000;
+          // Пропуск (#66): задание предъявлено, счёт 0 — в точность дня и срез по навыкам; без ошибки, освоения и XP.
+          if (rec.skipped) {
+            return {
+              streak: bumpStreak(s.streak, today),
+              days: { ...s.days, [today]: { ...day, asked: (day.asked ?? 0) + 1, skipped: (day.skipped ?? 0) + 1 } },
+              skillDays: rec.skill ? addSkillDay(s.skillDays, today, rec.skill, { n: 1, sec }) : s.skillDays,
+            };
+          }
+          // Освоение (#67): подсказка до ответа и повтор ошибки весят вдвое меньше и не считаются самостоятельными.
+          const skills = rec.skill
+            ? {
+                ...s.skills,
+                [rec.skill]: updateSkill(s.skills[rec.skill], rec.score, Date.now(), {
+                  weight: answerWeight(rec),
+                  clean: first && !rec.hinted,
+                  day: today,
+                }),
+              }
+            : s.skills;
+          const score = Math.max(0, Math.min(1, rec.score));
           // Одна запись на задание: повторная ошибка обновляет запись (и сохраняет урок),
           // верный ответ закрывает её.
           let mistakes = s.mistakes;
@@ -627,8 +735,14 @@ export const useApp = create<AppState & AppActions>()(
                 xp: day.xp + xp,
                 answers: day.answers + 1,
                 correct: day.correct + (rec.correct ? 1 : 0),
+                // #66: точность — по первым попыткам; повтор ошибки сюда не входит.
+                ...(first
+                  ? { asked: (day.asked ?? 0) + 1, score: (day.score ?? 0) + score, hinted: (day.hinted ?? 0) + (rec.hinted ? 1 : 0) }
+                  : {}),
               },
             },
+            skillDays:
+              first && rec.skill ? addSkillDay(s.skillDays, today, rec.skill, { n: 1, s: score, h: rec.hinted ? 1 : 0, sec }) : s.skillDays,
           };
           return settleChips(s, { ...next, ...evaluate(next) });
         }),
@@ -659,7 +773,7 @@ export const useApp = create<AppState & AppActions>()(
             [today]: {
               ...day,
               xp: day.xp + bonusXp,
-              seconds: day.seconds + Math.min(7200, result.durationSec),
+              // Секунды дня пишет только трекер активного времени (#68) — здесь не добавляем, чтобы не считать дважды.
               lessons: (day.lessons ?? 0) + (isLesson ? 1 : 0),
             },
           },
@@ -900,6 +1014,35 @@ export const useApp = create<AppState & AppActions>()(
           return lessonRuns === s.lessonRuns ? {} : { lessonRuns };
         }),
 
+      addActiveSeconds: (sec, game) =>
+        set((s) => {
+          const n = Math.max(0, Math.min(60, Math.floor(Number.isFinite(sec) ? sec : 0)));
+          if (!n) return {};
+          const today = todayKey();
+          const day = s.days[today] ?? emptyDay();
+          return {
+            days: {
+              ...s.days,
+              [today]: { ...day, seconds: day.seconds + n, ...(game ? { gameSeconds: (day.gameSeconds ?? 0) + n } : {}) },
+            },
+          };
+        }),
+
+      recordDiagnostic: (summary, skillAnswers, opts) =>
+        set((s) => {
+          const now = Date.now();
+          let skills = s.skills;
+          for (const [skill, answers] of Object.entries(skillAnswers)) {
+            if (!answers.length) continue;
+            // Большинство верных — «скорее знает» (стартовая оценка 0,45), иначе 0,15; уже знакомые навыки не трогаем.
+            const right = answers.filter(Boolean).length * 2 > answers.length;
+            const seeded = seedSkill(skills[skill], right, now);
+            if (seeded !== skills[skill]) skills = { ...skills, [skill]: seeded };
+          }
+          const profile = { ...s.profile, diagnostic: summary, ...(opts?.skipBasics !== undefined ? { skipBasics: opts.skipBasics } : {}) };
+          return { skills, profile };
+        }),
+
       buy: (id) => {
         const s = get();
         const now = Date.now();
@@ -967,13 +1110,27 @@ export const useApp = create<AppState & AppActions>()(
         const xp = first ? CODE_XP[task.level] : 0;
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
-        const skills = task.skill ? { ...s.skills, [task.skill]: updateSkill(s.skills[task.skill], ok ? 1 : 0) } : s.skills;
+        // #66: в точность — только первая попытка задачи; #67: самостоятельный успех — решена с первой попытки.
+        const firstTry = (prev?.attempts ?? 0) === 0;
+        const skills = task.skill
+          ? { ...s.skills, [task.skill]: updateSkill(s.skills[task.skill], ok ? 1 : 0, Date.now(), { clean: firstTry, day: today }) }
+          : s.skills;
         let next: AppState = {
           ...s,
           xp: s.xp + xp,
           skills,
           streak: bumpStreak(s.streak, today),
-          days: { ...s.days, [today]: { ...day, xp: day.xp + xp, answers: day.answers + 1, correct: day.correct + (ok ? 1 : 0) } },
+          days: {
+            ...s.days,
+            [today]: {
+              ...day,
+              xp: day.xp + xp,
+              answers: day.answers + 1,
+              correct: day.correct + (ok ? 1 : 0),
+              ...(firstTry ? { asked: (day.asked ?? 0) + 1, score: (day.score ?? 0) + (ok ? 1 : 0) } : {}),
+            },
+          },
+          skillDays: firstTry && task.skill ? addSkillDay(s.skillDays, today, task.skill, { n: 1, s: ok ? 1 : 0 }) : s.skillDays,
           codeTasks: {
             ...s.codeTasks,
             [task.id]: { solved: !!prev?.solved || ok, attempts: (prev?.attempts ?? 0) + 1, at: first ? Date.now() : (prev?.at ?? Date.now()) },
@@ -991,7 +1148,8 @@ export const useApp = create<AppState & AppActions>()(
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
         let skills = s.skills;
-        for (const [skill, score] of Object.entries(reward.skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score) };
+        // Игра — один «ответ» на навык; самостоятельным успехом не считается (#67). «Спокойно» — половина веса: этап 14.
+        for (const [skill, score] of Object.entries(reward.skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score, Date.now(), { day: today }) };
         let next: AppState = {
           ...s,
           xp: s.xp + reward.xp,
@@ -999,7 +1157,8 @@ export const useApp = create<AppState & AppActions>()(
           streak: result.total > 0 ? bumpStreak(s.streak, today) : s.streak,
           days: {
             ...s.days,
-            [today]: { ...day, xp: day.xp + reward.xp, answers: day.answers + result.total, correct: day.correct + result.correct },
+            // Игры — отдельно от ответов (#66): в точность дня не входят.
+            [today]: { ...day, xp: day.xp + reward.xp, games: (day.games ?? 0) + result.total, gameCorrect: (day.gameCorrect ?? 0) + result.correct },
           },
           games: key
             ? {
@@ -1019,11 +1178,18 @@ export const useApp = create<AppState & AppActions>()(
           const today = todayKey();
           const day = s.days[today] ?? emptyDay();
           let skills = s.skills;
+          let skillDays = s.skillDays;
+          const now = Date.now();
           for (const [skill, scores] of Object.entries(skillScores)) {
-            for (const score of scores) skills = { ...skills, [skill]: updateSkill(skills[skill], score) };
+            // Пробник — без подсказок: верный ответ — самостоятельный успех (#67).
+            for (const score of scores) skills = { ...skills, [skill]: updateSkill(skills[skill], score, now, { clean: true, day: today }) };
+            if (scores.length) skillDays = addSkillDay(skillDays, today, skill, { n: scores.length, s: scores.reduce((a, x) => a + Math.max(0, Math.min(1, x)), 0) });
           }
           const answered = Object.values(skillScores).reduce((a, x) => a + x.length, 0);
           const correct = Object.values(skillScores).reduce((a, x) => a + x.filter((v) => v >= 0.99).length, 0);
+          const scoreSum = Object.values(skillScores).reduce((a, x) => a + x.reduce((b, v) => b + Math.max(0, Math.min(1, v)), 0), 0);
+          // #66: знаменатель — весь вариант (пропущенные — со счётом 0), если он известен.
+          const asked = Math.max(answered, typeof summary.questions === "number" && summary.questions > 0 ? Math.floor(summary.questions) : 0);
           // Ошибки пробного ЕНТ попадают в общую работу над ошибками (id вида «ent:…», см. lib/ent-steps.ts).
           let mistakes = s.mistakes;
           for (const w of [...wrong].reverse()) {
@@ -1059,13 +1225,15 @@ export const useApp = create<AppState & AppActions>()(
             history: pushHistory(s.history, entry),
             exams: [summary, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
             streak: answered > 0 ? bumpStreak(s.streak, today) : s.streak,
+            skillDays,
             days: {
               ...s.days,
               [today]: {
                 ...day,
                 answers: day.answers + answered,
                 correct: day.correct + correct,
-                seconds: day.seconds + Math.min(7200, summary.durationSec),
+                // Время пробника пишет трекер активного времени (#68); настоящий таймер ЕНТ — в итогах попытки.
+                ...(isNewExam(s, summary.id) && asked > 0 ? { asked: (day.asked ?? 0) + asked, score: (day.score ?? 0) + scoreSum } : {}),
               },
             },
           };

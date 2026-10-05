@@ -45,9 +45,14 @@ describe("освоение навыка", () => {
     expect(masteryLevel(updateSkill(undefined, 1))).toBe("progress");
     expect(masteryLevel(updateSkill(undefined, 0))).toBe("weak");
   });
-  it("серия верных ответов приводит к «освоено»", () => {
+  it("«освоено» — самостоятельные верные ответы в разные дни, а не серия за раз (#67)", () => {
     let s = updateSkill(undefined, 0);
-    for (let i = 0; i < 6; i++) s = updateSkill(s, 1);
+    // шесть верных подряд в один день: оценка высокая, но это ещё «в процессе»
+    for (let i = 0; i < 6; i++) s = updateSkill(s, 1, 0, { clean: true, day: "2027-01-15" });
+    expect(s.mastery).toBeGreaterThan(0.8);
+    expect(masteryLevel(s)).toBe("progress");
+    // успех на следующий день — «освоено»
+    s = updateSkill(s, 1, 0, { clean: true, day: "2027-01-16" });
     expect(masteryLevel(s)).toBe("mastered");
   });
   it("weakSkills сортирует от слабого", () => {

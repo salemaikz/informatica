@@ -10,6 +10,7 @@ import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
 import { SaveToNotesSheet } from "@/components/notes/SaveToNotesSheet";
 import { ReminderAgent } from "@/components/app/ReminderAgent";
+import { ActiveTimeAgent } from "@/components/app/ActiveTimeAgent";
 import { SwRegister } from "@/components/app/SwRegister";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { StorageBanner } from "@/components/app/StorageBanner";
@@ -108,6 +109,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <SaveToNotesSheet />
       {/* Напоминания о серии: таймер, пока приложение открыто, и зеркало для сервис-воркера. */}
       <ReminderAgent />
+      {/* Активное время учёбы (#68): единственный писатель секунд дня. */}
+      <ActiveTimeAgent />
       {/* Окно тарифов: бесплатным ученикам на главной не чаще раза в 3 дня. */}
       <PaywallAgent />
     </MotionProvider>

@@ -142,3 +142,10 @@ describe("sanitizeLessonRuns: данные из localStorage недоверен�
     expect(r).toMatchObject({ xpFactor: 1, cost: 1, paidAt: null, combo: 0 });
   });
 });
+
+describe("sanitizeLessonRuns: флаги ответа #66", () => {
+  it("hinted и skipped сохраняются", () => {
+    const r = run({ records: [{ stepId: "b", correct: false, score: 0, given: "", expected: "", prompt: "", retry: false, timeMs: 1, hinted: true, skipped: true }] });
+    expect(sanitizeLessonRuns({ les: r }, T0).les.records[0]).toMatchObject({ hinted: true, skipped: true });
+  });
+});

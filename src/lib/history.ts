@@ -71,7 +71,8 @@ export function entryFromSession(result: SessionResult, id: string, at: number, 
   const kind: HistoryKind = result.kind === "drill" ? "drill" : result.via === "check" ? "check" : "lesson";
   const wrong: WrongItem[] = [];
   for (const a of first) {
-    if (a.correct || wrong.some((w) => w.stepId === a.stepId)) continue;
+    // Пропуск (#66) снижает результат, но это не ошибка — в «работу над ошибками» не идёт.
+    if (a.correct || a.skipped || wrong.some((w) => w.stepId === a.stepId)) continue;
     wrong.push(wrongFromAnswer(a, result.lessonId));
   }
   return {

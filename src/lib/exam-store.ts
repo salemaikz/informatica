@@ -309,6 +309,8 @@ export function buildSummary(attempt: ExamAttempt, finishedAt: number, title?: s
     topics: attempt.kind === "topic" ? attempt.topics : undefined,
     unit: attempt.kind === "unit" ? attempt.unit : undefined,
     title: attempt.kind === "unit" && title ? title : undefined,
+    // Знаменатель точности дня (#66): весь вариант, пропущенные — со счётом 0.
+    questions: attempt.paper.items.length,
   };
 }
 

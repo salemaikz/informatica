@@ -40,6 +40,10 @@ import { issueDict } from "./parts/issue";
 import { errorsDict } from "./parts/errors";
 import { storageDict } from "./parts/storage";
 import { metaDict } from "./parts/meta";
+import { progressDict } from "./parts/progress";
+import { feedbackDict } from "./parts/feedback";
+import { diagnosticDict } from "./parts/diagnostic";
+import { resultsDict } from "./parts/results";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -519,6 +523,10 @@ export const dict = {
   ...errorsDict,
   ...storageDict,
   ...metaDict,
+  ...progressDict,
+  ...feedbackDict,
+  ...diagnosticDict,
+  ...resultsDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

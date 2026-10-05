@@ -151,6 +151,9 @@ function cleanRecord(raw: unknown): AnswerRecord | null {
   };
   const skill = str(raw.skill, 100);
   if (skill) rec.skill = skill;
+  // Флаги честной точности (#66): ответ с подсказкой и пропуск.
+  if (raw.hinted === true) rec.hinted = true;
+  if (raw.skipped === true) rec.skipped = true;
   return rec;
 }
 

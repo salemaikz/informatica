@@ -81,8 +81,8 @@ export const BACKUP_STATE_KEYS = [
 
 type MustBeNever<T extends never> = T;
 /** Если в AppState появилось поле, которого нет в копии (и нет среди сознательно исключённых), здесь ошибка компиляции. */
-// Не входят: onboarded, тариф (привязан к устройству) и незаконченные уроки (lessonRuns — временные, #41).
-export type BackupKeysComplete = MustBeNever<Exclude<keyof AppState, "onboarded" | "plan" | "lessonRuns" | (typeof BACKUP_STATE_KEYS)[number]>>;
+// Не входят: onboarded, тариф (привязан к устройству), незаконченные уроки (lessonRuns — временные, #41) и срез по навыкам (skillDays, #71).
+export type BackupKeysComplete = MustBeNever<Exclude<keyof AppState, "onboarded" | "plan" | "lessonRuns" | "skillDays" | (typeof BACKUP_STATE_KEYS)[number]>>;
 
 const CHIP_REASONS = ["welcome", "xp", "lesson", "perfect", "dailyGoal", "achievement", "exam", "buy", "ai", "refund"] as const satisfies readonly ChipReason[];
 export type BackupReasonsComplete = MustBeNever<Exclude<ChipReason, (typeof CHIP_REASONS)[number]>>;
