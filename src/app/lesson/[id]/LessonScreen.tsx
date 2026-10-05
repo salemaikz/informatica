@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { getLesson } from "@/content/course";
 import { useT } from "@/i18n/useT";
 import { track } from "@/lib/analytics";
 import { buildCheck } from "@/lib/drill";
 import { ENTRY_COST, canAfford, lessonCost } from "@/lib/economy";
+import { withEntBoss } from "@/lib/ent-boss";
 import { runPaid, usableRun } from "@/lib/lesson-run";
 import { useApp } from "@/lib/store";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
@@ -25,7 +26,9 @@ import { OutOfHearts } from "@/components/economy/OutOfHearts";
 export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check" }) {
   const router = useRouter();
   const { l } = useT();
-  const lesson = getLesson(id)!;
+  const base = getLesson(id)!;
+  // «Босс урока» (#84): настоящее ЕНТ-«соответствие» и «несколько верных» из банка ЕНТ — и в «Учиться», и в «Проверить себя».
+  const lesson = useMemo(() => withEntBoss(base), [base]);
   // «Проверить себя»: только задания (A → B → C), недостающее добираем из банка. Набор собираем один раз при входе.
   const [check] = useState(() => (mode === "check" ? buildCheck(lesson, Date.now()) : []));
   const asCheck = mode === "check" && check.length > 0;
