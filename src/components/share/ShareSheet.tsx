@@ -1,15 +1,14 @@
 "use client";
 
 import { Download, Loader2, Share2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { track, type ShareWhat } from "@/lib/analytics";
-import { cn } from "@/lib/cn";
 import { downloadBlob } from "@/lib/download";
-import { canShareFile, canShareNative, absoluteUrl } from "@/lib/share";
+import { canShareFile, absoluteUrl } from "@/lib/share";
 import { cardFileName, renderShareCard, type CardTopic } from "@/lib/share-card";
 import { sharePath, type ShareResult } from "@/lib/share-code";
 import { APP_NAME } from "@/lib/site-meta";
@@ -21,7 +20,6 @@ export type ShareSource = ShareResult | null | (() => Promise<ShareResult | null
 
 type Card = { status: "none" } | { status: "loading" } | { status: "ready"; url: string; file: File } | { status: "failed" };
 
-const noop = () => () => {};
 
 /**
  * Кнопка + лист «Поделиться» (#72, #73). Нажатие открывает окно и ЗАПУСКАЕТ рисование карточки (promise, setState — в then),
@@ -61,7 +59,6 @@ export function ShareSheet({
   // Номер запуска: закрыли окно, пока рисовалось, — поздний ответ выбрасываем (и не оставляем object URL).
   const run = useRef(0);
   const urlRef = useRef<string | null>(null);
-  const native = useSyncExternalStore(noop, () => canShareNative(), () => false);
 
   const release = useCallback(() => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -161,19 +158,14 @@ export function ShareSheet({
 
           {url && result && (
             <>
-              {/* Пока картинка рисуется, кнопку системного меню заменяет подпись-ожидание: так в меню уйдёт и картинка. */}
-              {preparing && native && (
-                <Button block disabled icon={<Loader2 size={18} className="animate-spin" aria-hidden />}>
-                  {t("share.sheet.preparing")}
-                </Button>
-              )}
+              {/* Пока картинка рисуется, кнопка системного меню ждёт: так в меню уйдёт и картинка. */}
               <ShareTargets
                 url={url}
                 title={APP_NAME}
                 text={messageText(result, what === "challenge" ? "challenge" : "result")}
                 what={what}
                 file={file}
-                className={cn(preparing && "[&>button:first-child]:hidden")}
+                nativePending={preparing ? t("share.sheet.preparing") : undefined}
               />
               {file && !canShareFile(file) && (
                 <Button variant="secondary" block icon={<Download size={18} aria-hidden />} onClick={onSave}>

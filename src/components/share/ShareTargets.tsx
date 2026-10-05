@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, MessageCircle, Send, Share2 } from "lucide-react";
+import { Check, Link2, Loader2, MessageCircle, Send, Share2 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/useT";
 import { track, type ShareHow, type ShareWhat } from "@/lib/analytics";
@@ -24,6 +24,7 @@ export function ShareTargets({
   text,
   what,
   file,
+  nativePending,
   className,
 }: {
   /** Абсолютная ссылка. */
@@ -34,6 +35,8 @@ export function ShareTargets({
   text: string;
   what: ShareWhat;
   file?: File | null;
+  /** Картинка ещё готовится: вместо кнопки системного меню — неактивная кнопка с этой подписью (в меню должна уйти и картинка). */
+  nativePending?: string;
   className?: string;
 }) {
   const { t } = useT();
@@ -67,11 +70,16 @@ export function ShareTargets({
 
   return (
     <div className={cn("flex flex-col gap-2.5", className)}>
-      {native && (
-        <Button block icon={<Share2 size={18} aria-hidden />} onClick={onNative}>
-          {t("share.targets.native")}
-        </Button>
-      )}
+      {native &&
+        (nativePending ? (
+          <Button block disabled icon={<Loader2 size={18} className="animate-spin" aria-hidden />}>
+            {nativePending}
+          </Button>
+        ) : (
+          <Button block icon={<Share2 size={18} aria-hidden />} onClick={onNative}>
+            {t("share.targets.native")}
+          </Button>
+        ))}
       <div className="grid grid-cols-2 gap-2.5">
         <a {...link("wa")}>
           <MessageCircle size={18} aria-hidden />
