@@ -26,18 +26,60 @@ import type { AnswerRecord, SessionResult } from "@/lib/types";
 const known = new Set(Object.keys(LESSONS));
 const done = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { completions: 1 }]));
 
+/** Подпись плана для сообщений: «5», «10 emn». */
+const planLabel = (p: SchoolGradePlan) => (p.direction ? `${p.grade} ${p.direction}` : p.grade);
+
 describe("школьная программа: данные", () => {
-  it("есть все классы 5–11 по порядку", () => {
+  it("есть все классы 5–11 по порядку (10–11 — в двух направлениях)", () => {
     expect(missingGrades()).toEqual([]);
-    expect(SCHOOL_PROGRAM.map((p) => p.grade)).toEqual(SCHOOL_GRADES);
+    expect([...new Set(SCHOOL_PROGRAM.map((p) => p.grade))]).toEqual(SCHOOL_GRADES);
+  });
+
+  it("у 10 и 11 классов есть планы ЕМН и ОГН, у 5–9 — один план без направления", () => {
+    for (const grade of ["10", "11"] as const) {
+      const dirs = SCHOOL_PROGRAM.filter((p) => p.grade === grade).map((p) => p.direction);
+      expect(dirs.sort(), grade).toEqual(["emn", "ogn"]);
+    }
+    for (const grade of ["5", "6", "7", "8", "9"] as const) {
+      const plans = SCHOOL_PROGRAM.filter((p) => p.grade === grade);
+      expect(plans.length, grade).toBe(1);
+      expect(plans[0].direction, grade).toBeUndefined();
+    }
+  });
+
+  it("у каждого раздела 5–11 задана четверть 1–4, и по плану четверти не убывают", () => {
+    for (const plan of SCHOOL_PROGRAM) {
+      let prev = 1;
+      for (const s of plan.sections) {
+        expect([1, 2, 3, 4], `${planLabel(plan)}/${s.id}`).toContain(s.quarter);
+        expect(s.quarter!, `${planLabel(plan)}/${s.id}`).toBeGreaterThanOrEqual(prev);
+        prev = s.quarter!;
+      }
+    }
+  });
+
+  it("темы — строки долгосрочных планов приказа № 399: число тем по классам совпадает с официальным текстом", () => {
+    const official: Record<string, number> = { "5": 20, "6": 19, "7": 21, "8": 19, "9": 21, "10 emn": 29, "11 emn": 20, "10 ogn": 21, "11 ogn": 12 };
+    const got = Object.fromEntries(SCHOOL_PROGRAM.map((p) => [planLabel(p), p.sections.reduce((n, s) => n + s.topics.length, 0)]));
+    expect(got).toEqual(official);
   });
 
   it("id уникальны, названия двуязычные, все уроки существуют", () => {
     expect(validateSchoolProgram(SCHOOL_PROGRAM, known)).toEqual([]);
   });
 
-  it("в каждом классе есть хотя бы одна тема с готовым уроком", () => {
-    for (const plan of SCHOOL_PROGRAM) expect(gradeLessonIds(plan).length, plan.grade).toBeGreaterThan(0);
+  it("id ОГН не пересекаются с ЕМН: префиксы g10o-/g11o-", () => {
+    for (const plan of SCHOOL_PROGRAM.filter((p) => p.direction === "ogn"))
+      for (const s of plan.sections) {
+        expect(s.id.startsWith(`g${plan.grade}o-`), s.id).toBe(true);
+        for (const t of s.topics) expect(t.id.startsWith(`g${plan.grade}o-`), t.id).toBe(true);
+      }
+    for (const plan of SCHOOL_PROGRAM.filter((p) => p.direction !== "ogn"))
+      for (const s of plan.sections) expect(s.id.startsWith(`g${plan.grade}-`), s.id).toBe(true);
+  });
+
+  it("в каждом классе (и в каждом направлении) есть хотя бы одна тема с готовым уроком", () => {
+    for (const plan of SCHOOL_PROGRAM) expect(gradeLessonIds(plan).length, planLabel(plan)).toBeGreaterThan(0);
   });
 
   it("казахские названия не повторяют русские (нет забытых переводов)", () => {
@@ -47,17 +89,35 @@ describe("школьная программа: данные", () => {
         for (const t of s.topics) if (t.title.ru.length > 20) expect(t.title.kk, t.id).not.toBe(t.title.ru);
   });
 
-  it("в названиях нет эмодзи", () => {
+  it("в названиях нет эмодзи и опечаток приказа (транскрипции в скобках, «оделирование», «ITStartup»)", () => {
     const emoji = /\p{Extended_Pictographic}/u;
+    const typos = /пайтон|ай-ти|ай ди и|(?<![мМ])оделирование|ITStartup|Python\(|\(бигдейта\)/;
     for (const plan of SCHOOL_PROGRAM)
       for (const s of plan.sections) {
         expect(emoji.test(s.title.ru + s.title.kk), s.id).toBe(false);
-        for (const t of s.topics) expect(emoji.test(t.title.ru + t.title.kk), t.id).toBe(false);
+        expect(typos.test(s.title.ru + s.title.kk), s.id).toBe(false);
+        for (const t of s.topics) {
+          expect(emoji.test(t.title.ru + t.title.kk), t.id).toBe(false);
+          expect(typos.test(t.title.ru + t.title.kk), t.id).toBe(false);
+        }
       }
   });
 
   it("schoolPlan находит класс", () => {
     expect(schoolPlan("8")?.grade).toBe("8");
+  });
+
+  it("schoolPlan(10, ogn) возвращает ОГН; по умолчанию и с emn — ЕМН", () => {
+    const ogn = schoolPlan("10", "ogn");
+    expect(ogn?.grade).toBe("10");
+    expect(ogn?.direction).toBe("ogn");
+    expect(ogn?.sections[0].id).toBe("g10o-1");
+    expect(schoolPlan("11", "ogn")?.direction).toBe("ogn");
+    expect(schoolPlan("10")?.direction).toBe("emn");
+    expect(schoolPlan("10", "emn")?.sections[0].id).toBe("g10-1");
+    expect(schoolPlan("11", "emn")?.sections[0].id).toBe("g11-1");
+    // у 5–9 классов направление игнорируется
+    expect(schoolPlan("7", "ogn")?.grade).toBe("7");
   });
 });
 
@@ -190,7 +250,7 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
   /** Статистика урока после одного прохождения. */
   const stat = (over: Partial<LessonStat> = {}): LessonStat => ({ completions: 1, bestAccuracy: 1, lastAt: NOW, totalXp: 10, dueAt: NOW + DAY, ...over });
   const mapRef = (id: string) => UNITS.flatMap((u) => u.lessons.map((ref) => ({ unit: u, ref }))).find((x) => x.ref.id === id);
-  const schoolTopics = SCHOOL_PROGRAM.flatMap((p) => p.sections.flatMap((s) => s.topics.map((t) => ({ grade: p.grade, topic: t }))));
+  const schoolTopics = SCHOOL_PROGRAM.flatMap((p) => p.sections.flatMap((s) => s.topics.map((t) => ({ grade: p.grade, direction: p.direction, topic: t }))));
   const allSchoolLessons = [...new Set(SCHOOL_PROGRAM.flatMap(gradeLessonIds))];
   const rec = (over: Partial<AnswerRecord> = {}): AnswerRecord => ({
     stepId: "q1",
@@ -236,25 +296,25 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
       expect(unitProgress(unit, lessons).done, id).toBe(1);
       expect(recommendedLesson([unit], lessons)?.ref.id, id).not.toBe(id);
       // школьная карта: каждая тема с этим уроком насчитала его, класс — тоже
-      for (const { grade, topic } of schoolTopics.filter((x) => x.topic.lessonIds.includes(id))) {
+      for (const { grade, direction, topic } of schoolTopics.filter((x) => x.topic.lessonIds.includes(id))) {
         expect(topicProgress(topic, lessons).done, `${grade}/${topic.id}/${id}`).toBe(1);
-        expect(gradeProgress(schoolPlan(grade)!, lessons).lessonsDone, `${grade}/${id}`).toBe(1);
+        expect(gradeProgress(schoolPlan(grade, direction)!, lessons).lessonsDone, `${grade}${direction ?? ""}/${id}`).toBe(1);
       }
     }
   });
 
-  it("урок про биты есть и в школьной программе (6 и 10 классы), и в курсе ЕНТ (раздел «Информация и системы счисления», тема t04)", () => {
+  it("урок про биты есть и в школьной программе (5 класс — «Двоичное представление информации», 10 ЕМН — перевод между системами), и в курсе ЕНТ (раздел «Информация и системы счисления», тема t04)", () => {
     const grades = schoolTopics.filter((x) => x.topic.lessonIds.includes(BITS)).map((x) => `${x.grade}/${x.topic.id}`);
-    expect(grades).toEqual(expect.arrayContaining(["6/g6-3-3", "10/g10-2-1"]));
+    expect(grades).toEqual(expect.arrayContaining(["5/g5-1-4", "10/g10-2-1"]));
     expect(mapRef(BITS)?.unit.id).toBe("u1");
     expect(topicLessons("t04", UNITS, LESSONS, SKILLS).map((x) => x.ref.id)).toContain(BITS);
   });
 
   it("пройден в школьном режиме → пройден и на карте ЕНТ: стор → школьная карта и «Путь»", () => {
-    useApp.getState().updateProfile({ track: "school", grade: "6" });
+    useApp.getState().updateProfile({ track: "school", grade: "5" });
     const { unit, ref } = mapRef(BITS)!;
-    const topic = schoolTopics.find((x) => x.topic.id === "g6-3-3")!.topic;
-    const plan = schoolPlan("6")!;
+    const topic = schoolTopics.find((x) => x.topic.id === "g5-1-4")!.topic;
+    const plan = schoolPlan("5")!;
     const before = useApp.getState().lessons;
     expect(isLessonDone(BITS, before)).toBe(false);
     expect(isPassed(nodeState(ref, before[BITS], undefined, Date.now()))).toBe(false);
@@ -273,22 +333,24 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
     expect(recommendedLesson(UNITS, lessons)?.ref.id).not.toBe(BITS);
   });
 
-  it("пройден в режиме ЕНТ → пройден и в школьной программе (6 и 10 классы); смена режима ничего не стирает", () => {
+  it("пройден в режиме ЕНТ → пройден и в школьной программе (5 и 10 классы); смена режима ничего не стирает", () => {
     useApp.getState().updateProfile({ track: "ent" });
     useApp.getState().finishSession(session(BITS));
     const snapshot = useApp.getState().lessons;
     useApp.getState().updateProfile({ track: "school", grade: "10" });
     expect(useApp.getState().lessons).toBe(snapshot);
     const lessons = useApp.getState().lessons;
-    expect(topicProgress(schoolTopics.find((x) => x.topic.id === "g10-2-1")!.topic, lessons)).toMatchObject({ total: 6, done: 1 });
+    expect(topicProgress(schoolTopics.find((x) => x.topic.id === "g10-2-1")!.topic, lessons)).toMatchObject({ total: 5, done: 1 });
     expect(gradeProgress(schoolPlan("10")!, lessons).lessonsDone).toBe(1);
-    expect(gradeProgress(schoolPlan("6")!, lessons).lessonsDone).toBe(1);
+    expect(gradeProgress(schoolPlan("5")!, lessons).lessonsDone).toBe(1);
+    // ОГН-план 10 класса про системы счисления ничего не знает: урок в нём не учитывается
+    expect(gradeProgress(schoolPlan("10", "ogn")!, lessons).lessonsDone).toBe(0);
     useApp.getState().updateProfile({ track: "ent" });
     expect(useApp.getState().lessons).toBe(snapshot);
   });
 
   it("тема школьной программы целиком пройдена → все её уроки пройдены на «Пути»", () => {
-    const topic = schoolTopics.find((x) => x.topic.id === "g6-3-3")!.topic;
+    const topic = schoolTopics.find((x) => x.topic.id === "g5-1-4")!.topic;
     useApp.getState().completeLessons(topic.lessonIds, "extern", 1);
     const { lessons } = useApp.getState();
     expect(topicProgress(topic, lessons)).toMatchObject({ total: 4, done: 4, complete: true, nextLessonId: null });
