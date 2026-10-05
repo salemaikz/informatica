@@ -553,7 +553,7 @@ Windows C: және D: дискілерін көрсетеді және қалт
       scene: { kind: "files", tree: TREE, active: "Users/Ali/Docs", caption: l("Текущая папка — Docs", "Ағымдағы қалта — Docs") },
       lines: [
         [l("Кластер — 4 КБ. Файл размером 9 КБ занимает ", "Кластер — 4 КБ. Көлемі 9 КБ файл "), { blank: ["3"], mode: "number" }, l(" кластера, то есть ", " кластер алады, яғни дискіде "), { blank: ["12"], mode: "number" }, l(" КБ на диске.", " КБ орын.")],
-        [l("Текущая папка — ", "Ағымдағы қалта — "), DOCS, l(". Путь ", ". Жол "), REL, l(" — это абсолютный путь ", " — абсолютті жол "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text", label: { ru: "Music", kk: "Music" } }, "\\", { blank: ["song.mp3"], mode: "text", label: { ru: "song.mp3", kk: "song.mp3" } }],
+        [l("Текущая папка — ", "Ағымдағы қалта — "), DOCS, l(". Путь ", ". "), REL, l(" — это абсолютный путь ", " жолының абсолютті түрі: "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text", label: { ru: "Music", kk: "Music" } }, "\\", { blank: ["song.mp3"], mode: "text", label: { ru: "song.mp3", kk: "song.mp3" } }],
         [l("Предел размера одного файла в FAT32: ", "FAT32 жүйесіндегі бір файлдың ең үлкен көлемі: "), { blank: ["4"], mode: "number" }, " ГБ"],
       ],
       bank: [{ ru: "Docs", kk: "Docs" }, { ru: "report.docx", kk: "report.docx" }, { ru: "Ali", kk: "Ali" }],

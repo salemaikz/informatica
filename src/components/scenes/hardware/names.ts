@@ -52,7 +52,7 @@ export const HARDWARE_NAMES: Record<HardwareId, L> = {
   plotter: { ru: "Плоттер", kk: "Плоттер" },
   "pen-tablet": { ru: "Графический планшет", kk: "Графикалық планшет" },
   sensor: { ru: "Датчик", kk: "Датчик" },
-  "vr-headset": { ru: "VR-шлем", kk: "VR-дулыға" },
+  "vr-headset": { ru: "VR-шлем", kk: "VR-шлем" },
   "robot-vacuum": { ru: "Робот-пылесос", kk: "Робот-шаңсорғыш" },
   drone: { ru: "Дрон", kk: "Дрон" },
   manipulator: { ru: "Робот-манипулятор", kk: "Робот-манипулятор" },
