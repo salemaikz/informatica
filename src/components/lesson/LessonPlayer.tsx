@@ -84,6 +84,11 @@ export interface PlayerProps {
   resume?: LessonRun;
   /** Сохранять прохождение после каждого шага (#41) — только урок в режиме «Учиться». */
   saveRun?: boolean;
+  /**
+   * Тест (мини-тест группы, этап 14): до ответа нет подсказки и «Спросить Бита» — как на ЕНТ.
+   * Разбор после ответа (объяснение, «Почему?») остаётся.
+   */
+  testMode?: boolean;
 }
 
 const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];
@@ -181,6 +186,7 @@ export function LessonPlayer({
   entryCost = 0,
   resume,
   saveRun = false,
+  testMode = false,
 }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
@@ -708,15 +714,18 @@ export function LessonPlayer({
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
           {entryCost > 0 && <HeartsBar />}
-          <button
-            type="button"
-            onClick={() => openAi("ask")}
-            aria-label={t("tutor.askButton")}
-            title={t("tutor.askButton")}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-ai-soft text-ai hover:brightness-95"
-          >
-            <Sparkles size={20} />
-          </button>
+          {/* В тесте до ответа Бита не спрашиваем (как на ЕНТ); после ответа — «Почему?» на панели. */}
+          {!(testMode && phase !== "feedback") && (
+            <button
+              type="button"
+              onClick={() => openAi("ask")}
+              aria-label={t("tutor.askButton")}
+              title={t("tutor.askButton")}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-ai-soft text-ai hover:brightness-95"
+            >
+              <Sparkles size={20} />
+            </button>
+          )}
           <ToolboxButton variant="icon" />
         </div>
         {(via === "check" || xpFactor < 1) && (
@@ -816,7 +825,7 @@ export function LessonPlayer({
                   </Pill>
                 )}
               </div>
-              {phase === "answering" && (
+              {phase === "answering" && !testMode && (
                 <button
                   type="button"
                   onClick={() => openAi("hint")}

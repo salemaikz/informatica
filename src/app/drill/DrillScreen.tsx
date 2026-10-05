@@ -270,6 +270,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
       entryCost={paid ? cost : undefined}
+      testMode={mode === "minitest"}
     />
   );
   return paid ? (
