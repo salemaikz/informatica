@@ -89,6 +89,8 @@ describe("нерешённое задание: ответ не отдаётся 
     create.mockResolvedValue(answer(LEAKY));
     const res = await POST(post(quick(cloze())));
     expect(res.headers.get("X-AI-Cache")).toBe("skip");
+    // Безопасный текст — не ответ: клиент возвращает ученику обращение (#100).
+    expect(res.headers.get("X-AI-Fallback")).toBe("1");
     expect(await read(res)).toEqual({ text: LEAK_FALLBACK.ru, end: "ok" });
     expect(info.mock.calls.flat().some((l: unknown) => String(l).includes("leak=1"))).toBe(true);
     // заглушка в кэш не легла: следующий запрос снова идёт к модели

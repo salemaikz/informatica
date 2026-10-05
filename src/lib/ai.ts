@@ -44,7 +44,7 @@ export async function streamTutor(
   req: TutorRequest,
   onText: (full: string) => void,
   signal?: AbortSignal,
-  /** Вызывается сразу после заголовков: значение X-AI-Cache (hit | miss | skip) или null. */
+  /** Вызывается сразу после заголовков: значение X-AI-Cache (hit | miss | skip) или null; «fallback» — безопасный текст вместо ответа (#100). */
   onCache?: (status: string | null) => void,
 ): Promise<string> {
   const res = await fetch("/api/ai/tutor", {
@@ -54,7 +54,7 @@ export async function streamTutor(
     signal,
   });
   await ensureOk(res);
-  onCache?.(res.headers.get("X-AI-Cache"));
+  onCache?.(res.headers.get("X-AI-Fallback") === "1" ? "fallback" : res.headers.get("X-AI-Cache"));
   if (!res.body) throw new AiError("no_body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

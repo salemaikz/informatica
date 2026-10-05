@@ -165,6 +165,8 @@ export async function POST(req: Request) {
         return { text: stripStreamMark(choice?.message?.content?.trim() ?? ""), cut: choice?.finish_reason === "length" };
       };
       let res = await generate(false);
+      // Безопасный текст вместо ответа модели: ученику обращение возвращается (клиент — refundAi, #100).
+      let fallback = false;
       if (leaksUnsolved(res.text, task, secrets)) {
         // Повтор может не уложиться в срок (сигнал один на оба вызова): тогда тоже безопасный текст, а не 502.
         let retry: { text: string; cut: boolean } | null = null;
@@ -177,6 +179,7 @@ export async function POST(req: Request) {
         if (!retry || leaksUnsolved(retry.text, task, secrets)) {
           console.info(`[ai] route=${route} leak=1`);
           res = { text: LEAK_FALLBACK[ctx.lang], cut: false };
+          fallback = true;
         } else {
           res = retry;
         }
@@ -184,7 +187,9 @@ export async function POST(req: Request) {
       const mark = !res.text ? STREAM_ERROR_MARK : res.cut ? STREAM_CUT_MARK : STREAM_OK_MARK;
       if (mark !== STREAM_OK_MARK) console.info(`[ai] route=${route} ${res.text ? "cut" : "empty"}=1`);
       return withGuardHeaders(
-        new Response(res.text + mark, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } }),
+        new Response(res.text + mark, {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...(fallback ? { "X-AI-Fallback": "1" } : {}) },
+        }),
         g,
       );
     }
@@ -336,11 +341,14 @@ async function cachedTutor(
     }
     // Из кэша и свежая генерация — без служебного символа (его вырезали до кэша), добавляем OK; обрезанный (CUT) и
     // заглушка не кэшируются: у обрезанного маркер уже есть, у заглушки — добавится OK.
+    // Безопасный текст вместо утёкшего ответа: ученику обращение возвращается (клиент — refundAi, #100).
+    const fallback = !r.cacheable && (r.text === FALLBACK_HINT[ctx.lang] || r.text === LEAK_FALLBACK[ctx.lang]);
     return new Response(r.cacheable ? stripStreamMark(r.text) + STREAM_OK_MARK : withStreamEnd(r.text), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
         "X-AI-Cache": r.hit ? "hit" : r.cacheable ? "miss" : "skip",
+        ...(fallback ? { "X-AI-Fallback": "1" } : {}),
       },
     });
   } catch (e) {

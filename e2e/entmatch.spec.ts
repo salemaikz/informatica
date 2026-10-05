@@ -53,6 +53,8 @@ async function seed(page: Page, theme: "light" | "dark" = "dark") {
             profile: { name: "Т", lang: "ru", grade: "11", goal: "ent", style: "short", dailyGoalXp: 50, theme, sound: false, createdAt: 1 },
             hearts: { count: 5, updatedAt: Date.now(), day: "" },
             paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
             lessonRuns: { [run.lessonId]: run },
           },
           version: 2,

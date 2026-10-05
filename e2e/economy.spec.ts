@@ -14,6 +14,8 @@ async function seed(page: Page, extra: Record<string, unknown> = {}) {
             profile: { name: "Т", lang: "ru", grade: "11", goal: "ent", style: "short", dailyGoalXp: 50, theme: "dark", sound: false, createdAt: 1 },
             lessons: { "ns-1-bits": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 100 } },
             paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
             ...more,
           },
           version: 2,
@@ -65,7 +67,8 @@ test("магазин: полный запас — цена за недостаю
   // Сердечко — плата за вход: цены из констант, бесплатное, восстановление по тарифам, возврат за тренировку.
   await expect(page.getByRole("heading", { name: "Как работают сердечки" })).toBeVisible();
   await expect(page.getByText("Сердечко — плата за вход, а не за ошибку.")).toBeVisible();
-  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(3);
+  // Цена 2 — большой урок и тест по разделу (экстерна больше нет, #96).
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(2);
   await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(4);
   await expect(page.getByText("Чат с Битом")).toBeVisible();
   await expect(page.getByText("запас 5, +1 за 6 ч")).toBeVisible();

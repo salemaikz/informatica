@@ -430,3 +430,33 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Поиск `/search`: `useCourseIndex(lang)` грузит `components/theory/course-search-index.ts` после показа (до загрузки — «Загрузка…»). «Конспекты»: `useConspects(searching)` грузит шпаргалки при поиске. Чат: `ChatQuiz` — `next/dynamic`. Игры — реестр (`games/registry.ts`).
 - Вес страниц после сборки — `npm run size` (`scripts/bundle-size.mjs`, `--over=1.5` — только тяжелее 1,5 МБ).
 
+
+## v0.16: этап 16Б, волна 1 — по отзыву владельца (решения #94–#104)
+
+### Тест по разделу (`lib/exam.ts`, `components/exam/*`, #96)
+- `UNIT_COUNTS` 14/3/2/1 (20 заданий, 25 баллов), `unitTimeLimitSec` — 90 с на задание; `BuildExamOpts.prioritySkills` — навыки непройденных уроков первыми; `unitPaperSizeOf` общий с каталогом.
+- Зачёт: `unitPassed` (≥ 80% баллов, `UNIT_PASS_RATIO`) → `lessonsToCredit(paper, ready, isDone)` (все навыки урока в варианте) → `completeLessons(ids, "extern", accuracy)` один раз; список — `ExamAttempt.credited` (`[]` — сдан, засчитывать нечего; `undefined` — старая попытка). `/drill?mode=extern` → redirect на `/exam/run?kind=unit`. Тип `LessonVia "extern"` оставлен (старые записи).
+- Мини-тест: экран старта `MiniStart` в `DrillScreen` списывает `ENTRY_COST.check` на «Начать», плеер получает `prepaid` (сколько уже списано: показать «−N» и не списывать второй раз).
+- «−N» сердечек: `components/economy/HeartLoss.tsx` (`useHeartDelta`, `HeartLossPop`, `HeartPaidPop`) в `HeartsChip`, `HeartsBar`, на старте теста.
+
+### Серия, комбо, XP (#97, #98)
+- `bumpStreak` вызывается только при завершении занятия (`finishSession`, итоги теста, игры), не в `recordAnswer`. Анимация «огонь загорелся» — по снимку занятия (`components/motion/streak-snapshot.ts`): видна на итогах первого занятия дня, не видна при открытии старого результата.
+- `components/motion/ComboFlame.tsx`: `StreakFlame` — шапка урока, `ComboBadge` — панель ответа. `components/economy/XpIcon.tsx` — значок «XP»; `components/economy/xp-chips.ts` — курс и склонение «+N чипов».
+
+### ИИ: бесплатные навсегда и без ответа к нерешённому (#99, #100)
+- `AiUsage.freeTotal` + `aiFreeIsLifetime(plan)` (`lib/economy.ts`): «Бесплатный» — 3 за всё время, «Лайт» — 30 в день; `freeTotal` переживает `resetProgress`. Тексты — `i18n/parts/ai-limits.ts`, баланс рядом с ценой — `AiCost`.
+- Нерешённое задание: клиент кладёт в `TaskContext.secrets` результат `taskSecrets(step, lang)` (`lib/task-secrets.ts`); сервер (`server/answer-guard.ts`: `unsolvedSecrets`, `leaksUnsolved`; общая логика — `lib/answer-leak.ts`, записи «предмет ~ ответ» через `PAIR_SEP`) получает ответ без потока, проверяет, при утечке — повтор с `NO_LEAK_NOTE`, затем `LEAK_FALLBACK`. Безопасный текст помечается заголовком `X-AI-Fallback: 1` → `streamTutor` сообщает `"fallback"` → `useTutor` возвращает обращение. `secrets` входят в ключ кэша; `PROMPT_VERSION` 4.
+
+### Уведомления (`lib/reminder-texts.ts`, #101)
+- Ситуация (`Situation`, 9 видов) выбирается по серии, заморозкам на сегодня, дням без занятий, повторениям и цели дня; шаблоны с подстановками `{streak} {lesson} …` (без имени — варианты с `{name}` не берутся). Пул и данные — в зеркале IndexedDB (`informatica:reminder`: name, due, nextTitle, goalXp, xpToday, xpDay, pool); `public/sw.js` повторяет выбор и подстановку (сверка — `tests/reminders.test.ts`).
+
+### «Продолжить» и выбор слов (#102, #103)
+- `resumeTarget(lessonRuns, now, accept?)` в `lib/lesson-run.ts` — незаконченный урок своего трека, пропуская засчитанные; `ContinueCard`, `GradeProgressCard`, `QuickActions`, `SchoolMap`.
+- Пропуск `ClozeBlank` с `label` — «плашка»: `lib/cloze-bank.ts` (`clozeBank(step, lang)` — подписи + `bank`, без повторов, перемешаны по id шага), `ClozeView` заполняет первый пустой выбираемый пропуск; проверка — как у ввода (`label` в нормализованном виде входит в `blank`, `tests/validate.ts`). `expectedText` показывает подпись на языке урока.
+
+### Проводник первого входа (`components/tour/*`, `lib/tour.ts`, `lib/tips.ts`, #104)
+- `TourAgent` (в `Providers`): `learnScene({ completedLessons, onboarded, pathname })` → приветствие (`Spotlight` с вырезом вокруг `[data-tour=continue]`) или обзор панели (`hdr-*`, `nav-*`). `LessonFirstTip` — в `LessonScreen`, `AfterFirstLesson` — в `Results`, `PageTip` — на «Практике», «ИИ-чате», «Материалах», «Прогрессе», школьной карте. Показанные — `useApp.tips` (`noteTip`, `resetTips`; `TipsReset` в профиле).
+- `tourBlocking` держит `PaywallAgent` и `PushAskAgent`; онбординг и диагностика ведут на `/learn` (`notePaywallShown()` — окно тарифов в этом запуске не открывается).
+
+### Подготовка волны 3 — новые сцены (`docs/specs/stage16b-wave3-scenes.md`)
+- Типы в `lib/types.ts` (`numberline`, `tape`, `chart`, `graph`, `grid`, `db-schema`, `box`, `wave`, `gates`, `switches`, `url`, `message`; расширения `binary`, `decimal`, `table`, `circuit`, `web`; `SceneTone`, `GateOp`, `BoxSides`, `UrlRole`), проверки — `tests/validate.ts`, образцы — `components/scenes/samples/*` (`tests/scene-samples.test.ts`), галерея — `/dev/scenes` (404 без `SCENES_GALLERY=1`).

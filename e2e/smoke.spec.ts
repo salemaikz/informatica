@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { dismissTour } from "./tour";
 
-// Дымовой тест без обращений к ИИ: онбординг → диагностика → тарифы → главная → начало урока → тренировка.
+// Дымовой тест без обращений к ИИ: онбординг → диагностика → главная (проводник) → начало урока → тренировка.
 
 /**
  * Онбординг ЕНТ до главной (язык и имя уже выбраны): «Продолжить» → ЕНТ → «Пока не знаю» (дата) → «Пока не знаю» (цель)
- * → «Поехали» → диагностика → «Пропустить» → тарифы → «Продолжить бесплатно» → /learn.
+ * → «Поехали» → диагностика → «Пропустить» → /learn (окна тарифов после онбординга нет, #104) → проводник закрыт.
  */
 async function finishOnboarding(page: Page) {
   await page.getByRole("button", { name: "Продолжить" }).click();
@@ -17,10 +18,8 @@ async function finishOnboarding(page: Page) {
   // После онбординга ЕНТ — входная диагностика; пропускаем.
   await page.waitForURL("**/diagnostic?from=onboarding");
   await page.getByRole("button", { name: "Пропустить", exact: true }).click();
-  // Дальше — окно тарифов; закрываем «Продолжить бесплатно».
-  await page.waitForURL("**/plans?from=onboarding");
-  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
   await page.waitForURL("**/learn");
+  await dismissTour(page);
 }
 
 /**
@@ -96,6 +95,8 @@ test("тренировка по навыку генерирует задания
           lessons: { "ns-1-binary": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 100 } },
           // Окно тарифов уже показано — не всплывает в автотестах.
           paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
         },
         version: 1,
       }),

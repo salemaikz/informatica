@@ -19,6 +19,8 @@ async function seed(page: Page, hearts = 5, theme: "light" | "dark" = "light") {
             // Восстановление идёт от updatedAt: ставим «сейчас», чтобы сердечки не вернулись сами за время теста.
             hearts: { count: n, updatedAt: Date.now(), day: "" },
             paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
           },
           version: 2,
         }),

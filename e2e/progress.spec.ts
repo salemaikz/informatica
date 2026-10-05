@@ -29,6 +29,8 @@ async function seed(page: Page, opts: { lang?: "ru" | "kk"; theme?: "light" | "d
             },
             days: { [today]: { xp: 40, answers: 10, correct: 7, seconds: 500, asked: 10, score: 7, hinted: 2, skipped: 1 } },
             paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
             hearts: { count: 5, updatedAt: 0, day: "" },
           },
           version: 1,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { dismissTour } from "./tour";
 
 // Короткий онбординг и входная диагностика (#70): без обращений к ИИ.
 
@@ -46,7 +47,7 @@ async function answerAll(page: Page) {
   }
 }
 
-test("ЕНТ: 10 заданий («Не знаю» и первый вариант) → итог → тарифы → /learn; не пробник", async ({ page }) => {
+test("ЕНТ: 10 заданий («Не знаю» и первый вариант) → итог → /learn без тарифов; не пробник", async ({ page }) => {
   await toDiagnostic(page);
   // Дата и цель — «пока не знаю»: цель не считается выбранной.
   let s = await saved(page);
@@ -68,23 +69,22 @@ test("ЕНТ: 10 заданий («Не знаю» и первый вариан�
   expect(s.exams ?? []).toHaveLength(0);
   expect(s.xp ?? 0).toBe(0);
 
-  // «Дальше» → окно тарифов → «Продолжить бесплатно» → главная.
+  // «Дальше» → сразу главная (окна тарифов после онбординга нет, #104), там — приветствие проводника.
   await page.getByRole("button", { name: "Дальше", exact: true }).click();
-  await page.waitForURL("**/plans?from=onboarding");
-  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
   await page.waitForURL("**/learn");
+  await dismissTour(page);
+  expect((await saved(page)).paywall?.views ?? 0).toBeLessThanOrEqual(1);
 });
 
-test("диагностика: «Пропустить диагностику» посреди заданий — в профиль ничего не пишется, дальше тарифы", async ({ page }) => {
+test("диагностика: «Пропустить диагностику» посреди заданий — в профиль ничего не пишется, дальше главная", async ({ page }) => {
   await toDiagnostic(page);
   await page.getByRole("button", { name: "Начать", exact: true }).click();
   await expect(page.getByText("1 из 10", { exact: true })).toBeVisible();
   await page.locator("article button[aria-pressed]").first().click();
   await page.getByRole("button", { name: "Пропустить диагностику" }).click();
-  await page.waitForURL("**/plans?from=onboarding");
-  expect((await saved(page)).profile.diagnostic).toBeNull();
-  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
   await page.waitForURL("**/learn");
+  expect((await saved(page)).profile.diagnostic).toBeNull();
+  await dismissTour(page);
 });
 
 test("онбординг ЕНТ: дата и цель сохраняются; шагов пять", async ({ page }) => {
@@ -107,7 +107,7 @@ test("онбординг ЕНТ: дата и цель сохраняются; ш
   expect(s.profile.grade).toBe("11");
 });
 
-test("школьный трек: четыре экрана, выбор класса, без диагностики — сразу тарифы", async ({ page }) => {
+test("школьный трек: четыре экрана, выбор класса, без диагностики — сразу главная", async ({ page }) => {
   await langAndName(page);
   await page.getByRole("button", { name: /Изучаю школьную программу/ }).click();
   await expect(page.getByRole("progressbar", { name: "Шаг 4 из 4" })).toBeVisible();
@@ -115,13 +115,12 @@ test("школьный трек: четыре экрана, выбор клас�
   await expect(page.getByRole("button", { name: "Поехали" })).toBeDisabled();
   await page.getByRole("button", { name: "8 класс" }).click();
   await page.getByRole("button", { name: "Поехали" }).click();
-  await page.waitForURL("**/plans?from=onboarding");
+  await page.waitForURL("**/learn");
   const s = await saved(page);
   expect(s.profile.track).toBe("school");
   expect(s.profile.grade).toBe("8");
   expect(s.profile.diagnostic).toBeNull();
-  await page.getByRole("button", { name: "Продолжить бесплатно" }).click();
-  await page.waitForURL("**/learn");
+  await dismissTour(page);
 });
 
 test("повтор из «Цели»: без from итог ведёт на главную, диагностика пересчитывается", async ({ page }) => {
@@ -135,6 +134,8 @@ test("повтор из «Цели»: без from итог ведёт на гл�
           profile: { name: "Т", lang: "ru", grade: "11", goal: "ent", track: "ent", style: "short", dailyGoalXp: 50, theme: "light", sound: false, createdAt: 1 },
           // Окно тарифов уже показано — не всплывает на главной.
           paywall: { lastShownAt: 4102444800000, views: 1 },
+            // Проводник первого входа (#104) уже пройден — не закрывает экран.
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
         },
         version: 1,
       }),
