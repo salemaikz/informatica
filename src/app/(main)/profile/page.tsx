@@ -28,6 +28,7 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { AnalyticsToggle } from "@/components/profile/AnalyticsToggle";
 import { FeedbackLink } from "@/components/issue/FeedbackLink";
+import { ReportEntry } from "@/components/report/ReportShareSheet";
 
 const NAME_MAX = 30;
 const WEEKLY = [2, 3, 4, 5, 7];
@@ -310,6 +311,7 @@ export default function ProfilePage() {
 
       {/* Статистика (#69, сама скрыта, пока сбор выключен) и отзывы */}
       <AnalyticsToggle />
+      <ReportEntry />
       <FeedbackLink />
 
       {/* Документы: политика и условия */}
