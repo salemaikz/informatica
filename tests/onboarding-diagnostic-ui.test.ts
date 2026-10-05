@@ -148,6 +148,40 @@ describe("онбординг: школа", () => {
     expect(events.at(-1)).toEqual({ e: "onb_done", track: "school" });
   });
 
+  it("C33: двойное нажатие «Поехали» — онбординг завершается один раз: одно onb_done, один показ окна тарифов, один переход", async () => {
+    await langAndName();
+    await click("Изучаю школьную программу");
+    await act(async () => (host.querySelector('[aria-label="8 класс"]') as HTMLButtonElement).click());
+    const go = button("Поехали")!;
+    await act(async () => {
+      go.click();
+      go.click();
+    });
+    expect(events.filter((e) => e.e === "onb_done")).toHaveLength(1);
+    expect(useApp.getState().paywall.views).toBe(1);
+    expect(nav.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it("C10/C34: шаг считается один раз, как бы ни нажимали «Назад», язык и трек заново — по числу дошедших", async () => {
+    await render(createElement(OnboardingPage));
+    await click("Русский");
+    await typeInto(host.querySelector("input")!, "Аня");
+    await click("Продолжить");
+    await click("Готовлюсь к ЕНТ");
+    // Назад к имени и к языку, язык нажат ещё раз, имя пройдено ещё раз, трек выбран заново, на дате — «Пока не знаю»
+    await act(async () => (host.querySelector('[aria-label="Назад"]') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Назад"]') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Назад"]') as HTMLButtonElement).click());
+    await click("Русский");
+    await click("Продолжить");
+    await click("Изучаю школьную программу");
+    await act(async () => (host.querySelector('[aria-label="Назад"]') as HTMLButtonElement).click());
+    await click("Готовлюсь к ЕНТ");
+    await click("Пока не знаю");
+    const steps = events.filter((e) => e.e === "onb_step").map((e) => (e as { step: string }).step);
+    expect(steps).toEqual(["lang", "name", "track", "date"]);
+  });
+
   it("передумал: вернулся и выбрал ЕНТ — шагов снова пять, класс 11", async () => {
     await langAndName();
     await click("Изучаю школьную программу");

@@ -10,10 +10,11 @@ import {
   createAnalyticsClient,
   FLUSH_MS,
   lastStudyDay,
-  MAX_PER_LOAD,
+  MAX_PER_HOUR,
   sendBatch,
   shouldAskBreak,
   splitBatches,
+  WINDOW_MS,
   type Timers,
 } from "@/lib/analytics-client";
 
@@ -178,16 +179,38 @@ describe("клиент: буфер и таймер", () => {
     expect(beacon).toHaveBeenCalledTimes(3);
   });
 
-  it("не больше 300 событий за загрузку страницы", () => {
+  it("не больше 300 событий в час: сверх — отброшено, отправка буфера потолок не сбрасывает", () => {
     const clock = fakeTimers();
-    const c = createAnalyticsClient({ sendBeacon: () => true, timers: clock.timers });
+    let t = 1_000_000;
+    const c = createAnalyticsClient({ sendBeacon: () => true, timers: clock.timers, now: () => t });
+    expect(MAX_PER_HOUR).toBe(300);
     let ok = 0;
-    for (let i = 0; i < MAX_PER_LOAD + 50; i++) if (c.add(ev(i))) ok++;
+    for (let i = 0; i < MAX_PER_HOUR + 50; i++) if (c.add(ev(i))) ok++;
     expect(ok).toBe(300);
     expect(c.accepted).toBe(300);
-    // Отправка буфера лимит не сбрасывает: он на всю загрузку страницы.
     c.flush();
     expect(c.add(ev(1))).toBe(false);
+    t += WINDOW_MS - 1;
+    expect(c.add(ev(1))).toBe(false);
+  });
+
+  it("окно — скользящий час: через час после начала счёт обнуляется, долгая вкладка не глохнет навсегда (C11)", () => {
+    const clock = fakeTimers();
+    let t = 5_000_000;
+    const beacon = vi.fn<(url: string, data: Blob) => boolean>(() => true);
+    const c = createAnalyticsClient({ sendBeacon: beacon, timers: clock.timers, now: () => t });
+    for (let i = 0; i < MAX_PER_HOUR; i++) expect(c.add(ev(i))).toBe(true);
+    expect(c.add(ev(1))).toBe(false); // 301-е
+    // Час прошёл — следующее событие принимается, счёт идёт заново.
+    t += WINDOW_MS;
+    expect(c.accepted).toBe(0);
+    expect(c.add({ e: "lesson_finish", lesson: "ns-1-bits", via: "learn", acc: 90, sec: 60 })).toBe(true);
+    expect(c.accepted).toBe(1);
+    // …и потолок в новом окне — снова 300.
+    for (let i = 1; i < MAX_PER_HOUR; i++) expect(c.add(ev(i))).toBe(true);
+    expect(c.add(ev(1))).toBe(false);
+    c.flush();
+    expect(beacon).toHaveBeenCalled();
   });
 
   it("мусор не копится и не отправляется (та же проверка, что на сервере)", () => {

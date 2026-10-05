@@ -10,8 +10,10 @@ import { dayDiff, todayKey } from "@/lib/text";
 export const ANALYTICS_URL = "/api/events";
 /** Пачка уходит не чаще раза в это время (мс): первое событие запускает таймер, остальные копятся. */
 export const FLUSH_MS = 20_000;
-/** Не больше стольких событий за загрузку страницы: остальное — повторы и шум. */
-export const MAX_PER_LOAD = 300;
+/** Не больше стольких событий за окно WINDOW_MS: защита от зациклившегося кода; остальное — повторы и шум. */
+export const MAX_PER_HOUR = 300;
+/** Окно потолка событий, мс: час. Открытая вкладка или PWA живёт днями — потолок «за загрузку» навсегда глушил бы тех, кто занимается много. */
+export const WINDOW_MS = 60 * 60_000;
 
 // text/plain — «простой» тип: sendBeacon не требует предварительного запроса, сервер читает тело как текст.
 const BEACON_TYPE = "text/plain;charset=UTF-8";
@@ -71,26 +73,30 @@ export interface Timers {
 }
 
 export interface AnalyticsClient {
-  /** Принять событие (после проверки по белому списку). false — отброшено (мусор или лимит за загрузку). */
+  /** Принять событие (после проверки по белому списку). false — отброшено (мусор или потолок за час). */
   add(ev: AnalyticsEvent): boolean;
   /** Отправить всё накопленное сейчас (уход со страницы). */
   flush(): void;
   /** Остановить: таймер снят, накопленное НЕ отправляется (ученик выключил статистику). */
   stop(): void;
-  /** Сколько событий принято за загрузку и сколько ждёт отправки. */
+  /** Сколько событий принято в текущем окне (час) и сколько ждёт отправки. */
   readonly accepted: number;
   readonly pending: number;
 }
 
 /**
  * Клиент статистики. События копятся в памяти; первое событие запускает таймер на FLUSH_MS, по его концу уходят все
- * накопленные (пачками). max — потолок событий за загрузку страницы.
+ * накопленные (пачками). max — потолок событий за скользящее окно windowMs (по умолчанию 300 в час); часы now подменяются в тестах.
+ * Суточные потолки на IP и на сайт остаются на сервере — это жёсткая страховка.
  */
-export function createAnalyticsClient(deps: SendDeps & { timers: Timers; max?: number; flushMs?: number }): AnalyticsClient {
-  const max = deps.max ?? MAX_PER_LOAD;
+export function createAnalyticsClient(deps: SendDeps & { timers: Timers; max?: number; flushMs?: number; windowMs?: number; now?: () => number }): AnalyticsClient {
+  const max = deps.max ?? MAX_PER_HOUR;
   const flushMs = deps.flushMs ?? FLUSH_MS;
+  const windowMs = deps.windowMs ?? WINDOW_MS;
+  const now = deps.now ?? Date.now;
   let buffer: AnalyticsEvent[] = [];
   let accepted = 0;
+  let windowStart = now();
   let timer: unknown = null;
   let stopped = false;
 
@@ -106,7 +112,14 @@ export function createAnalyticsClient(deps: SendDeps & { timers: Timers; max?: n
   };
   return {
     add(ev) {
-      if (stopped || accepted >= max) return false;
+      if (stopped) return false;
+      // Окно кончилось — счёт начинается заново: долгая вкладка не глохнет навсегда.
+      const t = now();
+      if (t - windowStart >= windowMs) {
+        windowStart = t;
+        accepted = 0;
+      }
+      if (accepted >= max) return false;
       // Проверка по тому же белому списку, что и на сервере: мусор не копим и не отправляем.
       const clean = parseEvent(ev);
       if (!clean) return false;
@@ -122,7 +135,8 @@ export function createAnalyticsClient(deps: SendDeps & { timers: Timers; max?: n
       buffer = [];
     },
     get accepted() {
-      return accepted;
+      // Окно могло закончиться, пока событий не было: тогда в новом окне принято 0.
+      return now() - windowStart >= windowMs ? 0 : accepted;
     },
     get pending() {
       return buffer.length;

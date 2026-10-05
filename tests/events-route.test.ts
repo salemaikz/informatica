@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENTS_BODY_MAX, EVENTS_FIELDS_DAY_MAX, EVENTS_IP_DAY_MAX, EVENTS_IP_LIMIT, EVENTS_SITE_DAY_MAX, MAX_BATCH } from "@/lib/analytics-schema";
 import { EVENTS_TTL_SEC } from "@/lib/analytics-fields";
+import { LESSONS } from "@/content/course";
 import { createMemoryKv } from "@/server/kv";
 
 vi.mock("server-only", () => ({}));
+
+// Настоящие идентификаторы из контента: сервер сверяет id с реестрами и неизвестное сводит к `other`.
+const LESSON = Object.values(LESSONS)[0];
+const LESSON_ID = LESSON.id;
+const STEP_KEY = `${LESSON_ID}:${LESSON.steps[0].id}`;
 
 describe("POST /api/events", () => {
   // Общее хранилище — настоящая память (счётчики лимитов работают), запись в хеш — шпион поверх неё.
@@ -21,8 +27,8 @@ describe("POST /api/events", () => {
       headers: { host: "localhost", "x-forwarded-for": `10.2.0.${++n}`, ...headers },
     });
 
-  const lessonStart = { e: "lesson_start", lesson: "ns-1-binary", via: "learn", resume: 0 };
-  const task = (ok: 0 | 1) => ({ e: "task", step: "ns-1-binary:q-1", ok, skip: 0, hint: 0 });
+  const lessonStart = { e: "lesson_start", lesson: LESSON_ID, via: "learn", resume: 0 };
+  const task = (ok: 0 | 1) => ({ e: "task", step: STEP_KEY, ok, skip: 0, hint: 0 });
 
   let POST: (r: Request) => Promise<Response>;
 
@@ -59,7 +65,7 @@ describe("POST /api/events", () => {
     const [key, fields, ttl] = hincrMany.mock.calls[0] as unknown as [string, Record<string, number>, number];
     expect(key).toBe("ev:2026-10-05");
     expect(ttl).toBe(EVENTS_TTL_SEC);
-    expect(fields).toEqual({ lesson_start: 1, "ls:ns-1-binary:learn": 1, task: 2, "tk:ns-1-binary:q-1:n": 2, "tk:ns-1-binary:q-1:w": 1 });
+    expect(fields).toEqual({ lesson_start: 1, [`ls:${LESSON_ID}:learn`]: 1, task: 2, [`tk:${STEP_KEY}:n`]: 2, [`tk:${STEP_KEY}:w`]: 1 });
   });
 
   it("text/plain (как шлёт sendBeacon) и голый массив тоже принимаются", async () => {
@@ -72,7 +78,7 @@ describe("POST /api/events", () => {
     const res = await POST(req({ events: [dirty, { e: "evil" }, "строка", null, { e: "task", step: "<b>", ok: 1, skip: 0, hint: 0 }, { e: "active", d: 99 }] }));
     expect(res.status).toBe(204);
     const [, fields] = hincrMany.mock.calls[0] as unknown as [string, Record<string, number>];
-    expect(fields).toEqual({ lesson_start: 1, "ls:ns-1-binary:learn": 1 });
+    expect(fields).toEqual({ lesson_start: 1, [`ls:${LESSON_ID}:learn`]: 1 });
     expect(JSON.stringify(hincrMany.mock.calls)).not.toMatch(/dev-1|Айгерим|1700000000000/);
   });
 
@@ -219,7 +225,67 @@ describe("POST /api/events", () => {
       day = "2027-01-11";
       hincrMany.mockClear();
       expect((await POST(req({ events: [lessonStart] }))).status).toBe(204);
-      expect(Object.keys((hincrMany.mock.calls[0] as unknown as [string, Record<string, number>])[1])).toContain("ls:ns-1-binary:learn");
+      expect(Object.keys((hincrMany.mock.calls[0] as unknown as [string, Record<string, number>])[1])).toContain(`ls:${LESSON_ID}:learn`);
+    } finally {
+      day = "2026-10-05";
+    }
+  });
+
+  it("C2: неизвестные урок, шаг, игра, режим, товар и шаг онбординга сводятся к `other` — число полей ограничено контентом", async () => {
+    day = "2027-02-10";
+    try {
+      const fake = Array.from({ length: 25 }, (_, i) => [
+        { e: "lesson_start", lesson: `fake-lesson-${i}`, via: "learn", resume: 0 },
+        { e: "task", step: `fake-lesson-${i}:q-${i}`, ok: 0, skip: 0, hint: 0 },
+        { e: "game_start", game: `game-${i}`, lesson: 0 },
+      ]).flat();
+      // 75 событий не влезают в пачку (30) и в тело (4000 байт): шлём несколькими запросами, как клиент
+      for (let i = 0; i < fake.length; i += 25) expect((await POST(req({ events: fake.slice(i, i + 25) }))).status).toBe(204);
+      const written = new Set(hincrMany.mock.calls.flatMap((c) => Object.keys((c as unknown as [string, Record<string, number>])[1])));
+      expect([...written].sort()).toEqual(["game_start", "gs:other", "lesson_start", "ls:other:learn", "task", "tk:other:n", "tk:other:w"]);
+      expect(JSON.stringify([...written])).not.toContain("fake-lesson");
+    } finally {
+      day = "2026-10-05";
+    }
+  });
+
+  it("C1: id с именем из Object.prototype (constructor, __proto__…) — событие отбрасывается, ничего не пишется", async () => {
+    const poisoned = ["constructor", "__proto__", "toString", "hasOwnProperty", "prototype", "constructor:x"].flatMap((bad) => [
+      { e: "lesson_start", lesson: bad, via: "learn", resume: 0 },
+      { e: "task", step: bad, ok: 0, skip: 0, hint: 0 },
+      { e: "drill_start", mode: bad },
+    ]);
+    expect((await POST(req({ events: poisoned.slice(0, 30) }))).status).toBe(204);
+    expect(hincrMany).not.toHaveBeenCalled();
+  });
+
+  it("C4: IP над суточным потолком не наращивает счётчик сайта — другие ученики не теряют статистику", async () => {
+    day = "2027-02-11";
+    try {
+      const ip = { "x-forwarded-for": "10.8.8.8" };
+      const batch = { events: Array.from({ length: MAX_BATCH }, () => ({ e: "active", d: 1 })) };
+      const accepted = Math.floor(EVENTS_IP_DAY_MAX / MAX_BATCH);
+      for (let i = 0; i < accepted; i++) expect((await POST(req(batch, ip))).status).toBe(204);
+      for (let i = 0; i < 20; i++) expect((await POST(req(batch, ip))).status).toBe(429);
+      // Сайт посчитал только принятое: отказанные запросы счёт не двигают.
+      expect(await mem.get(`ev-site:${day}`)).toBe(accepted * MAX_BATCH);
+      // Остальные по-прежнему пишут.
+      expect((await POST(req({ events: [lessonStart] }, { "x-forwarded-for": "10.8.8.9" }))).status).toBe(204);
+    } finally {
+      day = "2026-10-05";
+    }
+  });
+
+  it("бюджет новых полей: резерв до сравнения — параллельные запросы не проскакивают потолок", async () => {
+    day = "2027-02-12";
+    try {
+      await mem.incrBy(`ev-fields:${day}`, EVENTS_FIELDS_DAY_MAX - 1, 86_400);
+      const results = await Promise.all(Array.from({ length: 10 }, () => POST(req({ events: [lessonStart, task(0)] }))));
+      expect(results.every((r) => r.status === 204)).toBe(true);
+      // До потолка оставалось одно поле, а пачка резервирует три измерения: ни одна не прошла с измерениями.
+      for (const c of hincrMany.mock.calls) expect(Object.keys((c as unknown as [string, Record<string, number>])[1]).every((k) => !k.includes(":"))).toBe(true);
+      // Резерв возвращён: счётчик не «убежал» за потолок на число отклонённых запросов.
+      expect(await mem.get(`ev-fields:${day}`)).toBeLessThanOrEqual(EVENTS_FIELDS_DAY_MAX + 2);
     } finally {
       day = "2026-10-05";
     }
@@ -230,6 +296,6 @@ describe("POST /api/events", () => {
     hincrMany.mockRejectedValueOnce(new Error("kv down"));
     expect((await POST(req({ events: [lessonStart] }))).status).toBe(204);
     expect(err).toHaveBeenCalledTimes(1);
-    expect(String(err.mock.calls[0])).not.toContain("ns-1-binary");
+    expect(String(err.mock.calls[0])).not.toContain(LESSON_ID);
   });
 });

@@ -2,16 +2,14 @@ import { readBodyText } from "@/server/body";
 import { sameOrigin } from "@/server/context";
 import { ipHash } from "@/server/ip-hash";
 import { kvRateLimit } from "@/server/rate-limit";
-import { OWNER_LOGIN_LIMIT, ownerCookieHeader, ownerSecret, passwordMatches, signOwnerCookie } from "@/server/owner-auth";
+import { OWNER_BODY_MAX, OWNER_LOGIN_LIMIT, ownerCookieHeader, ownerSecret, passwordMatches, signOwnerCookie } from "@/server/owner-auth";
 
 // Вход владельца (форма на /owner). Нет OWNER_SECRET — 404, как будто маршрута нет.
-// Порядок: секрет → origin → лимит попыток по ХЕШУ IP (до чтения тела; считается каждая попытка) → тело потоком, не больше 1000 байт →
+// Порядок: секрет → origin → лимит попыток по ХЕШУ IP (до чтения тела; считается каждая попытка) → тело потоком, не больше OWNER_BODY_MAX (1000) байт →
 // пароль (сравнение за постоянное время) → cookie `inf_owner` (HMAC, 12 часов). Ответ всегда редирект на /owner:
 // `?e=1` — неверный пароль, `?e=2` — слишком много попыток, `?e=3` — запрос не принят.
 
 export const maxDuration = 10;
-
-const BODY_MAX = 1000;
 
 const back = (query = "", cookie?: string) => {
   const headers = new Headers({ Location: `/owner${query}`, "Cache-Control": "no-store" });
@@ -39,7 +37,7 @@ export async function POST(req: Request) {
   // Лимит — до чтения тела; успешный вход тоже считается: перебирать по кругу нельзя.
   if (!(await kvRateLimit(`owner-login:${ipHash(req)}`, OWNER_LOGIN_LIMIT.limit, OWNER_LOGIN_LIMIT.windowMs))) return back("?e=2");
 
-  const text = await readBodyText(req, BODY_MAX).catch(() => null);
+  const text = await readBodyText(req, OWNER_BODY_MAX).catch(() => null);
   if (text === null) return back("?e=3");
   const password = passwordFrom(text, req.headers.get("content-type") ?? "");
   if (!passwordMatches(password, secret)) return back("?e=1");

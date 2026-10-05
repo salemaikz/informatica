@@ -15,13 +15,23 @@ export const EVENTS_IP_LIMIT = { limit: 600, windowMs: 10 * 60_000 } as const;
 export const EVENTS_IP_DAY_MAX = 10_000;
 export const EVENTS_SITE_DAY_MAX = 50_000;
 /**
- * Новых полей в суточном хеше за сутки. Идентификаторы (урок, шаг, игра) приходят от клиента, и без потолка выдуманными id
- * можно раздуть хранилище (оно общее с лимитами ИИ). Исчерпан бюджет — пишутся только счётчики событий, без измерений.
+ * Новых полей в суточном хеше за сутки — запасной предохранитель: основная защита — сервер сводит неизвестные id к `other`
+ * (server/analytics-ids.ts), поэтому число полей ограничено контентом, а не клиентом. Исчерпан бюджет — пишутся только
+ * счётчики событий, без измерений (#69, ревью этапа 12).
  */
-export const EVENTS_FIELDS_DAY_MAX = 20_000;
+export const EVENTS_FIELDS_DAY_MAX = 5000;
 
 /** Строка-идентификатор (урок, шаг, игра, режим, товар): латиница, цифры и `_ . : -`, до 80 знаков. */
 export const ID_RE = /^[\w.:-]{1,80}$/;
+
+/**
+ * Имена, которыми «отравить» поиск в обычном объекте: ключи Object.prototype (constructor, __proto__, toString…) и prototype.
+ * Идентификатор с таким именем (или с таким кусочком между «:») не принимается: см. тест «отравленные поля».
+ */
+const POISON = new Set([...Object.getOwnPropertyNames(Object.prototype), "prototype"]);
+
+/** Верный идентификатор: по шаблону и без имён из Object.prototype (целиком и по кускам через «:»). */
+export const isSafeId = (v: unknown): v is string => typeof v === "string" && ID_RE.test(v) && !POISON.has(v) && !v.split(":").some((part) => POISON.has(part));
 
 // ---------- Допустимые значения ----------
 
@@ -37,7 +47,7 @@ const FEEDBACK_KINDS = ["idea", "bug", "content", "other"] as const;
 
 type Check = (v: unknown) => string | number | undefined;
 
-const id: Check = (v) => (typeof v === "string" && ID_RE.test(v) ? v : undefined);
+const id: Check = (v) => (isSafeId(v) ? v : undefined);
 const oneOf =
   (list: readonly (string | number)[]): Check =>
   (v) =>

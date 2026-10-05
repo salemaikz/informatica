@@ -88,7 +88,7 @@ export interface FunnelRow {
   starts: number;
   resumes: number;
   finishes: number;
-  /** Доля дошедших до конца, %: finishes / starts. */
+  /** Доля дошедших до конца, %: концы / (старты − продолжения), не больше 100. Продолжение сохранённого урока — не новый ученик. */
   reach: number | null;
   /** Средняя точность по законченным, %. */
   avgAcc: number | null;
@@ -96,6 +96,15 @@ export interface FunnelRow {
   quits: number;
   quitStep: number | null;
   quitOf: number | null;
+}
+
+/**
+ * Доля дошедших до конца, %. Старт и продолжение того же урока — один ученик, поэтому в знаменателе только «свежие» старты
+ * (старты − продолжения). Сутки бывают разрезаны (старт вчера, продолжение и конец сегодня), поэтому знаменатель не меньше числа концов:
+ * доля не бывает больше 100%.
+ */
+export function reachOf(finishes: number, starts: number, resumes: number): number | null {
+  return share(finishes, Math.max(finishes, starts - resumes));
 }
 
 /** Топ уроков по стартам. Старты — оба режима (learn и check), в том числе продолжения. */
@@ -158,7 +167,7 @@ export function funnelRows(sum: Record<string, number>, names: Pick<ReportNames,
       starts: a.starts,
       resumes: a.resumes,
       finishes: a.finishes,
-      reach: share(a.finishes, a.starts),
+      reach: reachOf(a.finishes, a.starts, a.resumes),
       avgAcc: a.finishes > 0 ? Math.round(a.acc / a.finishes) : null,
       quits: a.quits,
       quitStep,
@@ -237,7 +246,9 @@ export function addDaysIso(day: string, k: number): string {
 
 /**
  * Удержание по когортам: для каждого дня X с первыми запусками (act:0) смотрим, сколько отметилось ровно через k дней
- * (act:k в день X + k). Считаются только дни, за которые данные есть и которые уже закончились (самый свежий день — неполный, его пропускаем).
+ * (act:k в день X + k). Считаются только дни с записанными первыми запусками (act:0 > 0) и которые уже закончились
+ * (самый свежий день — неполный, его пропускаем). Устройства, начавшие до включения сбора, и потерянные act:0 когорту не раздувают:
+ * возвраты в день не больше когорты дня (C6).
  */
 export function retention(history: readonly DayFields[]): Retention {
   const by = new Map(history.map((d) => [d.day, d.fields]));
@@ -246,10 +257,14 @@ export function retention(history: readonly DayFields[]): Retention {
     let returned = 0;
     let cohort = 0;
     for (const [day, f] of by) {
-      const back = by.get(addDaysIso(day, k));
-      if (!back || addDaysIso(day, k) >= newest) continue;
-      cohort += f["act:0"] ?? 0;
-      returned += back[`act:${k}`] ?? 0;
+      const c = f["act:0"] ?? 0;
+      // Нет записанных первых запусков (данных нет или сбор ещё не шёл) — это не когорта.
+      if (!(c > 0)) continue;
+      const target = addDaysIso(day, k);
+      const back = by.get(target);
+      if (!back || target >= newest) continue;
+      cohort += c;
+      returned += Math.min(back[`act:${k}`] ?? 0, c);
     }
     return { d: k, returned, cohort, pct: share(returned, cohort) };
   });

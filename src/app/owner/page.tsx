@@ -102,7 +102,13 @@ export default async function OwnerPage({ searchParams }: { searchParams: Promis
         </nav>
       </div>
 
-      <OwnerView data={data} />
+      {data.unavailable ? (
+        <p role="alert" className="rounded-3xl border-2 border-danger/40 bg-danger-soft px-4 py-3 text-base font-extrabold text-danger">
+          Хранилище не ответило — данные не загружены. Это не значит, что их нет: обновите страницу.
+        </p>
+      ) : (
+        <OwnerView data={data} />
+      )}
     </main>
   );
 }

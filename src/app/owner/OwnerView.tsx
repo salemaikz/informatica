@@ -60,7 +60,7 @@ const pct = (v: number | null) => (v === null ? "—" : `${v}%`);
 
 export function OwnerView({ data }: { data: OwnerData }) {
   const { report: r, retention: ret } = data;
-  const funnelNote = `Топ-${TOP_ROWS} по стартам. «Дошли» — доля тех, кто закончил урок. «Чаще выходят» — шаг, на котором ушли до конца.`;
+  const funnelNote = `Топ-${TOP_ROWS} по стартам. «Дошли» — доля закончивших от начавших заново: продолжения сохранённого урока в знаменатель не входят. «Чаще выходят» — шаг, на котором ушли до конца.`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -189,11 +189,11 @@ export function OwnerView({ data }: { data: OwnerData }) {
         </div>
       </Section>
 
-      <Section title="Входная диагностика">
+      <Section title="Входная диагностика" hint="Закрытие вкладки или уход со страницы не считаются: учитывается только кнопка «Пропустить».">
         <Counts
           rows={[
             { key: "Прошли до конца", n: r.diagnostic.finished },
-            { key: "Не дошли до конца (пропуск или выход)", n: r.diagnostic.notFinished },
+            { key: "Пропустили (кнопкой)", n: r.diagnostic.notFinished },
           ]}
           name={(k) => k}
         />

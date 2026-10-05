@@ -2,7 +2,7 @@
 
 import { BookOpen, ChevronLeft, Target, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Lang, Track } from "@/lib/types";
 import { track } from "@/lib/analytics";
 import { TARGET_CHOICES, isExamDateValid } from "@/lib/goals";
@@ -24,6 +24,7 @@ import { GradePicker } from "@/components/school/GradePicker";
 // Короткий онбординг (#70): язык → имя → ЕНТ или школа → (ЕНТ) дата → (ЕНТ) цель | (школа) класс. Остальное — по умолчанию, меняется в профиле.
 // Экранов: у ЕНТ — 5, у школы — 4. «Поехали» — кнопка последнего экрана (под ней — согласие с условиями).
 
+// Имена шагов уходят в статистику (onb_step); сервер принимает только эти шесть (server/analytics-ids.ts → ONBOARDING_STEPS): новый шаг — добавить и туда.
 type StepId = "lang" | "name" | "track" | "date" | "target" | "grade";
 const STEPS: Record<Track, StepId[]> = {
   ent: ["lang", "name", "track", "date", "target"],
@@ -95,10 +96,21 @@ export default function OnboardingPage() {
             ? toSchoolGrade(profile.grade) !== null
             : true;
 
-  /** Аналитика (#69): шаг пройден. Имя шага — обезличенное, без введённых данных. */
-  const passed = (id: StepId) => track({ e: "onb_step", step: id });
+  // Аналитика считает «дошедших»: шаг учитывается один раз за онбординг, сколько бы ни нажимали «Назад», трек или язык заново.
+  const reported = useRef(new Set<StepId>());
+  // Двойное нажатие «Поехали» до перехода на другой экран не должно завершать онбординг дважды.
+  const done = useRef(false);
+
+  /** Аналитика (#69): шаг пройден (первый раз). Имя шага — обезличенное, без введённых данных. */
+  const passed = (id: StepId) => {
+    if (reported.current.has(id)) return;
+    reported.current.add(id);
+    track({ e: "onb_step", step: id });
+  };
 
   const finish = () => {
+    if (done.current) return;
+    done.current = true;
     const ent = trackNow === "ent";
     const cleanName = name.trim().slice(0, 30);
     if (ent) {

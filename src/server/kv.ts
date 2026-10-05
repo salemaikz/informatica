@@ -3,7 +3,9 @@ import "server-only";
 // Общее хранилище счётчиков и списков для серверных маршрутов (потолок расходов ИИ, жалобы, ошибки с телефонов).
 // Есть Upstash Redis (Vercel Marketplace: KV_REST_API_URL/KV_REST_API_TOKEN или UPSTASH_REDIS_REST_URL/TOKEN) —
 // пишем туда: одно хранилище на все копии сервера. Нет — память процесса: на serverless у каждой копии
-// своя память, поэтому это только мягкая защита (решение #48). Upstash недоступен — та же память, сайт не падает.
+// своя память, поэтому это только мягкая защита (решение #48). Upstash недоступен — запись и счётчики учеников идут в ту же память,
+// сайт не падает. Чтения для страницы владельца (hgetAll, hgetAllMany, hmgetMany, lrange) в память НЕ откатываются: пустая память
+// выглядела бы как «данных нет». Ошибка доходит до вызывающего (loadOwnerData показывает «хранилище не ответило»).
 
 export interface Kv {
   readonly kind: "upstash" | "memory";
@@ -28,6 +30,11 @@ export interface Kv {
   hgetAll(key: string): Promise<Record<string, number>>;
   /** Несколько хешей одним конвейером; порядок результата — как порядок ключей. */
   hgetAllMany(keys: string[]): Promise<Record<string, number>[]>;
+  /**
+   * Только перечисленные поля нескольких хешей одним конвейером (HMGET): порядок результата — как порядок ключей;
+   * в объект попадают лишь существующие поля. Для удержания: act:0/1/7/30 за все сутки без чтения целых хешей.
+   */
+  hmgetMany(keys: string[], fields: string[]): Promise<Record<string, number>[]>;
   /** Срез списка как в Redis LRANGE (индексы включительно, -1 — последний); новые записи — в начале. Нет ключа — пустой список. */
   lrange(key: string, start: number, stop: number): Promise<string[]>;
 }
@@ -109,6 +116,14 @@ export function createMemoryKv(now: () => number = Date.now): Kv {
     async hgetAllMany(keys) {
       return keys.map((k) => Object.fromEntries(alive(hashes.get(k))?.v ?? []));
     },
+    async hmgetMany(keys, fields) {
+      return keys.map((k) => {
+        const h = alive(hashes.get(k))?.v;
+        const out: Record<string, number> = {};
+        if (h) for (const f of fields) if (h.has(f)) out[f] = h.get(f)!;
+        return out;
+      });
+    },
     async lrange(key, start, stop) {
       const cur = alive(lists.get(key))?.v ?? [];
       // Как LRANGE: отрицательный индекс — с конца, stop включительно.
@@ -157,6 +172,15 @@ export function createUpstashKv(url: string, token: string, fallback: Kv, fetchI
       return onFail();
     }
   };
+  // Чтение для страницы владельца: длинный таймаут, ошибка логируется и пробрасывается (в память не откатываемся).
+  const read = async (cmds: Cmd[]): Promise<unknown[]> => {
+    try {
+      return await pipeline(cmds, READ_TIMEOUT_MS);
+    } catch (e) {
+      console.error("[kv] upstash read failed", e instanceof Error ? e.message : e);
+      throw e;
+    }
+  };
   return {
     kind: "upstash",
     incrBy: (key, n, ttlSec) =>
@@ -193,24 +217,29 @@ export function createUpstashKv(url: string, token: string, fallback: Kv, fetchI
         },
         () => fallback.hincrMany(key, fields, ttlSec),
       ),
-    hgetAll: (key) =>
-      safe(
-        async () => hashOf((await pipeline([["HGETALL", key]], READ_TIMEOUT_MS))[0]),
-        () => fallback.hgetAll(key),
-      ),
-    hgetAllMany: (keys) =>
-      safe(
-        async () => (keys.length === 0 ? [] : (await pipeline(keys.map((k): Cmd => ["HGETALL", k]), READ_TIMEOUT_MS)).map(hashOf)),
-        () => fallback.hgetAllMany(keys),
-      ),
-    lrange: (key, start, stop) =>
-      safe(
-        async () => {
-          const r = (await pipeline([["LRANGE", key, start, stop]], READ_TIMEOUT_MS))[0];
-          return Array.isArray(r) ? r.filter((x): x is string => typeof x === "string") : [];
-        },
-        () => fallback.lrange(key, start, stop),
-      ),
+    // Чтения — только для страницы владельца: без отката в память (пустая память = «данных нет», это ложь). Ошибку — наверх.
+    hgetAll: async (key) => hashOf((await read([["HGETALL", key]]))[0]),
+    hgetAllMany: async (keys) => (keys.length === 0 ? [] : (await read(keys.map((k): Cmd => ["HGETALL", k]))).map(hashOf)),
+    hmgetMany: async (keys, fields) => {
+      if (keys.length === 0 || fields.length === 0) return keys.map(() => ({}));
+      const res = await read(keys.map((k): Cmd => ["HMGET", k, ...fields]));
+      return res.map((r) => {
+        const out: Record<string, number> = {};
+        if (Array.isArray(r)) {
+          fields.forEach((f, i) => {
+            const v = r[i];
+            if (v === null || v === undefined) return;
+            const n = Number(v);
+            if (Number.isFinite(n)) out[f] = n;
+          });
+        }
+        return out;
+      });
+    },
+    lrange: async (key, start, stop) => {
+      const r = (await read([["LRANGE", key, start, stop]]))[0];
+      return Array.isArray(r) ? r.filter((x): x is string => typeof x === "string") : [];
+    },
   };
 }
 
