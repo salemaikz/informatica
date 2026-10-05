@@ -45,6 +45,13 @@ async function answerAny(page: Page) {
     await main.locator("input").first().fill("0");
     return;
   }
+  // «Соответствие» ЕНТ: у каждого пункта (radiogroup) — первый номер.
+  const groups = main.getByRole("radiogroup");
+  const g = await groups.count();
+  if (g) {
+    for (let i = 0; i < g; i++) await groups.nth(i).getByRole("radio").first().click();
+    return;
+  }
   const options = main.locator("button[aria-pressed]");
   const n = await options.count();
   if (n) {
@@ -116,8 +123,8 @@ test("карта: узел «Практика» после группы «Вет
   const saved = await page.evaluate((id) => JSON.parse(localStorage.getItem("informatica-v1")!).state.courseNodes?.[id], NODE_ID);
   expect(saved.runs).toBe(1);
 
-  // Назад на карту: узел пройден.
-  await page.getByRole("link", { name: "К карте курса" }).click();
+  // «Продолжить» на итогах ведёт на карту (практика начинается с карты): узел пройден.
+  await page.getByRole("button", { name: "Продолжить", exact: true }).click();
   await page.waitForURL("**/learn");
   await expect(practiceNode(page)).toHaveAttribute("aria-label", /Практика: Ветвления, пройдено 1 раз/);
   expect(errors).toEqual([]);
@@ -142,21 +149,20 @@ test("мини-тест: открывается из листа практики
   expect(errors).toEqual([]);
 });
 
-test("мини-тест: итог — баллы как на ЕНТ, слабое место и кнопка «К карте курса»", async ({ page }) => {
+test("мини-тест: итог — баллы как на ЕНТ, слабое место, «Продолжить» ведёт на карту", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 5);
   await page.goto(`/drill?mode=minitest&node=${NODE_ID}`);
-  // В мини-тесте есть «соответствие» ЕНТ; пока его вид — заглушка (пакет P3), ответить на него нельзя.
   await expect(page.locator("main button[aria-pressed]").first()).toBeVisible();
-  const steps = await playThrough(page, 20, async () => {
-    const view = page.locator("main [data-step-kind='entmatch']");
-    const stub = (await view.count()) > 0 && (await view.locator("button").count()) === 0;
-    test.skip(stub, "вид «соответствия» (EntMatchView) ещё заглушка — пакет P3");
-  });
-  expect(steps).toBeGreaterThanOrEqual(6);
+  // В тесте до ответа нет подсказки и «Спросить Бита» (как на ЕНТ).
+  await expect(page.getByRole("button", { name: /Подсказка/ })).toHaveCount(0);
+  const steps = await playThrough(page, 20);
+  // Ошибки в тесте не повторяются в конце: ровно 6 заданий.
+  expect(steps).toBe(6);
   // Все шесть заданий — первые ответы «первым вариантом»: баллы считаются из 8 (4 + 2 + 2).
   await expect(page.getByText(/^Баллы как на ЕНТ: \d+ из 8$/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "К карте курса" })).toHaveAttribute("href", "/learn");
+  await page.getByRole("button", { name: "Продолжить", exact: true }).click();
+  await page.waitForURL("**/learn");
   const saved = await page.evaluate((id) => JSON.parse(localStorage.getItem("informatica-v1")!).state.courseNodes?.[id], NODE_ID);
   expect(saved.testRuns).toBe(1);
   expect(errors).toEqual([]);
