@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     ...devices["Pixel 7"],
+    // Уведомления разрешены заранее: иначе окно «Включить напоминания» (PushAskAgent) закрывало бы экран во всех сценариях.
+    permissions: ["notifications"],
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
   webServer: {
