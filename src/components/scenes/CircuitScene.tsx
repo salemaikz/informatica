@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import type { DictKey } from "@/i18n/dict";
 import { translate, useT } from "@/i18n/useT";
-import { CIRCUIT_GEO, GATE_STYLE, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
+import { estimateTextWidth } from "./text-width";
+import { CIRCUIT_GEO, GATE_STYLE, OUT_CHIP_W, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
 
 const OP_KEY: Record<GateOp, DictKey> = {
   and: "scene.op.and",
@@ -19,8 +20,8 @@ const OP_KEY: Record<GateOp, DictKey> = {
 const wireClass = (v: Bit | undefined) => (v === undefined ? "stroke-muted" : v === 1 ? "stroke-success" : "stroke-muted/50");
 
 /** Плашка со значением 0/1 на проводе. */
-function ValueChip({ x, y, v, below }: { x: number; y: number; v: Bit; below: boolean }) {
-  const top = below ? y + 3 : y - 19;
+function ValueChip({ x, y, v, below, inline }: { x: number; y: number; v: Bit; below: boolean; inline?: boolean }) {
+  const top = inline ? y - 8 : below ? y + 3 : y - 19;
   return (
     <g>
       <rect x={x - 8} y={top} width={16} height={16} rx={5} className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : "fill-surface-2 stroke-border")} strokeWidth={1.5} />
@@ -71,7 +72,7 @@ function Terminal({ node, label, v }: { node: CircuitNode; label: string; v: Bit
         strokeWidth={2}
         className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : v === 0 ? "fill-surface-2 stroke-muted" : "fill-primary-soft stroke-primary")}
       />
-      <text x={node.x} y={node.y + 5} textAnchor="middle" fontSize={15} fontWeight={800} className="fill-text">
+      <text x={node.x} y={node.y + 5} textAnchor="middle" fontSize={estimateTextWidth(label, 15) > CIRCUIT_GEO.r * 1.6 ? 11 : 15} fontWeight={800} className="fill-text">
         {label}
       </text>
     </g>
@@ -95,13 +96,17 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
   const layout = useMemo(() => layoutCircuit(scene, { labelLines, labels }), [scene, labelLines, labels]);
   const hasValues = !!scene.values;
   const vals = useMemo(() => (scene.values ? evalCircuit(scene, scene.values) : null), [scene]);
-  const valueOf = (id: string): Bit | undefined => (vals ? vals[id === layout.outId ? scene.output : id] : undefined);
+  // Выходные узлы берут значение вентиля, к которому подключены (id выхода внутренний).
+  const outGate = useMemo(() => new Map(layout.outputs.map((o) => [o.id, o.gate])), [layout]);
+  const multi = !!scene.outputs?.length;
+  const valueOf = (id: string): Bit | undefined => (vals ? vals[outGate.get(id) ?? id] : undefined);
+  const feedsOutput = new Set(layout.outputs.map((o) => o.gate));
   const G = CIRCUIT_GEO;
 
   return (
     <svg
       role="img"
-      aria-label={t("scene.circuit.aria")}
+      aria-label={multi ? t("scene.circuit.ariaOutputs") : t("scene.circuit.aria")}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       className="mx-auto block h-auto w-full"
       style={{ maxWidth: Math.round(layout.width * 1.6) }}
@@ -119,6 +124,11 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
         />
       ))}
 
+      {/* Ответвления проводов одного источника (схемы с несколькими выходами). */}
+      {layout.junctions.map(([x, y]) => (
+        <circle key={`j:${x},${y}`} cx={x} cy={y} r={3.2} className={cn("transition-colors duration-200", "fill-muted")} />
+      ))}
+
       {layout.nodes.map((n) => {
         if (n.kind === "gate") return <GateShape key={n.id} node={n} label={labels[n.op!]} v={valueOf(n.id)} />;
         return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} />;
@@ -127,7 +137,7 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
       {/* Значения: по одной плашке на выходе каждого источника (вход или вентиль). */}
       {hasValues &&
         layout.nodes
-          .filter((n) => n.kind !== "output")
+          .filter((n) => n.kind !== "output" && !(multi && feedsOutput.has(n.id)))
           .map((n) => {
             const v = valueOf(n.id);
             if (v === undefined) return null;
@@ -135,6 +145,16 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
             // Плашка — с той стороны провода, куда не уходит вертикальный излом.
             const goesUp = layout.wires.some((w) => w.from === n.id && w.points.length > 2 && w.points[2][1] < n.y);
             return <ValueChip key={`v:${n.id}`} x={px} y={n.y} v={v} below={goesUp} />;
+          })}
+
+      {/* Значения выходов — плашка справа от каждого выходного кружка. */}
+      {hasValues &&
+        multi &&
+        layout.nodes
+          .filter((n) => n.kind === "output")
+          .map((n) => {
+            const v = valueOf(n.id);
+            return v === undefined ? null : <ValueChip key={`o:${n.id}`} x={n.x + G.r + OUT_CHIP_W / 2 + 1} y={n.y} v={v} below={false} inline />;
           })}
     </svg>
   );

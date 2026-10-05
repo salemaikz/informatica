@@ -33,6 +33,23 @@ export const SAMPLES: Scene[] = [
     outputs: [{ gate: "s", name: "S" }, { gate: "c", name: "C" }],
     values: { A: 1, B: 1 },
   },
+  {
+    // Полусумматор без значений, трёхбуквенные имена выходов.
+    kind: "circuit",
+    inputs: ["A", "B"],
+    gates: [{ id: "s", op: "xor", in: ["A", "B"] }, { id: "c", op: "and", in: ["A", "B"] }],
+    output: "s",
+    outputs: [{ gate: "s", name: "Sum" }, { gate: "c", name: "Car" }],
+  },
+  {
+    // Выходы из разных столбцов: S от xor, перенос с инверсией (И-НЕ по смыслу) — вентиль НЕ во втором столбце.
+    kind: "circuit",
+    inputs: ["A", "B"],
+    gates: [{ id: "x", op: "xor", in: ["A", "B"] }, { id: "c", op: "and", in: ["A", "B"] }, { id: "n", op: "not", in: ["c"] }],
+    output: "x",
+    outputs: [{ gate: "x", name: "S" }, { gate: "n", name: "Cn" }],
+    values: { A: 1, B: 1 },
+  },
   { kind: "hardware", items: ["switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber", "printer-dot", "printer-inkjet"] },
   { kind: "hardware", items: ["printer-laser", "plotter", "pen-tablet", "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator"] },
 ];
