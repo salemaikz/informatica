@@ -25,3 +25,8 @@ export function webFrameHeight(html: string): number {
   const lines = html.split("\n").length;
   return Math.max(140, Math.min(260, 70 + lines * 28));
 }
+
+/** Разметка сцены на языке ученика: htmlKk — для казахского (если задана), иначе общий html. */
+export function webHtml(scene: { html: string; htmlKk?: string }, lang: "ru" | "kk"): string {
+  return lang === "kk" && scene.htmlKk !== undefined ? scene.htmlKk : scene.html;
+}
