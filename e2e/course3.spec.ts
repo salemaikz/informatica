@@ -1,0 +1,181 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// Этап 14 (P2): узлы «Практика» и «Повторение» на карте курса, мини-тест группы (#81).
+// Группа «Ветвления» (раздел «Python»): после неё — узел «Практика» (12 заданий), в конце раздела — «Повторение».
+// Мини-тест стоит 1 сердечко (как «Проверить себя»), практика бесплатна. Без обращений к ИИ.
+
+const NODE_ID = "practice:py-2a-if";
+
+async function seed(page: Page, hearts = 5, theme: "light" | "dark" = "light") {
+  await page.goto("/onboarding");
+  await page.evaluate(
+    ([n, th]) =>
+      localStorage.setItem(
+        "informatica-v1",
+        JSON.stringify({
+          state: {
+            onboarded: true,
+            profile: { name: "Т", lang: "ru", grade: "11", goal: "ent", style: "short", dailyGoalXp: 50, theme: th, sound: false, createdAt: 1 },
+            // Восстановление идёт от updatedAt: ставим «сейчас», чтобы сердечки не вернулись сами за время теста.
+            hearts: { count: n, updatedAt: Date.now(), day: "" },
+            paywall: { lastShownAt: 4102444800000, views: 1 },
+          },
+          version: 2,
+        }),
+      ),
+    [hearts, theme] as const,
+  );
+}
+
+function trackErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  return errors;
+}
+
+const hearts = (page: Page, n: number) => page.getByLabel(`Сердечки: ${n}`);
+const practiceNode = (page: Page) => page.getByRole("button", { name: /^Практика: Ветвления/ });
+const results = (page: Page) => page.getByRole("heading", { level: 1, name: "Тренировка завершена!" });
+
+/** Отвечает на текущее задание чем попало: ввод — «0», варианты — по очереди, пока не станет доступна «Проверить»; «пары» — перебором. */
+async function answerAny(page: Page) {
+  const main = page.locator("main");
+  const check = page.getByRole("button", { name: "Проверить", exact: true });
+  if (await main.locator("input").count()) {
+    await main.locator("input").first().fill("0");
+    return;
+  }
+  const options = main.locator("button[aria-pressed]");
+  const n = await options.count();
+  if (n) {
+    // single/multi — хватит первого варианта; «соответствие» — по одному номеру у каждого пункта.
+    for (let i = 0; i < n && !(await check.isEnabled()); i++) await options.nth(i).click();
+    return;
+  }
+  // «Соединить пары»: две колонки плиток; верная пара гасит левую плитку, шаг сдаётся сам.
+  const columns = main.locator(".grid.grid-cols-2 > div");
+  const free = (side: number) => columns.nth(side).locator("button:not([disabled])");
+  for (let guard = 0; guard < 40 && (await free(0).count()) > 0; guard++) {
+    const left = await free(0).count();
+    const right = await free(1).count();
+    for (let r = 0; r < right && (await free(0).count()) === left; r++) {
+      await free(0).first().click();
+      await free(1).nth(r).click();
+    }
+  }
+}
+
+/** Проходит сессию до итогов; возвращает, сколько шагов (с повторами ошибок) пройдено. */
+async function playThrough(page: Page, max = 60, beforeAnswer?: () => Promise<void>) {
+  const check = page.getByRole("button", { name: "Проверить", exact: true });
+  const next = page.getByRole("button", { name: "Продолжить", exact: true });
+  for (let i = 0; i < max; i++) {
+    await expect(check.or(next).or(results(page)).first()).toBeVisible();
+    if (await results(page).isVisible()) return i;
+    if (!(await next.isVisible())) {
+      await beforeAnswer?.();
+      await answerAny(page);
+      if (await check.isVisible()) await check.click();
+    }
+    await expect(next).toBeVisible();
+    await next.click();
+  }
+  throw new Error("сессия не закончилась");
+}
+
+test("карта: узел «Практика» после группы «Ветвления» — лист, 12 заданий, узел становится пройденным", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page);
+  await page.goto("/learn");
+
+  const node = practiceNode(page);
+  await expect(node).toBeVisible();
+  await expect(node).toHaveAttribute("aria-label", "Практика: Ветвления, пока не пройдено");
+  // Узел не мельче 44 px (как урок): появляется «выпрыгиванием» только когда попал в экран — прокручиваем и ждём.
+  await node.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await node.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  await expect.poll(async () => (await node.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+  await node.click();
+  const sheet = page.getByRole("dialog", { name: "Практика: Ветвления" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText("12 заданий: эта тема, прошлые темы и начало курса. Бесплатно.")).toBeVisible();
+  await expect(sheet.getByText("Пока не пройдено")).toBeVisible();
+  await expect(sheet.getByRole("link", { name: /Мини-тест/ })).toHaveAttribute("href", `/drill?mode=minitest&node=${NODE_ID}`);
+
+  await sheet.getByRole("link", { name: "Начать практику" }).click();
+  await page.waitForURL("**/drill?mode=practice**");
+  await expect(page.getByRole("button", { name: "Проверить", exact: true })).toBeVisible();
+  // Практика бесплатна: сердечек в шапке нет.
+  await expect(page.getByLabel(/^Сердечки: /)).toHaveCount(0);
+
+  await playThrough(page);
+  // Заданий — 12 (первые попытки; ошибки показываются ещё раз в «работе над ошибками»).
+  await expect(page.getByText(/без подсказки: \d+ из 12/)).toBeVisible();
+
+  const saved = await page.evaluate((id) => JSON.parse(localStorage.getItem("informatica-v1")!).state.courseNodes?.[id], NODE_ID);
+  expect(saved.runs).toBe(1);
+
+  // Назад на карту: узел пройден.
+  await page.getByRole("link", { name: "К карте курса" }).click();
+  await page.waitForURL("**/learn");
+  await expect(practiceNode(page)).toHaveAttribute("aria-label", /Практика: Ветвления, пройдено 1 раз/);
+  expect(errors).toEqual([]);
+});
+
+test("мини-тест: открывается из листа практики и списывает сердечко при первом ответе", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page, 5, "dark");
+  await page.goto("/learn");
+  await practiceNode(page).click();
+  const sheet = page.getByRole("dialog", { name: "Практика: Ветвления" });
+  await expect(sheet.getByText(/6 заданий в формате ЕНТ/)).toBeVisible();
+  await sheet.getByRole("link", { name: /Мини-тест/ }).click();
+  await page.waitForURL("**/drill?mode=minitest**");
+
+  // Вход ещё не списан — первое задание (single уровня A) открыто, сердечек 5.
+  await expect(hearts(page, 5)).toBeVisible();
+  await expect(page.locator("main button[aria-pressed]").first()).toBeVisible();
+  await page.locator("main button[aria-pressed]").first().click();
+  await page.getByRole("button", { name: "Проверить", exact: true }).click();
+  await expect(hearts(page, 4)).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("мини-тест: итог — баллы как на ЕНТ, слабое место и кнопка «К карте курса»", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page, 5);
+  await page.goto(`/drill?mode=minitest&node=${NODE_ID}`);
+  // В мини-тесте есть «соответствие» ЕНТ; пока его вид — заглушка (пакет P3), ответить на него нельзя.
+  await expect(page.locator("main button[aria-pressed]").first()).toBeVisible();
+  const steps = await playThrough(page, 20, async () => {
+    const view = page.locator("main [data-step-kind='entmatch']");
+    const stub = (await view.count()) > 0 && (await view.locator("button").count()) === 0;
+    test.skip(stub, "вид «соответствия» (EntMatchView) ещё заглушка — пакет P3");
+  });
+  expect(steps).toBeGreaterThanOrEqual(6);
+  // Все шесть заданий — первые ответы «первым вариантом»: баллы считаются из 8 (4 + 2 + 2).
+  await expect(page.getByText(/^Баллы как на ЕНТ: \d+ из 8$/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "К карте курса" })).toHaveAttribute("href", "/learn");
+  const saved = await page.evaluate((id) => JSON.parse(localStorage.getItem("informatica-v1")!).state.courseNodes?.[id], NODE_ID);
+  expect(saved.testRuns).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("карта: в конце раздела «Python» — узел «Повторение», лист ведёт на 15 заданий", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page);
+  await page.goto("/learn");
+  const recap = page.getByRole("button", { name: /^Повторение: Python и алгоритмы/ });
+  await expect(recap).toBeVisible();
+  await recap.click();
+  const sheet = page.getByRole("dialog", { name: /^Повторение: / });
+  await expect(sheet.getByText(/15 заданий: весь раздел/)).toBeVisible();
+  // Мини-теста у повторения нет.
+  await expect(sheet.getByRole("link", { name: /Мини-тест/ })).toHaveCount(0);
+  await expect(sheet.getByRole("link", { name: "Начать повторение" })).toHaveAttribute("href", "/drill?mode=recap&unit=u3");
+  await sheet.getByRole("link", { name: "Начать повторение" }).click();
+  await page.waitForURL("**/drill?mode=recap**");
+  await expect(page.getByRole("button", { name: "Проверить", exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

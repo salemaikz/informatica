@@ -14,19 +14,29 @@ import {
   isDarkColor,
   isDue,
   lessonTopics,
+  nodeLessonRefs,
   nodeState,
+  pathItemNodeId,
   pathLayout,
+  pathPassed,
   pluralForm,
+  practiceNodeState,
   recommendedLesson,
   reviewInDays,
   segmentDone,
   topicLessons,
   topicMastery,
   topicSkillIds,
+  unitPathItems,
   unitProgress,
   unitSkillIds,
   xpKind,
+  type PathItem,
 } from "@/components/learn/map";
+import type { CourseGroup } from "@/content/groups";
+import { practiceNodeId, recapNodeId, unitGroups } from "@/content/groups";
+import { skillsOfLessons } from "@/lib/drill";
+import type { CourseNodeStat } from "@/lib/course-nodes";
 
 const NOW = 1_800_000_000_000;
 const stat = (p: Partial<LessonStat> = {}): LessonStat => ({ completions: 1, bestAccuracy: 0.9, lastAt: NOW - DAY_MS, totalXp: 20, ...p });
@@ -269,5 +279,123 @@ describe("Карта ЕНТ: размеры плиток и сетка без д
     expect(fillGrid([one, { cols: 2, rows: 1 }, one], 2)).toEqual({ rows: 2, holes: 0 }); // третья плитка заполняет дыру (dense)
     expect(fillGrid([{ cols: 2, rows: 1 }, { cols: 1, rows: 2 }], 3)).toEqual({ rows: 2, holes: 2 });
     expect(fillGrid([], 3)).toEqual({ rows: 0, holes: 0 });
+  });
+});
+
+describe("узлы курса 3.0 на дороге раздела (#81)", () => {
+  const grp = (lessons: string[], index: number, last: boolean): CourseGroup => ({
+    id: `g:${lessons[0]}`,
+    unitId: "z",
+    index,
+    last,
+    title: { ru: lessons[0], kk: lessons[0] },
+    lessons,
+  });
+  const ready = (ref: { status: string }) => ref.status === "available";
+  const kinds = (items: PathItem[]) => items.map((i) => (i.kind === "lesson" ? i.ref.id : i.kind === "practice" ? `P(${i.group.lessons[0]})` : `R(${i.unitId})`));
+
+  it("практика — после каждой не последней группы, повторение — в конце раздела", () => {
+    const u = unit("z", [["a1", "available"], ["a2", "available"], ["a3", "available"], ["a4", "available"], ["a5", "available"]]);
+    const groups = [grp(["a1", "a2"], 0, false), grp(["a3", "a4"], 1, false), grp(["a5"], 2, true)];
+    expect(kinds(unitPathItems(u, { groups, trainable: ready }))).toEqual(["a1", "a2", "P(a1)", "a3", "a4", "P(a3)", "a5", "R(z)"]);
+  });
+
+  it("группа без готового урока с банком узла практики не получает; нет таких уроков вообще — нет и повторения", () => {
+    const u = unit("z", [["a1", "available"], ["a2", "soon"], ["a3", "soon"], ["a4", "available"]]);
+    const groups = [grp(["a1"], 0, false), grp(["a2", "a3"], 1, false), grp(["a4"], 2, true)];
+    expect(kinds(unitPathItems(u, { groups, trainable: ready }))).toEqual(["a1", "P(a1)", "a2", "a3", "a4", "R(z)"]);
+    // «Готов» ≠ «можно тренировать»: урок без банка не считается.
+    expect(kinds(unitPathItems(u, { groups, trainable: (r) => r.id === "a4" }))).toEqual(["a1", "a2", "a3", "a4", "R(z)"]);
+    const none = unit("z", [["a1", "soon"], ["a2", "soon"]]);
+    expect(kinds(unitPathItems(none, { groups: [grp(["a1"], 0, false), grp(["a2"], 1, true)], trainable: ready }))).toEqual(["a1", "a2"]);
+    expect(unitPathItems(unit("z", []), { groups: [], trainable: ready })).toEqual([]);
+  });
+
+  it("раздел из одной группы — только повторение; уроки вне групп остаются на дороге", () => {
+    const one = unit("z", [["a1", "available"], ["a2", "available"]]);
+    expect(kinds(unitPathItems(one, { groups: [grp(["a1", "a2"], 0, true)], trainable: ready }))).toEqual(["a1", "a2", "R(z)"]);
+    const loose = unit("z", [["a1", "available"], ["a2", "available"], ["a3", "available"]]);
+    expect(kinds(unitPathItems(loose, { groups: [grp(["a1"], 0, false), grp(["a3"], 1, true)], trainable: ready }))).toEqual(["a1", "P(a1)", "a2", "a3", "R(z)"]);
+  });
+
+  it("реальный курс: уроки идут в порядке карты, узлы — по правилам групп", () => {
+    for (const u of UNITS) {
+      const items = unitPathItems(u);
+      expect(items.filter((i): i is Extract<PathItem, { kind: "lesson" }> => i.kind === "lesson").map((i) => i.ref.id), u.id).toEqual(u.lessons.map((r) => r.id));
+      const groups = unitGroups(u);
+      const trainable = (id: string) => skillsOfLessons([id]).length > 0 && u.lessons.find((r) => r.id === id)?.status === "available";
+      const wantPractice = groups.filter((g) => !g.last && g.lessons.some(trainable)).map((g) => practiceNodeId(g));
+      const gotPractice = items.filter((i) => i.kind === "practice").map((i) => pathItemNodeId(i));
+      expect(gotPractice, u.id).toEqual(wantPractice);
+      expect(items.some((i) => i.kind === "recap"), u.id).toBe(u.lessons.some((r) => trainable(r.id)));
+      if (items.some((i) => i.kind === "recap")) expect(items[items.length - 1].kind).toBe("recap");
+      // «Практика» стоит сразу после последнего урока своей группы.
+      items.forEach((it, i) => {
+        if (it.kind !== "practice") return;
+        const prev = items[i - 1];
+        expect(prev.kind === "lesson" && prev.ref.id).toBe(it.group.lessons[it.group.lessons.length - 1]);
+      });
+    }
+  });
+
+  it("на карте Python узел «Практика» стоит после группы «Ветвления»", () => {
+    const py = UNITS.find((u) => u.id === "u3")!;
+    const items = unitPathItems(py);
+    const at = items.findIndex((i) => i.kind === "practice" && i.group.title.ru === "Ветвления");
+    expect(at).toBeGreaterThan(0);
+    const before = items[at - 1];
+    expect(before.kind === "lesson" && before.ref.id).toBe("py-2b-logic");
+  });
+
+  it("id узлов и их уроки", () => {
+    const g = grp(["a1", "a2"], 0, false);
+    const u = unit("z", [["a0", "available"], ["a1", "available"], ["a2", "soon"]]);
+    const practice: PathItem = { kind: "practice", group: g };
+    const recap: PathItem = { kind: "recap", unitId: "z" };
+    expect(pathItemNodeId(practice)).toBe(practiceNodeId(g));
+    expect(pathItemNodeId(recap)).toBe(recapNodeId("z"));
+    expect(pathItemNodeId({ kind: "lesson", ref: u.lessons[0] })).toBeUndefined();
+    expect(nodeLessonRefs(practice, u).map((r) => r.id)).toEqual(["a1", "a2"]);
+    expect(nodeLessonRefs(recap, u).map((r) => r.id)).toEqual(["a0", "a1", "a2"]);
+  });
+
+  it("пройденность дороги учитывает узлы: непройденная практика обрывает пройденный отрезок", () => {
+    const u = unit("z", [["a1", "available"], ["a2", "available"], ["a3", "available"]]);
+    const groups = [grp(["a1", "a2"], 0, false), grp(["a3"], 1, true)];
+    const items = unitPathItems(u, { groups, trainable: ready });
+    expect(kinds(items)).toEqual(["a1", "a2", "P(a1)", "a3", "R(z)"]);
+    const node = (runs: number): CourseNodeStat => ({ runs, best: 0.8, at: NOW });
+    const allLessons = () => true;
+    // Все уроки пройдены, узлы нет.
+    const p0 = pathPassed(items, allLessons, {});
+    expect(p0).toEqual([true, true, false, true, false]);
+    const { segments } = pathLayout(items.length);
+    expect(segments.map((s) => segmentDone(s, p0))).toEqual([true, true, false, false, false, false]);
+    // Практика пройдена — дорога зажигается до неё и дальше до пройденного a3.
+    const p1 = pathPassed(items, allLessons, { [practiceNodeId(groups[0])]: node(1) });
+    expect(p1).toEqual([true, true, true, true, false]);
+    expect(segments.map((s) => segmentDone(s, p1))).toEqual([true, true, true, true, false, false]);
+    // Запись узла с нулём прохождений не считается пройденной.
+    expect(pathPassed(items, allLessons, { [practiceNodeId(groups[0])]: node(0) })[2]).toBe(false);
+    // Повторение пройдено — «выход» дороги зажигается.
+    const p2 = pathPassed(items, allLessons, { [practiceNodeId(groups[0])]: node(2), [recapNodeId("z")]: node(1) });
+    expect(segments.map((s) => segmentDone(s, p2))).toEqual([true, true, true, true, true, true]);
+  });
+
+  it("состояние узла: пройден / рекомендуется (все уроки пройдены, узел нет) / доступен", () => {
+    const refs = [
+      { id: "a1", title: { ru: "", kk: "" }, status: "available" as const },
+      { id: "a2", title: { ru: "", kk: "" }, status: "available" as const },
+      { id: "a3", title: { ru: "", kk: "" }, status: "soon" as const },
+    ];
+    const done = (n = 1) => ({ runs: n, best: 1, at: NOW });
+    expect(practiceNodeState(refs, {}, undefined)).toBe("available");
+    expect(practiceNodeState(refs, { a1: stat() }, undefined)).toBe("available");
+    // Урок «скоро» не мешает: готовые пройдены — рекомендуем.
+    expect(practiceNodeState(refs, { a1: stat(), a2: stat() }, undefined)).toBe("recommended");
+    expect(practiceNodeState(refs, { a1: stat(), a2: stat() }, done())).toBe("done");
+    expect(practiceNodeState(refs, {}, done())).toBe("done");
+    expect(practiceNodeState(refs, { a1: stat(), a2: stat() }, { runs: 0, best: 0, at: 0 })).toBe("recommended");
+    expect(practiceNodeState([refs[2]], {}, undefined)).toBe("available");
   });
 });

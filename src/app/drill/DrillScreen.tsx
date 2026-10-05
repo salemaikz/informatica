@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
-import { Check, Flag } from "lucide-react";
+import { Check, Flag, Map as MapIcon, Target } from "lucide-react";
 import type { EntTopicId, QuestionStep, SessionResult } from "@/lib/types";
 import { useApp } from "@/lib/store";
+import { cn } from "@/lib/cn";
 import { getLesson } from "@/content/course";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
@@ -26,7 +27,7 @@ import {
   type DrillMode,
 } from "@/lib/drill";
 import { decaySkills } from "@/lib/mastery";
-import { buildMiniTest, buildPractice, buildRecap } from "@/lib/course-mix";
+import { buildMiniTest, buildPractice, buildRecap, miniTestPoints, weakestSkill } from "@/lib/course-mix";
 import { buildContextDrill } from "@/lib/context-drill";
 import { groupOfPracticeNode, recapNodeId } from "@/content/groups";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
@@ -114,6 +115,8 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
   const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item }));
   const recordCourseNode = useApp((s) => s.recordCourseNode);
   const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
+  // Итог мини-теста: баллы «как на ЕНТ» и слабое место (этап 14).
+  const [mini, setMini] = useState<{ points: number; max: number; weak?: string } | null>(null);
   const completeLessons = useApp((s) => s.completeLessons);
   const markReviewed = useApp((s) => s.markReviewed);
   // Экстерн стоит 2 сердечка (#40): не хватает на входе — «сердечки закончились» (#69). Пустой набор экран не открывает — события нет.
@@ -126,6 +129,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
       // Узлы курса 3.0 (этап 14): прохождение практики, повторения и мини-теста — на карту.
       if ((mode === "practice" || mode === "minitest") && node && groupOfPracticeNode(node)) recordCourseNode(node, mode, result.accuracy);
       if (mode === "recap" && unitById(unit)) recordCourseNode(recapNodeId(unit!), "recap", result.accuracy);
+      if (mode === "minitest") setMini({ ...miniTestPoints(session.steps, result.answers), weak: weakestSkill(result.answers) });
       if (mode === "review" && session.reviewLessons?.length) {
         // Точность считаем по заданиям навыков каждого урока: стор сдвинет расписание повторения.
         for (const [id, acc] of Object.entries(lessonAccuracies(result.answers, session.reviewLessons))) markReviewed([id], acc);
@@ -205,6 +209,31 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
           {t("modes.extern.toMap")}
         </ButtonLink>
       </div>
+    );
+  } else if (mini) {
+    // Баллы как на ЕНТ: от 80% — «освоено» (success), иначе — «в процессе» (warning).
+    const good = mini.max > 0 && mini.points / mini.max >= 0.8;
+    const weak = mini.weak ? skillById(mini.weak) : undefined;
+    extra = (
+      <div className={cn("flex flex-col gap-3 rounded-3xl border-2 p-4 text-center", good ? "border-success/40 bg-success-soft" : "border-warning/40 bg-warning-soft")}>
+        <p className={cn("text-xl font-extrabold", good ? "text-success-strong" : "text-warning-strong")}>{t("course3.minitest.points", { points: mini.points, max: mini.max })}</p>
+        {weak && (
+          <p className="flex items-center justify-center gap-2 text-sm font-bold">
+            <Target size={16} className="shrink-0 text-danger" aria-hidden />
+            <span>{t("course3.minitest.weak", { skill: l(weak.title) })}</span>
+          </p>
+        )}
+        <ButtonLink href="/learn" variant="secondary" icon={<MapIcon size={18} />}>
+          {t("course3.toMap")}
+        </ButtonLink>
+      </div>
+    );
+  } else if (mode === "practice" || mode === "recap") {
+    // Практика и повторение начинаются с карты — на карту и ведёт кнопка (итог узла записан в onSessionFinish).
+    extra = (
+      <ButtonLink href="/learn" variant="secondary" block icon={<MapIcon size={18} />}>
+        {t("course3.toMap")}
+      </ButtonLink>
     );
   } else if (outcome) {
     const lesson = outcome.lessonId ? getLesson(outcome.lessonId) : undefined;
