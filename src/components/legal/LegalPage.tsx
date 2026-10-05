@@ -66,7 +66,8 @@ export function LegalPage({ doc }: { doc: LegalId }) {
       </div>
 
       <Card className="sm:p-6">
-        <Markdown>{legalMarkdown(d, lang)}</Markdown>
+        {/* Ссылки (почта для связи) — голубые и подчёркнутые: в общем Markdown стиля ссылок нет. */}
+        <Markdown className="[&_a]:font-semibold [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2">{legalMarkdown(d, lang)}</Markdown>
       </Card>
 
       <p className="text-sm font-semibold text-muted">

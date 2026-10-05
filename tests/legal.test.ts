@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 import { LEGAL, LEGAL_CONTACT, LEGAL_IDS, legalMarkdown, type LegalDoc } from "@/content/legal";
 import { dict } from "@/i18n/dict";
 import { legalDict } from "@/i18n/parts/legal";
-import { TRIAL_DAYS } from "@/lib/economy";
+import { AI_UNITS, TRIAL_DAYS } from "@/lib/economy";
 import { detectLang, GUEST_LANG_KEY, guestLangToApply, markLangChosen } from "@/lib/guest-lang";
+import { ISSUE_LIMITS } from "@/lib/issue";
 import { isPublicPath } from "@/lib/public-paths";
+import { MAX_RECORD_SEC } from "@/lib/voice";
 
 type Lang = "ru" | "kk";
 const LANGS: Lang[] = ["ru", "kk"];
@@ -161,6 +163,13 @@ describe("правовые документы", () => {
     expect(defaultUrlTransform(`mailto:${LEGAL_CONTACT}`)).toBe(`mailto:${LEGAL_CONTACT}`);
   });
 
+  it("ссылки в документах заметны: страница документа красит и подчёркивает их (в общем Markdown стиля ссылок нет)", () => {
+    const page = readFileSync(join(root, "src/components/legal/LegalPage.tsx"), "utf8");
+    expect(page).toMatch(/\[&_a\]:text-primary/);
+    expect(page).toMatch(/\[&_a\]:underline\b/);
+    expect(page).toMatch(/\[&_a\]:underline-offset-2/);
+  });
+
   it("законы: только №94-V, без выдуманных статей", () => {
     for (const doc of docs) {
       for (const lang of LANGS) {
@@ -203,9 +212,9 @@ describe("правовые документы", () => {
     // Что уходит ИИ о ученике: ключевые позиции.
     expect(ru).toMatch(/имя, класс, цель/);
     expect(kk).toMatch(/аты, сыныбы, мақсаты/);
-    // Запись голоса — до 60 секунд.
-    expect(ru).toContain("до 60 секунд");
-    expect(kk).toContain("60 секундқа дейін");
+    // Запись голоса — тот же предел, что в коде (lib/voice.ts).
+    expect(ru).toContain(`до ${MAX_RECORD_SEC} секунд`);
+    expect(kk).toContain(`${MAX_RECORD_SEC} секундқа дейін`);
     // Технический cookie со случайным номером устройства, срок — 400 дней.
     expect(ru).toContain("технический файл cookie со случайным номером устройства");
     expect(ru).toContain("до 400 дней");
@@ -219,7 +228,7 @@ describe("правовые документы", () => {
     expect(section(privacy, "Как удалить данные", "kk")).toContain("сайт деректерін тазала");
   });
 
-  it("сообщения и отчёты об ошибках: пределы и хранение — по смыслу, без привязки к константам кода", () => {
+  it("сообщения и отчёты об ошибках: пределы — как в коде (lib/issue.ts), срок хранения — 30 дней", () => {
     const items = (lang: Lang) => {
       const list = section(LEGAL.privacy, "Что хранится у нас на сервере", lang)
         .split("\n")
@@ -233,10 +242,10 @@ describe("правовые документы", () => {
       const { report, crash } = items(lang);
       expect(report, lang).toBeTruthy();
       expect(crash, lang).toBeTruthy();
-      // Сообщение: комментарий, фрагмент, срок хранения.
-      for (const n of ["500", "600", "30"]) expect(report, `${lang}: ${n}`).toContain(n);
+      // Сообщение: комментарий, фрагмент (числа — из кода) и срок хранения. Число хранимых сообщений (ISSUE_CHANNELS.max) не называем.
+      for (const n of [ISSUE_LIMITS.comment, ISSUE_LIMITS.snippet, 30]) expect(report, `${lang}: ${n}`).toContain(String(n));
       // Отчёт о сбое: текст ошибки и технические подробности.
-      for (const n of ["500", "1500"]) expect(crash, `${lang}: ${n}`).toContain(n);
+      for (const n of [ISSUE_LIMITS.message, ISSUE_LIMITS.stack]) expect(crash, `${lang}: ${n}`).toContain(String(n));
     }
     // Страницы и браузера в сообщении об ошибке нет (в отчёте о сбое страница без параметров и сведения о браузере есть).
     expect(items("ru").report).toContain("страницы и браузера в сообщении нет");
@@ -327,9 +336,10 @@ describe("правовые документы", () => {
     const kk = section(LEGAL.terms, "Бесплатно, тарифы и чипы", "kk");
     expect(ru).toContain("Число обращений к ИИ в день ограничено — до 65 на любом тарифе; готовые подсказки и разборы — без ограничений.");
     expect(kk).toContain("ЖИ-ге күніне жүгіну саны шектелген — кез келген тарифте ең көбі 65 жүгіну; дайын кеңестер мен талдаулар шектеусіз.");
-    // Вес обращений: фото и «Разбор от Бита» — 2, голос — 4.
-    expect(ru).toContain("считаются за 2 обращения, голосовой вопрос — за 4");
-    expect(kk).toContain("2 жүгіну, дауыспен қойылған сұрақ 4 жүгіну");
+    // Вес обращений — как в коде (AI_UNITS): фото и «Разбор от Бита» одинаково, голос дороже.
+    expect(AI_UNITS.review).toBe(AI_UNITS.photo);
+    expect(ru).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${AI_UNITS.voice}`);
+    expect(kk).toContain(`${AI_UNITS.photo} жүгіну, дауыспен қойылған сұрақ ${AI_UNITS.voice} жүгіну`);
     // Своих потолков у тарифов в документах нет, ИИ «без ограничений» не обещаем.
     for (const doc of docs) {
       expect(fullText(doc, "ru"), doc.id).not.toMatch(/до (?:50|100)\b|неограниченн|безгранично|без лимита/i);
