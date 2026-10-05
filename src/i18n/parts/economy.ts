@@ -88,16 +88,11 @@ export const economyDict = {
   "shop.rules.checkpoint": { ru: "Контрольная", kk: "Бақылау жұмысы" },
   "shop.rules.extern": { ru: "Экстерн", kk: "Экстерн" },
   "shop.rules.game": { ru: "Игра", kk: "Ойын" },
-  "shop.rules.when": {
-    ru: "Сердечко списывается при первом ответе (в пробном ЕНТ, контрольной и игре — при старте). Теория урока — бесплатно.",
-    kk: "Жүрек бірінші жауап берілгенде жұмсалады (сынақ ҰБТ-да, бақылау жұмысында және ойында — басталғанда). Сабақ теориясы — тегін.",
-  },
   "shop.rules.free": { ru: "Бесплатно", kk: "Тегін" },
   "shop.rules.free.practice": { ru: "Тренировка", kk: "Жаттығу" },
   "shop.rules.free.review": { ru: "Повторение", kk: "Қайталау" },
   "shop.rules.free.mistakes": { ru: "Работа над ошибками", kk: "Қателермен жұмыс" },
   "shop.rules.free.code": { ru: "Практикум кода", kk: "Код практикумы" },
-  "shop.rules.free.theory": { ru: "Теория", kk: "Теория" },
   "shop.rules.free.chat": { ru: "Чат с Битом", kk: "Битпен чат" },
   "shop.rules.regen": { ru: "Сердечки возвращаются сами", kk: "Жүректер өздігінен қайтады" },
   // max — запас тарифа, time — PLAN_FEATURES[тариф].regenMs

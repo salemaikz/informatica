@@ -77,7 +77,7 @@ describe("тег банка", () => {
 // Сторож EXAM_BUILD_VERSION: тот же seed должен давать тот же вариант, пока тег не поменялся.
 // Банк поменялся (новые задания) — тег другой: обновите RECORDED (тег и отпечаток). Тег прежний, а отпечаток другой —
 // поменялся алгоритм сборки (lib/exam.ts): увеличьте EXAM_BUILD_VERSION в lib/exam-pool.ts и тоже обновите RECORDED.
-const RECORDED = { tag: "dfy4", fingerprint: "c8rq" };
+const RECORDED = { tag: "j0qw", fingerprint: "oazw" };
 
 function fingerprint(): string {
   const cases: [ExamKind, number, EntTopicId[]][] = [
