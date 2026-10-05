@@ -279,14 +279,14 @@ describe("«Учиться»: переключатель режима и общ�
   });
 
   it("урок про биты, пройденный в школьном режиме, отмечен пройденным на «Пути» ЕНТ", async () => {
-    await profile("school", "6");
+    await profile("school", "5");
     await render(createElement(LearnPage));
-    expect(host.textContent).toContain(lessonsLine(0, "6"));
+    expect(host.textContent).toContain(lessonsLine(0, "5"));
 
     await act(async () => {
       useApp.getState().finishSession(session(BITS));
     });
-    expect(host.textContent).toContain(lessonsLine(1, "6"));
+    expect(host.textContent).toContain(lessonsLine(1, "5"));
 
     await clickTrack("ЕНТ");
     const label = nodeLabel(BITS);
@@ -294,8 +294,8 @@ describe("«Учиться»: переключатель режима и общ�
     expect(label).toContain(`, ${ru("learn2.state.done")}`);
   });
 
-  it("урок, пройденный в режиме ЕНТ, отмечен в школьной программе (и в 6, и в 10 классе)", async () => {
-    await profile("ent", "6");
+  it("урок, пройденный в режиме ЕНТ, отмечен в школьной программе (и в 5, и в 10 классе)", async () => {
+    await profile("ent", "5");
     await render(createElement(LearnPage));
     expect(nodeLabel(BITS)).not.toContain(`, ${ru("learn2.state.done")}`);
 
@@ -305,14 +305,14 @@ describe("«Учиться»: переключатель режима и общ�
     expect(nodeLabel(BITS)).toContain(`, ${ru("learn2.state.done")}`);
 
     await clickTrack("Школа");
-    expect(host.textContent).toContain(lessonsLine(1, "6"));
+    expect(host.textContent).toContain(lessonsLine(1, "5"));
     await profile("school", "10");
     expect(host.textContent).toContain(lessonsLine(1, "10"));
   });
 
   it("«Карта ЕНТ»: ответы, данные в школьном режиме, окрашивают тему «Системы счисления»", async () => {
     localStorage.setItem(VIEW_KEY, "ent");
-    await profile("school", "6");
+    await profile("school", "5");
     await render(createElement(LearnPage));
     await act(async () => {
       useApp.getState().recordAnswer(session(BITS).answers[0], 5, BITS);
