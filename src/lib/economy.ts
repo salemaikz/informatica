@@ -327,15 +327,6 @@ export function lessonChips(first: boolean, multiplier: number): number {
   return earnAmount(lessonChipBase(first), multiplier);
 }
 
-/**
- * @deprecated Бонуса «+5 за идеальный урок» больше нет — вместо него шанс (PERFECT_DROP, lib/perfect.ts); стор его не начисляет.
- * Оставлено ТОЛЬКО ради старой карточки проводника components/tour/AfterFirstLesson и tests/tour-ui.test.ts (их заменяет пакет P2a):
- * удалить вместе с ними.
- */
-export function perfectChips(multiplier: number): number {
-  return earnAmount(5, multiplier);
-}
-
 /** Добавляет запись в историю чипов: свежие записи той же причины склеиваются. Новые — первыми. */
 export function pushLedger(ledger: LedgerEntry[], entry: LedgerEntry): LedgerEntry[] {
   if (entry.amount === 0) return ledger;

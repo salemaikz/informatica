@@ -78,6 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div key={g.id} className="flex flex-col gap-1">
                 <Link
                   href={g.href}
+                  data-tour={`nav-${g.id}`}
                   aria-current={sub ? undefined : current(g.href, on)}
                   className={cn(
                     "flex h-12 items-center gap-3 rounded-2xl border-2 px-3 font-extrabold transition-colors",
