@@ -21,6 +21,7 @@ import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeS
 import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { sanitizeTips, type TipId, type TipsState } from "./tips";
+import { EMPTY_PERFECT_RUN, sanitizePendingCases, sanitizePerfectRun, type PerfectRun } from "./rewards-state";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -275,6 +276,10 @@ export interface AppState {
   pushAsk: PushAskState;
   /** Подсказки первого входа, которые уже показаны (этап 16Б, lib/tips.ts). */
   tips: TipsState;
+  /** Серия идеальных уроков подряд (волна 1Б, R2; lib/rewards-state.ts). Меняет только пакет R1+R2. */
+  perfectRun: PerfectRun;
+  /** Неоткрытые кейсы за уровень — номера уровней (волна 1Б, R3). Меняет только пакет R3. */
+  pendingCases: number[];
 
   /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
   history: HistoryEntry[];
@@ -470,6 +475,8 @@ const initialState: AppState = {
   paywall: { lastShownAt: 0, views: 0 },
   pushAsk: EMPTY_PUSH_ASK,
   tips: {},
+  perfectRun: { ...EMPTY_PERFECT_RUN },
+  pendingCases: [],
   history: [],
   chats: [],
   codeTasks: {},
@@ -685,6 +692,8 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     paywall: sanitizePaywall(p.paywall),
     pushAsk: sanitizePushAsk(p.pushAsk),
     tips: sanitizeTips(p.tips),
+    perfectRun: sanitizePerfectRun(p.perfectRun),
+    pendingCases: sanitizePendingCases(p.pendingCases),
     courseNodes: sanitizeCourseNodes(p.courseNodes),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),

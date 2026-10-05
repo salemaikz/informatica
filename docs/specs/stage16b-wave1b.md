@@ -52,9 +52,31 @@
    «набегают», плитки итогов появляются по очереди, огонь серии «вспыхивает», чипы «летят» в счётчик шапки.
 3. Всё — с `useReduceMotion` и настройкой «Меньше анимаций»; в пробном ЕНТ и тесте по разделу — без маскота, звуков и XP (правило RULES §1).
 
+## Заготовки главной модели (уже в ветке)
+- `src/lib/rewards-state.ts`: `PerfectRun`, `EMPTY_PERFECT_RUN`, `sanitizePerfectRun`, `sanitizePendingCases`, `MAX_PENDING_CASES` (5) + тесты.
+- Стор: поля `perfectRun` (меняет только пакет R12) и `pendingCases` (только R3) — тип, дефолт, санитайзер в `mergeState` уже есть; действия
+  добавляет пакет в своём участке (рядом со своим полем).
+- Части словаря (подключены в `dict.ts`): `i18n/parts/perfect.ts` (R12: `perfect.*`, `economy.earn.*`), `rewards.ts` (R3: `case.*`),
+  `praise.ts` (R4: `praise.*`).
+
+## Что поменялось после волны 1 (учесть)
+- P2 показал чипы на итогах с подписью курса «5 XP = 2 чипа» (`components/economy/xp-chips.ts`, ключи `xp.rate.*`) и «до +N XP · ≈ M чипов»
+  в карточке урока (`xp.reward.*`). **После R1 курса больше нет** — R12 меняет подпись на разбивку («урок +3 · идеально +5»), оценку в карточке
+  урока — на «+3 чипа» (первое прохождение) / «+1» (повтор), а текст проводника `tour.after.xp` («приносит чипы») и `tour.after.chips`
+  («За урок — бонус +{n}») — под новые правила (`i18n/parts/tour.ts` — только эти два ключа).
+- Серия засчитывается после занятия (#97), анимация «огонь загорелся» — `components/motion/StreakIgnite.tsx` (R4 может усилить, не ломая
+  снимок `streak-snapshot.ts`).
+
 ## Файлы (по пакетам; исполнители — `sonnet`)
-- **R1+R2** — `src/lib/economy.ts` (участок чипов), `src/lib/store.ts` (начисление чипов, `perfectRun`), `src/lib/gamification.ts` (достижение),
-  `components/lesson/Results.tsx` (плитки «Идеально», «+N чипов»), `components/economy/ShopInfo.tsx` (таблица «как заработать»), тесты экономики.
-- **R3** — `src/lib/level-case.ts`, `src/components/rewards/LevelCase.tsx` (новый), вставка после итогов (`Results`, `GameShell`), `pendingCases` в сторе,
-  карточка «Кейс ждёт» на главной/в профиле, `src/i18n/parts/rewards.ts`, тесты.
-- **R4** — `src/lib/sound.ts`, `components/motion/*`, `components/mascot/*`, панель ответа в `LessonPlayer.tsx`, `src/i18n/parts/lesson-modes.ts` (похвала).
+- **R12 (R1+R2)** — `src/lib/economy.ts` (участок чипов), `src/lib/store.ts` (начисление чипов, `perfectRun`), `src/lib/gamification.ts` (достижение),
+  `components/lesson/Results.tsx` (плитки «Идеально», «+N чипов»), `components/economy/xp-chips.ts`, `components/economy/shop-helpers.ts`,
+  `components/economy/ShopInfo.tsx` (таблица «как заработать»), `components/learn/LessonSheet.tsx` (только награда), `i18n/parts/xp-sign.ts`,
+  `i18n/parts/tour.ts` (два ключа), `i18n/parts/perfect.ts`, тесты экономики.
+- **R3** — `src/lib/level-case.ts`, `src/components/rewards/LevelCase.tsx` (новый), `src/components/rewards/CaseAgent.tsx` (новый: открывает кейс,
+  когда в `pendingCases` что-то есть и ученик не в уроке/тесте/игре — вставку в `Providers` делает главная модель), `pendingCases` в сторе
+  (действия «добавить при переходе уровня» — там, где стор считает уровень, и «открыть»), карточка «Кейс ждёт» (`components/rewards/CaseWaiting.tsx`,
+  вставку на главную и в профиль описать в отчёте), `src/i18n/parts/rewards.ts`, тесты. `Results.tsx` и `GameShell.tsx` не трогать — кейс
+  показывает агент после итогов.
+- **R4** — `src/lib/sound.ts`, `components/motion/*` (кроме `StreakIgnite` — только усилить), `components/mascot/*`, панель ответа в `LessonPlayer.tsx`,
+  `src/i18n/parts/praise.ts` (похвала). Имена звуков `perfect`, `chips`, `streak`, `caseTick`, `caseReveal` уже есть в `SoundName`
+  (пока звучат заменители — `alias` в `playSound`); R4 делает им свой звук и убирает заменитель, R12 и R3 просто вызывают `playSound(...)`.

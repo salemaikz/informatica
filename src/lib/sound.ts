@@ -4,7 +4,10 @@
 // Один AudioContext на всё приложение, общий мастер-гейн и мягкий компрессор:
 // наложение звуков не клиппит, огибающие громкости убирают щелчки.
 
-export type SoundName = "correct" | "wrong" | "complete" | "tap" | "combo" | "levelUp" | "xp" | "pop";
+export type SoundName =
+  | "correct" | "wrong" | "complete" | "tap" | "combo" | "levelUp" | "xp" | "pop"
+  // Волна 1Б (docs/specs/stage16b-wave1b.md, R4): пока звучат как близкие старые, свой звук делает пакет R4.
+  | "perfect" | "chips" | "streak" | "caseTick" | "caseReveal";
 
 export interface SoundOptions {
   /** Для "combo": размер комбо — чем больше, тем выше тон и длиннее «искры». */
@@ -134,7 +137,10 @@ export function playSound(name: SoundName, opts: SoundOptions = {}) {
       if (a.currentTime > 0.05) return;
     }
     const t0 = a.currentTime + 0.005;
-    switch (name) {
+    // Заготовки волны 1Б: до пакета R4 — звуки-заменители.
+    const alias: Partial<Record<SoundName, SoundName>> = { perfect: "complete", chips: "xp", streak: "levelUp", caseTick: "tap", caseReveal: "levelUp" };
+    const kind = alias[name] ?? name;
+    switch (kind) {
       case "correct":
         // Яркий двойной звон (квинта вверх) с мягким хвостом.
         chime(a, t0, N.A5, 0, 0.22);
