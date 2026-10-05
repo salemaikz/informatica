@@ -128,10 +128,9 @@ function Cartesian({ lay, tr }: { lay: BarChartLayout | LineChartLayout; tr: Tr 
           />
           <m.text
             initial={false}
-            animate={{ y: lay.threshold.y - 5 }}
+            animate={{ x: lay.threshold.x, y: lay.threshold.ty }}
             transition={tr}
-            x={right - 2}
-            textAnchor="end"
+            textAnchor={lay.threshold.anchor}
             fontSize={lay.threshold.font}
             fontWeight={800}
             fill="var(--text)"
@@ -189,14 +188,14 @@ function Bars({ lay, tr }: { lay: BarChartLayout; tr: Tr }) {
         />
       ))}
       {lay.valueLabels.map((v) => (
-        <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums">
+        <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y, opacity: v.dim ? 0.5 : 1 }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums">
           {v.text}
         </m.text>
       ))}
       {lay.funnelChips.map((c) => (
-        <m.text key={c.i} initial={false} animate={{ x: c.x, y: c.y }} transition={tr} textAnchor="middle" fontSize={c.font} fontWeight={800} fill="var(--ai-strong)">
+        <m.text key={c.i} initial={false} animate={{ x: c.x, y: c.y }} transition={tr} textAnchor="middle" fontSize={c.font} fontWeight={800} fill="var(--text)">
           {c.lines.map((ln, k) => (
-            <tspan key={k} x={c.x} dy={k === 0 ? 0 : c.font + 2} fontWeight={k === 0 ? 800 : 700} fill={k === 0 ? "var(--ai-strong)" : "var(--muted)"}>
+            <tspan key={k} x={c.x} dy={k === 0 ? 0 : c.font + 2} fontWeight={k === 0 ? 800 : 700} fill={k === 0 ? "var(--primary-strong)" : "var(--muted)"}>
               {ln}
             </tspan>
           ))}
@@ -216,9 +215,9 @@ function Lines({ lay, tr }: { lay: LineChartLayout; tr: Tr }) {
         <m.circle key={p.key} initial={false} animate={{ cx: p.x, cy: p.y, r: p.r }} transition={tr} fill={toneVar(p.tone)} stroke="var(--surface)" strokeWidth={1.5} />
       ))}
       {lay.valueLabels.map((v) => (
-        <text key={v.key} x={v.x} y={v.y} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums" {...HALO}>
+        <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums" {...HALO}>
           {v.text}
-        </text>
+        </m.text>
       ))}
     </>
   );
@@ -239,7 +238,7 @@ function Pie({ lay }: { lay: PieChartLayout }): ReactNode {
       {lay.sectors.map((s) =>
         s.label && s.leader ? (
           <g key={s.i}>
-            <line x1={s.leader.x1} y1={s.leader.y1} x2={s.leader.x2} y2={s.leader.y2} stroke="var(--muted)" strokeWidth={1} />
+            <polyline points={s.leader.pts.map((q) => `${Math.round(q[0] * 10) / 10},${Math.round(q[1] * 10) / 10}`).join(" ")} fill="none" stroke="var(--muted)" strokeWidth={1} />
             <text x={s.label.x} y={s.label.y} dy="0.35em" textAnchor={s.label.anchor} fontSize={lay.labelFont} fontWeight={800} fill="var(--text)" className="tabular-nums">
               {s.label.text}
             </text>

@@ -43,7 +43,7 @@ export const SAMPLES: Extract<Scene, { kind: "chart" }>[] = [
     labels: ["1", "2", "3", "4", "5", "6"],
     series: [
       { name: { ru: "Сайт А", kk: "А сайты" }, values: [10, 14, 20, 26, 31, 40] },
-      { name: { ru: "Сайт Б", kk: "Б сайты" }, values: [30, 28, 27, 25, 24, 22], tone: "ai" },
+      { name: { ru: "Сайт Б", kk: "Б сайты" }, values: [30, 28, 27, 25, 24, 22] },
     ],
     values: true,
     threshold: { value: 25, label: { ru: "Порог", kk: "Шек" } },

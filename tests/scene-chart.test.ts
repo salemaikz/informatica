@@ -286,6 +286,73 @@ describe("раскладка pie", () => {
   });
 });
 
+const base = { highlight: [] as number[], funnel: false, funnelFrom: "", funnelNote: "" };
+
+describe("исправления ревью S3", () => {
+  const rectDist = (cx: number, cy: number, x1: number, x2: number, y1: number, y2: number) =>
+    Math.hypot(Math.max(x1 - cx, 0, cx - x2), Math.max(y1 - cy, 0, cy - y2));
+  it("pie: подписи вне круга и рядом со своими выносками", () => {
+    const sets: number[][] = [[72, 15, 6, 4, 2, 1], [90, 3, 3, 2, 1, 1], [78, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]];
+    for (const vals of sets)
+      for (const withValues of [false, true])
+        for (const hl of [[], [0], [1]]) {
+          const lay = chartLayout({ type: "pie", labels: vals.map((_, i) => `К${i}`), series: [{ values: vals, tone: "primary" }], values: withValues, unit: withValues ? "₸" : undefined, ...base, highlight: hl });
+          if (lay.type !== "pie") throw new Error();
+          for (const s of lay.sectors) {
+            if (!s.label || !s.leader) continue;
+            const w = estimateTextWidth(s.label.text, lay.labelFont);
+            const x1 = s.label.anchor === "start" ? s.label.x : s.label.x - w;
+            const h = lay.labelFont * 0.5;
+            const d = rectDist(lay.cx, lay.cy, x1, x1 + w, s.label.y - h, s.label.y + h);
+            expect(d, `${vals} ${s.i}`).toBeGreaterThanOrEqual(lay.r + 7 - 1e-6);
+            const end = s.leader.pts[s.leader.pts.length - 1];
+            const near = Math.hypot(Math.max(x1 - end[0], 0, end[0] - (x1 + w)), Math.max(s.label.y - h - end[1], 0, end[1] - (s.label.y + h)));
+            expect(near, `${vals} ${s.i}`).toBeLessThanOrEqual(4);
+          }
+        }
+  });
+  it("порог на верхней метке шкалы не обрезается сверху", () => {
+    const lay = chartLayout({ type: "bar", labels: ["a", "b", "c"], series: [{ values: [60, 80, 90], tone: "primary" }], values: false, threshold: { value: 100, label: "Мақсат: 100" }, ...base });
+    if (lay.type !== "bar" || !lay.threshold) throw new Error();
+    expect(lay.threshold.ty - lay.threshold.font).toBeGreaterThanOrEqual(0);
+  });
+  it("наклонные подписи категорий не выходят за левый край", () => {
+    for (const labels of [
+      ["Ақмола облысы", "Алматы облысы", "Атырау облысы", "Шығыс Қазақстан облысы", "Жамбыл облысы", "Батыс Қазақстан"],
+      ["Бағдарламалау", "Ақпараттандыру", "Компьютерлендіру", "Бағдарламалау 2", "Ақпараттандыру 2", "Компьютерлендіру 2", "Деректер", "Желілер"],
+    ]) {
+      const lay = chartLayout({ type: "bar", labels, series: [{ values: labels.map((_, i) => i + 1), tone: "primary" }], values: true, ...base });
+      if (lay.type !== "bar") throw new Error();
+      expect(lay.cats.rotate).toBe(true);
+      expect(lay.cats.minLeft).toBeGreaterThanOrEqual(2 - 1e-6);
+    }
+  });
+  it("подпись порога не пересекается с подписями значений", () => {
+    for (const [vals, thr] of [[[3, 5, 2, 6], 6.3], [[100, 120, 130, 145], 140], [[60, 80, 90], 100]] as [number[], number][]) {
+      const lay = chartLayout({ type: "bar", labels: vals.map((_, i) => `м${i}`), series: [{ values: vals, tone: "primary" }], values: true, unit: "₸", threshold: { value: thr, label: "Мақсат" }, ...base });
+      if (lay.type !== "bar" || !lay.threshold) throw new Error();
+      const t = lay.threshold;
+      const w = estimateTextWidth(t.text, t.font);
+      const a = { x1: t.anchor === "end" ? t.x - w : t.x, x2: t.anchor === "end" ? t.x : t.x + w, y1: t.ty - t.font, y2: t.ty + 2 };
+      expect(a.y1).toBeGreaterThanOrEqual(0);
+      for (const v of lay.valueLabels) {
+        const hw = estimateTextWidth(v.text, v.font) / 2;
+        const b = { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 };
+        expect(a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1, `${vals} ${v.text}`).toBe(false);
+      }
+    }
+  });
+  it("двухстрочная подпись воронки помещается в слот своим кеглем", () => {
+    const lay = chartLayout({ type: "bar", labels: ["a", "b", "c", "d"], series: [{ values: [3, 2, 2, 1], tone: "primary" }], values: false, ...base, funnel: true, funnelFrom: "от предыдущего", funnelNote: "n" });
+    if (lay.type !== "bar") throw new Error();
+    for (const c of lay.funnelChips) for (const ln of c.lines) expect(estimateTextWidth(ln, c.font)).toBeLessThanOrEqual(lay.slot - 2 + 1e-6);
+  });
+  it("aria круга без values называет проценты", () => {
+    const input: ChartInput = { type: "pie", labels: ["a", "b", "c"], series: [{ values: [8, 8, 8], tone: "primary" }], values: false, ...base };
+    expect(chartAria(input, tr("ru"))).toContain("8 (33%)");
+  });
+});
+
 describe("образцы: ru и kk", () => {
   for (const lang of ["ru", "kk"] as const) {
     SAMPLES.forEach((scene, n) => {

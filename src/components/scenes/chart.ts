@@ -11,6 +11,7 @@ const PLOT_H = 168;
 const GAP_IN_GROUP = 2;
 const MAX_BAR_W = 46;
 const MAX_GROUP_BAR_W = 34;
+const THRESHOLD_FONT = 11;
 
 /** Тоны серий по умолчанию (красный — только «неверно», поэтому danger не берём). */
 export const DEFAULT_TONES: SceneTone[] = ["primary", "gold", "success", "ai"];
@@ -183,7 +184,7 @@ export type LegendItem = { x: number; y: number; swatch: string; text: TextPiece
 export type Legend = { items: LegendItem[]; height: number };
 
 export type CatLabel = { x: number; lines: string[] };
-type CatLayout = { rotate: boolean; font: number; labels: CatLabel[]; height: number };
+type CatLayout = { rotate: boolean; font: number; labels: CatLabel[]; height: number; minLeft: number };
 
 type Frame = {
   w: number;
@@ -199,7 +200,7 @@ type Frame = {
   xTitle?: { text: string; y: number };
   cats: CatLayout;
   legend?: Legend;
-  threshold?: { y: number; text: string; font: number };
+  threshold?: { y: number; text: string; font: number; x: number; ty: number; anchor: "start" | "end" };
   band: { x: number; w: number }[];
   highlight: Set<number>;
 };
@@ -207,7 +208,7 @@ type Frame = {
 export type BarChartLayout = Frame & {
   type: "bar";
   bars: { key: string; s: number; i: number; x: number; y: number; w: number; h: number; tone: SceneTone; dim: boolean }[];
-  valueLabels: { key: string; x: number; y: number; text: string; font: number }[];
+  valueLabels: { key: string; x: number; y: number; text: string; font: number; dim: boolean }[];
   /** true — значения не подписаны, потому что столбцы слишком узкие (цифры остаются в aria). */
   valuesHidden: boolean;
   funnelChips: { i: number; x: number; y: number; lines: string[]; font: number }[];
@@ -237,7 +238,8 @@ export type PieChartLayout = {
     dx: number;
     dy: number;
     dim: boolean;
-    leader?: { x1: number; y1: number; x2: number; y2: number };
+    /** Выноска ломаной: от края сектора по радиусу, затем колено к подписи. */
+    leader?: { pts: [number, number][] };
     label?: { x: number; y: number; anchor: "start" | "end"; text: string };
   }[];
   labelFont: number;
@@ -256,7 +258,7 @@ export function legendLayout(entries: { text: string; swatch: string }[], top: n
   const maxItemW = w - 16;
   const font = 11;
   const items = entries.map((e) => {
-    const text = fitText(e.text, maxItemW - SW - GAP, font, 9, 2);
+    const text = fitText(e.text, maxItemW - SW - GAP, font, 10, 2);
     const tw = Math.max(...text.lines.map((ln) => estimateTextWidth(ln, text.font)));
     return { e, text, width: SW + GAP + tw };
   });
@@ -293,12 +295,13 @@ export function legendLayout(entries: { text: string; swatch: string }[], top: n
 // ---------- Подписи категорий ----------
 
 function categoryLayout(labels: string[], centers: number[], slot: number): CatLayout {
-  for (const font of [11, 10, 9]) {
+  for (const font of [11, 10]) {
     const wrapped = labels.map((t) => wrapWords(t, slot - 4, font, 2));
     if (wrapped.every((w) => w !== null)) {
       const maxLines = Math.max(...wrapped.map((w) => w!.length));
       return {
         rotate: false,
+        minLeft: Infinity,
         font,
         labels: wrapped.map((w, i) => ({ x: centers[i], lines: w! })),
         height: maxLines * (font + 3) + 8,
@@ -308,8 +311,11 @@ function categoryLayout(labels: string[], centers: number[], slot: number): CatL
   // Наклон −45°: одна строка на подпись, конец текста у столбца.
   const font = 10;
   const maxW = Math.max(...labels.map((t) => estimateTextWidth(t, font)));
+  // Левый край наклонной подписи: конец у x+3, текст уходит влево-вниз на w·cos45, плюс высота букв.
+  const minLeft = Math.min(...labels.map((t, i) => centers[i] + 3 - estimateTextWidth(t, font) * Math.SQRT1_2 - font * 0.55));
   return {
     rotate: true,
+    minLeft,
     font,
     labels: labels.map((t, i) => ({ x: centers[i], lines: [t] })),
     height: Math.ceil(maxW * Math.SQRT1_2 + font) + 8,
@@ -325,16 +331,29 @@ function buildFrame(input: ChartInput): Frame & { headroom: number } {
   const scale = niceScale(topValue);
   const tickTexts = scale.ticks.map((v) => formatNum(v));
   const yLabelW = Math.max(...tickTexts.map((t) => estimateTextWidth(t, 11)));
-  const padL = Math.max(22, Math.ceil(yLabelW) + 10);
-  const plotW = CHART_W - padL - PAD_R;
-  const slot = plotW / k;
-  const centers = Array.from({ length: k }, (_, i) => padL + slot * (i + 0.5));
+  let padL = Math.max(22, Math.ceil(yLabelW) + 10);
+  let plotW = CHART_W - padL - PAD_R;
+  let slot = plotW / k;
+  let centers = Array.from({ length: k }, (_, i) => padL + slot * (i + 0.5));
+  let cats = categoryLayout(input.labels, centers, slot);
+  // Наклонные подписи не должны выходить за левый край: при нехватке места сдвигаем рамку вправо.
+  for (let n = 0; n < 5 && cats.rotate && cats.minLeft < 2; n++) {
+    padL += Math.ceil(2 - cats.minLeft);
+    plotW = CHART_W - padL - PAD_R;
+    slot = plotW / k;
+    centers = Array.from({ length: k }, (_, i) => padL + slot * (i + 0.5));
+    cats = categoryLayout(input.labels, centers, slot);
+  }
 
   // Запас над графиком: заголовок оси Y, подписи значений, воронка.
   let headroom = 8;
   if (input.axes?.y) headroom += 14;
+  // Подпись порога стоит над линией: если порог у верхней метки шкалы, нужен запас сверху.
+  if (input.threshold) {
+    const gap = PLOT_H * (1 - Math.min(Math.max(input.threshold.value, 0), scale.max) / scale.max);
+    headroom = Math.max(headroom, THRESHOLD_FONT + 8 - gap);
+  }
   const plotTop = headroom; // уточняется ниже (bar добавляет место под подписи)
-  const cats = categoryLayout(input.labels, centers, slot);
 
   const f: Frame & { headroom: number } = {
     w: CHART_W,
@@ -355,15 +374,36 @@ function buildFrame(input: ChartInput): Frame & { headroom: number } {
   return f;
 }
 
-/** Завершает рамку: считает y меток и порога, хвост (подписи категорий, ось X, легенда), общую высоту. */
-function finishFrame(f: Frame & { headroom: number }, input: ChartInput, plotTop: number, extraBottom: number): void {
+/** Завершает рамку: считает y меток и порога, хвост (подписи категорий, ось X, легенда), общую высоту.
+ *  obstacles — рамки подписей значений: подпись порога встаёт туда, где с ними не пересекается. Возвращает рамку подписи порога. */
+function finishFrame(f: Frame & { headroom: number }, input: ChartInput, plotTop: number, extraBottom: number, obstacles: Box[] = []): Box | undefined {
   f.plotTop = plotTop;
-  const y = (v: number) => plotTop + f.plotH * (1 - v / f.scale.max);
+  const y = (v: number) => plotTop + f.plotH * (1 - Math.min(Math.max(v, 0), f.scale.max) / f.scale.max);
   f.ticks = f.ticks.map((t) => ({ ...t, y: y(t.v) }));
+  let thrBox: Box | undefined;
   if (input.threshold) {
     const text = input.threshold.label ?? formatValue(input.threshold.value, input.unit);
-    const fit = fitText(text, f.plotW - 6, 11, 9, 1);
-    f.threshold = { y: y(input.threshold.value), text: fit.lines.join(" "), font: fit.font };
+    const fit = fitText(text, f.plotW - 6, THRESHOLD_FONT, 10, 1);
+    const ty = y(input.threshold.value);
+    const str = fit.lines.join(" ");
+    const w = estimateTextWidth(str, fit.font);
+    const right = f.padL + f.plotW;
+    // Варианты места: справа над линией, слева над, справа под, слева под.
+    const cands = [
+      { anchor: "end" as const, base: ty - 5 },
+      { anchor: "start" as const, base: ty - 5 },
+      { anchor: "end" as const, base: ty + fit.font + 3 },
+      { anchor: "start" as const, base: ty + fit.font + 3 },
+    ].map((c) => {
+      const x = c.anchor === "end" ? right - 2 : f.padL + 2;
+      const box: Box = { x1: c.anchor === "end" ? x - w : x, x2: c.anchor === "end" ? x : x + w, y1: c.base - fit.font, y2: c.base + 2 };
+      const inside = box.y1 >= 1 && box.y2 <= plotTop + f.plotH + 1;
+      const hits = obstacles.filter((b) => overlaps(box, b)).length;
+      return { ...c, x, box, inside, hits };
+    });
+    const best = cands.find((c) => c.inside && c.hits === 0) ?? [...cands].filter((c) => c.inside).sort((a, b) => a.hits - b.hits)[0] ?? cands[0];
+    f.threshold = { y: ty, text: str, font: fit.font, x: best.x, ty: best.base, anchor: best.anchor };
+    thrBox = best.box;
   }
   let bottom = plotTop + f.plotH + f.cats.height;
   if (input.axes?.x) {
@@ -380,6 +420,7 @@ function finishFrame(f: Frame & { headroom: number }, input: ChartInput, plotTop
     bottom += 4 + legend.height;
   }
   f.h = Math.ceil(bottom + 6);
+  return thrBox;
 }
 
 // ---------- Столбцы ----------
@@ -410,7 +451,7 @@ function barLayout(input: ChartInput): BarChartLayout {
   if (input.values) {
     const widest = Math.max(...texts.flat().map((t) => estimateTextWidth(t, 1)));
     const room = (ns === 1 ? f.slot : pitch) - 3;
-    for (const fs of [12, 11, 10, 9]) {
+    for (const fs of [12, 11, 10]) {
       if (widest * fs <= room) {
         valueFont = fs;
         break;
@@ -425,13 +466,13 @@ function barLayout(input: ChartInput): BarChartLayout {
   const pcts = input.funnel ? input.series[0].values.map((v, i) => (i === 0 ? "" : funnelPercent(input.series[0].values[i - 1], v))) : [];
   if (input.funnel) {
     const widest = Math.max(...pcts.map((p) => estimateTextWidth(p, 1)));
-    for (const fs of [10, 9, 8]) {
+    for (const fs of [11, 10]) {
       if (widest * fs <= f.slot - 2) {
         chipFont = fs;
         break;
       }
     }
-    chipTwoLines = chipFont > 0 && estimateTextWidth(input.funnelFrom, 9) <= f.slot - 2;
+    chipTwoLines = chipFont > 0 && estimateTextWidth(input.funnelFrom, chipFont) <= f.slot - 2;
   }
   const chipLines = chipTwoLines ? 2 : 1;
   const chipH = chipFont ? chipLines * (chipFont + 2) + 4 : 0;
@@ -451,7 +492,7 @@ function barLayout(input: ChartInput): BarChartLayout {
       const top = yOf(v);
       const x = x0 + s * pitch;
       bars.push({ key: `${s}-${i}`, s, i, x, y: top, w: barW, h: Math.max(0, base - top), tone: input.series[s].tone, dim: anyHl && !hl.has(i) });
-      if (valueFont) valueLabels.push({ key: `${s}-${i}`, x: x + barW / 2, y: top - 4, text: texts[s][i], font: valueFont });
+      if (valueFont) valueLabels.push({ key: `${s}-${i}`, x: x + barW / 2, y: top - 4, text: texts[s][i], font: valueFont, dim: anyHl && !hl.has(i) });
     }
   }
 
@@ -471,7 +512,20 @@ function barLayout(input: ChartInput): BarChartLayout {
   }
   const needNote = input.funnel && !chipTwoLines;
 
-  finishFrame(f, input, plotTop, needNote ? 16 : 0);
+  const vBox = (v: { x: number; y: number; text: string; font: number }): Box => {
+    const hw = estimateTextWidth(v.text, v.font) / 2;
+    return { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 };
+  };
+  const cBox = (c: BarChartLayout["funnelChips"][number]): Box => {
+    const hw = Math.max(...c.lines.map((ln) => estimateTextWidth(ln, c.font))) / 2;
+    return { x1: c.x - hw, x2: c.x + hw, y1: c.y - c.font, y2: c.y + (c.lines.length - 1) * (c.font + 2) + 2 };
+  };
+  const thr = finishFrame(f, input, plotTop, needNote ? 16 : 0, [...valueLabels.map(vBox), ...funnelChips.map(cBox)]);
+  // Если место для подписи порога так и не нашлось без наложений, прячем конфликтующие подписи значений (цифры остаются в aria).
+  if (thr) {
+    for (let n = valueLabels.length - 1; n >= 0; n--) if (overlaps(thr, vBox(valueLabels[n]))) valueLabels.splice(n, 1);
+    for (let n = funnelChips.length - 1; n >= 0; n--) if (overlaps(thr, cBox(funnelChips[n]))) funnelChips.splice(n, 1);
+  }
   const noteY = f.xTitle ? f.xTitle.y + 14 : plotTop + f.plotH + f.cats.height + 12;
   return {
     ...f,
@@ -513,7 +567,7 @@ function lineLayout(input: ChartInput): LineChartLayout {
     for (const p of points) {
       const text = formatValue(input.series[p.s].values[p.i], input.unit);
       const w = estimateTextWidth(text, font);
-      const x = Math.min(CHART_W - 2 - w / 2, Math.max(2 + w / 2, p.x));
+      const x = Math.min(CHART_W - 2 - w / 2, Math.max(f.padL + w / 2, p.x));
       for (const dir of [-1, 1]) {
         const base = dir < 0 ? p.y - p.r - 3 : p.y + p.r + font + 1;
         const box = { x1: x - w / 2, x2: x + w / 2, y1: base - font, y2: base + 2 };
@@ -526,7 +580,20 @@ function lineLayout(input: ChartInput): LineChartLayout {
     }
   }
 
-  finishFrame(f, input, plotTop, 0);
+  const thr = finishFrame(f, input, plotTop, 0, [
+    ...points.map((p) => ({ x1: p.x - p.r, y1: p.y - p.r, x2: p.x + p.r, y2: p.y + p.r })),
+    ...valueLabels.map((v) => {
+      const hw = estimateTextWidth(v.text, v.font) / 2;
+      return { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 };
+    }),
+  ]);
+  if (thr) {
+    for (let n = valueLabels.length - 1; n >= 0; n--) {
+      const v = valueLabels[n];
+      const hw = estimateTextWidth(v.text, v.font) / 2;
+      if (overlaps(thr, { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 })) valueLabels.splice(n, 1);
+    }
+  }
   return { ...f, type: "line", lines, points, valueLabels };
 }
 
@@ -541,7 +608,7 @@ function pieLayout(input: ChartInput): PieChartLayout {
   const texts = vals.map((v) => (input.values ? formatValue(v, input.unit) : `${Math.round((v / total) * 100)}%`));
   let labelFont = 12;
   let maxLabelW = Math.max(...texts.map((t) => estimateTextWidth(t, labelFont)));
-  while (maxLabelW > 100 && labelFont > 9) {
+  while (maxLabelW > 100 && labelFont > 10) {
     labelFont -= 1;
     maxLabelW = Math.max(...texts.map((t) => estimateTextWidth(t, labelFont)));
   }
@@ -566,6 +633,9 @@ function pieLayout(input: ChartInput): PieChartLayout {
     const spread = spreadLabels(grp.map((p) => p.y), labelFont + 3, 8, areaH - 8);
     grp.forEach((p, n) => ys.set(p.i, spread[n]));
   }
+  // Радиус «колонки» подписей: от центра, с запасом над самым выдвинутым сектором.
+  const R = r + EXPLODE + 14;
+  const halfH = labelFont * 0.5 + 1;
 
   const sectors: PieChartLayout["sectors"] = secs.map((s, i) => {
     const ex = hl.has(i) ? EXPLODE : 0;
@@ -576,13 +646,17 @@ function pieLayout(input: ChartInput): PieChartLayout {
     if (vals[i] > 0) {
       const side = Math.cos(s.mid) >= 0 ? 1 : -1;
       const ly = ys.get(i) ?? cy;
+      // x подписи от её новой y: ближний к центру угол рамки лежит на окружности радиуса R (над кругом — у вертикали).
+      const dyNear = Math.max(0, Math.abs(ly - cy) - halfH);
+      const lx = cx + side * Math.max(6, Math.sqrt(Math.max(0, R * R - dyNear * dyNear)));
       const ax = cx + Math.cos(s.mid) * (r + 2) + dx;
       const ay = cy + Math.sin(s.mid) * (r + 2) + dy;
-      const ex2 = cx + Math.cos(s.mid) * (r + 12) + dx;
-      const ey2 = cy + Math.sin(s.mid) * (r + 12) + dy;
-      // Выноска: от края сектора по радиусу, затем к подписи (ломаная заменяется прямой — подписи у самого края).
-      out.leader = { x1: ax, y1: ay, x2: ex2, y2: ey2 };
-      out.label = { x: ex2 + side * 3, y: ly, anchor: side === 1 ? "start" : "end", text: texts[i] };
+      const kx = cx + Math.cos(s.mid) * (r + 12) + dx;
+      const ky = cy + Math.sin(s.mid) * (r + 12) + dy;
+      const endX = lx - side * 3;
+      // Выноска: радиальный отрезок от края сектора, затем колено к подписи.
+      out.leader = { pts: [[ax, ay], [kx, ky], [endX, ly]] };
+      out.label = { x: lx, y: ly, anchor: side === 1 ? "start" : "end", text: texts[i] };
     }
     return out;
   });
@@ -606,6 +680,10 @@ type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
 export function chartAria(input: ChartInput, t: Tr): string {
   const items = input.labels
     .map((label, i) => {
+      if (input.type === "pie" && !input.values) {
+        const tot = input.series[0].values.reduce((a, b) => a + b, 0) || 1;
+        return `${label}: ${formatValue(input.series[0].values[i], input.unit)} (${Math.round((input.series[0].values[i] / tot) * 100)}%)`;
+      }
       if (input.series.length === 1 && input.series[0].name === undefined) return `${label}: ${formatValue(input.series[0].values[i], input.unit)}`;
       const parts = input.series.map((s) => `${s.name ? `${s.name} ` : ""}${formatValue(s.values[i], input.unit)}`);
       return `${label}: ${parts.join(", ")}`;
