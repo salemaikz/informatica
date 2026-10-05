@@ -83,7 +83,8 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/stats",
     label: "nav.stats",
     icon: ChartColumn,
-    match: ["/stats", "/shop", "/plans", "/profile"],
+    // /feedback — «Отзывы и предложения»: не вкладка, а страница из профиля; группа «Прогресс» остаётся подсвеченной.
+    match: ["/stats", "/shop", "/plans", "/profile", "/feedback"],
     subs: [
       { id: "stats", href: "/stats", label: "nav2.stats", icon: ChartColumn, match: ["/stats"] },
       { id: "shop", href: "/shop", label: "nav2.shop", icon: Store, match: ["/shop"] },

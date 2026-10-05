@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildFeedbackBody,
   buildIssueBody,
   clip,
   clipId,
@@ -214,6 +215,100 @@ describe("issueChannel и лимиты потоков", () => {
   });
 });
 
+describe("отзывы со страницы /feedback", () => {
+  const fb = { type: "feedback", where: "page", reason: "idea", comment: "  Добавьте тёмную тему  ", lang: "kk" };
+
+  it("верный отзыв: вид в reason, текст обрезан по краям, без привязки к заданию", () => {
+    const r = parseIssue({ ...fb, itemId: "ns-1:q", lessonId: "ns-1", snippet: "условие" }, meta);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.channel).toBe("issue");
+    expect(r.record).toEqual({ type: "feedback", where: "page", reason: "idea", comment: "Добавьте тёмную тему", lang: "kk", version: "abc1234", at: "2026-10-04T12:00:00.000Z" });
+  });
+
+  it("виды отзыва: идея, ошибка в приложении, ошибка в задании или теории, другое", () => {
+    expect(ISSUE_REASONS.feedback).toEqual(["idea", "bug", "content", "other"]);
+    for (const reason of ISSUE_REASONS.feedback) expect(parseIssue({ ...fb, reason }, meta).ok).toBe(true);
+    // Причины жалоб на задание и ответ ИИ отзыву не подходят — и наоборот.
+    expect(parseIssue({ ...fb, reason: "wrong_answer" }, meta)).toEqual({ ok: false, code: "bad_reason" });
+    expect(parseIssue({ type: "task", where: "lesson", reason: "idea" }, meta)).toEqual({ ok: false, code: "bad_reason" });
+  });
+
+  it("место отзыва — только «page»; у жалоб «page» не бывает", () => {
+    for (const where of ["lesson", "drill", "code", "chat", undefined]) expect(parseIssue({ ...fb, where }, meta), String(where)).toEqual({ ok: false, code: "bad_where" });
+    expect(parseIssue({ type: "task", where: "page", reason: "other" }, meta)).toEqual({ ok: false, code: "bad_where" });
+  });
+
+  it("задача практикума: место «code» принимается для жалобы на задание и на ответ ИИ", () => {
+    expect(parseIssue({ type: "task", where: "code", reason: "wrong_answer", itemId: "py-1-hello" }, meta).ok).toBe(true);
+    expect(parseIssue({ type: "ai", where: "code", reason: "wrong" }, meta).ok).toBe(true);
+  });
+
+  it("текст обязателен: пустой, из пробелов, из невидимых знаков или не строка — отказ", () => {
+    for (const comment of [undefined, "", "   ", "\u200B\u200B", 5, null]) expect(parseIssue({ ...fb, comment }, meta), String(comment)).toEqual({ ok: false, code: "bad_comment" });
+  });
+
+  it("текст отзыва — до 1000 знаков (у жалобы — 500)", () => {
+    const r = parseIssue({ ...fb, comment: "к".repeat(1500) }, meta);
+    expect(r.ok && r.record.type !== "client_error" && r.record.comment).toHaveLength(ISSUE_LIMITS.feedback);
+    expect(ISSUE_LIMITS.feedback).toBe(1000);
+    const task = parseIssue({ ...valid, comment: "к".repeat(1500) }, meta);
+    expect(task.ok && task.record.type !== "client_error" && task.record.comment).toHaveLength(ISSUE_LIMITS.comment);
+  });
+
+  it("issueChannel: отзыв идёт в поток жалоб (список «issues»)", () => {
+    expect(issueChannel({ type: "feedback" })).toBe("issue");
+  });
+
+  it("buildFeedbackBody: тело проходит серверную проверку; 1000 знаков кириллицей укладываются в предел тела", () => {
+    const body = buildFeedbackBody("bug", "  Не открывается урок  ", "ru");
+    expect(body).toEqual({ type: "feedback", where: "page", reason: "bug", comment: "Не открывается урок", lang: "ru" });
+    expect(parseIssue(body, meta).ok).toBe(true);
+    const long = JSON.stringify(buildFeedbackBody("other", "я".repeat(5000), "kk"));
+    expect(new TextEncoder().encode(long).length).toBeLessThan(ISSUE_LIMITS.body);
+    expect(JSON.parse(long).comment).toHaveLength(1000);
+  });
+
+  it("buildIssueBody для жалобы режет комментарий по 500", () => {
+    const body = buildIssueBody({ kind: "task", where: "lesson" }, "other", "я".repeat(900), "ru");
+    expect(body.comment).toHaveLength(ISSUE_LIMITS.comment);
+  });
+});
+
+describe("словарь: отзывы, «Что помешало?», выключатель статистики", () => {
+  const keys = () => Object.keys(dict).filter((k) => k.startsWith("feedback.") || k.startsWith("break.") || k.startsWith("privacy."));
+
+  it("у каждого ключа есть ru и kk", () => {
+    expect(keys().length).toBeGreaterThanOrEqual(30);
+    for (const k of keys()) {
+      const v = dict[k as keyof typeof dict];
+      expect(v.ru.trim(), k).not.toBe("");
+      expect(v.kk.trim(), k).not.toBe("");
+    }
+  });
+
+  it("в казахском — ҰБТ, не ЕНТ; нет эмодзи", () => {
+    for (const k of keys()) {
+      const v = dict[k as keyof typeof dict];
+      expect(v.kk, k).not.toMatch(/ЕНТ/);
+      expect(`${v.ru}${v.kk}`, k).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
+  });
+
+  it("причины «Что помешало?» и виды отзыва — все есть в словаре", () => {
+    for (const code of ["time", "hard", "boring", "forgot", "other_prep", "other"]) expect(dict[`break.${code}` as keyof typeof dict], code).toBeTruthy();
+    for (const kind of ISSUE_REASONS.feedback) expect(dict[`feedback.kind.${kind}` as keyof typeof dict], kind).toBeTruthy();
+  });
+
+  it("нет глаголов с родом в обращении к ученику", () => {
+    for (const k of keys()) {
+      const ru = dict[k as keyof typeof dict].ru;
+      expect(ru, k).not.toMatch(/\b(ты|тебе) (сделал|написал|закончил|решил|прошёл)/i);
+      expect(ru, k).not.toMatch(/\b(сделал|написал|закончил)а?\b/i);
+    }
+  });
+});
+
 describe("клиент: тело, ключ «уже отправлено», отправка", () => {
   const target: IssueTarget = { kind: "task", where: "drill", itemId: "bank:ns:12", snippet: "2 + 2 = ?" };
 
@@ -304,6 +399,16 @@ describe("POST /api/issue", () => {
     expect(JSON.parse(json)).toMatchObject({ type: "task", reason: "wrong_answer", where: "lesson" });
     expect(log).toHaveBeenCalledWith(`[issue] ${json}`);
     expect(json).not.toContain("10.1.0.");
+  });
+
+  it("отзыв со страницы /feedback: ok, запись в список «issues» с видом и текстом", async () => {
+    const res = await POST(req({ type: "feedback", where: "page", reason: "content", comment: "В задании 5 опечатка", lang: "ru" }));
+    expect(res.status).toBe(200);
+    const [list, json] = pushCapped.mock.calls[0] as unknown as [string, string];
+    expect(list).toBe("issues");
+    expect(JSON.parse(json)).toMatchObject({ type: "feedback", where: "page", reason: "content", comment: "В задании 5 опечатка" });
+    // Отзыв без текста — 400.
+    expect((await POST(req({ type: "feedback", where: "page", reason: "idea", comment: "  " }))).status).toBe(400);
   });
 
   it("ошибка клиента (text/plain, как шлёт sendBeacon): список «client-errors»", async () => {

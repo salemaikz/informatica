@@ -1,15 +1,19 @@
 // «Сообщить об ошибке»: что именно ученик считает ошибкой (задание или ответ ИИ) и где это было.
+// Тут же «Отзывы и предложения» (страница /feedback) — отдельный вид обращения feedback без привязки к заданию.
 // Тип общий для кнопки (components/issue), маршрута /api/issue и мест, где кнопка стоит.
 // Здесь же — чистая проверка и обрезка тела запроса (без React и без сервера: покрыта tests/issue.test.ts).
 
 import type { Lang } from "@/lib/types";
 
-export type IssueKind = "task" | "ai";
+export type IssueKind = "task" | "ai" | "feedback";
 
-export type IssueWhere = "lesson" | "drill" | "exam" | "chat" | "panel";
+/** Жалоба на конкретное место (кнопка «Сообщить об ошибке»): задание или ответ ИИ. Отзыв — не отсюда. */
+export type ReportKind = "task" | "ai";
+
+export type IssueWhere = "lesson" | "drill" | "exam" | "chat" | "panel" | "code" | "page";
 
 export interface IssueTarget {
-  kind: IssueKind;
+  kind: ReportKind;
   where: IssueWhere;
   /** id задания или шага (для ответа ИИ — id задания, к которому был ответ, если есть). */
   itemId?: string;
@@ -20,19 +24,24 @@ export interface IssueTarget {
 
 // ---------- Причины ----------
 
-/** Допустимые причины жалобы: у задания и у ответа ИИ они разные. */
+/** Допустимые причины: у задания, у ответа ИИ и у отзыва (вид отзыва) они разные. */
 export const ISSUE_REASONS = {
   task: ["wrong_answer", "unclear", "typo", "other"],
   ai: ["wrong", "unclear", "gave_solution", "other"],
+  feedback: ["idea", "bug", "content", "other"],
 } as const satisfies Record<IssueKind, readonly string[]>;
 
 export type IssueReason = (typeof ISSUE_REASONS)[IssueKind][number];
 
-const WHERES: readonly IssueWhere[] = ["lesson", "drill", "exam", "chat", "panel"];
+/** Где может быть обращение: у жалобы — место приложения (code — задача практикума), у отзыва — только страница отзывов. */
+const REPORT_WHERES: readonly IssueWhere[] = ["lesson", "drill", "exam", "chat", "panel", "code"];
+const WHERES: Record<IssueKind, readonly IssueWhere[]> = { task: REPORT_WHERES, ai: REPORT_WHERES, feedback: ["page"] };
 
 /** Максимальная длина полей (символов). Всё, что длиннее, обрезается. */
 export const ISSUE_LIMITS = {
   comment: 500,
+  /** Текст отзыва со страницы «Отзывы и предложения». */
+  feedback: 1000,
   snippet: 600,
   id: 80,
   path: 200,
@@ -58,6 +67,9 @@ export const ISSUE_ANY_LIMIT = { limit: 60, windowMs: 10 * 60_000 } as const;
 export const ISSUE_DAY_MAX = 3000;
 
 // ---------- Тело запроса ----------
+
+/** Длина комментария: у отзыва — больше, чем у жалобы. */
+export const commentMax = (kind: IssueKind): number => (kind === "feedback" ? ISSUE_LIMITS.feedback : ISSUE_LIMITS.comment);
 
 export interface IssueBody {
   type: IssueKind;
@@ -107,7 +119,7 @@ export interface ClientErrorRecord {
 
 export type StoredIssue = IssueRecord | ClientErrorRecord;
 
-export type IssueRejection = "bad_body" | "bad_type" | "bad_reason" | "bad_where" | "bad_message";
+export type IssueRejection = "bad_body" | "bad_type" | "bad_reason" | "bad_where" | "bad_message" | "bad_comment";
 
 export type ParsedIssue = { ok: true; channel: IssueChannel; record: StoredIssue } | { ok: false; code: IssueRejection };
 
@@ -143,7 +155,7 @@ export function cleanPath(v: unknown): string {
 export function issueChannel(raw: unknown): IssueChannel | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const type = (raw as Record<string, unknown>).type;
-  if (type === "task" || type === "ai") return "issue";
+  if (type === "task" || type === "ai" || type === "feedback") return "issue";
   if (type === "client_error") return "client_error";
   return null;
 }
@@ -175,15 +187,20 @@ export function parseIssue(raw: unknown, meta: IssueMeta): ParsedIssue {
     return { ok: true, channel: "client_error", record };
   }
 
-  if (o.type !== "task" && o.type !== "ai") return { ok: false, code: "bad_type" };
+  if (o.type !== "task" && o.type !== "ai" && o.type !== "feedback") return { ok: false, code: "bad_type" };
   const kind: IssueKind = o.type;
   const reasons: readonly string[] = ISSUE_REASONS[kind];
   if (typeof o.reason !== "string" || !reasons.includes(o.reason)) return { ok: false, code: "bad_reason" };
-  if (typeof o.where !== "string" || !WHERES.includes(o.where as IssueWhere)) return { ok: false, code: "bad_where" };
+  if (typeof o.where !== "string" || !WHERES[kind].includes(o.where as IssueWhere)) return { ok: false, code: "bad_where" };
 
   const record: IssueRecord = { type: kind, where: o.where as IssueWhere, reason: o.reason, lang, version: meta.version, at };
-  const comment = clip(o.comment, ISSUE_LIMITS.comment);
+  const comment = clip(o.comment, commentMax(kind));
   if (comment) record.comment = comment;
+  if (kind === "feedback") {
+    // Отзыв без текста бесполезен; к заданию он не привязан — id и текст задания не храним.
+    if (!comment) return { ok: false, code: "bad_comment" };
+    return { ok: true, channel: "issue", record };
+  }
   const itemId = clipId(o.itemId);
   if (itemId) record.itemId = itemId;
   const lessonId = clipId(o.lessonId);
@@ -198,7 +215,7 @@ export function parseIssue(raw: unknown, meta: IssueMeta): ParsedIssue {
 /** Тело жалобы из выбора ученика (поля уже обрезаются так же, как на сервере). */
 export function buildIssueBody(target: IssueTarget, reason: string, comment: string, lang: Lang): IssueBody {
   const body: IssueBody = { type: target.kind, where: target.where, reason, lang };
-  const c = clip(comment, ISSUE_LIMITS.comment);
+  const c = clip(comment, commentMax(target.kind));
   if (c) body.comment = c;
   const itemId = clipId(target.itemId);
   if (itemId) body.itemId = itemId;
@@ -236,4 +253,9 @@ function hash(s: string): string {
 /** Ключ «то же самое»: повторную жалобу на то же задание или тот же ответ ИИ за сессию не отправляем. */
 export function issueKey(target: IssueTarget): string {
   return [target.kind, clipId(target.itemId), hash(clip(target.snippet, ISSUE_LIMITS.snippet))].join("|");
+}
+
+/** Тело отзыва со страницы «Отзывы и предложения»: вид (idea | bug | content | other) и текст. Без имени и контактов. */
+export function buildFeedbackBody(kind: (typeof ISSUE_REASONS.feedback)[number], text: string, lang: Lang): IssueBody {
+  return { type: "feedback", where: "page", reason: kind, comment: clip(text, ISSUE_LIMITS.feedback), lang };
 }

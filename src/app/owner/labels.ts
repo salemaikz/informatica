@@ -1,0 +1,85 @@
+// Подписи кодов для страницы владельца. Только по-русски — исключение из правила двух языков (решение #69).
+// Незнакомый код (новое значение в данных) показывается как есть.
+
+type Dict = Record<string, string>;
+
+const pick = (d: Dict, code: string): string => d[code] ?? code;
+
+const FROM: Dict = {
+  onboarding: "после онбординга",
+  auto: "автопоказ",
+  shop: "из магазина",
+  profile: "из профиля",
+  hearts: "сердечки закончились",
+  ai: "лимит ИИ",
+  other: "другое",
+};
+const HEARTS_WHERE: Dict = {
+  lesson: "урок",
+  check: "«Проверить себя»",
+  extern: "экстерн по разделу",
+  exam: "пробный ЕНТ",
+  checkpoint: "контрольная точка",
+  game: "игра",
+};
+const DRILL_MODE: Dict = {
+  smart: "умная тренировка",
+  mistakes: "работа над ошибками",
+  skill: "по навыку",
+  review: "повторение",
+  extern: "экстерн",
+  topic: "по теме ЕНТ",
+  history: "из истории",
+};
+const EXAM_KIND: Dict = { full: "полный пробник", mini: "мини-пробник", topic: "по теме", unit: "по разделу" };
+const BREAK: Dict = {
+  time: "не хватало времени",
+  hard: "было сложно",
+  boring: "стало скучно",
+  forgot: "вылетело из головы",
+  other_prep: "готовлюсь по-другому",
+  other: "другое",
+};
+const FEEDBACK: Dict = { idea: "идея", bug: "ошибка в приложении", content: "ошибка в задании или теории", other: "другое" };
+const TIER: Dict = { lite: "Лайт", unlimited: "Безлимит" };
+const PERIOD: Dict = { month: "месяц", year: "год" };
+const TRACK: Dict = { ent: "ЕНТ", school: "школа" };
+const ISSUE_TYPE: Dict = { task: "жалоба на задание", ai: "жалоба на ответ ИИ", feedback: "отзыв" };
+const ISSUE_WHERE: Dict = {
+  lesson: "урок",
+  drill: "тренировка",
+  exam: "пробный ЕНТ",
+  chat: "чат",
+  panel: "панель ИИ",
+  code: "практикум кода",
+  page: "страница отзывов",
+};
+const ISSUE_REASON: Dict = {
+  wrong_answer: "неверный ответ",
+  unclear: "непонятно",
+  typo: "опечатка или ошибка перевода",
+  other: "другое",
+  wrong: "неверно",
+  gave_solution: "выдал решение задания",
+  idea: "идея",
+  bug: "ошибка в приложении",
+  content: "ошибка в задании или теории",
+};
+
+export const label = {
+  from: (c: string) => pick(FROM, c),
+  heartsWhere: (c: string) => pick(HEARTS_WHERE, c),
+  drillMode: (c: string) => pick(DRILL_MODE, c),
+  examKind: (c: string) => pick(EXAM_KIND, c),
+  breakReason: (c: string) => pick(BREAK, c),
+  feedback: (c: string) => pick(FEEDBACK, c),
+  track: (c: string) => pick(TRACK, c),
+  issueType: (c: string) => pick(ISSUE_TYPE, c),
+  issueWhere: (c: string) => pick(ISSUE_WHERE, c),
+  issueReason: (c: string) => pick(ISSUE_REASON, c),
+  /** `lite:month` → «Лайт, месяц». */
+  planClick: (c: string) => {
+    const [tier = "", period = ""] = c.split(":");
+    return `${pick(TIER, tier)}, ${pick(PERIOD, period)}`;
+  },
+};

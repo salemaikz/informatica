@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { track } from "@/lib/analytics";
 import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
@@ -44,7 +45,11 @@ export default function ShopPage() {
   const practiceLeft = usePracticeHeartsLeft();
   const showPractice = !hearts.unlimited && hearts.count < hearts.max && practiceLeft > 0;
   const practice = practiceRule();
-  const pick = (what: string) => setSoon({ open: true, what });
+  // Клик по товару за ₸ (спрос, #69): id товара из каталога экономики; оплата пока не подключена.
+  const pick = (item: string, what: string) => {
+    track({ e: "shop_click", item });
+    setSoon({ open: true, what });
+  };
 
   const heart1 = shopItem("heart-1");
   const heart3 = shopItem("hearts-3");
@@ -135,7 +140,7 @@ export default function ShopPage() {
                 title={title}
                 desc={t("shop.pass.desc")}
                 price={price}
-                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+                onPick={() => pick(p.id, t("shop.soon.what", { item: title, price }))}
               />
             );
           })}
@@ -175,7 +180,7 @@ export default function ShopPage() {
                 title={title}
                 desc={t("shop.boost.packDesc")}
                 price={price}
-                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+                onPick={() => pick(p.id, t("shop.soon.what", { item: title, price }))}
               />
             );
           })}
@@ -208,7 +213,7 @@ export default function ShopPage() {
                       }
                     : undefined
                 }
-                onPick={() => pick(t("shop.soon.what", { item: title, price }))}
+                onPick={() => pick(p.id, t("shop.soon.what", { item: title, price }))}
               />
             );
           })}
@@ -230,6 +235,7 @@ export default function ShopPage() {
       <ComingSoonSheet
         open={soon.open}
         what={soon.what}
+        from="shop"
         onClose={() => setSoon((s) => ({ ...s, open: false }))}
       />
     </div>

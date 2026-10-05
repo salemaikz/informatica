@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { createMemoryKv, createUpstashKv, kzDay } = await import("@/server/kv");
+const { createMemoryKv, createUpstashKv, kzDay, HASH_MAX_FIELDS } = await import("@/server/kv");
 
 describe("хранилище сервера: память", () => {
   it("счётчик растёт, уменьшается и сбрасывается по времени жизни", async () => {
@@ -47,6 +47,134 @@ describe("хранилище сервера: Upstash", () => {
     expect(await kv.incrBy("k", 2, 60)).toBe(4);
     await expect(kv.pushCapped("l", "v", 10)).resolves.toBeUndefined();
     expect(err).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+});
+
+describe("хранилище сервера: хеши и срезы списка (память)", () => {
+  it("hincrBy: поле растёт, возвращает новое значение; hgetAll отдаёт все поля", async () => {
+    const kv = createMemoryKv();
+    expect(await kv.hincrBy("h", "a", 2, 60)).toBe(2);
+    expect(await kv.hincrBy("h", "a", 3, 60)).toBe(5);
+    expect(await kv.hincrBy("h", "b", 1, 60)).toBe(1);
+    expect(await kv.hgetAll("h")).toEqual({ a: 5, b: 1 });
+    expect(await kv.hgetAll("нет")).toEqual({});
+  });
+
+  it("hincrMany: несколько полей разом (в том числе отрицательные), hgetAllMany — по порядку ключей", async () => {
+    const kv = createMemoryKv();
+    await kv.hincrMany("d1", { x: 3, y: 1 }, 60);
+    await kv.hincrMany("d1", { x: 2, z: 7, y: -1 }, 60);
+    await kv.hincrMany("d2", { q: 1 }, 60);
+    expect(await kv.hgetAllMany(["d1", "нет", "d2"])).toEqual([{ x: 5, y: 0, z: 7 }, {}, { q: 1 }]);
+    await expect(kv.hincrMany("d3", {}, 60)).resolves.toBe(0);
+    expect(await kv.hgetAllMany([])).toEqual([]);
+  });
+
+  it("hincrMany возвращает, сколько полей создано впервые", async () => {
+    const kv = createMemoryKv();
+    expect(await kv.hincrMany("h", { a: 1, b: 2, c: 3 }, 60)).toBe(3);
+    expect(await kv.hincrMany("h", { a: 1, d: 1 }, 60)).toBe(1);
+    expect(await kv.hincrMany("h", { a: 5 }, 60)).toBe(0);
+  });
+
+  it("время жизни хеша: после ttl поля исчезают, ttl продлевается каждой записью", async () => {
+    let t = 1_000;
+    const kv = createMemoryKv(() => t);
+    await kv.hincrMany("h", { a: 1 }, 10);
+    t += 8_000;
+    await kv.hincrBy("h", "a", 1, 10);
+    t += 8_000;
+    expect(await kv.hgetAll("h")).toEqual({ a: 2 });
+    t += 3_000;
+    expect(await kv.hgetAll("h")).toEqual({});
+    expect(await kv.hincrBy("h", "a", 1, 10)).toBe(1);
+  });
+
+  it("у хеша не больше 5000 полей: новое поле сверх потолка не пишется, старые растут", async () => {
+    const kv = createMemoryKv();
+    const fields: Record<string, number> = {};
+    for (let i = 0; i < HASH_MAX_FIELDS + 50; i++) fields[`f${i}`] = 1;
+    await kv.hincrMany("big", fields, 60);
+    const all = await kv.hgetAll("big");
+    expect(Object.keys(all)).toHaveLength(HASH_MAX_FIELDS);
+    expect(all.f0).toBe(1);
+    expect(all[`f${HASH_MAX_FIELDS}`]).toBeUndefined();
+    expect(await kv.hincrBy("big", "f0", 4, 60)).toBe(5);
+    expect(await kv.hincrBy("big", "новое", 1, 60)).toBe(0);
+    expect(Object.keys(await kv.hgetAll("big"))).toHaveLength(HASH_MAX_FIELDS);
+  });
+
+  it("lrange: новые записи в начале, индексы включительно, отрицательные — с конца", async () => {
+    const kv = createMemoryKv();
+    for (let i = 1; i <= 5; i++) await kv.pushCapped("l", `v${i}`, 4);
+    expect(await kv.lrange("l", 0, -1)).toEqual(["v5", "v4", "v3", "v2"]);
+    expect(await kv.lrange("l", 0, 1)).toEqual(["v5", "v4"]);
+    expect(await kv.lrange("l", 1, 2)).toEqual(["v4", "v3"]);
+    expect(await kv.lrange("l", -2, -1)).toEqual(["v3", "v2"]);
+    expect(await kv.lrange("l", 10, 20)).toEqual([]);
+    expect(await kv.lrange("нет", 0, -1)).toEqual([]);
+  });
+});
+
+describe("хранилище сервера: Upstash — хеши и срезы", () => {
+  const make = (replies: unknown[][]) => {
+    const calls: unknown[] = [];
+    const fetchMock = (async (_url: string, init: RequestInit) => {
+      calls.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify((replies.shift() ?? []).map((result) => ({ result }))), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { kv: createUpstashKv("https://x.upstash.io", "tok", createMemoryKv(), fetchMock), calls };
+  };
+
+  it("hincrMany: одна команда HINCRBY на поле и EXPIRE — одним запросом", async () => {
+    const { kv, calls } = make([[2, 1, 1]]);
+    await kv.hincrMany("ev:2026-10-05", { "lesson_start": 2, "ls:a:learn": 1 }, 400 * 86_400);
+    expect(calls).toEqual([[["HINCRBY", "ev:2026-10-05", "lesson_start", 2], ["HINCRBY", "ev:2026-10-05", "ls:a:learn", 1], ["EXPIRE", "ev:2026-10-05", 34_560_000]]]);
+  });
+
+  it("hincrMany с пустым набором полей ничего не шлёт", async () => {
+    const { kv, calls } = make([]);
+    expect(await kv.hincrMany("k", {}, 60)).toBe(0);
+    expect(calls).toEqual([]);
+  });
+
+  it("hincrMany: новое поле — когда после прибавления в нём ровно n (у старого было бы больше)", async () => {
+    // a: 2 → стало 2 (новое), b: 1 → стало 5 (было), c: 3 → стало 3 (новое)
+    const { kv } = make([[2, 5, 3, 1]]);
+    expect(await kv.hincrMany("k", { a: 2, b: 1, c: 3 }, 60)).toBe(2);
+  });
+
+  it("hincrBy: HINCRBY + EXPIRE, возвращает новое значение", async () => {
+    const { kv, calls } = make([[7, 1]]);
+    expect(await kv.hincrBy("k", "f", 7, 60)).toBe(7);
+    expect(calls[0]).toEqual([["HINCRBY", "k", "f", 7], ["EXPIRE", "k", 60]]);
+  });
+
+  it("hgetAll / hgetAllMany: плоский список [поле, значение, …] превращается в объект с числами", async () => {
+    const { kv, calls } = make([[["a", "3", "b", "10"]], [["a", "1"], [], ["x", "2", "мусор", "не число"]]]);
+    expect(await kv.hgetAll("k")).toEqual({ a: 3, b: 10 });
+    expect(await kv.hgetAllMany(["k1", "k2", "k3"])).toEqual([{ a: 1 }, {}, { x: 2 }]);
+    expect(calls[0]).toEqual([["HGETALL", "k"]]);
+    expect(calls[1]).toEqual([["HGETALL", "k1"], ["HGETALL", "k2"], ["HGETALL", "k3"]]);
+  });
+
+  it("lrange: передаёт границы и возвращает только строки", async () => {
+    const { kv, calls } = make([[["a", "b", 5, null]]]);
+    expect(await kv.lrange("issues", 0, 99)).toEqual(["a", "b"]);
+    expect(calls[0]).toEqual([["LRANGE", "issues", 0, 99]]);
+  });
+
+  it("Upstash недоступен — хеши и списки работают на памяти и не бросают", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
+    const kv = createUpstashKv("https://x.upstash.io", "tok", createMemoryKv(), fetchMock);
+    expect(await kv.hincrMany("h", { a: 2 }, 60)).toBe(1);
+    expect(await kv.hincrBy("h", "a", 1, 60)).toBe(3);
+    expect(await kv.hgetAll("h")).toEqual({ a: 3 });
+    expect(await kv.hgetAllMany(["h"])).toEqual([{ a: 3 }]);
+    await kv.pushCapped("l", "v", 10);
+    expect(await kv.lrange("l", 0, -1)).toEqual(["v"]);
     err.mockRestore();
   });
 });

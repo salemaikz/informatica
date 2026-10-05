@@ -2,6 +2,7 @@
 
 import { Clock, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { track, type PaywallFrom } from "@/lib/analytics";
 import { useApp } from "@/lib/store";
 import { canStartTrial, TRIAL_DAYS } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
@@ -15,8 +16,9 @@ import { useNow } from "@/components/economy/useEconomy";
  * «Оплата скоро»: оплата деньгами (тарифы, наборы чипов, бустеры за ₸) пока не подключена.
  * Никакой имитации платежа и сбора контактов — честно говорим, что будет, и предлагаем пробный период.
  * what — что выбрал ученик (название товара и цена), показывается подзаголовком.
+ * from — откуда пришли (для статистики пробного периода, #69).
  */
-export function ComingSoonSheet({ open, onClose, what }: { open: boolean; onClose: () => void; what?: string }) {
+export function ComingSoonSheet({ open, onClose, what, from = "other" }: { open: boolean; onClose: () => void; what?: string; from?: PaywallFrom }) {
   const { t } = useT();
   const router = useRouter();
   const plan = useApp((s) => s.plan);
@@ -26,6 +28,7 @@ export function ComingSoonSheet({ open, onClose, what }: { open: boolean; onClos
 
   const onTrial = () => {
     if (startTrial()) {
+      track({ e: "trial_start", from });
       feedback("levelUp");
       onClose();
       router.push("/learn");
