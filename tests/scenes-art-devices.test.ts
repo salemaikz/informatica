@@ -9,11 +9,14 @@ const EXPECTED: HardwareId[] = [
   "keyboard", "mouse", "touchpad", "touchscreen", "mic", "webcam", "scanner", "gamepad",
   "monitor", "printer", "speakers", "headphones", "projector",
   "desktop", "laptop", "phone", "tablet", "smartwatch", "atm", "pos", "car", "server", "router",
+  "switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber",
+  "printer-dot", "printer-inkjet", "printer-laser", "plotter", "pen-tablet",
+  "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator",
 ];
 
 describe("DEVICE_ART", () => {
-  it("рисует все 23 устройства", () => {
-    expect(EXPECTED).toHaveLength(23);
+  it("рисует все 40 устройств", () => {
+    expect(EXPECTED).toHaveLength(40);
     expect([...DEVICE_IDS].sort()).toEqual([...EXPECTED].sort());
     expect(Object.keys(DEVICE_ART).sort()).toEqual([...EXPECTED].sort());
   });

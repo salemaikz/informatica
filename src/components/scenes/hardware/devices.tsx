@@ -14,6 +14,9 @@ import {
   SmartwatchArt,
   TabletArt,
 } from "./devices/around";
+import { AccessPointArt, CableFiberArt, CableUtpArt, HubArt, ModemArt, NicArt, SwitchArt } from "./devices/network";
+import { PenTabletArt, PlotterArt, PrinterDotArt, PrinterInkjetArt, PrinterLaserArt } from "./devices/print";
+import { DroneArt, ManipulatorArt, RobotVacuumArt, SensorArt, VrHeadsetArt } from "./devices/robots";
 
 /** Устройства ввода/вывода и «компьютеры вокруг нас» (рисует A2, детали и носители — в internals.tsx). */
 export const DEVICE_IDS = [
@@ -23,6 +26,10 @@ export const DEVICE_IDS = [
   "monitor", "printer", "speakers", "headphones", "projector",
   // компьютеры вокруг нас
   "desktop", "laptop", "phone", "tablet", "smartwatch", "atm", "pos", "car", "server", "router",
+  // сеть, печать, ввод, роботы (волна 3)
+  "switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber",
+  "printer-dot", "printer-inkjet", "printer-laser", "plotter", "pen-tablet",
+  "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator",
 ] as const satisfies readonly HardwareId[];
 
 export type DeviceId = (typeof DEVICE_IDS)[number];
@@ -52,4 +59,21 @@ export const DEVICE_ART: Record<DeviceId, () => ReactElement> = {
   car: CarArt,
   server: ServerArt,
   router: RouterArt,
+  switch: SwitchArt,
+  hub: HubArt,
+  modem: ModemArt,
+  "access-point": AccessPointArt,
+  nic: NicArt,
+  "cable-utp": CableUtpArt,
+  "cable-fiber": CableFiberArt,
+  "printer-dot": PrinterDotArt,
+  "printer-inkjet": PrinterInkjetArt,
+  "printer-laser": PrinterLaserArt,
+  plotter: PlotterArt,
+  "pen-tablet": PenTabletArt,
+  sensor: SensorArt,
+  "vr-headset": VrHeadsetArt,
+  "robot-vacuum": RobotVacuumArt,
+  drone: DroneArt,
+  manipulator: ManipulatorArt,
 };
