@@ -1,13 +1,15 @@
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
-import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, INPUT_BUDGET, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
-import { sanitizeContext } from "@/server/context";
+import { feedbackSummary, fitInput, messagesChars, sanitizeContext } from "@/server/context";
 import { lessonFeedbackPrompt } from "@/server/prompts";
 
 // Отзыв после урока + обновление «памяти наставника» об ученике. Дешёвая модель.
 // Страж лимитов (server/ai-guard.ts): для устройства бесплатно (AI_UNITS.feedback = 0, свой потолок в сутки), с сайта списывается 1.
 // Возврат — только если модель точно не получила запрос (ошибка до вызова, HTTP-ошибка OpenAI); обрыв и таймаут не возвращают.
+// Бюджет входа (INPUT_BUDGET.feedback, v0.9.1): сводка по уроку не длиннее FEEDBACK_SUMMARY_MAX_CHARS, затем fitInput ужимает
+// контекст ученика; память наставника — в последнюю очередь (отзыв перезаписывает её по её же тексту).
 
 export const maxDuration = 30;
 
@@ -43,21 +45,21 @@ export async function POST(req: Request) {
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return reject(400, "bad_json");
   const ctx = sanitizeContext(body.context);
-  const mistakes = (Array.isArray(body.mistakes) ? body.mistakes : []).slice(0, 10).map((m) => {
-    const o = (m ?? {}) as Record<string, unknown>;
-    return `- «${str(o.q, 200)}» — ответ «${str(o.given, 60)}», верно «${str(o.expected, 60)}»`;
-  });
-  const skills = (Array.isArray(body.skills) ? body.skills : []).slice(0, 10).map((s) => {
-    const o = (s ?? {}) as Record<string, unknown>;
-    return `- ${str(o.title, 60)}: ${Math.round((Number(o.mastery) || 0) * 100)}%`;
-  });
-  const summary = [
-    `Урок: ${str(body.lesson, 120)}`,
-    `Точность: ${Math.round((Number(body.accuracy) || 0) * 100)}%`,
-    `Время: ${Math.round((Number(body.durationSec) || 0) / 60)} мин`,
-    mistakes.length ? `Ошибки:\n${mistakes.join("\n")}` : "Ошибок не было.",
-    skills.length ? `Освоение тем после урока:\n${skills.join("\n")}` : "",
-  ].join("\n");
+  const summary = feedbackSummary(body);
+  let messages: { role: "system" | "user"; content: string }[];
+  let input: { chars: number; trimmed: boolean };
+  try {
+    const fit = fitInput({ budget: INPUT_BUDGET.feedback, ctx, history: [], base: (c) => lessonFeedbackPrompt(c).length + summary.length, keepMemory: true });
+    messages = [
+      { role: "system", content: lessonFeedbackPrompt(fit.ctx) },
+      { role: "user", content: summary },
+    ];
+    input = { chars: messagesChars(messages), trimmed: fit.trimmed };
+  } catch (e) {
+    // Сбой при сборке запроса — до вызова модели: обращение возвращается.
+    console.error("[lesson-feedback] build error", e instanceof Error ? e.message : e);
+    return reject(502, "ai_failed");
+  }
 
   let res;
   try {
@@ -67,10 +69,7 @@ export async function POST(req: Request) {
         reasoning_effort: "none",
         max_completion_tokens: MAX_TOKENS.feedback,
         response_format: { type: "json_schema", json_schema: { name: "lesson_feedback", strict: true, schema: SCHEMA } },
-        messages: [
-          { role: "system", content: lessonFeedbackPrompt(ctx) },
-          { role: "user", content: summary },
-        ],
+        messages,
       },
       { signal: req.signal, timeout: callTimeoutMs(maxDuration) },
     );
@@ -82,7 +81,7 @@ export async function POST(req: Request) {
 
   // Модель ответила (токены потрачены): дальше обращение не возвращаем.
   try {
-    logUsage("lesson-feedback", MODELS.fast, res.usage);
+    logUsage("lesson-feedback", MODELS.fast, res.usage, input);
     const parsed = JSON.parse(res.choices[0]?.message?.content ?? "{}") as LessonFeedbackResponse;
     return withGuardHeaders(
       Response.json({

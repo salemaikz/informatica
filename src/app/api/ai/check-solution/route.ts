@@ -1,13 +1,15 @@
 import type { CheckSolutionResponse } from "@/lib/ai-types";
-import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, INPUT_BUDGET, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
-import { lang as parseLang, sanitizeContext, sanitizeImage } from "@/server/context";
+import { clipEnd, lang as parseLang, messagesChars, sanitizeContext, sanitizeImage } from "@/server/context";
 import { checkSolutionPrompt } from "@/server/prompts";
 
 // Проверка развёрнутого решения по фото/рисунку. Ответ — строгий JSON по схеме.
 // Страж лимитов (server/ai-guard.ts): вес как у фото (AI_UNITS.photo = 2). Обращения возвращаются, только если модель
 // точно не получила запрос: ошибка до вызова или HTTP-ошибка OpenAI; обрыв клиентом, таймаут и сеть — не возвращают.
+// Бюджет входа (INPUT_BUDGET.check, v0.9.1): потолки полей ниже держат вход около 4 тыс. символов; если когда-нибудь выйдут
+// за бюджет, укорачивается эталонное решение (с конца) — условие, ответ и сама работа ученика не трогаются.
 
 export const maxDuration = 60;
 
@@ -60,6 +62,36 @@ export async function POST(req: Request) {
   const typed = str(body.typedAnswer, 100).trim();
   if (!task.prompt || (!image && !typed)) return reject(400, "empty");
 
+  // Вход одним куском: системный промпт + текст (ответ) или подпись к фото. Картинка в бюджет не входит.
+  const buildMessages = (reference: string) => [
+    { role: "system" as const, content: checkSolutionPrompt(ctx, lang, { ...task, reference }, typed) },
+    {
+      role: "user" as const,
+      content: image
+        ? [
+            { type: "text" as const, text: lang === "kk" ? "Менің шешімім:" : "Моё решение:" },
+            { type: "image_url" as const, image_url: { url: image, detail: "high" as const } },
+          ]
+        : typed,
+    },
+  ];
+  let messages: ReturnType<typeof buildMessages>;
+  let chars: number;
+  let trimmed = false;
+  try {
+    messages = buildMessages(task.reference);
+    chars = messagesChars(messages);
+    if (chars > INPUT_BUDGET.check) {
+      trimmed = true;
+      messages = buildMessages(clipEnd(task.reference, chars - INPUT_BUDGET.check));
+      chars = messagesChars(messages);
+    }
+  } catch (e) {
+    // Сбой при сборке запроса — до вызова модели: обращение возвращается.
+    console.error("[check-solution] build error", e instanceof Error ? e.message : e);
+    return reject(502, "ai_failed");
+  }
+
   let res;
   try {
     res = await client.chat.completions.create(
@@ -68,18 +100,7 @@ export async function POST(req: Request) {
         reasoning_effort: "low",
         max_completion_tokens: MAX_TOKENS.check,
         response_format: { type: "json_schema", json_schema: { name: "solution_check", strict: true, schema: SCHEMA } },
-        messages: [
-          { role: "system", content: checkSolutionPrompt(ctx, lang, task, typed) },
-          {
-            role: "user",
-            content: image
-              ? [
-                  { type: "text", text: lang === "kk" ? "Менің шешімім:" : "Моё решение:" },
-                  { type: "image_url", image_url: { url: image, detail: "high" } },
-                ]
-              : typed,
-          },
-        ],
+        messages,
       },
       { signal: req.signal, timeout: callTimeoutMs(maxDuration) },
     );
@@ -91,7 +112,7 @@ export async function POST(req: Request) {
 
   // Модель ответила (токены потрачены): дальше обращение не возвращаем, даже если разбор ответа не удался.
   try {
-    logUsage("check-solution", MODELS.vision, res.usage);
+    logUsage("check-solution", MODELS.vision, res.usage, { chars, trimmed });
     const raw = res.choices[0]?.message?.content ?? "";
     const parsed = JSON.parse(raw) as CheckSolutionResponse;
     const out: CheckSolutionResponse = {

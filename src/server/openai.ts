@@ -24,6 +24,17 @@ export const MODELS = {
  */
 export const MAX_TOKENS = { hint: 250, chat: 800, chatLong: 1000, chatPhoto: 1200, cached: 600, check: 2000, feedback: 700 } as const;
 
+/**
+ * Бюджет входа одного запроса к модели, в символах текста (v0.9.1): системные правила + данные ученика +
+ * задание + история. Казахский ≈ 2,5–3 символа на токен, русский ≈ 3–4: tutor ≈ 5–6 тыс. токенов, остальное ≈ 2 тыс.
+ * Картинка в бюджет не входит (отдельный предел ~4 МБ base64, sanitizeImage). Потолки полей (server/context.ts) заданы так,
+ * что обычный запрос укладывается без обрезки; fitInput срабатывает только на тяжёлых случаях: сначала отбрасывает самые
+ * старые сообщения истории, затем укорачивает необязательные части контекста (заметки, память, ошибки). Системные правила
+ * и последний вопрос ученика не трогаются. Выход ограничен MAX_TOKENS.
+ * tutor — чат, подсказки, разборы (поток и кэшируемый путь); check — проверка решения по фото; feedback — отзыв после урока.
+ */
+export const INPUT_BUDGET = { tutor: 16_000, check: 6_000, feedback: 6_000 } as const;
+
 /** Запас до maxDuration маршрута: ошибку по таймауту отдаём сами, а не получаем обрыв платформы. */
 export const CALL_MARGIN_SEC = 5;
 
@@ -57,10 +68,19 @@ export function getOpenAI(): OpenAI | null {
   return client;
 }
 
-/** Лог расхода токенов — основа для контроля затрат (видно в логах Vercel/сервера). */
-export function logUsage(route: string, model: string, usage?: { prompt_tokens?: number; completion_tokens?: number } | null) {
+/**
+ * Лог расхода токенов — основа для контроля затрат (видно в логах хостинга). chars — размер текстового входа в символах
+ * (по нему видно, где бюджет INPUT_BUDGET жмёт); trimmed — вход пришлось укоротить.
+ */
+export function logUsage(
+  route: string,
+  model: string,
+  usage?: { prompt_tokens?: number; completion_tokens?: number } | null,
+  input?: { chars: number; trimmed?: boolean },
+) {
   if (!usage) return;
-  console.info(`[ai] route=${route} model=${model} in=${usage.prompt_tokens ?? 0} out=${usage.completion_tokens ?? 0}`);
+  const size = input ? ` chars=${input.chars}${input.trimmed ? " trimmed=1" : ""}` : "";
+  console.info(`[ai] route=${route} model=${model} in=${usage.prompt_tokens ?? 0} out=${usage.completion_tokens ?? 0}${size}`);
 }
 
 export function jsonError(status: number, code: string) {
