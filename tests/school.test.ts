@@ -252,6 +252,8 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
   const mapRef = (id: string) => UNITS.flatMap((u) => u.lessons.map((ref) => ({ unit: u, ref }))).find((x) => x.ref.id === id);
   const schoolTopics = SCHOOL_PROGRAM.flatMap((p) => p.sections.flatMap((s) => s.topics.map((t) => ({ grade: p.grade, direction: p.direction, topic: t }))));
   const allSchoolLessons = [...new Set(SCHOOL_PROGRAM.flatMap(gradeLessonIds))];
+  /** Уроки курса ЕНТ в программе (без школьных уроков этапа 15 — их нет на карте ЕНТ). */
+  const courseLessons = allSchoolLessons.filter((id) => !LESSONS[id]?.school);
   const rec = (over: Partial<AnswerRecord> = {}): AnswerRecord => ({
     stepId: "q1",
     skill: "ns.base",
@@ -269,9 +271,18 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
   beforeEach(() => useApp.getState().resetProgress());
   afterEach(() => useApp.getState().resetProgress());
 
-  it("каждый урок школьной программы есть на карте курса ЕНТ как готовый — иначе пройденный в школе урок не отметился бы на «Пути»", () => {
-    expect(allSchoolLessons.length).toBeGreaterThan(0);
-    for (const id of allSchoolLessons) expect(mapRef(id)?.ref.status, id).toBe("available");
+  it("каждый урок курса в школьной программе есть на карте курса ЕНТ как готовый — иначе пройденный в школе урок не отметился бы на «Пути»", () => {
+    expect(courseLessons.length).toBeGreaterThan(0);
+    for (const id of courseLessons) expect(mapRef(id)?.ref.status, id).toBe("available");
+  });
+
+  it("школьные уроки (этап 15) — в LESSONS, но не на карте ЕНТ; каждый привязан хотя бы к одной теме программы", () => {
+    const school = Object.values(LESSONS).filter((l) => l.school).map((l) => l.id);
+    expect(school.length).toBeGreaterThan(0);
+    for (const id of school) {
+      expect(mapRef(id), id).toBeUndefined();
+      expect(allSchoolLessons, id).toContain(id);
+    }
   });
 
   it("«пройден» — одно определение: школьные функции и карта курса согласны, мусор в сохранении не считается прохождением", () => {
@@ -287,8 +298,8 @@ describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
     for (const completions of [1, 2, 7]) expect(isPassedStat(stat({ completions }))).toBe(true);
   });
 
-  it("любой урок школьной программы, пройденный в одном режиме, пройден в обоих (школьные функции и карта ЕНТ)", () => {
-    for (const id of allSchoolLessons) {
+  it("любой урок курса в школьной программе, пройденный в одном режиме, пройден в обоих (школьные функции и карта ЕНТ)", () => {
+    for (const id of courseLessons) {
       const lessons = { [id]: stat() };
       const { unit, ref } = mapRef(id)!;
       // карта ЕНТ («Путь»): узел пройден, раздел насчитал один урок
