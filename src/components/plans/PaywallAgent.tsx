@@ -18,6 +18,8 @@ export function PaywallAgent() {
   const paywall = useApp((s) => s.paywall);
   // Пока идёт проводник первого входа (#104), тарифы не показываем.
   const touring = useApp((s) => tourBlocking(s.tips));
+  // Ждёт неоткрытый кейс за уровень (волна 1Б): окно кейса на «Учиться» важнее тарифов, переход на /plans его бы закрыл.
+  const casePending = useApp((s) => s.pendingCases.length > 0);
   const notePaywallShown = useApp((s) => s.notePaywallShown);
   const tier = usePlanTier();
   const now = useNow();
@@ -27,12 +29,12 @@ export function PaywallAgent() {
 
   useEffect(() => {
     if (touring) sawTour.current = true;
-    if (fired.current || sawTour.current || pathname !== "/learn" || !onboarded || touring || now <= 0) return;
+    if (fired.current || sawTour.current || pathname !== "/learn" || !onboarded || touring || casePending || now <= 0) return;
     if (!shouldShowPaywall(tier, paywall, now)) return;
     fired.current = true;
     notePaywallShown();
     router.push("/plans?from=auto");
-  }, [pathname, onboarded, touring, tier, paywall, now, notePaywallShown, router]);
+  }, [pathname, onboarded, touring, casePending, tier, paywall, now, notePaywallShown, router]);
 
   return null;
 }

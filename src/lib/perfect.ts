@@ -10,10 +10,10 @@ export const PERFECT_RUN_GOAL = 5;
 /** Серию показываем на итогах с этого значения («Идеальных подряд: 3», с 2-го). */
 export const PERFECT_RUN_SHOW_FROM = 2;
 
-/** Идеально: все задания с первой попытки верно, ничего не пропущено; хотя бы одно задание было. */
+/** Идеально: все задания с первой попытки верно и сам — без подсказок, ничего не пропущено; хотя бы одно задание было. */
 export function isPerfectSession(r: Pick<SessionResult, "answers" | "skipped">): boolean {
   const firstTry = r.answers.filter((a) => !a.retry);
-  return firstTry.length > 0 && firstTry.every((a) => a.correct) && !r.skipped;
+  return firstTry.length > 0 && firstTry.every((a) => a.correct && !a.hinted) && !r.skipped;
 }
 
 /**

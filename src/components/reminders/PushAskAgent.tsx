@@ -41,6 +41,8 @@ export function PushAskAgent() {
       const s = useApp.getState();
       // Ученик сам выключил напоминания — не уговариваем.
       if (!s.profile.reminder.enabled) return;
+      // Уже открыто другое окно (кейс за уровень, проводник) — не кладём окно поверх окна; спросим в следующий заход.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       const permission = pushPermission();
       const pushOn = s.profile.reminder.push && permission === "granted";
       const action = shouldAskPush(permission, s.pushAsk, s.profile.createdAt, Date.now(), pushOn);
