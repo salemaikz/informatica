@@ -390,6 +390,8 @@ export interface Lesson {
   conspect: L;
   /** Темы ЕНТ, к которым относится урок. */
   entTopics?: EntTopicId[];
+  /** Большой урок: вход стоит 2 сердечка (#40). Нет поля — 1. */
+  hearts?: 2;
 }
 
 export interface LessonRef {

@@ -51,8 +51,10 @@ describe("shopAvailability", () => {
 
   it("хватает чипов и есть что восстановить — можно", () => {
     expect(shopAvailability(heart, view(3), 100)).toEqual({ ok: true });
-    expect(shopAvailability(three, view(2), 50)).toEqual({ ok: true });
-    expect(shopAvailability(full, view(0), 75)).toEqual({ ok: true });
+    expect(shopAvailability(three, view(2), 150)).toEqual({ ok: true });
+    // полный запас: по 45 за каждое недостающее — 5 × 45
+    expect(shopAvailability(full, view(0), 225)).toEqual({ ok: true });
+    expect(shopAvailability(full, view(1), 180)).toEqual({ ok: true });
   });
   it("запас полный — нельзя, даже если чипов мало", () => {
     expect(shopAvailability(heart, view(5), 0)).toEqual({ ok: false, reason: "full" });
@@ -63,20 +65,28 @@ describe("shopAvailability", () => {
     expect(shopAvailability(three, UNLIMITED, 999)).toEqual({ ok: false, reason: "unlimited" });
   });
   it("не хватает чипов — считает, сколько", () => {
-    expect(shopAvailability(full, view(1), 55)).toEqual({ ok: false, reason: "chips", missing: 20 });
-    expect(shopAvailability(three, view(0), 15)).toEqual({ ok: false, reason: "chips", missing: 35 });
-    expect(shopAvailability(heart, view(2), 19)).toEqual({ ok: false, reason: "chips", missing: 1 });
+    expect(shopAvailability(full, view(1), 160)).toEqual({ ok: false, reason: "chips", missing: 20 });
+    expect(shopAvailability(full, view(0), 200)).toEqual({ ok: false, reason: "chips", missing: 25 });
+    expect(shopAvailability(three, view(0), 115)).toEqual({ ok: false, reason: "chips", missing: 35 });
+    expect(shopAvailability(heart, view(2), 59)).toEqual({ ok: false, reason: "chips", missing: 1 });
   });
   it("три сердечка не помещаются в запас — overflow (раньше, чем «не хватает чипов»)", () => {
     expect(shopAvailability(three, view(3), 100)).toEqual({ ok: false, reason: "overflow" });
     expect(shopAvailability(three, view(4), 100)).toEqual({ ok: false, reason: "overflow" });
     expect(shopAvailability(three, view(4), 0)).toEqual({ ok: false, reason: "overflow" });
     // у Лайта (запас 10) — помещается, пока не хватает хотя бы трёх
-    expect(shopAvailability(three, view(7, 10), 50)).toEqual({ ok: true });
-    expect(shopAvailability(three, view(8, 10), 50)).toEqual({ ok: false, reason: "overflow" });
-    // поштучно и «полный запас» при переполнении продаются
+    expect(shopAvailability(three, view(7, 10), 150)).toEqual({ ok: true });
+    expect(shopAvailability(three, view(8, 10), 150)).toEqual({ ok: false, reason: "overflow" });
+    // поштучно продаётся всегда, пока запас не полон
     expect(shopAvailability(heart, view(4), 100)).toEqual({ ok: true });
-    expect(shopAvailability(full, view(4), 100)).toEqual({ ok: true });
+  });
+  it("полный запас — только когда не хватает хотя бы четырёх (иначе выгоднее поштучно или тройкой)", () => {
+    expect(shopAvailability(full, view(2), 999)).toEqual({ ok: false, reason: "overflow" });
+    expect(shopAvailability(full, view(4), 999)).toEqual({ ok: false, reason: "overflow" });
+    expect(shopAvailability(full, view(1), 999)).toEqual({ ok: true });
+    // у Лайта: не хватает 4 из 10 — можно, цена 4 × 45
+    expect(shopAvailability(full, view(6, 10), 180)).toEqual({ ok: true });
+    expect(shopAvailability(full, view(7, 10), 999)).toEqual({ ok: false, reason: "overflow" });
   });
   it("бустер не зависит от сердечек", () => {
     expect(shopAvailability(boost, view(5), 40)).toEqual({ ok: true });

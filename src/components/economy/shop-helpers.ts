@@ -1,4 +1,4 @@
-import { CHIPS_PER_XP, MINUTE, DAY, SHOP_ITEMS, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
+import { CHIPS_PER_XP, MINUTE, DAY, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
 import { daysText } from "@/lib/goals";
 import type { Lang } from "@/lib/types";
 
@@ -56,7 +56,8 @@ export type ShopAvailability = { ok: true } | { ok: false; reason: BuyFail; miss
 
 /**
  * Можно ли купить товар за чипы сейчас. Порядок причин как в buyItem:
- * безлимит → запас полон → набор не помещается (overflow) → не хватает чипов.
+ * безлимит → запас полон → набор не помещается или полный запас невыгоден (overflow) → не хватает чипов.
+ * Цена — itemPrice (у полного запаса зависит от числа недостающих сердечек).
  * Для бустеров запас сердечек не важен.
  */
 export function shopAvailability(item: ShopItem, hearts: HeartsView, chips: number): ShopAvailability {
@@ -64,8 +65,10 @@ export function shopAvailability(item: ShopItem, hearts: HeartsView, chips: numb
     if (hearts.unlimited) return { ok: false, reason: "unlimited" };
     if (hearts.count >= hearts.max) return { ok: false, reason: "full" };
     if (item.kind === "heart" && (item.amount ?? 1) > 1 && hearts.max - hearts.count < (item.amount ?? 1)) return { ok: false, reason: "overflow" };
+    if (item.kind === "refill" && hearts.max - hearts.count < REFILL_MIN_MISSING) return { ok: false, reason: "overflow" };
   }
-  if (chips < item.price) return { ok: false, reason: "chips", missing: item.price - chips };
+  const price = itemPrice(item, hearts);
+  if (chips < price) return { ok: false, reason: "chips", missing: price - chips };
   return { ok: true };
 }
 

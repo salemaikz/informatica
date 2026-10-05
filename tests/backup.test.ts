@@ -13,6 +13,7 @@ import {
   type IdbSnapshot,
 } from "@/lib/backup";
 import { exportBackup, importBackup } from "@/lib/backup-idb";
+import { PRACTICE_HEART_DAILY } from "@/lib/economy";
 import { deleteMessages, loadMessages, saveMessages } from "@/lib/chat-store";
 import { MAX_MESSAGES } from "@/lib/chats";
 import { deleteImages, getImage } from "@/lib/note-images";
@@ -571,7 +572,7 @@ describe("недоверенный файл: потолки экономики �
     expect(ECONOMY_CAPS.hearts).toBe(10);
     expect(parse({ hearts: { count: 99, updatedAt: 5, day: "2026-10-03" } }).hearts).toEqual({ count: 10, updatedAt: 5, day: "2026-10-03" });
     expect(parse({ hearts: { count: 4, updatedAt: 5, day: "2026-10-03" } }).hearts).toMatchObject({ count: 4 });
-    expect(parse({ practiceHearts: { day: "2026-10-03", count: 99 } }).practiceHearts).toEqual({ day: "2026-10-03", count: 5 });
+    expect(parse({ practiceHearts: { day: "2026-10-03", count: 99 } }).practiceHearts).toEqual({ day: "2026-10-03", count: PRACTICE_HEART_DAILY });
   });
 
   it("buildBackup: бустер в копии не дальше потолка от момента экспорта", () => {

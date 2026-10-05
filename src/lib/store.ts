@@ -37,6 +37,7 @@ import {
   type NoteSource,
 } from "./notebook";
 import type { GameMode, GameResult } from "@/games/types";
+import { dropRun, putRun, sanitizeLessonRuns, type LessonRun } from "./lesson-run";
 import {
   addHearts,
   applyAiUsage,
@@ -48,9 +49,9 @@ import {
   effectiveTier,
   FREE_PLAN,
   heartsView,
-  loseHeart as loseHeartPure,
   practiceEarnsHeart,
   PRACTICE_HEART_DAILY,
+  spendHearts,
   pushLedger,
   quoteAi,
   refundAiUsage,
@@ -223,6 +224,8 @@ export interface AppState {
   boost: Boost | null;
   /** Сколько тренировок сегодня уже вернули сердечко. */
   practiceHearts: { day: string; count: number };
+  /** Незаконченные уроки (#41): id урока → сохранённое прохождение (lib/lesson-run.ts). В резервную копию не входит. */
+  lessonRuns: Record<string, LessonRun>;
   /** Когда показывали окно тарифов. */
   paywall: PaywallState;
 
@@ -296,8 +299,15 @@ export interface AppActions {
   dismissMistake: (stepId: string) => void;
 
   // ---- экономика ----
-  /** Ошибка в уроке: минус сердечко. Возвращает запас после. */
-  loseHeart: () => HeartsView;
+  /**
+   * Плата за вход (#40): списать cost сердечек. Безлимит или cost 0 — бесплатно (paid 0).
+   * ok: false — сердечек не хватает, ничего не списано. view — запас после.
+   */
+  payEntry: (cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /** Сохранить незаконченный урок (плеер — после каждого шага). */
+  saveLessonRun: (run: LessonRun) => void;
+  /** Забыть незаконченный урок («Начать заново»; пройденный урок забывается сам в finishSession). */
+  clearLessonRun: (lessonId: string) => void;
   /** Покупка за чипы: сердечко, полный запас, бустер. */
   buy: (id: ShopItemId) => BuyResult;
   /** Пробный период «Безлимита» (один раз). false — уже был или тариф платный. */
@@ -380,6 +390,7 @@ const initialState: AppState = {
   ledger: [],
   boost: null,
   practiceHearts: { day: "", count: 0 },
+  lessonRuns: {},
   paywall: { lastShownAt: 0, views: 0 },
   history: [],
   chats: [],
@@ -549,6 +560,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
       p.practiceHearts && typeof p.practiceHearts.day === "string" && typeof p.practiceHearts.count === "number"
         ? p.practiceHearts
         : { day: "", count: 0 },
+    lessonRuns: sanitizeLessonRuns(p.lessonRuns),
     paywall: sanitizePaywall(p.paywall),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
@@ -657,6 +669,8 @@ export const useApp = create<AppState & AppActions>()(
             ...s.lessons,
             [result.lessonId!]: nextLessonStat(prev, result.via ?? "learn", result.accuracy, result.xp + bonusXp, now),
           };
+          // Урок пройден в режиме «Учиться» — сохранение незаконченного прохождения больше не нужно (#41).
+          if ((result.via ?? "learn") === "learn") next.lessonRuns = dropRun(next.lessonRuns, result.lessonId!);
           next = { ...next, ...withAchievement(next, "first_lesson") };
           if (perfect) next = { ...next, ...withAchievement(next, "perfect") };
         }
@@ -667,10 +681,10 @@ export const useApp = create<AppState & AppActions>()(
         const entry = entryFromSession(result, uid(), now, result.mode);
         if (entry) next = { ...next, history: pushHistory(next.history, entry) };
 
-        // Тренировка возвращает сердечко (не больше PRACTICE_HEART_DAILY раз в день).
+        // Тренировка возвращает сердечко (не больше PRACTICE_HEART_DAILY раз в день). Экстерн — платный тест (#40), не тренировка.
         let heart = false;
         const tier = tierOf(next, now);
-        if (result.kind === "drill" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
+        if (result.kind === "drill" && result.mode !== "extern" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
           const ph = next.practiceHearts.day === today ? next.practiceHearts : { day: today, count: 0 };
           const view = heartsView(next.hearts, tier, now, today);
           if (!view.unlimited && view.count < view.max && ph.count < PRACTICE_HEART_DAILY) {
@@ -865,15 +879,26 @@ export const useApp = create<AppState & AppActions>()(
 
       dismissMistake: (stepId) => set((s) => closeMistake(s, stepId)),
 
-      loseHeart: () => {
+      payEntry: (cost) => {
         const s = get();
         const now = Date.now();
         const today = todayKey();
         const tier = tierOf(s, now);
-        const hearts = loseHeartPure(s.hearts, tier, now, today);
-        if (hearts !== s.hearts) set({ hearts });
-        return heartsView(hearts, tier, now, today);
+        const view = heartsView(s.hearts, tier, now, today);
+        if (view.unlimited || cost <= 0) return { ok: true, paid: 0, view };
+        const hearts = spendHearts(s.hearts, cost, tier, now, today);
+        if (!hearts) return { ok: false, paid: 0, view };
+        set({ hearts });
+        return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
       },
+
+      saveLessonRun: (run) => set((s) => ({ lessonRuns: putRun(s.lessonRuns, run, Date.now()) })),
+
+      clearLessonRun: (lessonId) =>
+        set((s) => {
+          const lessonRuns = dropRun(s.lessonRuns, lessonId);
+          return lessonRuns === s.lessonRuns ? {} : { lessonRuns };
+        }),
 
       buy: (id) => {
         const s = get();

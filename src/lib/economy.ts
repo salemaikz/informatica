@@ -1,9 +1,10 @@
 // Экономика приложения: сердечки, чипы (внутренняя валюта), бустеры, тарифы и цена ИИ.
 // Чистые функции без React; состояние лежит в сторе (lib/store.ts), интерфейс — components/economy и components/plans.
 //
-// Правила (решение #31, docs/DECISIONS.md):
-// - сердечки тратятся только в уроках (ошибка с первой попытки); тренировка, пробный ЕНТ и игры их не тратят;
-// - потерянное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
+// Правила (решения #31, #34, #40, #60 — docs/DECISIONS.md):
+// - сердечки — плата за вход, а не за ошибки: урок 1 (большой 2), «Проверить себя» и пробный ЕНТ 1, контрольная
+//   и экстерн 2, игра 1 (каждый запуск); тренировка, повторение, работа над ошибками, практикум, теория, чат — бесплатно;
+// - потраченное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
 // - тренировка (в том числе работа над ошибками) возвращает сердечко — бесплатный путь всегда есть;
 // - чипы зарабатываются опытом (5 XP = 2 чипа) и бонусами; на чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
 // - оплата деньгами (тарифы, наборы чипов) пока не подключена — экран «скоро» без имитации платежа.
@@ -157,13 +158,18 @@ export function heartsView(h: Hearts, tier: PlanTier, now: number, today: string
   return { count: cur.count, max, unlimited: false, nextAt: cur.count < max ? cur.updatedAt + PLAN_FEATURES[tier].regenMs : null };
 }
 
-/** Минус одно сердечко (не ниже нуля). С полного запаса восстановление начинается с этого момента. */
-export function loseHeart(h: Hearts, tier: PlanTier, now: number, today: string): Hearts {
+/**
+ * Списать n сердечек (плата за вход, #40). Не хватает — null, ничего не меняется. При безлимите — состояние как есть.
+ * С полного запаса восстановление начинается с этого момента.
+ */
+export function spendHearts(h: Hearts, n: number, tier: PlanTier, now: number, today: string): Hearts | null {
   if (!Number.isFinite(PLAN_FEATURES[tier].maxHearts)) return h;
+  const cost = Math.max(0, Math.floor(n));
   const cur = heartsNow(h, tier, now, today);
-  if (cur.count <= 0) return cur;
+  if (cost === 0) return cur;
+  if (cur.count < cost) return null;
   const wasFull = cur.count >= PLAN_FEATURES[tier].maxHearts;
-  return { count: cur.count - 1, updatedAt: wasFull ? now : cur.updatedAt, day: today };
+  return { count: cur.count - cost, updatedAt: wasFull ? now : cur.updatedAt, day: today };
 }
 
 /** Плюс n сердечек (не выше запаса). */
@@ -179,8 +185,30 @@ export function refillHearts(tier: PlanTier, now: number, today: string): Hearts
   return { count: PLAN_FEATURES[tier].maxHearts, updatedAt: now, day: today };
 }
 
-/** Можно ли начать урок (есть хотя бы одно сердечко или безлимит). */
-export const canStartLesson = (v: HeartsView): boolean => v.unlimited || v.count > 0;
+/** Хватает ли сердечек на вход стоимостью cost (безлимит — всегда). */
+export const canAfford = (v: HeartsView, cost: number): boolean => v.unlimited || v.count >= cost;
+
+// ---------- Плата за вход (#40) ----------
+
+/** Что стоит сердечек. Тренировка, повторение, работа над ошибками, практикум, теория и чат — бесплатно. */
+export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game";
+
+/**
+ * Цена входа в сердечках: урок 1 (большой урок — поле lesson.hearts = 2), «Проверить себя» 1, пробный ЕНТ любого вида 1,
+ * контрольная раздела 2, экстерн (зачёт раздела тестом) 2, игра 1 — каждый запуск, в том числе «ещё раз».
+ */
+export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1 };
+
+/** Вход в урок в режиме «Учиться»: 1, у большого урока — 2. */
+export function lessonCost(lesson: { hearts?: number } | undefined): number {
+  return lesson?.hearts === 2 ? 2 : ENTRY_COST.lesson;
+}
+
+/** Цена входа: игра с привязкой к уроку («урок игрой») стоит как сам урок. */
+export function entryCost(kind: EntryKind, lesson?: { hearts?: number }): number {
+  if (kind === "lesson" || (kind === "game" && lesson)) return lessonCost(lesson);
+  return ENTRY_COST[kind];
+}
 
 export function sanitizeHearts(raw: unknown): Hearts {
   const h = (raw ?? {}) as Partial<Hearts>;
@@ -190,11 +218,11 @@ export function sanitizeHearts(raw: unknown): Hearts {
   return { count, updatedAt, day };
 }
 
-/** Сколько тренировок в день могут вернуть сердечко. */
-export const PRACTICE_HEART_DAILY = 5;
-/** Тренировка возвращает сердечко, если ответов не меньше и точность не ниже. */
-export const PRACTICE_HEART_MIN_ANSWERS = 3;
-export const PRACTICE_HEART_MIN_ACCURACY = 0.6;
+/** Сколько тренировок в день могут вернуть сердечко (#60: строже, чем было — вход теперь платный, а не ошибки). */
+export const PRACTICE_HEART_DAILY = 3;
+/** Тренировка возвращает сердечко, если ответов с первой попытки не меньше и точность не ниже. */
+export const PRACTICE_HEART_MIN_ANSWERS = 6;
+export const PRACTICE_HEART_MIN_ACCURACY = 0.7;
 
 export function practiceEarnsHeart(answers: number, accuracy: number): boolean {
   return answers >= PRACTICE_HEART_MIN_ANSWERS && accuracy >= PRACTICE_HEART_MIN_ACCURACY;
@@ -309,7 +337,7 @@ export type ShopItemId = "heart-1" | "hearts-3" | "hearts-full" | "boost-15" | "
 export interface ShopItem {
   id: ShopItemId;
   kind: "heart" | "refill" | "boost";
-  /** Цена в чипах. */
+  /** Цена в чипах; у полного запаса (refill) — за каждое недостающее сердечко, итог — itemPrice. */
   price: number;
   /** Сердечки: сколько штук (по умолчанию 1). */
   amount?: number;
@@ -319,16 +347,38 @@ export interface ShopItem {
 }
 
 /**
- * За чипы. Сердечки дешёвые (урок с парой ошибок окупает их сам), чем больше берёшь — тем дешевле штука:
- * 1 — 25, 3 — 60 (по 20), полный запас — 90 (по 18 у бесплатного тарифа). Бустер: 15 мин — 40, час — 120.
+ * За чипы (#60). Вход в урок стоит сердечко, а урок приносит ~45–65 чипов — поэтому сердечко дороже, чем раньше:
+ * урок окупает чуть меньше одного следующего входа, и чипы не превращаются в бесконечный запас.
+ * Чем больше берёшь — тем дешевле штука: 1 — 60, 3 — 150 (по 50), полный запас — по 45 за каждое недостающее
+ * (продаётся, когда не хватает хотя бы REFILL_MIN_MISSING). Бустер: 15 мин — 40, час — 120.
  */
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: "heart-1", kind: "heart", price: 20, amount: 1 },
-  { id: "hearts-3", kind: "heart", price: 50, amount: 3 },
-  { id: "hearts-full", kind: "refill", price: 75 },
+  { id: "heart-1", kind: "heart", price: 60, amount: 1 },
+  { id: "hearts-3", kind: "heart", price: 150, amount: 3 },
+  /** price — за каждое недостающее сердечко (итог — refillPrice). */
+  { id: "hearts-full", kind: "refill", price: 45 },
   { id: "boost-15", kind: "boost", price: 40, mult: 2, minutes: 15 },
   { id: "boost-60", kind: "boost", price: 120, mult: 2, minutes: 60 },
 ];
+
+/** Полный запас продаётся, когда не хватает хотя бы стольких сердечек (меньше — выгоднее по одному или тройкой). */
+export const REFILL_MIN_MISSING = 4;
+
+/** Цена полного запаса: по item.price за каждое недостающее сердечко. */
+export function refillPrice(missing: number): number {
+  const item = SHOP_ITEMS.find((i) => i.kind === "refill")!;
+  return Math.max(0, Math.floor(missing)) * item.price;
+}
+
+/**
+ * Цена товара прямо сейчас: у полного запаса зависит от того, сколько сердечек не хватает (v — запас на сейчас).
+ * Без v (или при безлимите) у полного запаса — цена полного запаса бесплатного тарифа.
+ */
+export function itemPrice(item: ShopItem, v?: HeartsView): number {
+  if (item.kind !== "refill") return item.price;
+  const missing = v && !v.unlimited ? v.max - v.count : PLAN_FEATURES.free.maxHearts;
+  return refillPrice(missing);
+}
 
 export const shopItem = (id: ShopItemId): ShopItem | undefined => SHOP_ITEMS.find((i) => i.id === id);
 
@@ -358,13 +408,16 @@ export function buyItem(
     if (v.unlimited) return { ok: false, reason: "unlimited" };
     if (v.count >= v.max) return { ok: false, reason: "full" };
     const amount = item.amount ?? 1;
-    // Набор больше, чем не хватает, — переплата: предлагаем брать поштучно.
-    if (item.kind === "heart" && amount > 1 && v.max - v.count < amount) return { ok: false, reason: "overflow" };
+    const missing = v.max - v.count;
+    // Набор больше, чем не хватает, — переплата: предлагаем брать поштучно (полный запас — когда не хватает многих).
+    if (item.kind === "heart" && amount > 1 && missing < amount) return { ok: false, reason: "overflow" };
+    if (item.kind === "refill" && missing < REFILL_MIN_MISSING) return { ok: false, reason: "overflow" };
     hearts = item.kind === "heart" ? addHearts(state.hearts, amount, tier, now, today) : refillHearts(tier, now, today);
   }
-  if (state.wallet.chips < item.price) return { ok: false, reason: "chips" };
+  const price = itemPrice(item, heartsView(state.hearts, tier, now, today));
+  if (state.wallet.chips < price) return { ok: false, reason: "chips" };
   if (item.kind === "boost") boost = extendBoost(state.boost, item.mult ?? 2, item.minutes ?? 15, now);
-  const wallet = { ...state.wallet, chips: state.wallet.chips - item.price, spent: state.wallet.spent + item.price };
+  const wallet = { ...state.wallet, chips: state.wallet.chips - price, spent: state.wallet.spent + price };
   return { ok: true, wallet, hearts, boost };
 }
 

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp } from "@/lib/store";
-import { MINUTE, PLAN_FEATURES, PRACTICE_HEART_DAILY, START_WALLET, chipsForXp, heartsView } from "@/lib/economy";
+import { MINUTE, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ANSWERS, START_WALLET, chipsForXp, heartsView } from "@/lib/economy";
 import { todayKey } from "@/lib/text";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
 import type { ExamSummary } from "@/lib/store";
+import type { LessonRun } from "@/lib/lesson-run";
 
 const rec = (over: Partial<AnswerRecord> = {}): AnswerRecord => ({
   stepId: "q1",
@@ -57,6 +58,8 @@ const exam = (over: Partial<ExamSummary> = {}): ExamSummary => ({
 const wrongEnt = (stepId: string) => ({ stepId, skill: "ns.bin2dec", prompt: "Условие", given: "1", expected: "2" });
 
 const st = () => useApp.getState();
+/** Потратить одно сердечко (вход в урок); возвращает запас после. */
+const lose = () => st().payEntry(1).view;
 // resetProgress сохраняет тариф — для изоляции тестов сбрасываем и его.
 function fullReset() {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -181,45 +184,53 @@ describe("стор: finishSession", () => {
   });
 
   it("хорошая тренировка возвращает сердечко, если запас не полон", () => {
-    st().loseHeart();
+    lose();
     expect(heartCount()).toBe(4);
-    expect(st().finishSession(drill()).heart).toBe(true);
+    expect(st().finishSession(drill(PRACTICE_HEART_MIN_ANSWERS)).heart).toBe(true);
     expect(heartCount()).toBe(5);
     expect(st().practiceHearts).toEqual({ day: todayKey(), count: 1 });
   });
 
   it("при полном запасе сердечко не возвращается", () => {
-    expect(st().finishSession(drill()).heart).toBe(false);
+    expect(st().finishSession(drill(8)).heart).toBe(false);
     expect(st().practiceHearts.count).toBe(0);
   });
 
-  it("слабая или короткая тренировка сердечко не возвращает", () => {
-    st().loseHeart();
-    expect(st().finishSession(drill(3, 0.5)).heart).toBe(false);
-    expect(st().finishSession(drill(2, 1)).heart).toBe(false);
+  it("слабая или короткая тренировка сердечко не возвращает (#60: от 6 ответов и 70%)", () => {
+    lose();
+    expect(st().finishSession(drill(8, 0.69)).heart).toBe(false);
+    expect(st().finishSession(drill(5, 1)).heart).toBe(false);
+    expect(st().finishSession(drill(3, 1)).heart).toBe(false);
+    expect(heartCount()).toBe(4);
+    expect(st().finishSession(drill(6, 0.7)).heart).toBe(true);
+  });
+
+  it("экстерн — платный тест, сердечко не возвращает", () => {
+    lose();
+    expect(st().finishSession(drill(10, 1, { mode: "extern" })).heart).toBe(false);
     expect(heartCount()).toBe(4);
   });
 
   it("урок сердечко не возвращает", () => {
-    st().loseHeart();
+    lose();
     expect(st().finishSession(lesson()).heart).toBe(false);
   });
 
   it(`не больше ${PRACTICE_HEART_DAILY} возвращённых сердечек в день`, () => {
     const results: boolean[] = [];
     for (let i = 0; i < PRACTICE_HEART_DAILY + 2; i++) {
-      st().loseHeart();
-      results.push(st().finishSession(drill()).heart);
+      lose();
+      results.push(st().finishSession(drill(8)).heart);
     }
-    expect(results).toEqual([true, true, true, true, true, false, false]);
+    expect(results).toEqual([true, true, true, false, false]);
     expect(st().practiceHearts.count).toBe(PRACTICE_HEART_DAILY);
     expect(heartCount()).toBe(3);
   });
 
   it("у безлимита сердечки не возвращаются (и не тратятся)", () => {
     st().startTrial();
-    expect(st().loseHeart().unlimited).toBe(true);
-    expect(st().finishSession(drill()).heart).toBe(false);
+    expect(lose().unlimited).toBe(true);
+    expect(st().finishSession(drill(8)).heart).toBe(false);
   });
 });
 
@@ -227,14 +238,14 @@ describe("стор: сердечки и покупки", () => {
   beforeEach(fullReset);
 
   it("loseHeart снимает по одному, не ниже нуля", () => {
-    expect(st().loseHeart().count).toBe(4);
-    for (let i = 0; i < 10; i++) st().loseHeart();
-    expect(st().loseHeart()).toMatchObject({ count: 0, max: 5, unlimited: false });
+    expect(lose().count).toBe(4);
+    for (let i = 0; i < 10; i++) lose();
+    expect(lose()).toMatchObject({ count: 0, max: 5, unlimited: false });
     expect(heartCount()).toBe(0);
   });
 
   it("после первой потери виден таймер: следующее сердечко через 6 ч", () => {
-    const v = st().loseHeart();
+    const v = lose();
     expect(v.nextAt).not.toBeNull();
     expect(v.nextAt!).toBeGreaterThan(Date.now());
     expect(v.nextAt).toBe(Date.now() + PLAN_FEATURES.free.regenMs);
@@ -242,7 +253,7 @@ describe("стор: сердечки и покупки", () => {
   });
 
   it("суточного пополнения нет: на следующий день сердечки возвращаются по одному за 6 ч", () => {
-    for (let i = 0; i < 5; i++) st().loseHeart();
+    for (let i = 0; i < 5; i++) lose();
     expect(heartCount()).toBe(0);
     vi.setSystemTime(new Date(2027, 0, 16, 0, 0, 0)); // полночь, прошло 12 ч
     expect(todayKey()).toBe("2027-01-16");
@@ -255,7 +266,7 @@ describe("стор: сердечки и покупки", () => {
 
   it("Лайт: запас 10, сердечко возвращается за 3 ч", () => {
     useApp.setState({ plan: { tier: "lite", period: "month", until: Date.now() + 30 * 86_400_000 } });
-    const v = st().loseHeart();
+    const v = lose();
     expect(v).toMatchObject({ count: 9, max: 10, unlimited: false });
     expect(v.nextAt).toBe(Date.now() + 180 * MINUTE);
     const liteCount = () => heartsView(st().hearts, "lite", Date.now(), todayKey()).count;
@@ -273,31 +284,31 @@ describe("стор: сердечки и покупки", () => {
     expect(st().ledger).toHaveLength(0);
   });
 
-  it("buy heart-1: +1 сердечко за 20 чипов, запись в истории чипов", () => {
+  it("buy heart-1: +1 сердечко за 60 чипов, запись в истории чипов", () => {
     fund();
-    st().loseHeart();
-    st().loseHeart();
+    lose();
+    lose();
     expect(st().buy("heart-1")).toEqual({ ok: true });
     expect(heartCount()).toBe(4);
-    expect(chips()).toBe(80);
-    expect(st().wallet.spent).toBe(20);
-    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "heart-1", amount: -20 });
+    expect(chips()).toBe(40);
+    expect(st().wallet.spent).toBe(60);
+    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "heart-1", amount: -60 });
   });
 
-  it("buy hearts-3: +3 сердечка за 50 чипов, запись в истории чипов", () => {
-    fund();
-    for (let i = 0; i < 3; i++) st().loseHeart(); // 2 из 5: набор как раз помещается
+  it("buy hearts-3: +3 сердечка за 150 чипов, запись в истории чипов", () => {
+    fund(200);
+    for (let i = 0; i < 3; i++) lose(); // 2 из 5: набор как раз помещается
     expect(st().buy("hearts-3")).toEqual({ ok: true });
     expect(heartCount()).toBe(5);
     expect(chips()).toBe(50);
-    expect(st().wallet.spent).toBe(50);
-    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "hearts-3", amount: -50 });
+    expect(st().wallet.spent).toBe(150);
+    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "hearts-3", amount: -150 });
   });
 
   it("buy hearts-3: если не помещается — overflow, ничего не списывается; поштучно можно", () => {
     fund();
-    st().loseHeart();
-    st().loseHeart(); // 3 из 5, не хватает 2
+    lose();
+    lose(); // 3 из 5, не хватает 2
     const hearts = st().hearts;
     expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "overflow" });
     expect(chips()).toBe(100);
@@ -308,24 +319,48 @@ describe("стор: сердечки и покупки", () => {
   });
 
   it("buy hearts-3: не хватает чипов — chips; при безлимите — unlimited", () => {
-    for (let i = 0; i < 3; i++) st().loseHeart();
-    expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "chips" }); // 20 < 50
+    for (let i = 0; i < 3; i++) lose();
+    expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "chips" }); // 20 < 150
     expect(chips()).toBe(START);
     st().startTrial();
     expect(st().buy("hearts-3")).toEqual({ ok: false, reason: "unlimited" });
   });
 
-  it("buy hearts-full: полный запас за 75 (нужно заработать)", () => {
-    st().loseHeart();
-    expect(st().buy("hearts-full")).toEqual({ ok: false, reason: "chips" }); // 20 < 75
-    fund(75);
+  it("buy hearts-full: по 45 за каждое недостающее, только когда не хватает хотя бы четырёх", () => {
+    lose();
+    expect(st().buy("hearts-full")).toEqual({ ok: false, reason: "overflow" }); // не хватает 1 — выгоднее поштучно
+    for (let i = 0; i < 3; i++) lose(); // 1 из 5
+    expect(st().buy("hearts-full")).toEqual({ ok: false, reason: "chips" }); // 20 < 4 × 45
+    fund(180);
     expect(st().buy("hearts-full")).toEqual({ ok: true });
     expect(heartCount()).toBe(5);
     expect(chips()).toBe(0);
+    expect(st().ledger[0]).toMatchObject({ reason: "buy", note: "hearts-full", amount: -180 });
+  });
+
+  it("payEntry: списывает цену входа целиком или ничего", () => {
+    expect(st().payEntry(2)).toMatchObject({ ok: true, paid: 2, view: { count: 3 } });
+    expect(st().payEntry(1)).toMatchObject({ ok: true, paid: 1, view: { count: 2 } });
+    expect(st().payEntry(2)).toMatchObject({ ok: true, paid: 2, view: { count: 0 } });
+    const hearts = st().hearts;
+    expect(st().payEntry(1)).toMatchObject({ ok: false, paid: 0, view: { count: 0 } });
+    expect(st().hearts).toBe(hearts);
+  });
+
+  it("payEntry: двух сердечек нет — вход за 2 не списывает последнее", () => {
+    for (let i = 0; i < 4; i++) lose();
+    expect(st().payEntry(2)).toMatchObject({ ok: false, paid: 0, view: { count: 1 } });
+    expect(heartCount()).toBe(1);
+  });
+
+  it("payEntry: безлимит и нулевая цена — бесплатно", () => {
+    expect(st().payEntry(0)).toMatchObject({ ok: true, paid: 0, view: { count: 5 } });
+    st().startTrial();
+    expect(st().payEntry(2)).toMatchObject({ ok: true, paid: 0, view: { unlimited: true } });
   });
 
   it("buy: нехватка чипов ничего не меняет", () => {
-    st().loseHeart();
+    lose();
     fund(10);
     const hearts = st().hearts;
     expect(st().buy("heart-1")).toEqual({ ok: false, reason: "chips" });
@@ -353,7 +388,7 @@ describe("стор: сердечки и покупки", () => {
     expect(st().plan).toMatchObject({ tier: "unlimited", trial: true, trialUsed: true });
     expect(st().plan.until!).toBeGreaterThan(Date.now() + 6 * 86_400_000);
     expect(st().startTrial()).toBe(false);
-    expect(st().loseHeart()).toMatchObject({ unlimited: true, count: Infinity });
+    expect(lose()).toMatchObject({ unlimited: true, count: Infinity });
     expect(st().buy("heart-1")).toEqual({ ok: false, reason: "unlimited" });
   });
 
@@ -361,7 +396,7 @@ describe("стор: сердечки и покупки", () => {
     st().startTrial();
     useApp.setState((s) => ({ plan: { ...s.plan, until: Date.now() - 1 } }));
     expect(st().startTrial()).toBe(false);
-    expect(st().loseHeart().unlimited).toBe(false);
+    expect(lose().unlimited).toBe(false);
   });
 
   it("notePaywallShown считает показы", () => {
@@ -558,7 +593,7 @@ describe("стор: сброс и загрузка сохранений", () => 
     st().startTrial();
     st().recordAnswer(rec(), 100);
     st().finishSession(lesson());
-    st().loseHeart();
+    lose();
     st().resetProgress();
     expect(st().plan).toMatchObject({ tier: "unlimited", trial: true, trialUsed: true });
     expect(st().wallet).toEqual(START_WALLET);
@@ -637,5 +672,68 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(ok).toBe(true);
     expect(st().plan.tier).toBe("free");
     expect(chips()).toBe(555);
+  });
+});
+
+describe("стор: незаконченные уроки (#41)", () => {
+  beforeEach(fullReset);
+
+  const run = (lessonId: string, over: Partial<LessonRun> = {}): LessonRun => ({
+    lessonId,
+    sig: "3-abc",
+    queue: [
+      { id: "s1", retry: false },
+      { id: "s2", retry: false },
+      { id: "s3", retry: false },
+    ],
+    pos: 1,
+    done: 1,
+    records: [rec({ stepId: "s1" })],
+    xp: 10,
+    combo: 1,
+    maxCombo: 1,
+    skipped: 0,
+    activeMs: 30_000,
+    xpFactor: 1,
+    chipsEarned: 4,
+    cost: 1,
+    startedAt: Date.now() - 60_000,
+    updatedAt: Date.now(),
+    paidAt: Date.now() - 50_000,
+    ...over,
+  });
+
+  it("saveLessonRun / clearLessonRun", () => {
+    st().saveLessonRun(run("ns-2-read"));
+    expect(st().lessonRuns["ns-2-read"]).toMatchObject({ pos: 1, xp: 10 });
+    st().saveLessonRun(run("ns-2-read", { pos: 2 }));
+    expect(st().lessonRuns["ns-2-read"].pos).toBe(2);
+    st().clearLessonRun("ns-2-read");
+    expect(st().lessonRuns).toEqual({});
+    const before = st().lessonRuns;
+    st().clearLessonRun("nope");
+    expect(st().lessonRuns).toBe(before);
+  });
+
+  it("пройденный в режиме «Учиться» урок забывает сохранение; «Проверить себя» — нет", () => {
+    st().saveLessonRun(run("ns-2-read"));
+    st().finishSession(lesson({ via: "check" }));
+    expect(st().lessonRuns["ns-2-read"]).toBeDefined();
+    st().finishSession(lesson());
+    expect(st().lessonRuns["ns-2-read"]).toBeUndefined();
+  });
+
+  it("хранится не больше 5 самых свежих", () => {
+    for (let i = 0; i < 7; i++) st().saveLessonRun(run(`l${i}`, { updatedAt: Date.now() + i }));
+    expect(Object.keys(st().lessonRuns).sort()).toEqual(["l2", "l3", "l4", "l5", "l6"]);
+  });
+
+  it("сброс прогресса и загрузка сохранения проверяют сохранения уроков", () => {
+    st().saveLessonRun(run("ns-2-read"));
+    st().resetProgress();
+    expect(st().lessonRuns).toEqual({});
+    const m = mergeState({ lessonRuns: { "ns-2-read": run("ns-2-read"), bad: { lessonId: "bad" }, "x y": run("x y") } }, st());
+    expect(Object.keys(m.lessonRuns)).toEqual(["ns-2-read"]);
+    expect(mergeState({ lessonRuns: "мусор" }, st()).lessonRuns).toEqual({});
   });
 });

@@ -321,14 +321,8 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       recordAnswer(rec, gained, lessonId);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
-      // Сердечко тратит только ошибка с первой попытки в уроке (тренировка и повтор ошибки — нет).
-      let lostHeart = false;
-      if (kind === "lesson" && !res.correct && !item.retry) {
-        const before = readHearts();
-        lostHeart = !before.unlimited && before.count > 0;
-        if (lostHeart) useApp.getState().loseHeart();
-      }
-      setHeartLost(lostHeart);
+      // Сердечки за ошибки больше не снимаются (#40): плата — за вход. Каркас этапа 11; плеер дорабатывает пакет A.
+      setHeartLost(false);
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
