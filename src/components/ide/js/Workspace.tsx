@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CircleAlert, Clock, Loader2, Play, SquareCheckBig, WifiOff } from "lucide-react";
+import { CircleAlert, Clock, Loader2, Play, Square, SquareCheckBig, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { cn } from "@/lib/cn";
@@ -45,6 +45,9 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     onRunError?.(problem(r));
   }
 
+  // «Стоп»: прервать запуск или проверку (этап 14) — запуск завершится с результатом `stopped`.
+  const stop = () => stopJs();
+
   async function check() {
     if (busy || !jsCheck) return;
     setBusy(true);
@@ -57,6 +60,12 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     if (!mounted.current) return;
     setBusy(false);
     setChecking(false);
+    // «Стоп» — не попытка: итог проверки не показываем и в статистику не пишем.
+    if ((last as JsRunResult | null)?.stopped) {
+      setResult(last);
+      onRunError?.(null);
+      return;
+    }
     if (last) {
       setResult(last);
       onRunError?.(problem(last));
@@ -69,17 +78,22 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
       <div className="min-w-0 space-y-3">
         <CodeEditor value={code} onChange={onCodeChange} language="javascript" ariaLabel={t("ideweb.js.editor.aria")} minHeight={240} />
         <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="primary"
-            size="lg"
-            block
-            className={jsCheck ? undefined : "col-span-2"}
-            disabled={busy}
-            onClick={run}
-            icon={busy && !checking ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <Play size={20} aria-hidden />}
-          >
-            {busy && !checking ? t("ideweb.js.running") : t("ideweb.js.run")}
-          </Button>
+          {busy ? (
+            <Button
+              variant="secondary"
+              size="lg"
+              block
+              className={jsCheck ? undefined : "col-span-2"}
+              onClick={stop}
+              icon={<Square size={18} fill="currentColor" aria-hidden />}
+            >
+              {t("iderun.stop")}
+            </Button>
+          ) : (
+            <Button variant="primary" size="lg" block className={jsCheck ? undefined : "col-span-2"} onClick={run} icon={<Play size={20} aria-hidden />}>
+              {t("ideweb.js.run")}
+            </Button>
+          )}
           {jsCheck && (
             <Button
               variant="success"
@@ -126,6 +140,16 @@ function OutputPanel({ busy, result, errorLine }: { busy: boolean; result: JsRun
         <>
           <Lines result={result} />
           {(result.cut || limitLines(result.lines).truncated) && <p className="text-xs font-bold text-warning-strong">{t("ideweb.js.out.cut")}</p>}
+          {/* «Стоп»: нейтральный статус — не ошибка и не таймаут. */}
+          {result.stopped && (
+            <div className="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-3 text-sm text-muted">
+              <Square size={16} fill="currentColor" className="mt-0.5 shrink-0" aria-hidden />
+              <div>
+                <p className="font-extrabold text-text">{t("iderun.stopped")}</p>
+                {result.lines.length > 0 && <p className="mt-0.5 font-semibold">{t("iderun.stopped.hint")}</p>}
+              </div>
+            </div>
+          )}
           {result.timedOut && (
             <div className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-3 text-sm text-warning-strong">
               <Clock size={18} className="mt-0.5 shrink-0" aria-hidden />
@@ -144,7 +168,7 @@ function OutputPanel({ busy, result, errorLine }: { busy: boolean; result: JsRun
               <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm font-semibold">{errorLine(result.error)}</pre>
             </div>
           )}
-          {!result.timedOut && <p className="text-xs text-muted">{t("ideweb.js.out.time", { ms: result.ms })}</p>}
+          {!result.timedOut && !result.stopped && <p className="text-xs text-muted">{t("ideweb.js.out.time", { ms: result.ms })}</p>}
         </>
       )}
     </section>
@@ -155,7 +179,7 @@ function OutputPanel({ busy, result, errorLine }: { busy: boolean; result: JsRun
 function Lines({ result }: { result: JsRunResult }) {
   const { t } = useT();
   if (result.lines.length === 0) {
-    return result.error || result.timedOut ? null : <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">{t("ideweb.js.out.empty")}</p>;
+    return result.error || result.timedOut || result.stopped ? null : <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">{t("ideweb.js.out.empty")}</p>;
   }
   const { shown } = limitLines(result.lines);
   return (

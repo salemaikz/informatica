@@ -5,6 +5,7 @@ import { m } from "motion/react";
 import { useEffect, useState } from "react";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { springBouncy } from "@/components/motion/presets";
+import { RunPanel } from "@/components/ide/python/RunPanel";
 import { cn } from "@/lib/cn";
 import type { Scene } from "@/lib/types";
 import { useT } from "@/i18n/useT";
@@ -108,6 +109,9 @@ export function CodeScene({ scene }: { scene: CodeScene }) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5">
       <CodeBlock lines={scene.lines} lang={scene.lang} active={scene.active} marks={scene.marks} />
+
+      {/* Контекстные задания практикума: программу можно запустить со своим вводом (этап 14). Только Python. */}
+      {scene.run && scene.lang === "python" && <RunPanel code={scene.lines.join("\n")} />}
 
       {vars && vars.length > 0 && (
         <div>

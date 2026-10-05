@@ -34,9 +34,12 @@ interface WorkerMsg {
 
 let seq = 0;
 let active: Worker | null = null;
+/** Прервать активный запуск: завершает его с { stopped: true }. */
+let abortActive: (() => void) | null = null;
 
-/** Остановить текущий запуск (например, при выходе со страницы). */
+/** «Стоп» (и выход со страницы): прервать текущий запуск — он завершится с `stopped: true` и тем, что успел вывести. */
 export function stopJs() {
+  if (abortActive) abortActive();
   active?.terminate();
   active = null;
 }
@@ -53,6 +56,8 @@ export function runJs(code: string, timeoutMs: number = RUN_TIMEOUT_MS): Promise
       return;
     }
     active = w;
+    const abort = () => finish({ stopped: true });
+    abortActive = abort;
     const id = ++seq;
     const lines: JsLine[] = [];
     let error: JsRunResult["error"] = null;
@@ -65,6 +70,7 @@ export function runJs(code: string, timeoutMs: number = RUN_TIMEOUT_MS): Promise
       clearTimeout(timer);
       w.terminate();
       if (active === w) active = null;
+      if (abortActive === abort) abortActive = null;
       resolve({ stdout: lines.map((l) => l.text).join("\n"), lines, error, ms: Math.round(performance.now() - t0), ...extra });
     };
     // До «ready» тикает только таймер загрузки; 3 с программы стартуют, когда воркер готов.
