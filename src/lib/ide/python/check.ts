@@ -27,6 +27,8 @@ export interface PyRunLike {
   timedOut?: boolean;
   /** Не удалось загрузить Python (нет сети). */
   loadFailed?: boolean;
+  /** Ученик нажал «Стоп» (этап 14): это не ошибка и не попытка. */
+  stopped?: boolean;
 }
 
 export type PyRun = (code: string, stdin: string) => Promise<PyRunLike>;
@@ -39,6 +41,7 @@ export const MSG_LOAD: L = {
   ru: "Не удалось загрузить Python. Проверьте интернет и попробуйте ещё раз.",
   kk: "Python жүктелмеді. Интернетті тексеріп, қайта көріңіз.",
 };
+export const MSG_STOPPED: L = { ru: "Программа остановлена.", kk: "Программа тоқтатылды." };
 const MSG_EMPTY: L = { ru: "Сначала напишите программу.", kk: "Алдымен программа жазыңыз." };
 
 /** Запрещённая конструкция (ограничение из условия задачи): regexp по коду без комментариев и (если inStrings не задан) без строк. */
@@ -94,6 +97,7 @@ export async function checkPython(check: Extract<IdeCheck, { kind: "python" }>, 
     const stdin = test.stdin ?? "";
     const n = i + 1;
     const res = await run(code, stdin);
+    if (res.stopped) return { ok: false, passed, total, message: MSG_STOPPED };
     if (res.loadFailed) return { ok: false, passed, total, message: MSG_LOAD };
     if (res.timedOut) return { ok: false, passed, total, message: MSG_TIMEOUT, sample: { input: stdin, expected: test.stdout, got: res.stdout } };
     if (res.error) {

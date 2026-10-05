@@ -27,6 +27,8 @@ export interface JsRunLike {
   timedOut?: boolean;
   /** Не удалось запустить воркер. */
   loadFailed?: boolean;
+  /** Ученик нажал «Стоп» (этап 14): это не ошибка и не попытка. */
+  stopped?: boolean;
 }
 
 export type JsRun = (code: string) => Promise<JsRunLike>;
@@ -39,6 +41,7 @@ export const MSG_LOAD: L = {
   ru: "Не удалось запустить JavaScript. Обновите страницу и попробуйте ещё раз.",
   kk: "JavaScript іске қосылмады. Бетті жаңартып, қайта көріңіз.",
 };
+export const MSG_STOPPED: L = { ru: "Программа остановлена.", kk: "Программа тоқтатылды." };
 export const MSG_EMPTY: L = { ru: "Сначала напишите программу.", kk: "Алдымен программа жазыңыз." };
 export const MSG_WRONG: L = { ru: "Вывод не совпал с ожидаемым.", kk: "Шығыс күтілген нәтижемен сәйкес келмеді." };
 
@@ -47,6 +50,7 @@ export async function checkJs(check: Extract<IdeCheck, { kind: "js" }>, code: st
   if (!code.trim()) return { ok: false, passed: 0, total: 1, message: MSG_EMPTY };
   const res = await run(code);
   const sample = { expected: check.stdout, got: res.stdout };
+  if (res.stopped) return { ok: false, passed: 0, total: 1, message: MSG_STOPPED };
   if (res.loadFailed) return { ok: false, passed: 0, total: 1, message: MSG_LOAD };
   if (res.timedOut) return { ok: false, passed: 0, total: 1, message: MSG_TIMEOUT, sample };
   if (res.error) {

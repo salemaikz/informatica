@@ -1,25 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CircleAlert, Clock, Footprints, Loader2, Play, SquareCheckBig, WifiOff } from "lucide-react";
+import { Footprints, Loader2, Play, Square, SquareCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CodeEditor } from "@/components/ide/CodeEditor";
+import { OutputPanel, type RunPhase } from "./OutputPanel";
 import { Tracer } from "./Tracer";
-import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { CheckResult, WorkspaceProps } from "@/lib/ide/types";
 import { checkPython } from "@/lib/ide/python/check";
 import { PY_FORBID } from "@/lib/ide/python/tasks";
-import { runPython, type PyRunResult, type RunStatus } from "@/lib/ide/python/runner";
+import { runPython, stopPython, type PyRunResult, type RunStatus } from "@/lib/ide/python/runner";
 import { highlightFor, type TraceData } from "@/lib/ide/python/trace";
 
 // Рабочая область Python: редактор, «Входные данные», запуск, пошаговое выполнение, проверка задачи.
-// Python — Pyodide в Web Worker (грузится при первом запуске), таймаут 5 с.
+// Python — Pyodide в Web Worker (грузится при первом запуске), таймаут 5 с; пока идёт запуск, проверка или трассировка,
+// кнопка «Запустить» становится «Стоп» (этап 14).
 
-/** Сколько символов вывода показываем (остальное обрезаем — длинный вывод тормозит страницу). */
-const SHOW_LIMIT = 20000;
-
-type Phase = "idle" | "loading" | "running";
+type Phase = RunPhase;
 
 export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: WorkspaceProps) {
   const { t } = useT();
@@ -75,11 +73,13 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     setPhase("running");
     setTrace(null);
     let firstError: string | null = null;
+    const flags = { stopped: false };
     const res: CheckResult = await checkPython(
       pyCheck,
       code,
       async (c, s) => {
         const r = await runPython({ code: c, stdin: s, quiet: true, onStatus });
+        if (r.stopped) flags.stopped = true;
         if (firstError === null && r.error) firstError = errorLine(r.error);
         if (firstError === null && r.timedOut) firstError = t("idepy.timeout");
         return r;
@@ -89,6 +89,12 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
     if (!mounted.current) return;
     setPhase("idle");
     setChecking(false);
+    // «Стоп» — не попытка: итог проверки не показываем и в статистику не пишем.
+    if (flags.stopped) {
+      setResult({ stdout: "", stopped: true, ms: 0 });
+      onRunError?.(null);
+      return;
+    }
     onRunError?.(firstError);
     onCheck(res);
   }
@@ -129,9 +135,15 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="primary" size="md" disabled={busy} onClick={() => run(false)} icon={<Play size={20} aria-hidden />}>
-            {t("idepy.run")}
-          </Button>
+          {busy ? (
+            <Button variant="secondary" size="md" onClick={stopPython} icon={<Square size={18} fill="currentColor" aria-hidden />}>
+              {t("iderun.stop")}
+            </Button>
+          ) : (
+            <Button variant="primary" size="md" onClick={() => run(false)} icon={<Play size={20} aria-hidden />}>
+              {t("idepy.run")}
+            </Button>
+          )}
           <Button variant="secondary" size="md" disabled={busy} onClick={() => run(true)} icon={<Footprints size={20} aria-hidden />}>
             {t("idepy.step")}
           </Button>
@@ -159,72 +171,5 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
         )}
       </div>
     </div>
-  );
-}
-
-function OutputPanel({ phase, result, errorLine }: { phase: Phase; result: PyRunResult | null; errorLine: (e: { line: number | null; text: string }) => string }) {
-  const { t } = useT();
-  const stdout = result?.stdout ?? "";
-  const shown = stdout.length > SHOW_LIMIT ? stdout.slice(0, SHOW_LIMIT) : stdout;
-
-  return (
-    <section aria-label={t("idepy.out.title")} aria-live="polite" className="space-y-2 rounded-2xl border-2 border-border bg-surface p-3">
-      <h3 className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("idepy.out.title")}</h3>
-
-      {phase === "loading" ? (
-        <div className="flex items-start gap-3 rounded-xl bg-primary-soft px-3 py-3">
-          <Loader2 size={20} className="mt-0.5 shrink-0 animate-spin text-primary" aria-hidden />
-          <div>
-            <p className="text-sm font-extrabold text-primary">{t("idepy.loading")}</p>
-            <p className="mt-0.5 text-xs text-muted">{t("idepy.loading.hint")}</p>
-          </div>
-        </div>
-      ) : phase !== "idle" ? (
-        <p className="flex items-center gap-2 px-1 py-2 text-sm font-bold text-muted">
-          <Loader2 size={18} className="animate-spin text-primary" aria-hidden />
-          {t("idepy.running")}
-        </p>
-      ) : !result ? (
-        <p className="rounded-xl bg-surface-2 px-3 py-3 text-sm text-muted">{t("idepy.out.idle")}</p>
-      ) : (
-        <>
-          {result.loadFailed ? (
-            <div className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-3 text-sm font-bold text-warning-strong">
-              <WifiOff size={18} className="mt-0.5 shrink-0" aria-hidden />
-              <p>{t("idepy.loadFail")}</p>
-            </div>
-          ) : (
-            <>
-              {shown ? (
-                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-surface-2 px-3 py-2 font-mono text-[15px]">{shown}</pre>
-              ) : !result.error && !result.timedOut ? (
-                <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">{t("idepy.out.empty")}</p>
-              ) : null}
-              {(result.cut || stdout.length > SHOW_LIMIT) && <p className="text-xs font-bold text-warning-strong">{t("idepy.out.cut")}</p>}
-              {result.timedOut && (
-                <div className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-3 text-sm text-warning-strong">
-                  <Clock size={18} className="mt-0.5 shrink-0" aria-hidden />
-                  <div>
-                    <p className="font-extrabold">{t("idepy.timeout")}</p>
-                    <p className="mt-0.5 font-semibold">{t("idepy.timeout.hint")}</p>
-                  </div>
-                </div>
-              )}
-              {result.error && (
-                <div className={cn("rounded-xl border-2 border-danger/30 bg-danger-soft px-3 py-2 text-danger")}>
-                  <p className="flex items-center gap-2 text-sm font-extrabold">
-                    <CircleAlert size={18} className="shrink-0" aria-hidden />
-                    {t("idepy.err.title")}
-                  </p>
-                  <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm font-semibold">{errorLine(result.error)}</pre>
-                  {result.error.text.startsWith("EOFError") && <p className="mt-1 text-sm font-semibold text-text">{t("idepy.err.eof")}</p>}
-                </div>
-              )}
-              {!result.timedOut && <p className="text-xs text-muted">{t("idepy.out.time", { ms: result.ms })}</p>}
-            </>
-          )}
-        </>
-      )}
-    </section>
   );
 }

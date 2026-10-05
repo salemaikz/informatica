@@ -46,6 +46,10 @@ interface WorkerMsg {
 let worker: Worker | null = null;
 let seq = 0;
 let chain: Promise<unknown> = Promise.resolve();
+/** Прервать активный запуск («Стоп»): завершает его с { stopped: true } и убивает воркер. */
+let abortActive: (() => void) | null = null;
+/** Счётчик остановок: запуски, поставленные в очередь до «Стоп», не стартуют. */
+let stopEpoch = 0;
 
 function dropWorker() {
   worker?.terminate();
@@ -78,6 +82,7 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
     const finish = (r: Omit<PyRunResult, "ms"> & { ms?: number }) => {
       if (settled) return;
       settled = true;
+      if (abortActive === abort) abortActive = null;
       clearTimeout(timer);
       clearTimeout(loadTimer);
       w.removeEventListener("message", onMessage);
@@ -90,6 +95,8 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
       else w.terminate();
       finish({ stdout, trace, ...extra });
     };
+    const abort = () => fail({ stopped: true });
+    abortActive = abort;
     const onMessage = (ev: MessageEvent<WorkerMsg>) => {
       const m = ev.data;
       if (!m || (m.id !== undefined && m.id !== id)) return;
@@ -129,12 +136,19 @@ function execute(opts: RunOptions): Promise<PyRunResult> {
 
 /** Запустить программу (запуски идут по очереди, воркер один). */
 export function runPython(opts: RunOptions): Promise<PyRunResult> {
-  const p = chain.then(() => execute(opts));
+  const epoch = stopEpoch;
+  // Запуск, поставленный в очередь до «Стоп», не стартует: сразу отдаёт «остановлено».
+  const p = chain.then(() => (epoch === stopEpoch ? execute(opts) : ({ stdout: "", stopped: true, ms: 0 } satisfies PyRunResult)));
   chain = p.catch(() => undefined);
   return p;
 }
 
-/** Остановить воркер (например, при выходе со страницы): следующий запуск создаст новый. */
+/**
+ * «Стоп»: прервать идущий запуск (он завершается с `stopped: true` и тем, что успел вывести) и очередь за ним.
+ * Воркер убивается — следующий запуск создаст новый (Pyodide берётся из кэша браузера). Годится и при выходе со страницы.
+ */
 export function stopPython() {
+  stopEpoch++;
+  abortActive?.();
   dropWorker();
 }
