@@ -88,8 +88,8 @@ describe("онбординг: ЕНТ", () => {
     expect(s.profile).toMatchObject({ name: "Аня", track: "ent", goal: "ent", grade: "11", examDate: null, targetScoreSet: false });
     expect(s.profile.createdAt).toBeGreaterThan(0);
     expect(nav.replace).toHaveBeenCalledWith("/diagnostic?from=onboarding");
-    // окно тарифов — после диагностики, а не сейчас
-    expect(s.paywall.views).toBe(0);
+    // окно тарифов не показываем (#104), но показ отмечен: автопоказ — не раньше чем через 3 дня
+    expect(s.paywall.views).toBe(1);
     // события: пройденные шаги и конец (без введённых данных)
     expect(events).toEqual([
       { e: "onb_step", step: "lang" },
@@ -131,7 +131,7 @@ describe("онбординг: ЕНТ", () => {
 });
 
 describe("онбординг: школа", () => {
-  it("четыре экрана, класс обязателен, диагностики нет — сразу окно тарифов", async () => {
+  it("четыре экрана, класс обязателен, диагностики нет — сразу «Учиться»", async () => {
     await langAndName();
     await click("Изучаю школьную программу");
     expect(progressLabel()).toBe("Шаг 4 из 4");
@@ -143,8 +143,10 @@ describe("онбординг: школа", () => {
     const s = useApp.getState();
     expect(s.onboarded).toBe(true);
     expect(s.profile).toMatchObject({ track: "school", goal: "school", grade: "8", examDate: null, targetScoreSet: false });
-    expect(nav.replace).toHaveBeenCalledWith("/plans?from=onboarding");
+    // школа: сразу «Учиться», где ведёт проводник (#104); окно тарифов не показываем, но показ отмечен
+    expect(nav.replace).toHaveBeenCalledWith("/learn");
     expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining("/diagnostic"));
+    expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining("/plans"));
     expect(s.paywall.views).toBe(1);
     expect(events.at(-1)).toEqual({ e: "onb_done", track: "school" });
   });

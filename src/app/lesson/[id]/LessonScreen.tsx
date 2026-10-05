@@ -15,6 +15,7 @@ import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
 import { readHearts } from "@/components/economy/HeartsBar";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { LessonFirstTip } from "@/components/tour/LessonFirstTip";
 
 /**
  * Урок. Режимы: «Учиться» (learn) — вход стоит сердечко (у большого урока два), прохождение сохраняется,
@@ -104,17 +105,21 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
     body = <LessonPlayer key="check" kind="lesson" via="check" lessonId={lesson.id} lesson={lesson} title={l(lesson.title)} steps={check} entryCost={ENTRY_COST.check} />;
   } else {
     body = (
-      <LessonPlayer
-        key={choice}
-        kind="lesson"
-        lessonId={lesson.id}
-        lesson={lesson}
-        title={l(lesson.title)}
-        steps={lesson.steps}
-        entryCost={cost}
-        saveRun
-        resume={choice === "continue" && saved ? saved : undefined}
-      />
+      <>
+        <LessonPlayer
+          key={choice}
+          kind="lesson"
+          lessonId={lesson.id}
+          lesson={lesson}
+          title={l(lesson.title)}
+          steps={lesson.steps}
+          entryCost={cost}
+          saveRun
+          resume={choice === "continue" && saved ? saved : undefined}
+        />
+        {/* Проводник (#104): в самом первом уроке — одна подсказка у сердечек. */}
+        <LessonFirstTip cost={cost} />
+      </>
     );
   }
 

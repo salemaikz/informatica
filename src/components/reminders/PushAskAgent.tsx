@@ -4,6 +4,7 @@ import { BellRing, Share, SquarePlus, Smartphone } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isPushAskScreen, shouldAskPush, type PushAskAction } from "@/lib/push-ask";
+import { tourBlocking } from "@/lib/tour";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { enablePush, pushPermission } from "@/components/goals/push";
@@ -24,6 +25,8 @@ export function PushAskAgent() {
   const { t } = useT();
   const pathname = usePathname();
   const onboarded = useApp((s) => s.onboarded);
+  // Пока идёт проводник первого входа (#104), окно ждёт; сразу после обзора панели появляется («напомнить завтра, чтобы серия не сгорела»).
+  const touring = useApp((s) => tourBlocking(s.tips));
   // mode — что показываем; shown — открыто ли окно (mode остаётся на время анимации закрытия, чтобы текст не «прыгал»).
   const [mode, setMode] = useState<PushAskAction>("ask");
   const [shown, setShown] = useState(false);
@@ -33,7 +36,7 @@ export function PushAskAgent() {
   const screen = isPushAskScreen(pathname);
 
   useEffect(() => {
-    if (fired.current || !screen || !onboarded) return;
+    if (fired.current || !screen || !onboarded || touring) return;
     const id = setTimeout(() => {
       const s = useApp.getState();
       // Ученик сам выключил напоминания — не уговариваем.
@@ -49,7 +52,7 @@ export function PushAskAgent() {
       setShown(true);
     }, PUSH_ASK_DELAY_MS);
     return () => clearTimeout(id);
-  }, [screen, onboarded]);
+  }, [screen, onboarded, touring]);
 
   // Ушли с главного экрана (назад, ссылка) — окно прячется вместе с экраном.
   const open = shown && screen;

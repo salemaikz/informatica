@@ -24,6 +24,7 @@ import { GradePicker } from "@/components/school/GradePicker";
 
 // Короткий онбординг (#70): язык → имя → ЕНТ или школа → (ЕНТ) дата → (ЕНТ) цель | (школа) класс. Остальное — по умолчанию, меняется в профиле.
 // Экранов: у ЕНТ — 5, у школы — 4. «Поехали» — кнопка последнего экрана (под ней — согласие с условиями).
+// Дальше: ЕНТ → диагностика → «Учиться»; школа → «Учиться»; на «Учиться» ученика встречает проводник (#104).
 
 // Имена шагов уходят в статистику (onb_step); сервер принимает только эти шесть (server/analytics-ids.ts → ONBOARDING_STEPS): новый шаг — добавить и туда.
 type StepId = "lang" | "name" | "track" | "date" | "target" | "grade";
@@ -138,14 +139,11 @@ export default function OnboardingPage() {
       router.replace(pending);
       return;
     }
-    if (ent) {
-      // ЕНТ: сначала входная диагностика (окно тарифов — после неё или её пропуска).
-      router.replace("/diagnostic?from=onboarding");
-    } else {
-      // Школа: сразу окно тарифов (один показ учитывается в статистике).
-      useApp.getState().notePaywallShown();
-      router.replace("/plans?from=onboarding");
-    }
+    // Окно тарифов сразу после онбординга больше не показываем (#104): ученика ведёт проводник (components/tour).
+    // Но отметку показа оставляем — автопоказ тарифов будет не раньше чем через 3 дня.
+    useApp.getState().notePaywallShown();
+    // ЕНТ: входная диагностика, потом «Учиться»; школа — сразу «Учиться», где проводник подведёт к первому уроку.
+    router.replace(ent ? "/diagnostic?from=onboarding" : "/learn");
   };
 
   const next = () => {

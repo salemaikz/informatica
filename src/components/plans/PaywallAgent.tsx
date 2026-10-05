@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { shouldShowPaywall } from "@/lib/economy";
+import { tourBlocking } from "@/lib/tour";
 import { useApp } from "@/lib/store";
 import { useNow, usePlanTier } from "@/components/economy/useEconomy";
 
@@ -15,18 +16,20 @@ export function PaywallAgent() {
   const router = useRouter();
   const onboarded = useApp((s) => s.onboarded);
   const paywall = useApp((s) => s.paywall);
+  // Пока идёт проводник первого входа (#104), тарифы не показываем.
+  const touring = useApp((s) => tourBlocking(s.tips));
   const notePaywallShown = useApp((s) => s.notePaywallShown);
   const tier = usePlanTier();
   const now = useNow();
   const fired = useRef(false);
 
   useEffect(() => {
-    if (fired.current || pathname !== "/learn" || !onboarded || now <= 0) return;
+    if (fired.current || pathname !== "/learn" || !onboarded || touring || now <= 0) return;
     if (!shouldShowPaywall(tier, paywall, now)) return;
     fired.current = true;
     notePaywallShown();
     router.push("/plans?from=auto");
-  }, [pathname, onboarded, tier, paywall, now, notePaywallShown, router]);
+  }, [pathname, onboarded, touring, tier, paywall, now, notePaywallShown, router]);
 
   return null;
 }
