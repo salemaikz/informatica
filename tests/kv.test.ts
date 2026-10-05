@@ -78,6 +78,13 @@ describe("хранилище сервера: хеши и срезы списка
     expect(await kv.hincrMany("h", { a: 5 }, 60)).toBe(0);
   });
 
+  it("hmgetMany: только нужные поля, по порядку ключей; нет ключа или поля — пусто", async () => {
+    const kv = createMemoryKv();
+    await kv.hincrMany("ev:a", { "act:0": 4, "act:7": 2, "ls:x:learn": 9 }, 60);
+    await kv.hincrMany("ev:b", { "act:1": 1 }, 60);
+    expect(await kv.hmgetMany(["ev:a", "ev:b", "ev:none"], ["act:0", "act:1", "act:7", "act:30"])).toEqual([{ "act:0": 4, "act:7": 2 }, { "act:1": 1 }, {}]);
+  });
+
   it("время жизни хеша: после ttl поля исчезают, ttl продлевается каждой записью", async () => {
     let t = 1_000;
     const kv = createMemoryKv(() => t);
@@ -165,16 +172,41 @@ describe("хранилище сервера: Upstash — хеши и срезы"
     expect(calls[0]).toEqual([["LRANGE", "issues", 0, 99]]);
   });
 
-  it("Upstash недоступен — хеши и списки работают на памяти и не бросают", async () => {
+  it("hmgetMany: HMGET нужных полей по каждому ключу одним запросом; нет поля (null) — его нет в объекте", async () => {
+    const { kv, calls } = make([[["4", null, "2", null], [null, null, null, null], ["1", "мусор", null, "7"]]]);
+    expect(await kv.hmgetMany(["ev:a", "ev:b", "ev:c"], ["act:0", "act:1", "act:7", "act:30"])).toEqual([{ "act:0": 4, "act:7": 2 }, {}, { "act:0": 1, "act:30": 7 }]);
+    expect(calls).toEqual([
+      [
+        ["HMGET", "ev:a", "act:0", "act:1", "act:7", "act:30"],
+        ["HMGET", "ev:b", "act:0", "act:1", "act:7", "act:30"],
+        ["HMGET", "ev:c", "act:0", "act:1", "act:7", "act:30"],
+      ],
+    ]);
+  });
+
+  it("hmgetMany без ключей или без полей ничего не шлёт", async () => {
+    const { kv, calls } = make([]);
+    expect(await kv.hmgetMany([], ["a"])).toEqual([]);
+    expect(await kv.hmgetMany(["k1", "k2"], [])).toEqual([{}, {}]);
+    expect(calls).toEqual([]);
+  });
+
+  it("Upstash недоступен — запись идёт в память и не бросает, а ЧТЕНИЯ для страницы владельца бросают (не подменяются пустой памятью)", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchMock = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
-    const kv = createUpstashKv("https://x.upstash.io", "tok", createMemoryKv(), fetchMock);
+    const memory = createMemoryKv();
+    const kv = createUpstashKv("https://x.upstash.io", "tok", memory, fetchMock);
     expect(await kv.hincrMany("h", { a: 2 }, 60)).toBe(1);
     expect(await kv.hincrBy("h", "a", 1, 60)).toBe(3);
-    expect(await kv.hgetAll("h")).toEqual({ a: 3 });
-    expect(await kv.hgetAllMany(["h"])).toEqual([{ a: 3 }]);
     await kv.pushCapped("l", "v", 10);
-    expect(await kv.lrange("l", 0, -1)).toEqual(["v"]);
+    // Запись ушла в память-запас, но читать её «вместо Upstash» нельзя: нулевые таблицы выглядели бы как «данных нет».
+    await expect(kv.hgetAll("h")).rejects.toThrow(/upstash http 500/);
+    await expect(kv.hgetAllMany(["h"])).rejects.toThrow();
+    await expect(kv.hmgetMany(["h"], ["a"])).rejects.toThrow();
+    await expect(kv.lrange("l", 0, -1)).rejects.toThrow();
+    expect(await memory.hgetAll("h")).toEqual({ a: 3 });
+    // Ошибка чтения попала в журнал.
+    expect(err.mock.calls.some((c) => String(c[0]).includes("upstash read failed"))).toBe(true);
     err.mockRestore();
   });
 });

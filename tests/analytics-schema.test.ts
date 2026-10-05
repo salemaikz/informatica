@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AnalyticsEvent, AnalyticsName } from "@/lib/analytics";
-import { EVENT_SCHEMA, ID_RE, MAX_BATCH, parseEvent, parseEvents } from "@/lib/analytics-schema";
+import { EVENT_SCHEMA, EVENTS_FIELDS_DAY_MAX, ID_RE, isSafeId, MAX_BATCH, parseEvent, parseEvents } from "@/lib/analytics-schema";
 
 // Образец каждого события, типизированный по контракту lib/analytics.ts: если контракт поменяется, тест не соберётся.
 const SAMPLES: Record<AnalyticsName, AnalyticsEvent> = {
@@ -93,6 +93,29 @@ describe("белый список событий статистики", () => {
     expect(parseEvent({ ...t, mode: "x".repeat(81) })).toBeNull();
     expect(parseEvent({ ...t, mode: 5 })).toBeNull();
     expect(parseEvent({ ...t, mode: ["weak"] })).toBeNull();
+  });
+
+  it("«отравленные» id: имена из Object.prototype (constructor, __proto__, toString…) не принимаются ни в одном поле-идентификаторе", () => {
+    const bad = ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf", "isPrototypeOf", "prototype", "constructor:x", "lesson:__proto__:q", "__proto__:x"];
+    for (const v of bad) expect(isSafeId(v), v).toBe(false);
+    // Похожие, но безопасные id остаются.
+    for (const v of ["constructor-q-1", "my-prototype", "ns-1-bits:bits-story-start", "to-string"]) expect(isSafeId(v), v).toBe(true);
+    for (const v of bad) {
+      expect(parseEvent({ e: "lesson_start", lesson: v, via: "learn", resume: 0 }), `lesson ${v}`).toBeNull();
+      expect(parseEvent({ e: "lesson_quit", lesson: v, via: "learn", step: 1, of: 2 }), `quit ${v}`).toBeNull();
+      expect(parseEvent({ e: "resume_choice", lesson: v, choice: "continue" }), `resume ${v}`).toBeNull();
+      expect(parseEvent({ e: "task", step: v, ok: 1, skip: 0, hint: 0 }), `task ${v}`).toBeNull();
+      expect(parseEvent({ e: "drill_start", mode: v }), `drill ${v}`).toBeNull();
+      expect(parseEvent({ e: "game_start", game: v, lesson: 0 }), `game ${v}`).toBeNull();
+      expect(parseEvent({ e: "shop_click", item: v }), `shop ${v}`).toBeNull();
+      expect(parseEvent({ e: "onb_step", step: v }), `onb ${v}`).toBeNull();
+    }
+    // Само имя события из прототипа — тоже отказ (проверялось и раньше).
+    expect(parseEvent({ e: "constructor" })).toBeNull();
+  });
+
+  it("бюджет новых полей за сутки — несколько тысяч, не десятки тысяч", () => {
+    expect(EVENTS_FIELDS_DAY_MAX).toBe(5000);
   });
 
   it("перечисления: значение не из списка — отказ (откуда открыли окно тарифов, место, причина перерыва)", () => {

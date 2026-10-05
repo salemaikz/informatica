@@ -4,8 +4,10 @@ import { createMemoryKv } from "@/server/kv";
 vi.mock("server-only", () => ({}));
 
 const {
+  OWNER_BODY_MAX,
   OWNER_COOKIE,
   OWNER_LOGIN_LIMIT,
+  OWNER_PASSWORD_MAX,
   OWNER_SECRET_MIN,
   OWNER_TTL_MS,
   ownerCookieHeader,
@@ -32,6 +34,34 @@ describe("секрет владельца", () => {
     expect(warn.mock.calls.length).toBeLessThanOrEqual(1);
     expect(JSON.stringify(warn.mock.calls)).not.toContain("aaaa");
     warn.mockRestore();
+  });
+
+  it("C5: длиннее 200 знаков или слишком длинный в байтах (кириллица, 3-байтовые знаки) — null с одним предупреждением в журнале", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(ownerSecret({ OWNER_SECRET: "a".repeat(OWNER_PASSWORD_MAX + 1) })).toBeNull();
+    expect(ownerSecret({ OWNER_SECRET: "a".repeat(300) })).toBeNull();
+    expect(ownerSecret({ OWNER_SECRET: "я".repeat(OWNER_PASSWORD_MAX) })).toBeNull(); // 400 байт → до 1200 знаков в форме
+    expect(ownerSecret({ OWNER_SECRET: "€".repeat(120) })).toBeNull(); // 3 байта на знак
+    // Предупреждение про длину — один раз за жизнь копии; сам секрет в журнал не попадает.
+    const longWarns = warn.mock.calls.filter((c) => String(c[0]).includes("длиннее"));
+    expect(longWarns).toHaveLength(1);
+    expect(String(longWarns[0][0])).toContain(String(OWNER_PASSWORD_MAX));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("aaaa");
+    // Границы: 200 латинских знаков и разумная кириллица — принимаются.
+    expect(ownerSecret({ OWNER_SECRET: "a".repeat(OWNER_PASSWORD_MAX) })).toBe("a".repeat(OWNER_PASSWORD_MAX));
+    expect(ownerSecret({ OWNER_SECRET: "я".repeat(100) })).toBe("я".repeat(100));
+    warn.mockRestore();
+  });
+
+  it("C5: всё, что принимает ownerSecret, помещается в тело запроса входа в закодированном виде", () => {
+    for (const ch of ["a", "я", "€", "😀"]) {
+      for (let len = OWNER_SECRET_MIN; len <= OWNER_PASSWORD_MAX; len++) {
+        const secret = ch.repeat(len);
+        if (ownerSecret({ OWNER_SECRET: secret }) === null) continue;
+        const body = new URLSearchParams({ password: secret }).toString();
+        expect(body.length, `${ch}×${len}`).toBeLessThanOrEqual(OWNER_BODY_MAX);
+      }
+    }
   });
 });
 

@@ -442,7 +442,7 @@ export function LessonPlayer({
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       recordAnswer(rec, gained, lessonId);
-      const taskEv = taskEvent(rec, stableSteps);
+      const taskEv = taskEvent(rec, stableSteps, lessonId);
       if (taskEv) track(taskEv);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
@@ -556,7 +556,7 @@ export function LessonPlayer({
       timeMs: stepMs(),
     });
     recordAnswer(rec, 0, lessonId);
-    const taskEv = taskEvent(rec, stableSteps);
+    const taskEv = taskEvent(rec, stableSteps, lessonId);
     if (taskEv) track(taskEv);
     const recs = [...records, rec];
     setRecords(recs);

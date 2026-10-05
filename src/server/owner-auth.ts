@@ -2,7 +2,8 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 // Вход владельца на /owner (решение #69): секрет OWNER_SECRET из окружения, cookie `inf_owner` с подписью HMAC и сроком 12 часов.
-// Нет секрета (или он короче OWNER_SECRET_MIN) — страница отвечает 404: её как будто нет.
+// Нет секрета (короче OWNER_SECRET_MIN, длиннее OWNER_PASSWORD_MAX или не помещается в тело запроса входа) — страница отвечает 404:
+// её как будто нет (а в журнале — предупреждение, почему).
 // Сравнение пароля и подписи — за постоянное время (timingSafeEqual). Чистые функции покрыты tests/owner-auth.test.ts.
 
 export const OWNER_COOKIE = "inf_owner";
@@ -14,18 +15,32 @@ export const OWNER_LOGIN_LIMIT = { limit: 10, windowMs: 10 * 60_000 } as const;
 export const OWNER_SECRET_MIN = 12;
 /** Пароль в форме длиннее этого — отказ без проверки. */
 export const OWNER_PASSWORD_MAX = 200;
+/** Тело запроса входа, байт (маршрут /api/owner/login читает не больше). Секрет должен в него помещаться в закодированном виде. */
+export const OWNER_BODY_MAX = 1000;
 
-let warned = false;
+const warned = new Set<string>();
+/** Предупреждение в журнал — один раз за жизнь копии для каждой причины (сам секрет в журнал не попадает). */
+function warnOnce(reason: string, text: string) {
+  if (warned.has(reason)) return;
+  warned.add(reason);
+  console.warn(text);
+}
 
-/** Секрет владельца из окружения или null (нет, пусто или слишком короткий — тогда в лог один раз за жизнь копии). */
+/**
+ * Секрет владельца из окружения или null: нет, пусто, короче OWNER_SECRET_MIN, длиннее OWNER_PASSWORD_MAX или слишком длинный
+ * в байтах (каждый байт при кодировании формы — до 3 знаков «%XX»; кириллица — 2 байта на букву). Иначе страница открылась бы,
+ * а войти было бы нельзя: форма и маршрут входа такой пароль не примут. Причина — в журнал, один раз.
+ */
 export function ownerSecret(env: Record<string, string | undefined> = process.env): string | null {
   const s = env.OWNER_SECRET?.trim() ?? "";
   if (!s) return null;
   if (s.length < OWNER_SECRET_MIN) {
-    if (!warned) {
-      warned = true;
-      console.warn(`[owner] OWNER_SECRET короче ${OWNER_SECRET_MIN} знаков — страница владельца выключена`);
-    }
+    warnOnce("short", `[owner] OWNER_SECRET короче ${OWNER_SECRET_MIN} знаков — страница владельца выключена`);
+    return null;
+  }
+  // 9 знаков — «password=», 20 — запас; 3 — самое длинное кодирование одного байта.
+  if (s.length > OWNER_PASSWORD_MAX || Buffer.byteLength(s) * 3 + 20 > OWNER_BODY_MAX) {
+    warnOnce("long", `[owner] OWNER_SECRET длиннее ${OWNER_PASSWORD_MAX} знаков (или слишком длинный в байтах) — страница владельца выключена`);
     return null;
   }
   return s;

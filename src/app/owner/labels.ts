@@ -3,7 +3,8 @@
 
 type Dict = Record<string, string>;
 
-const pick = (d: Dict, code: string): string => d[code] ?? code;
+// Только собственные ключи словаря: код `constructor` или `__proto__` из данных не должен вернуть Object.prototype (C1).
+const pick = (d: Dict, code: string): string => (Object.hasOwn(d, code) ? d[code] : code);
 
 const FROM: Dict = {
   onboarding: "после онбординга",
@@ -23,6 +24,7 @@ const HEARTS_WHERE: Dict = {
   game: "игра",
 };
 const DRILL_MODE: Dict = {
+  other: "другое (неизвестный режим)",
   smart: "умная тренировка",
   mistakes: "работа над ошибками",
   skill: "по навыку",

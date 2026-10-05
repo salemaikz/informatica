@@ -3,11 +3,11 @@
 
 import { accuracyOf, tallyOf } from "./accuracy";
 import { pct, type AnalyticsEvent, type HeartOutWhere } from "./analytics";
+import { isSafeId } from "./analytics-schema";
 import type { AnswerRecord, LessonVia, SessionResult, SkillId } from "./types";
 
-/** Идентификатор в событии: как у белого списка сервера (lib/analytics-schema.ts). */
-const ID_RE = /^[\w.:-]{1,80}$/;
-const isId = (v: string | undefined): v is string => typeof v === "string" && ID_RE.test(v);
+/** Идентификатор в событии: ровно как у белого списка сервера (lib/analytics-schema.ts → isSafeId). */
+const isId = (v: string | undefined): v is string => isSafeId(v);
 
 const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
 /** Шаги и их число в событиях — целые 0–200 (потолок схемы). */
@@ -55,11 +55,14 @@ export type SessionTotals = Pick<SessionResult, "accuracy" | "asked" | "hinted" 
 
 /**
  * Честные цифры итога по ответам сессии (tallyOf): точность (без заданий — 1), предъявлено, с подсказкой, пропущено.
- * skippedCount — счётчик плеера: в сохранении до этой версии пропуски лежали только в нём (записи о них не было).
+ * skippedCount — счётчик плеера: в сохранении до этой версии пропуски лежали только в нём (записи о них не было). Такие пропуски
+ * считаются предъявленными заданиями со счётом 0: попадают в asked и в знаменатель точности (иначе пропуск «давал» бы 100%).
  */
 export function sessionTotals(records: readonly AnswerRecord[], skippedCount = 0): SessionTotals {
   const t = tallyOf(records);
-  return { accuracy: accuracyOf(t) ?? 1, asked: t.asked, hinted: t.hinted, skipped: Math.max(t.skipped, whole(skippedCount)) };
+  const extra = Math.max(0, whole(skippedCount) - t.skipped);
+  const asked = t.asked + extra;
+  return { accuracy: accuracyOf({ asked, score: t.score }) ?? 1, asked, hinted: t.hinted, skipped: t.skipped + extra };
 }
 
 /** Из чего сложилось число заданий в итогах: сам, с подсказкой, пропущено (сумма = asked). */
@@ -105,12 +108,16 @@ export function quitEvent(p: PlayerKind & { done: number; total: number }): Anal
  * Первая попытка задания урока: ok — верно (частичный балл — 0), skip — пропущено, hint — с подсказкой.
  * Повтор ошибки — не событие. Шаги, которых нет в самом уроке (банк в «Проверить себя»), и тренировка не считаются:
  * их id разные при каждом запуске и только раздули бы счётчики (stable — id шагов урока).
+ * Ключ задания — `<урок>:<шаг>`: id шага уникален лишь внутри урока (у разных уроков бывают одинаковые id и разные вопросы).
+ * Без id урока события нет.
  */
-export function taskEvent(rec: AnswerRecord, stable: ReadonlySet<string> | null): AnalyticsEvent | null {
-  if (rec.retry || !stable || !stable.has(rec.stepId) || !isId(rec.stepId)) return null;
+export function taskEvent(rec: AnswerRecord, stable: ReadonlySet<string> | null, lessonId?: string): AnalyticsEvent | null {
+  if (rec.retry || !stable || !lessonId || !stable.has(rec.stepId)) return null;
+  const step = `${lessonId}:${rec.stepId}`;
+  if (!isId(step)) return null;
   return {
     e: "task",
-    step: rec.stepId,
+    step,
     ok: rec.correct && !rec.skipped ? 1 : 0,
     skip: rec.skipped ? 1 : 0,
     hint: rec.hinted && !rec.skipped ? 1 : 0,

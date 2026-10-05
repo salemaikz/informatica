@@ -5,7 +5,7 @@ import { eventsKey } from "@/lib/analytics-fields";
 import { isQuestion, promptText } from "@/lib/evaluate";
 import { buildOwnerReport, retention, type DayFields, type OwnerReport, type ReportNames, type Retention } from "@/lib/owner-report";
 import { parseErrorRows, parseIssueRows, type ErrorRow, type IssueRow } from "@/lib/owner-rows";
-import type { Step } from "@/lib/types";
+import type { Lesson, Step } from "@/lib/types";
 import { getKv, kzDay } from "@/server/kv";
 import { OWNER_COOKIE, ownerSecret, verifyOwnerCookie } from "@/server/owner-auth";
 
@@ -35,6 +35,9 @@ function stepTitle(step: Step): string {
   return t.length > 140 ? `${t.slice(0, 137)}…` : t;
 }
 
+/** Урок по id — только по собственным ключам: `constructor`, `__proto__` и прочие имена Object.prototype урока не дают (C1). */
+const lessonById = (id: string): Lesson | undefined => (Object.hasOwn(LESSONS, id) ? LESSONS[id] : undefined);
+
 let stepIndex: Map<string, string[]> | null = null;
 
 /** id шага → в каких уроках он есть (id шага уникален только внутри урока). */
@@ -52,16 +55,16 @@ function indexSteps(): Map<string, string[]> {
  * берём первый и помечаем «+N»). Банк практики и прочее, чего нет в уроках, — без названия (покажется сырой id).
  */
 export const ownerNames: ReportNames = {
-  lesson: (id) => LESSONS[id]?.title.ru,
+  lesson: (id) => lessonById(id)?.title.ru,
   task(key) {
     const colon = key.indexOf(":");
     if (colon > 0) {
-      const lesson = LESSONS[key.slice(0, colon)];
+      const lesson = lessonById(key.slice(0, colon));
       const step = lesson?.steps.find((s) => s.id === key.slice(colon + 1));
       if (lesson && step) return { title: stepTitle(step), lesson: lesson.title.ru };
     }
     const ids = indexSteps().get(key);
-    const lesson = ids?.[0] ? LESSONS[ids[0]] : undefined;
+    const lesson = ids?.[0] ? lessonById(ids[0]) : undefined;
     const step = lesson?.steps.find((s) => s.id === key);
     if (!lesson || !step) return undefined;
     return { title: stepTitle(step), lesson: ids!.length > 1 ? `${lesson.title.ru} (+${ids!.length - 1})` : lesson.title.ru };
@@ -76,30 +79,46 @@ export interface OwnerData {
   storage: "upstash" | "memory";
   /** Сбор включён на сервере (NEXT_PUBLIC_ANALYTICS=1). */
   collecting: boolean;
+  /** Хранилище не ответило: данных нет не потому, что их нет, а потому что они не загружены (страница показывает предупреждение, не нули). */
+  unavailable: boolean;
   report: OwnerReport;
   retention: Retention;
   issues: IssueRow[];
   errors: ErrorRow[];
 }
 
-/** Всё для страницы: счётчики за HISTORY_DAYS суток одним конвейером + списки жалоб и ошибок. */
+/** Поля удержания: события active за первые сутки и через 1, 7, 30 дней. */
+const RETENTION_FIELDS = ["act:0", "act:1", "act:7", "act:30"];
+
+/**
+ * Всё для страницы: счётчики выбранного периода целиком (HGETALL только за эти сутки) + удержание за HISTORY_DAYS суток
+ * (HMGET четырёх полей act:*, без чтения целых хешей) + списки жалоб и ошибок.
+ * Хранилище не ответило — `unavailable: true` и пустые таблицы: страница покажет предупреждение, а не нули (C3).
+ */
 export async function loadOwnerData(period: 7 | 30): Promise<OwnerData> {
   const kv = getKv();
   const now = Date.now();
   const dayList = Array.from({ length: HISTORY_DAYS }, (_, i) => kzDay(now - i * 86_400_000));
-  const [hashes, issues, errors] = await Promise.all([
-    kv.hgetAllMany(dayList.map(eventsKey)),
-    kv.lrange("issues", 0, ISSUES_SHOWN - 1),
-    kv.lrange("client-errors", 0, ERRORS_SHOWN - 1),
-  ]);
-  const history: DayFields[] = dayList.map((day, i) => ({ day, fields: hashes[i] ?? {} }));
-  return {
-    period,
-    storage: kv.kind,
-    collecting: process.env.NEXT_PUBLIC_ANALYTICS === "1",
-    report: buildOwnerReport(history.slice(0, period), ownerNames),
-    retention: retention(history),
-    issues: parseIssueRows(issues),
-    errors: parseErrorRows(errors),
-  };
+  const base = { period, storage: kv.kind, collecting: process.env.NEXT_PUBLIC_ANALYTICS === "1" } as const;
+  try {
+    const [hashes, act, issues, errors] = await Promise.all([
+      kv.hgetAllMany(dayList.slice(0, period).map(eventsKey)),
+      kv.hmgetMany(dayList.map(eventsKey), RETENTION_FIELDS),
+      kv.lrange("issues", 0, ISSUES_SHOWN - 1),
+      kv.lrange("client-errors", 0, ERRORS_SHOWN - 1),
+    ]);
+    const windowDays: DayFields[] = dayList.slice(0, period).map((day, i) => ({ day, fields: hashes[i] ?? {} }));
+    const history: DayFields[] = dayList.map((day, i) => ({ day, fields: act[i] ?? {} }));
+    return {
+      ...base,
+      unavailable: false,
+      report: buildOwnerReport(windowDays, ownerNames),
+      retention: retention(history),
+      issues: parseIssueRows(issues),
+      errors: parseErrorRows(errors),
+    };
+  } catch (e) {
+    console.error("[owner] storage read failed", e instanceof Error ? e.message : e);
+    return { ...base, unavailable: true, report: buildOwnerReport([], ownerNames), retention: retention([]), issues: [], errors: [] };
+  }
 }

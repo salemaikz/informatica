@@ -8,6 +8,7 @@ import {
   funnelRows,
   hardTaskRows,
   HARD_MIN_N,
+  reachOf,
   retention,
   share,
   sumFields,
@@ -82,12 +83,30 @@ describe("воронка уроков", () => {
       starts: 12,
       resumes: 2,
       finishes: 4,
-      reach: 33,
+      // 4 конца из 10 «свежих» стартов (12 стартов минус 2 продолжения)
+      reach: 40,
       avgAcc: 75,
       quits: 7,
       quitStep: 4,
       quitOf: 16,
     });
+  });
+
+  it("C8: старт, уход, продолжение и конец — один ученик, а не два старта: дошли 100%, а не 50%", () => {
+    const s = batchFields([
+      { e: "lesson_start", lesson: "a", via: "learn", resume: 0 },
+      { e: "lesson_start", lesson: "a", via: "learn", resume: 1 },
+      { e: "lesson_finish", lesson: "a", via: "learn", acc: 90, sec: 60 },
+    ]);
+    expect(funnelRows(s, names)[0]).toMatchObject({ starts: 2, resumes: 1, finishes: 1, reach: 100 });
+  });
+
+  it("C8: доля не бывает больше 100% (сутки разрезаны: старт вчера, продолжение и конец сегодня) и без свежих стартов — прочерк", () => {
+    expect(reachOf(3, 3, 3)).toBe(100);
+    expect(reachOf(2, 1, 1)).toBe(100);
+    expect(reachOf(0, 1, 1)).toBeNull();
+    expect(reachOf(1, 4, 0)).toBe(25);
+    expect(reachOf(0, 0, 0)).toBeNull();
   });
 
   it("урок без названия в контенте — без title; без выходов и конца — прочерки", () => {
@@ -179,6 +198,24 @@ describe("удержание по когортам", () => {
     const r = retention(h);
     expect(r.rows.find((x) => x.d === 7)).toEqual({ d: 7, returned: 3, cohort: 10, pct: 30 });
     expect(r.rows.find((x) => x.d === 30)).toEqual({ d: 30, returned: 0, cohort: 0, pct: null });
+  });
+
+  it("C6: дни без записанных первых запусков (act:0) — не когорта: возвраты устройств «до сбора» не раздувают долю", () => {
+    // 10-01 пусто, 10-02 — когорта 10, но в тот же день вернулись 40 «старых» устройств (act:1 за запуск, которого не записали)
+    const h: DayFields[] = [day("2026-10-01"), day("2026-10-02", { "act:0": 10, "act:1": 40 }), day("2026-10-03", { "act:1": 3 }), day("2026-10-04")];
+    const d1 = retention(h).rows.find((x) => x.d === 1)!;
+    // Когорта 10-02 (10 человек): вернулись 3. День 10-01 когортой не считается (act:0 нет): «возвраты» 10-02 из него не учитываются.
+    expect(d1).toEqual({ d: 1, returned: 3, cohort: 10, pct: 30 });
+  });
+
+  it("C6: возвраты в день не больше когорты дня (потерянный act:0 не даёт больше 100%)", () => {
+    const h: DayFields[] = [day("2026-10-01", { "act:0": 5 }), day("2026-10-02", { "act:1": 12 }), day("2026-10-03")];
+    expect(retention(h).rows.find((x) => x.d === 1)).toEqual({ d: 1, returned: 5, cohort: 5, pct: 100 });
+  });
+
+  it("C6: пустая история до начала сбора и act:1 без act:0 — нет когорты, доля — прочерк", () => {
+    const h: DayFields[] = [day("2026-10-01"), day("2026-10-02", { "act:1": 7 }), day("2026-10-03")];
+    expect(retention(h).rows.find((x) => x.d === 1)).toEqual({ d: 1, returned: 0, cohort: 0, pct: null });
   });
 
   it("нет данных — нули и прочерки", () => {
