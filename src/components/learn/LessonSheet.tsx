@@ -7,13 +7,13 @@ import {
   ChevronRight,
   CircleCheckBig,
   Clock,
+  Cpu,
   ClipboardCheck,
   Gamepad2,
   Hammer,
   NotebookPen,
   Play,
   RotateCcw,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -33,11 +33,14 @@ import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
-import { useHearts, usePlan } from "@/components/economy/useEconomy";
+import { useChips, useHearts, usePlan } from "@/components/economy/useEconomy";
 import { ICONS } from "@/components/scenes/icons";
 import { bestPercent, isDue, lessonTopics, pluralForm, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
 import { lessonStep, stepReviewDays } from "@/lib/mastery-steps";
+import { lessonXpFactor } from "@/lib/review";
+import { XpIcon } from "@/components/economy/XpIcon";
+import { chipsEstimate, chipsKey, lessonXpMax } from "@/components/economy/xp-chips";
 import { StepMarks } from "./MasteryLegend";
 
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
@@ -111,6 +114,7 @@ function ModeCard({
 function SheetBody({ lessonId }: { lessonId: string }) {
   const { t, l, lang } = useT();
   const now = useNow();
+  const { multiplier: chipMult } = useChips();
   // При безлимите значки цены скрыты — и строка о плате тоже; у пробного периода вместо неё — до какого дня.
   const unlimited = useHearts().unlimited;
   const { plan, trial } = usePlan();
@@ -177,6 +181,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const due = isDue(stat, now);
   const xp = xpKind(stat, now);
   const steps = lesson.stepCount;
+  const maxXp = lessonXpMax(steps, lessonXpFactor(stat, now), !!stat);
   const step = lessonStep(stat, now);
   const stepDays = stepReviewDays(stat, now);
   // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
@@ -192,8 +197,11 @@ function SheetBody({ lessonId }: { lessonId: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <Pill icon={<Clock size={13} />}>{t("common.minutes", { n: lesson.durationMin })}</Pill>
         <Pill>{t(`learn2.steps.${pluralForm(steps)}`, { n: steps })}</Pill>
-        <Pill tone="gold" icon={<Zap size={13} fill="currentColor" />}>
+        <Pill tone="gold" icon={<XpIcon size={16} decorative />}>
           {t(`learn2.xp.${xp}`)}
+        </Pill>
+        <Pill tone="gold" icon={<Cpu size={13} />}>
+          {t(chipsKey("xp.reward", chipsEstimate(maxXp, chipMult)), { xp: maxXp, chips: chipsEstimate(maxXp, chipMult) })}
         </Pill>
       </div>
 

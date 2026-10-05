@@ -1,4 +1,4 @@
-import { Brain, Bug, Castle, Coins, Grid3x3, Inbox, KeyRound, ListOrdered, ShieldQuestion, Swords, ToggleRight, Zap } from "lucide-react";
+import { Brain, Bug, Castle, Coins, Grid3x3, Inbox, KeyRound, ListOrdered, ShieldQuestion, Swords, ToggleRight, Timer } from "lucide-react";
 import { SKILLS } from "@/content/skills";
 import type { GameMeta } from "./types";
 
@@ -7,7 +7,7 @@ import type { GameMeta } from "./types";
 export const GAMES: GameMeta[] = [
   {
     id: "bit-rush",
-    icon: Zap,
+    icon: Timer,
     color: "#fff3dc",
     ink: "#d97706",
     skills: ["ns.base", "ns.bin2dec", "ns.dec2bin", "ns.props"],

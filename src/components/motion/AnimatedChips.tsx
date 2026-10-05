@@ -1,10 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { Flame, Zap } from "lucide-react";
+import { Flame } from "lucide-react";
 import { m } from "motion/react";
 import { useEffect, useState } from "react";
 import { useLevel, useStreak } from "@/lib/hooks";
+import { XpIcon } from "@/components/economy/XpIcon";
 import { useT } from "@/i18n/useT";
 import { CountUp } from "./CountUp";
 import { XpBurst } from "./XpBurst";
@@ -38,7 +39,7 @@ export function XpChipAnimated() {
 
   return (
     <span data-tour="hdr-xp" title="XP" className="relative flex items-center gap-1 font-extrabold text-warning-strong">
-      <Zap size={20} className="text-gold" fill="currentColor" />
+      <XpIcon size={18} />
       <m.span
         className="inline-block"
         animate={bumping ? { scale: [1, 1.4, 1] } : { scale: 1 }}

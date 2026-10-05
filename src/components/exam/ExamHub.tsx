@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChevronRight, ClipboardCheck, ListChecks, Play, Timer, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCheck, ListChecks, Play, Timer, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -30,7 +30,7 @@ import { StarRow } from "./StarRow";
 import { EXAM_FORMAT, examLink, formatDay, historyPoints, randomSeed, ratioOf, toneOf, toggleTopic, MAX_TOPIC_PICK } from "./logic";
 
 
-const MODE_ICON: Record<ExamKind, LucideIcon> = { mini: Zap, full: ClipboardCheck, topic: ListChecks, unit: BookOpen };
+const MODE_ICON: Record<ExamKind, LucideIcon> = { mini: Timer, full: ClipboardCheck, topic: ListChecks, unit: BookOpen };
 const TONE_PILL = { danger: "danger", warning: "warning", success: "success" } as const;
 const HISTORY_SHOWN = 6;
 

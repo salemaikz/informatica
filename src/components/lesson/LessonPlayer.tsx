@@ -40,7 +40,9 @@ import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
 import { ToolboxButton } from "@/components/tools/Toolbox";
-import { ComboFlame } from "@/components/motion/ComboFlame";
+import { ComboBadge, StreakFlame } from "@/components/motion/ComboFlame";
+import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
+import { XpIcon } from "@/components/economy/XpIcon";
 import { Shake } from "@/components/motion/Shake";
 import { XpBurst } from "@/components/motion/XpBurst";
 import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
@@ -271,6 +273,11 @@ export function LessonPlayer({
   // чтобы последний вариант ответа можно было прокрутить над панелью даже на 360×640.
   const footerRef = useRef<HTMLElement>(null);
   const [footerH, setFooterH] = useState(0);
+
+  // Снимок «горел ли огонь» на старте занятия — для анимации на итогах.
+  useEffect(() => {
+    snapshotStreakStart();
+  }, []);
 
   useEffect(() => {
     clockAtMount.current = activeMs();
@@ -736,7 +743,7 @@ export function LessonPlayer({
             <X size={24} />
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
-          <ComboFlame combo={combo} />
+          <StreakFlame />
           {entryCost > 0 && (
             <span data-tour="lesson-hearts" className="flex">
               <HeartsBar />
@@ -948,9 +955,12 @@ export function LessonPlayer({
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ ...springBouncy, delay: 0.14 }}
                       >
-                        +{gain} XP
+                        <span className="inline-flex items-center gap-1 align-middle">
+                          +{gain} <XpIcon size={16} />
+                        </span>
                       </m.span>
                     )}
+                    {result.correct && combo >= 3 && <span className="ml-2 inline-block align-middle"><ComboBadge combo={combo} /></span>}
                   </p>
                   <ReportIssueButton
                     compact

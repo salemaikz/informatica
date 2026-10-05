@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Library, Clock, Cpu, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target, Zap } from "lucide-react";
+import { BookOpen, Library, Clock, Cpu, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,10 @@ import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+import { XpIcon } from "@/components/economy/XpIcon";
+import { useChips } from "@/components/economy/useEconomy";
+import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
@@ -124,6 +128,7 @@ export function Results({
 }) {
   const router = useRouter();
   const { t, l } = useT();
+  const { multiplier: chipMult } = useChips();
   const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
   const dueAt = useApp((s) => (lessonId ? s.lessons[lessonId]?.dueAt : undefined));
@@ -207,7 +212,7 @@ export function Results({
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { icon: <Zap size={18} />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
+          { icon: <XpIcon size={16} className="border-white/70 bg-white/20 text-white" />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
           { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: accTile.cls, bg: accTile.bg },
           { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-primary", hint: t("res2.timeHint") },
         ].map((s, i) => (
@@ -239,31 +244,33 @@ export function Results({
         </ul>
       )}
 
-      {(chips > 0 || heart) && (
-        <div className="flex flex-wrap justify-center gap-2">
-          {chips > 0 && (
-            <m.span
-              className="inline-flex items-center gap-1.5 rounded-full border-2 border-gold bg-gold-soft px-3.5 py-1.5 font-extrabold text-warning-strong"
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ ...springBouncy, delay: 0.55 }}
-            >
-              <Cpu size={18} className="text-gold" aria-hidden /> {t("hearts.res.chips", { n: chips })}
-            </m.span>
-          )}
-          {heart && (
-            <m.span
-              className="inline-flex items-center gap-1.5 rounded-full border-2 border-heart bg-heart-soft px-3.5 py-1.5 font-extrabold text-heart-strong"
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ ...springBouncy, delay: 0.7 }}
-              title={t("hearts.res.heartHint")}
-            >
-              <Heart size={18} fill="currentColor" aria-hidden /> {t("hearts.res.heart")}
-            </m.span>
-          )}
-        </div>
-      )}
+      {/* Сколько чипов дал урок — всегда видно, с курсом обмена. */}
+      <div className="flex flex-wrap items-start justify-center gap-2">
+        <m.div
+          className="flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ ...springBouncy, delay: 0.55 }}
+        >
+          <span className="inline-flex items-center gap-1.5 font-extrabold">
+            <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
+          </span>
+          <span className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</span>
+        </m.div>
+        {heart && (
+          <m.span
+            className="inline-flex items-center gap-1.5 rounded-full border-2 border-heart bg-heart-soft px-3.5 py-1.5 font-extrabold text-heart-strong"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ ...springBouncy, delay: 0.7 }}
+            title={t("hearts.res.heartHint")}
+          >
+            <Heart size={18} fill="currentColor" aria-hidden /> {t("hearts.res.heart")}
+          </m.span>
+        )}
+      </div>
+
+      <StreakIgnite />
 
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">

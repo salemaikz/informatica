@@ -718,7 +718,6 @@ export const useApp = create<AppState & AppActions>()(
           // Пропуск (#66): задание предъявлено, счёт 0 — в точность дня и срез по навыкам; без ошибки, освоения и XP.
           if (rec.skipped) {
             return {
-              streak: bumpStreak(s.streak, today),
               days: { ...s.days, [today]: { ...day, asked: (day.asked ?? 0) + 1, skipped: (day.skipped ?? 0) + 1 } },
               skillDays: rec.skill ? addSkillDay(s.skillDays, today, rec.skill, { n: 1, sec }) : s.skillDays,
             };
@@ -764,7 +763,6 @@ export const useApp = create<AppState & AppActions>()(
             skills,
             mistakes,
             history,
-            streak: bumpStreak(s.streak, today),
             days: {
               ...s.days,
               [today]: {

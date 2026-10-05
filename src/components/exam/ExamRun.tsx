@@ -1,5 +1,6 @@
 "use client";
 
+import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 import { ChevronLeft, ChevronRight, Flag, LayoutGrid, Play, TimerOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -105,6 +106,11 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
     const [s, m, pool] = challengeKey?.split("-") ?? [];
     return challengeKey ? ({ s: Number(s), m: Number(m), pool } satisfies Challenge) : null;
   }, [challengeKey]);
+
+  // Снимок «горел ли огонь» на старте пробника — итоги прочитают его (день засчитывается при сдаче).
+  useEffect(() => {
+    snapshotStreakStart();
+  }, []);
 
   useEffect(() => {
     let off = false;

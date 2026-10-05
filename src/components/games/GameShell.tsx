@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, Feather, Heart, Info, Map as MapIcon, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, Check, Feather, Heart, Info, Map as MapIcon, Play, RotateCcw, Timer, Trophy, X, Clock, Cpu, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
 import type { SkillId } from "@/lib/types";
@@ -24,18 +24,22 @@ import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
-import { useHearts } from "@/components/economy/useEconomy";
+import { useChips, useHearts } from "@/components/economy/useEconomy";
 import { pluralKey } from "@/components/learn/useLearn";
+import { XpIcon } from "@/components/economy/XpIcon";
+import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { StreakIgnite } from "@/components/motion/StreakIgnite";
+import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 
 type Phase =
   | { name: "intro" }
   | { name: "playing"; round: number }
-  | { name: "result"; result: GameResult; reward: GameReward; credited: boolean | null };
+  | { name: "result"; result: GameResult; reward: GameReward; credited: boolean | null; chips: number };
 
 const MODES: { id: GameMode; icon: LucideIcon; title: DictKey; desc: DictKey }[] = [
   { id: "calm", icon: Feather, title: "game.mode.calm", desc: "game.mode.calm.desc" },
-  { id: "normal", icon: Timer, title: "game.mode.normal", desc: "game.mode.normal.desc" },
-  { id: "blitz", icon: Zap, title: "game.mode.blitz", desc: "game.mode.blitz.desc" },
+  { id: "normal", icon: Clock, title: "game.mode.normal", desc: "game.mode.normal.desc" },
+  { id: "blitz", icon: Timer, title: "game.mode.blitz", desc: "game.mode.blitz.desc" },
 ];
 
 /** Строка про цену запуска во вступлении (#40). Отдельный компонент: часы сердечек не должны перерисовывать оболочку во время игры. */
@@ -60,6 +64,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const router = useRouter();
   const { t, l, lang } = useT();
   const meta = gameById(id)!;
+  const { multiplier: chipMult } = useChips();
   const sound = useApp((s) => s.profile.sound);
   const mode = useApp((s) => s.profile.gameMode);
   const updateProfile = useApp((s) => s.updateProfile);
@@ -92,12 +97,14 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
     }
     // Статистика (#69): каждый запуск — своё событие, «урок игрой» помечен.
     track({ e: "game_start", game: id, lesson: lesson ? 1 : 0 });
+    snapshotStreakStart();
     const next = round + 1;
     setRound(next);
     setPhase({ name: "playing", round: next });
   };
 
   const finish = (result: GameResult) => {
+    const earned0 = useApp.getState().wallet.earned;
     const reward = recordGame(id, result, mode);
     const doneEvent = gameFinishEvent(id, result.correct, result.total);
     if (doneEvent) track(doneEvent);
@@ -113,7 +120,9 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
       credited = gamePassed(result.correct, result.total);
       if (credited && gameCanCredit(useApp.getState().lessons[lesson.id])) completeLessons([lesson.id], "game", result.correct / result.total);
     }
-    setPhase({ name: "result", result, reward, credited });
+    // Чипы — вместе с бонусами за «урок игрой» (достижения) из completeLessons.
+    const chips = Math.max(0, useApp.getState().wallet.earned - earned0);
+    setPhase({ name: "result", result, reward, credited, chips });
   };
 
   const exitHref = lesson ? "/learn" : "/practice";
@@ -261,11 +270,19 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
               </div>
               <div className="rounded-2xl border-2 border-gold bg-surface p-3 text-center">
                 <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
-                  <Zap size={14} className="text-gold" /> XP
+                  <XpIcon size={14} /> {t("res.xp")}
                 </p>
                 <p className="text-2xl font-extrabold text-warning-strong">+{phase.reward.xp}</p>
               </div>
             </div>
+            <div className="rounded-2xl border-2 border-gold bg-surface p-3 text-center">
+              <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
+                <Cpu size={14} className="text-gold" aria-hidden /> {t("xp.chips")}
+              </p>
+              <p className="text-2xl font-extrabold text-warning-strong">{t(chipsKey("xp.chipsPlus", phase.chips), { n: phase.chips })}</p>
+              <p className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</p>
+            </div>
+            <StreakIgnite />
             {!phase.reward.newBest && stat && statKey && (
               <MascotSays mood="happy" size={56}>
                 {t("game.beat", { n: stat.best })}
