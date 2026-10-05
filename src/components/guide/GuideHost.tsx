@@ -1,0 +1,346 @@
+"use client";
+
+import { AnimatePresence } from "motion/react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  BIT_SIZE,
+  DEFAULT_WAIT_MS,
+  GUIDE_DELAY_MS,
+  GUIDE_SCENES,
+  completedLessonsCount,
+  fingerPose,
+  padRect,
+  placeBit,
+  sameRect,
+  sceneFor,
+  sceneSteps,
+  stepText,
+  unionRect,
+  unseenTips,
+  type GuideScene,
+  type Rect,
+  type SceneId,
+} from "@/lib/guide";
+import { formatHearts } from "@/lib/economy";
+import { entVisible } from "@/lib/school";
+import { useApp } from "@/lib/store";
+import { useT } from "@/i18n/useT";
+import { useReduceMotion } from "@/components/motion/useReduceMotion";
+import { BitPopup } from "./BitPopup";
+import { GuideDim, GuideFinger } from "./GuidePointer";
+import { useGuideSpots } from "./GuideSpot";
+import { useGuideUi } from "./guide-state";
+import { bottomInset, findTour, focusableIn, foreignModal, inView, radiusOf, rectOf, tourSel } from "./targets";
+
+/** Зазор вокруг подсвеченного элемента, px. */
+const HOLE_PAD = 6;
+/**
+ * Цели нет дольше — Бит прячется. Обычное ожидание (страница дорисовывается, шаг пропускается) он пережидает на месте,
+ * задумавшись; прячется только при долгом ожидании (в уроке — пока не появится вопрос с вариантами).
+ */
+const HIDE_AFTER_MS = DEFAULT_WAIT_MS + 100;
+/** Как часто перемеряем цель (страница дорисовывается, анимации). */
+const POLL_MS = 150;
+/** Сцена закончилась — столько времени Бит уезжает вниз, потом сцена снимается. */
+const LEAVE_MS = 450;
+
+/** «Пропустить» и Escape: закрыть весь проводник — отметить все сцены. */
+function noteAll() {
+  const s = useApp.getState();
+  for (const id of unseenTips(s.tips)) s.noteTip(id);
+}
+
+/** Замер для шага `idx`: нашлась ли цель, её рамка, окно и занятый низ экрана. */
+interface View {
+  idx: number;
+  fallback: boolean;
+  found: boolean;
+  /** Цели нет дольше HIDE_AFTER_MS (или Бит ещё не выходил) — Бит спрятан. */
+  hideBit: boolean;
+  rect: Rect | null;
+  radius: number;
+  vw: number;
+  vh: number;
+  inset: number;
+}
+
+const START: View = { idx: -1, fallback: false, found: false, hideBit: true, rect: null, radius: 16, vw: 0, vh: 0, inset: 0 };
+
+const sameView = (a: View, b: View) =>
+  a.idx === b.idx &&
+  a.fallback === b.fallback &&
+  a.found === b.found &&
+  a.hideBit === b.hideBit &&
+  sameRect(a.rect, b.rect) &&
+  a.radius === b.radius &&
+  a.vw === b.vw &&
+  a.vh === b.vh &&
+  Math.round(a.inset) === Math.round(b.inset);
+
+/**
+ * Одна сцена: ведёт шаги, ждёт цели, ставит Бита, пузырь, затемнение и палец; шаг «нажми» ждёт нажатия в саму цель
+ * (клик ловим на document в фазе захвата — он проходит в элемент как обычно). Доиграна — `noteTip(сцена)`.
+ * `leaving` — сцена уже закончилась: Бит, пузырь и затемнение уходят (exit-анимации), обработчики сняты.
+ */
+function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: number; leaving: boolean }) {
+  const { t } = useT();
+  const name = useApp((s) => s.profile.name);
+  const ent = useApp((s) => entVisible(s.profile));
+  const sound = useApp((s) => s.profile.sound);
+  const reduce = useReduceMotion();
+  const isPresent = !leaving;
+  const steps = useMemo(() => sceneSteps(scene, ent), [scene, ent]);
+  const [at, setAt] = useState({ idx: 0, fallback: false });
+  const [view, setView] = useState<View>(START);
+  const [shake, setShake] = useState(0);
+  /** Какие шаги пропущены (для `chain`). */
+  const skipped = useRef<boolean[]>([]);
+  /** Бит сейчас на экране — между шагами он не прячется сразу. */
+  const shownRef = useRef(false);
+  /** Текущий шаг — сразу, без ожидания перерисовки: запоздалый замер или клик прошлого шага его не сдвинет. */
+  const cursor = useRef(0);
+
+  const step = steps[at.idx];
+  const targetsKey = step && !at.fallback ? (step.targets ?? []).join("|") : "";
+
+  /** Шаг `from` закончен (или пропущен) — следующий; шагов больше нет — сцена доиграна. */
+  const go = useCallback(
+    (from: number, skip: boolean) => {
+      if (cursor.current !== from) return;
+      cursor.current = from + 1;
+      skipped.current[from] = skip;
+      if (from + 1 >= steps.length) useApp.getState().noteTip(scene.id);
+      else setAt({ idx: from + 1, fallback: false });
+    },
+    [steps.length, scene.id],
+  );
+
+  // Замер цели: ждём её появления (`waitMs`), прокручиваем к ней один раз, следим за прокруткой и размером окна.
+  useEffect(() => {
+    if (!isPresent || !step) return;
+    const idx = at.idx;
+    const fallback = at.fallback;
+    if (step.chain && skipped.current[idx - 1]) {
+      const id = window.setTimeout(() => go(idx, true), 0);
+      return () => window.clearTimeout(id);
+    }
+    const list = targetsKey ? targetsKey.split("|") : [];
+    const start = Date.now();
+    let deadline = start + (step.waitMs ?? DEFAULT_WAIT_MS);
+    let lastFound = start;
+    let scrolled = false;
+    let stopped = false;
+    let raf = 0;
+    const measure = () => {
+      if (stopped) return;
+      const now = Date.now();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // Открыто чужое окно (шторка, кейс): Бит прячется и ждёт, ожидание цели на это время не тратится.
+      const blocked = foreignModal();
+      const els = blocked ? [] : list.map(findTour).filter((e): e is HTMLElement => !!e);
+      const found = !blocked && (list.length === 0 || els.length > 0);
+      if (blocked) deadline = Math.max(deadline, now + POLL_MS * 2);
+      if (!found && !blocked && now > deadline) {
+        stopped = true;
+        if (step.orElse && !fallback) setAt({ idx, fallback: true });
+        else go(idx, true);
+        return;
+      }
+      if (found) {
+        lastFound = now;
+        // Цель была и пропала (её нажали, страница перерисовалась) — шаг ждёт её ещё обычное время, потом идёт дальше.
+        deadline = Math.max(deadline, now + DEFAULT_WAIT_MS);
+        if (!scrolled && els[0]) {
+          scrolled = true;
+          if (!inView(els[0], vh)) els[0].scrollIntoView({ block: "center", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+        }
+      }
+      const hideBit = !found && (!shownRef.current || now - lastFound > HIDE_AFTER_MS);
+      shownRef.current = !hideBit;
+      const next: View = {
+        idx,
+        fallback,
+        found,
+        hideBit,
+        rect: found && els.length ? unionRect(els.map(rectOf)) : null,
+        radius: els.length === 1 ? radiusOf(els[0]) : 16,
+        vw,
+        vh,
+        inset: bottomInset(vh),
+      };
+      setView((prev) => (sameView(prev, next) ? prev : next));
+    };
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    };
+    queueMicrotask(measure);
+    const timer = window.setInterval(measure, POLL_MS);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+      window.clearInterval(timer);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+    };
+  }, [at.idx, at.fallback, targetsKey, step, isPresent, go, reduce]);
+
+  // Шаг «нажми»: нажатие именно в цель (или внутрь неё) — следующий шаг. Само нажатие проходит в элемент как обычно.
+  const tapStep = !!step && step.action === "tap" && !at.fallback && !!targetsKey;
+  useEffect(() => {
+    if (!isPresent || !tapStep) return;
+    const sel = targetsKey.split("|").map(tourSel).join(",");
+    const idx = at.idx;
+    let timer = 0;
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(sel)) return;
+      // После обработчика самого элемента (он мог открыть урок или выбрать вариант).
+      timer = window.setTimeout(() => go(idx, false), 0);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.clearTimeout(timer);
+    };
+  }, [isPresent, tapStep, targetsKey, at.idx, go]);
+
+  // Escape — закрыть весь проводник (если поверх нет чужого окна: тогда Escape закрывает его).
+  useEffect(() => {
+    if (!isPresent) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !foreignModal()) noteAll();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPresent]);
+
+  // Пока Бит рассказывает, плавающая кнопка Бита (P2b) спрятана — он «вышел» из неё. На шаге про саму кнопку — видна.
+  const dockStep = !!step && !at.fallback && !!step.targets?.includes("bit-dock");
+  useEffect(() => {
+    useGuideUi.getState().setActive(isPresent && !dockStep);
+  }, [isPresent, dockStep]);
+  useEffect(() => () => useGuideUi.getState().setActive(false), []);
+
+  const cur = view.idx === at.idx && view.fallback === at.fallback;
+  const found = isPresent && cur && view.found && !!step;
+  const hole = found && view.rect ? padRect(view.rect, HOLE_PAD, view.vw, view.vh) : null;
+  const textKey = step ? stepText(step, { name, school: !ent, n: cost, fallback: at.fallback }) : null;
+  const text = found && textKey ? t(textKey, { name: name.trim(), n: formatHearts(cost ?? 1) }) : null;
+  const place = placeBit(hole, { vw: view.vw, vh: view.vh, bottomInset: view.inset }, text?.length ?? 90);
+  const bitCenter = { x: place.bitX + BIT_SIZE / 2, y: view.vh - place.bitBottom - BIT_SIZE / 2 };
+  const finger = hole ? fingerPose(hole, bitCenter) : null;
+  const bitVisible = isPresent && view.vw > 0 && !view.hideBit;
+  const stepKey = `${scene.id}:${at.idx}:${at.fallback ? 1 : 0}`;
+  // Ждёт цель — задумался; говорит — настроение шага.
+  const mood = text === null ? "thinking" : ((at.fallback ? step?.orElse?.mood : undefined) ?? step?.mood ?? "neutral");
+
+  // Шаг «нажми»: фокус — на цель (клавиатура: Enter нажимает её же).
+  useEffect(() => {
+    if (!found || !tapStep) return;
+    focusableIn(findTour(targetsKey.split("|")[0]))?.focus({ preventScroll: true });
+  }, [found, tapStep, targetsKey]);
+
+  return (
+    <div data-guide="" className="pointer-events-none fixed inset-0 z-[60]">
+      <AnimatePresence>
+        {hole && (
+          <GuideDim
+            key="dim"
+            stepKey={stepKey}
+            hole={hole}
+            radius={view.radius + HOLE_PAD}
+            vw={view.vw}
+            vh={view.vh}
+            reduce={reduce}
+            onDimTap={() => setShake((n) => n + 1)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {bitVisible && (
+          <BitPopup
+            key="bit"
+            place={place}
+            mood={mood}
+            stepKey={stepKey}
+            text={text}
+            action={at.fallback || !targetsKey ? "next" : (step?.action ?? "next")}
+            last={at.idx >= steps.length - 1}
+            modal={!!hole}
+            reduce={reduce}
+            sound={sound}
+            shake={shake}
+            onNext={() => go(at.idx, false)}
+            onSkip={noteAll}
+          />
+        )}
+      </AnimatePresence>
+      {/* Палец — поверх пузыря. */}
+      <AnimatePresence>{finger && <GuideFinger key="finger" stepKey={stepKey} finger={finger} reduce={reduce} />}</AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Всплывающий Бит-проводник (этап 16В, P2a): решает, какую сцену играть (`sceneFor`), выжидает паузу после прихода
+ * на страницу и ведёт сцену. Ушли со страницы посреди сцены — сцена считается показанной. Монтируется в Providers.
+ */
+export function GuideHost() {
+  const onboarded = useApp((s) => s.onboarded);
+  const tips = useApp((s) => s.tips);
+  const completed = useApp((s) => completedLessonsCount(s.lessons));
+  const school = useApp((s) => !entVisible(s.profile));
+  const lesson = useGuideSpots((s) => s.lesson);
+  const results = useGuideSpots((s) => s.results);
+  const pathname = usePathname();
+
+  const desired = sceneFor(tips, { pathname, onboarded, completedLessons: completed, inLesson: !!lesson, onResults: results, school });
+  const key = desired ? `${desired}@${pathname}` : null;
+  // Сцена, для которой пауза прошла. Сменилась сцена или страница — ждём заново.
+  const [ready, setReady] = useState<string | null>(null);
+  // Сцена закончилась (или прервана) — ещё LEAVE_MS она на экране: Бит уезжает вниз. `gone` — чья уборка уже прошла.
+  const [gone, setGone] = useState<string | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    const id = window.setTimeout(() => {
+      setReady(key);
+      setGone(null);
+    }, GUIDE_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [key]);
+  const playing: SceneId | null = key && ready === key ? desired : null;
+  const leavingKey = !playing && ready && gone !== ready ? ready : null;
+  useEffect(() => {
+    if (!leavingKey) return;
+    const id = window.setTimeout(() => setGone(leavingKey), LEAVE_MS);
+    return () => window.clearTimeout(id);
+  }, [leavingKey]);
+
+  // Сцену прервали (ушли со страницы, итоги вместо урока) — она считается показанной. Отложено на такт: двойной
+  // монтаж React в разработке (размонтирование → сразу монтирование) сцену не отмечает.
+  const playingRef = useRef(playing);
+  useEffect(() => {
+    playingRef.current = playing;
+  });
+  useEffect(() => {
+    if (!playing) return;
+    // Вкладку закрыли или перезагрузили посреди сцены — тоже «ушёл со страницы» (стор пишет в localStorage сразу).
+    const onHide = () => useApp.getState().noteTip(playing);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.setTimeout(() => {
+        if (playingRef.current !== playing) useApp.getState().noteTip(playing);
+      }, 0);
+    };
+  }, [playing]);
+
+  const shown = playing && key ? key : leavingKey;
+  if (!shown) return null;
+  const scene = GUIDE_SCENES[shown.split("@")[0] as SceneId];
+  return <SceneRunner key={shown} scene={scene} cost={lesson?.cost} leaving={!playing} />;
+}

@@ -16,7 +16,6 @@ import { TopicTable } from "@/components/progress/TopicTable";
 import { UnitProgressList } from "@/components/progress/UnitProgressList";
 import { WeakSpotsCard } from "@/components/progress/WeakSpotsCard";
 import { useEntVisible } from "@/components/school/useEntVisible";
-import { PageTip } from "@/components/tour/PageTip";
 
 /**
  * «Прогресс»: сверху шкала курса, слабые места, разделы и темы (#71); затем честные числа (#66, #68),
@@ -33,7 +32,6 @@ export default function StatsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageTip id="page-progress" />
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
       <CourseProgressCard />

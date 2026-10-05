@@ -4,7 +4,7 @@ import { BellRing, Share, SquarePlus, Smartphone } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isPushAskScreen, shouldAskPush, type PushAskAction } from "@/lib/push-ask";
-import { tourBlocking } from "@/lib/tour";
+import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { enablePush, pushPermission } from "@/components/goals/push";

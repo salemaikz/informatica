@@ -46,11 +46,12 @@ test("проводник: школьник после онбординга ви�
   await page.getByRole("button", { name: "Поехали" }).click();
   await page.waitForURL("**/learn");
 
-  const dialog = page.getByRole("dialog", { name: "Подсказка Бита" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Привет, Аян!")).toBeVisible();
+  // Бит выпрыгивает снизу и здоровается (без затемнения — это status, а не dialog).
+  const bit = page.getByLabel("Подсказка Бита");
+  await expect(bit).toBeVisible();
+  await expect(bit).toContainText("Привет, Аян!");
   // Окна тарифов и напоминаний ждут проводник.
-  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await dismissTour(page);
   const tips = (await saved(page)).tips ?? {};
   expect(tips.welcome).toBeTruthy();
@@ -58,14 +59,14 @@ test("проводник: школьник после онбординга ви�
 
   await page.reload();
   await expect(page.getByRole("link", { name: /Продолжить|Начать/ }).first()).toBeVisible();
-  await expect(dialog).toHaveCount(0);
+  await expect(bit).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
 test("«Продолжить» ведёт в начатый урок, а не в первый на пути", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, {
-    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
+    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
   });
   // Начинаем не первый урок пути (первый — «Старт: компьютер с нуля»): ns-1-bits, два шага вперёд.
   await page.goto("/lesson/ns-1-bits");
@@ -86,7 +87,7 @@ test("«Продолжить» ведёт в начатый урок, а не в
 
 test("ИИ на «Бесплатном»: «осталось 3 из 3» без «сегодня»", async ({ page }) => {
   await seed(page, {
-    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
+    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
   });
   await page.goto("/lesson/ns-1-bits");
   const ask = page.getByRole("button", { name: /^Спросить ИИ/ });

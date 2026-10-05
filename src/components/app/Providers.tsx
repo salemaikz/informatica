@@ -19,7 +19,7 @@ import { StorageBanner } from "@/components/app/StorageBanner";
 import { RecoveryScreen } from "@/components/app/RecoveryScreen";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
 import { PushAskAgent } from "@/components/reminders/PushAskAgent";
-import { TourAgent } from "@/components/tour/TourAgent";
+import { GuideHost } from "@/components/guide/GuideHost";
 import { CaseAgent } from "@/components/rewards/CaseAgent";
 
 function subscribeHydration(cb: () => void): () => void {
@@ -129,8 +129,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <PaywallAgent />
       {/* Окно «Включить напоминания»: с первого входа, дальше раз в 3 дня первую неделю, потом раз в 7 (F3). */}
       <PushAskAgent />
-      {/* Проводник первого входа (#104): приветствие, обзор панели, карточки страниц; окна тарифов и напоминаний ждут его. */}
-      <TourAgent />
+      {/* Бит-проводник (этап 16В, P2a): всплывает снизу, показывает пальцем и ждёт нажатия; окна тарифов, напоминаний и кейса ждут его. */}
+      <GuideHost />
       {/* Кейс за новый уровень (волна 1Б, R3): открывается сам на «Учиться», «Профиле», «Прогрессе». */}
       <CaseAgent />
     </MotionProvider>

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { LevelCaseRoll } from "@/lib/level-case";
-import { tourBlocking } from "@/lib/tour";
+import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { LevelCase } from "./LevelCase";
 

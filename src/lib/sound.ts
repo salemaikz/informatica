@@ -7,11 +7,15 @@
 export type SoundName =
   | "correct" | "wrong" | "complete" | "tap" | "combo" | "levelUp" | "xp" | "pop"
   // Волна 1Б (docs/specs/stage16b-wave1b.md, R4).
-  | "perfect" | "chips" | "streak" | "caseTick" | "caseReveal";
+  | "perfect" | "chips" | "streak" | "caseTick" | "caseReveal"
+  // Этап 16В, P2a: «голосок» Бита-проводника.
+  | "bitPop" | "bitTalk";
 
 export interface SoundOptions {
   /** Для "combo": размер комбо (ступени 3/5/10); для "caseTick": номер щелчка. */
   step?: number;
+  /** Для "bitTalk": высота слога, Гц (по умолчанию — случайно 480–780). */
+  pitch?: number;
 }
 
 const MASTER_GAIN = 0.15;
@@ -126,6 +130,51 @@ const N = {
   G6: 1568,
   C7: 2093,
 };
+
+/**
+ * Слог «голоска» Бита: треугольник с лёгким вибрато и глайдом, через low-pass — мягко, как говорящий робот в играх.
+ * Длина 40–70 мс, высота 480–780 Гц (случайно, если не задана).
+ */
+function syllable(a: AudioContext, t0: number, pitch?: number) {
+  if (!master) return;
+  const f = pitch ?? 480 + Math.random() * 300;
+  const dur = 0.04 + Math.random() * 0.03;
+  const end = t0 + dur;
+  const osc = a.createOscillator();
+  const lfo = a.createOscillator();
+  const depth = a.createGain();
+  const lp = a.createBiquadFilter();
+  const g = a.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(f, t0);
+  // Слог чуть «поёт»: то вверх, то вниз.
+  osc.frequency.exponentialRampToValueAtTime(f * (Math.random() < 0.5 ? 0.9 : 1.08), end);
+  lfo.type = "sine";
+  lfo.frequency.value = 26 + Math.random() * 10;
+  depth.gain.value = f * 0.025;
+  lfo.connect(depth);
+  depth.connect(osc.frequency);
+  lp.type = "lowpass";
+  lp.frequency.value = 1900;
+  lp.Q.value = 2;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.42, t0 + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  osc.connect(lp);
+  lp.connect(g);
+  g.connect(master);
+  osc.start(t0);
+  lfo.start(t0);
+  osc.stop(end + 0.03);
+  lfo.stop(end + 0.03);
+  osc.onended = () => {
+    osc.disconnect();
+    lfo.disconnect();
+    depth.disconnect();
+    lp.disconnect();
+    g.disconnect();
+  };
+}
 
 /** Счётчик верных ответов — для чередования трёх вариантов звука. */
 let correctVariant = 0;
@@ -242,6 +291,14 @@ export function playSound(name: SoundName, opts: SoundOptions = {}) {
         voice(a, t0, { freq: 300, to: 900, dur: 0.22, vol: 0.35, type: "triangle", lp: 1500, attack: 0.03 });
         [N.C6, N.E6, N.G6].forEach((f, i) => chime(a, t0, f, 0.2 + i * 0.06, 0.4, 0.45));
         chime(a, t0, N.C7, 0.4, 0.9, 0.4);
+        break;
+      case "bitPop":
+        // Бит выпрыгнул: мягкий «буп» вверх и маленькое эхо повыше.
+        voice(a, t0, { freq: 210, to: 560, dur: 0.13, vol: 0.6, type: "triangle", lp: 1600, attack: 0.01 });
+        voice(a, t0, { freq: 420, to: 700, at: 0.08, dur: 0.1, vol: 0.28, type: "sine", attack: 0.008 });
+        break;
+      case "bitTalk":
+        syllable(a, t0, opts.pitch);
         break;
       case "pop":
         // «Пузырёк»: короткий глайд вверх.

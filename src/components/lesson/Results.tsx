@@ -28,7 +28,7 @@ import { useChips } from "@/components/economy/useEconomy";
 import { chipsKey } from "@/components/economy/xp-chips";
 import { ChipFlight } from "@/components/motion/ChipFlight";
 import { formatMult } from "@/components/economy/shop-helpers";
-import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
+import { GuideSpot } from "@/components/guide/GuideSpot";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -242,6 +242,7 @@ export function Results({
           // Плитки въезжают лесенкой, числа «накручиваются» следом за своей плиткой.
           <m.div
             key={i}
+            data-tour={i === 0 ? "res-xp" : undefined}
             title={"hint" in s ? s.hint : undefined}
             className={clsx("overflow-hidden rounded-2xl border-2", s.cls)}
             initial={{ opacity: 0, y: 28, scale: 0.85 }}
@@ -271,6 +272,7 @@ export function Results({
       <div className="flex flex-wrap items-start justify-center gap-2">
         {(kind === "lesson" || chips > 0) && (
           <m.div
+            data-tour="res-chips"
             className="relative flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -321,10 +323,13 @@ export function Results({
         </div>
       )}
 
-      <StreakIgnite delay={1.7} />
+      {/* Обёртка — метка для Бита-проводника; огня нет — обёртка пустая и не занимает места. */}
+      <div data-tour="res-streak" className="empty:hidden">
+        <StreakIgnite delay={1.7} />
+      </div>
 
-      {/* Первый урок: короткое «что всё это значит» (проводник, #104); компонент сам решает, показываться ли. */}
-      {kind === "lesson" && <AfterFirstLesson />}
+      {/* Бит-проводник: метка «итоги урока» — на первом пройденном уроке Бит покажет опыт, чипы и серию. */}
+      {kind === "lesson" && via !== "check" && <GuideSpot kind="results" />}
 
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -453,7 +458,7 @@ export function Results({
 
       <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-bg pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <div className="mx-auto flex max-w-xl px-4">
-          <Button size="lg" block disabled={!armed} onClick={() => router.push(doneHref ?? (kind === "lesson" ? "/learn" : "/practice"))}>
+          <Button size="lg" block data-tour="res-continue" disabled={!armed} onClick={() => router.push(doneHref ?? (kind === "lesson" ? "/learn" : "/practice"))}>
             {t("common.continue")}
           </Button>
         </div>

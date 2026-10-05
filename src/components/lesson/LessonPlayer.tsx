@@ -759,7 +759,7 @@ export function LessonPlayer({
           >
             <X size={24} />
           </button>
-          <div className="relative min-w-0 flex-1 rounded-full">
+          <div data-tour="lesson-progress" className="relative min-w-0 flex-1 rounded-full">
             <ProgressBar value={progress} label={title} />
             {/* Свечение на комбо — отдельный слой поверх полосы: сама полоса не перемонтируется. */}
             {comboTier(combo) > 0 && phase === "feedback" && result?.correct && !reduceMotion && !testMode && (
@@ -783,6 +783,7 @@ export function LessonPlayer({
           {!(testMode && phase !== "feedback") && (
             <button
               type="button"
+              data-tour="lesson-ask"
               onClick={() => openAi("ask")}
               aria-label={askQuota ? `${t("tutor.askButton")}: ${askQuota}` : t("tutor.askButton")}
               title={askQuota ? `${t("tutor.askButton")}: ${askQuota}` : t("tutor.askButton")}
@@ -909,14 +910,17 @@ export function LessonPlayer({
             {/* Схема-условие: код программы, таблица, логическая схема. */}
             {question.scene && <SceneView scene={question.scene} />}
             <Shake active={phase === "feedback" && !!result && !result.correct && SHAKE_AREA.has(question.type)} strength={6}>
-              <QuestionView
-                key={item.key}
-                step={question}
-                answer={answer}
-                onAnswer={onAnswer}
-                locked={phase !== "answering"}
-                result={result}
-              />
+              {/* Метка для Бита-проводника: варианты ответа, пока их можно выбирать. */}
+              <div data-tour={question.type === "choice" && phase === "answering" ? "lesson-options" : undefined}>
+                <QuestionView
+                  key={item.key}
+                  step={question}
+                  answer={answer}
+                  onAnswer={onAnswer}
+                  locked={phase !== "answering"}
+                  result={result}
+                />
+              </div>
             </Shake>
             {phase === "feedback" && result && question.reveal && <RevealCard key={`${item.key}:reveal`} scene={question.reveal} />}
             {checkError === "economy.noChips" ? (
@@ -1055,6 +1059,7 @@ export function LessonPlayer({
             ) : question?.type === "code" ? null /* у задачи с кодом своя кнопка «Проверить код» внутри шага */ : question ? (
               <Button
                 size="lg"
+                data-tour="lesson-check"
                 className="w-full sm:w-auto sm:min-w-56"
                 variant={question.type === "solution" && answer?.type === "solution" && answer.image ? "ai" : "success"}
                 disabled={!ready || phase === "checking"}

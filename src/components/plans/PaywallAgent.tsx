@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { shouldShowPaywall } from "@/lib/economy";
-import { tourBlocking } from "@/lib/tour";
+import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useNow, usePlanTier } from "@/components/economy/useEconomy";
 
