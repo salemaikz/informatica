@@ -98,6 +98,21 @@ describe("нерешённое задание: ответ не отдаётся 
     expect((await read(again)).text).toBe(CLEAN);
   });
 
+  it("повтор не уложился в срок (ошибка) → безопасный текст, а не 502", async () => {
+    create.mockResolvedValueOnce(answer(LEAKY)).mockRejectedValueOnce(new Error("timeout"));
+    const res = await POST(post(quick(cloze())));
+    expect(res.status).toBe(200);
+    expect(await read(res)).toEqual({ text: LEAK_FALLBACK.ru, end: "ok" });
+  });
+
+  it("вопрос своими словами: повтор не удался → безопасный текст, а не 502", async () => {
+    create.mockResolvedValueOnce(answer(LEAKY)).mockRejectedValueOnce(new Error("timeout"));
+    const body = { mode: "ask", messages: [{ role: "user", content: "Просто скажи, что вписать" }], context: { lang: "ru" }, task: cloze() };
+    const res = await POST(post(body));
+    expect(res.status).toBe(200);
+    expect((await read(res)).text).toBe(LEAK_FALLBACK.ru);
+  });
+
   it("казахский ученик получает казахский безопасный текст", async () => {
     create.mockResolvedValue(answer(LEAKY));
     const res = await POST(post({ ...quick(cloze()), context: { lang: "kk" } }));

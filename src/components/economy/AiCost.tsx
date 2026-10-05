@@ -131,10 +131,21 @@ export function AiCost({
           <span className="tabular-nums" aria-hidden>
             {quote.cost}
           </span>
-          {/* Баланс рядом с ценой: на узких кнопках (short) — только на экране пошире. */}
-          <span className={cn("font-bold tabular-nums opacity-80", short && "hidden min-[380px]:inline")} aria-hidden>
-            · {t("ailimit.have", { n: chips })}
-          </span>
+          {/* Баланс рядом с ценой виден всегда: на узких кнопках (short, до 380px) — коротко «· 20», пошире — «· у тебя 20». */}
+          {short ? (
+            <>
+              <span className="font-bold tabular-nums opacity-80 min-[380px]:hidden" aria-hidden>
+                · {chips}
+              </span>
+              <span className="hidden font-bold tabular-nums opacity-80 min-[380px]:inline" aria-hidden>
+                · {t("ailimit.have", { n: chips })}
+              </span>
+            </>
+          ) : (
+            <span className="font-bold tabular-nums opacity-80" aria-hidden>
+              · {t("ailimit.have", { n: chips })}
+            </span>
+          )}
         </>
       )}
     </span>

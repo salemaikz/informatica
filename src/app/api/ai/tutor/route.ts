@@ -166,10 +166,19 @@ export async function POST(req: Request) {
       };
       let res = await generate(false);
       if (leaksUnsolved(res.text, task, secrets)) {
-        res = await generate(true);
-        if (leaksUnsolved(res.text, task, secrets)) {
+        // Повтор может не уложиться в срок (сигнал один на оба вызова): тогда тоже безопасный текст, а не 502.
+        let retry: { text: string; cut: boolean } | null = null;
+        try {
+          retry = await generate(true);
+        } catch (e) {
+          if (req.signal.aborted) throw e;
+          console.error("[tutor] leak retry failed", e instanceof Error ? e.message : e);
+        }
+        if (!retry || leaksUnsolved(retry.text, task, secrets)) {
           console.info(`[ai] route=${route} leak=1`);
           res = { text: LEAK_FALLBACK[ctx.lang], cut: false };
+        } else {
+          res = retry;
         }
       }
       const mark = !res.text ? STREAM_ERROR_MARK : res.cut ? STREAM_CUT_MARK : STREAM_OK_MARK;
@@ -305,11 +314,18 @@ async function cachedTutor(
       if (leaks(res.text)) {
         // Подсказка или вопрос выдали ответ: один повтор с припиской; если снова — статичный текст и без кэша.
         // Подсказку автора ученик уже видел над кнопкой «Ещё подсказка» — повторять её нет смысла.
-        res = await generate(true);
+        // Повтор не удался (сбой, срок) — тоже безопасный текст без кэша, а не 502 после списанного обращения.
+        const safe = new SkipCache((mode === "hint" ? FALLBACK_HINT : LEAK_FALLBACK)[ctx.lang]);
+        try {
+          res = await generate(true);
+        } catch (e) {
+          console.error("[tutor] leak retry failed", e instanceof Error ? e.message : e);
+          throw safe;
+        }
         if (res.cut) throw cut(res.text);
         if (leaks(res.text)) {
           console.info(`[ai] route=${route} leak=1`);
-          throw new SkipCache((mode === "hint" ? FALLBACK_HINT : LEAK_FALLBACK)[ctx.lang]);
+          throw safe;
         }
       }
       return res.text;

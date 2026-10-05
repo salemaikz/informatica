@@ -1313,7 +1313,14 @@ export const useApp = create<AppState & AppActions>()(
         }),
 
       // Тариф и пробный период сброс прогресса не трогает.
-      resetProgress: () => set((s) => ({ ...initialState, notebook: emptyNotebook(Date.now()), plan: s.plan })),
+      // Бесплатные обращения к ИИ даются один раз (#99): сброс прогресса их не возвращает.
+      resetProgress: () =>
+        set((s) => ({
+          ...initialState,
+          notebook: emptyNotebook(Date.now()),
+          plan: s.plan,
+          aiUsage: { ...initialState.aiUsage, freeTotal: s.aiUsage.freeTotal ?? 0 },
+        })),
     }),
     {
       name: STORAGE_KEY,

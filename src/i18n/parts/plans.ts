@@ -102,8 +102,8 @@ export const plansDict = {
   // Карточка в профиле
   "plans.profile.free": { ru: "Бесплатный тариф", kk: "Тегін тариф" },
   "plans.profile.freeText": {
-    ru: "{hearts} сердечек, новое каждые {time}; ИИ: {ai} бесплатных ответа один раз",
-    kk: "{hearts} жүрек, жаңасы әр {time} сайын; ЖИ: бір реттік {ai} тегін жауап",
+    ru: "{hearts} сердечек, новое каждые {time}; ИИ бесплатно: {ai} всего",
+    kk: "{hearts} жүрек, жаңасы әр {time} сайын; ЖИ тегін: барлығы {ai}",
   },
   "plans.profile.cta": { ru: "Тарифы", kk: "Тарифтер" },
 } satisfies Record<string, L>;

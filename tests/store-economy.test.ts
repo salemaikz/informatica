@@ -65,7 +65,8 @@ function fullReset() {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2027, 0, 15, 12, 0, 0));
   st().resetProgress();
-  useApp.setState({ plan: { tier: "free" } });
+  // «Бесплатные навсегда» (#99) переживают resetProgress — для изоляции тестов обнуляем и их.
+  useApp.setState({ plan: { tier: "free" }, aiUsage: { day: "", count: 0, free: 0, freeTotal: 0 } });
 }
 afterEach(() => vi.useRealTimers());
 const chips = () => st().wallet.chips;
@@ -631,6 +632,13 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(st().boost).toBeNull();
     expect(st().aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 0 });
     expect(st().practiceHearts).toEqual({ day: "", count: 0 });
+  });
+
+  it("resetProgress не возвращает бесплатные обращения к ИИ «навсегда» (#99)", () => {
+    st().spendAi("hint");
+    st().spendAi("hint");
+    st().resetProgress();
+    expect(st().aiUsage).toEqual({ day: "", count: 0, free: 0, freeTotal: 2 });
   });
 
   it("resetProgress не даёт пробный период второй раз", () => {

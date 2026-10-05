@@ -151,9 +151,9 @@ export function leaksAnswer(
 
 // ---------- Клиентский кэш (localStorage, LRU) ----------
 
-export const CLIENT_CACHE_KEY = "informatica:ai-cache:v3";
+export const CLIENT_CACHE_KEY = "informatica:ai-cache:v4";
 /** Прежние ключи хранилища: записи в них больше не читаются, при записи в новый ключ их стираем (место в localStorage). */
-const LEGACY_CLIENT_CACHE_KEYS = ["informatica:ai-cache:v1", "informatica:ai-cache:v2"];
+const LEGACY_CLIENT_CACHE_KEYS = ["informatica:ai-cache:v1", "informatica:ai-cache:v2", "informatica:ai-cache:v3"];
 export const CLIENT_CACHE_MAX = 150;
 
 /** Минимальный интерфейс хранилища (Storage в браузере, заглушка в тестах). */

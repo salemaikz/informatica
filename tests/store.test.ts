@@ -63,6 +63,15 @@ describe("стор: работа над ошибками", () => {
     expect(useApp.getState().aiUsage.count).toBe(1);
     expect(useApp.getState().aiUsage.free).toBe(1);
   });
+
+  it("сброс прогресса не возвращает бесплатные обращения к ИИ (#99)", () => {
+    useApp.getState().resetProgress();
+    useApp.getState().spendAi("hint");
+    const spent = useApp.getState().aiUsage.freeTotal ?? 0;
+    expect(spent).toBeGreaterThan(0);
+    useApp.getState().resetProgress();
+    expect(useApp.getState().aiUsage.freeTotal).toBe(spent);
+  });
 });
 
 // Гидратация настоящего стора: подставляем window.localStorage и заново загружаем модули (тесты идут в node, без браузера).

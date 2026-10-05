@@ -253,7 +253,7 @@ describe("клиентский кэш (LRU)", () => {
     const s = memStore();
     clientCachePut("a", "   ", s);
     expect(s.raw()).toBeNull();
-    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v3");
+    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v4");
   });
 
   it("v3: записи старых ключей v1 и v2 (ответы до правок промпта) не читаются и стираются при первой записи", () => {

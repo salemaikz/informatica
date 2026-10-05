@@ -103,7 +103,7 @@ describe("тексты тарифов без суточного пополнен
 
   it("карточка профиля: запас, время возврата и бесплатный ИИ один раз (#99)", () => {
     const f = dict["plans.profile.freeText"];
-    expect(f.ru).toBe("{hearts} сердечек, новое каждые {time}; ИИ: {ai} бесплатных ответа один раз");
+    expect(f.ru).toBe("{hearts} сердечек, новое каждые {time}; ИИ бесплатно: {ai} всего");
     for (const p of ["{hearts}", "{time}", "{ai}"]) {
       expect(f.ru).toContain(p);
       expect(f.kk).toContain(p);
