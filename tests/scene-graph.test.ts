@@ -8,6 +8,7 @@ import {
   borderPoint,
   boxesOverlap,
   countCrossings,
+  countEdgeHits,
   edgeThroughNode,
   fitLines,
   graphAria,
@@ -18,6 +19,7 @@ import {
   type GraphLayout,
 } from "@/components/scenes/graph";
 import { dict, type DictKey } from "@/i18n/dict";
+import { estimateTextWidth } from "@/components/scenes/text-width";
 import { tx } from "@/lib/text";
 import type { Lang, Scene } from "@/lib/types";
 import { validateScene } from "./validate";
@@ -86,8 +88,10 @@ describe("образцы graph", () => {
         expectInside(lay);
         expect(lay.nodes).toHaveLength(scene.nodes.length);
         expect(lay.edges).toHaveLength(scene.edges.length);
-        // в экран телефона (логическая ширина 320) входят все образцы, кроме «ёжика»
-        if (scene.nodes.length < 16 || scene.layout !== "tree") expect(lay.width).toBe(GRAPH_W);
+        // в экран телефона (логическая ширина 320) входят все образцы, в том числе «ёжик»
+        expect(lay.width).toBe(GRAPH_W);
+        expect(lay.fits).toBe(true);
+        expect(countEdgeHits(lay)).toBe(0);
         expect(lay.height).toBeLessThan(420);
       });
     });
@@ -191,11 +195,13 @@ describe("tree", () => {
     expect(lay.scale).toBeGreaterThanOrEqual(0.84);
   });
 
-  it("«ёжик» из 15 листьев: вершины уменьшены, область шире экрана не больше чем на треть", () => {
+  it("«ёжик» из 15 листьев: влезает в 320 без уменьшения, листья в два яруса, рёбра с изломом", () => {
     const lay = layoutGraph(toInput(SAMPLES[9]));
-    expect(lay.scale).toBeLessThan(1);
-    expect(lay.width).toBeLessThanOrEqual(GRAPH_W * 1.34);
+    expect(lay.width).toBe(GRAPH_W);
+    expect(lay.scale).toBe(1);
     expect(overlapsAny(lay)).toEqual([]);
+    expect(new Set(lay.nodes.filter((n) => n.id !== "r").map((n) => n.cy)).size).toBe(2);
+    expect(minScreenFont(lay)).toBeGreaterThanOrEqual(10);
   });
 
   it("рёбра дерева не идут сквозь чужие вершины, в том числе у «ёжика»", () => {
@@ -420,4 +426,199 @@ describe("текст и словарь", () => {
       expect(dict[k].ru + dict[k].kk).not.toMatch(/\p{Extended_Pictographic}/u);
     }
   });
+});
+
+// ---------- худшие допустимые случаи из validate.ts ----------
+
+const base = { path: [] as string[], highlight: [] as string[], degrees: false, directed: false };
+const mkNodes = (labels: string[]) => labels.map((label, i) => ({ id: `v${i}`, label }));
+const nums = (n: number) => Array.from({ length: n }, (_, i) => String(i + 1));
+const cities = ["Алматы", "Қарағанды", "Астана", "Ақтөбе", "Шымкент", "Атырау", "Павлодар", "Орал", "Тараз", "Қостанай", "Семей", "Петропавл", "Көкшетау", "Талдықорған", "Ақтау", "Қызылорда"];
+const treeOf = (labels: string[], parent: (i: number) => number, weight?: string): GraphInput => ({
+  ...base,
+  layout: "tree",
+  root: "v0",
+  nodes: mkNodes(labels),
+  edges: labels.slice(1).map((_, i) => ({ from: `v${parent(i + 1)}`, to: `v${i + 1}`, weight })),
+});
+const ringOf = (labels: string[], weight?: string): GraphInput => ({
+  ...base,
+  layout: "circle",
+  nodes: mkNodes(labels),
+  edges: labels.map((_, i) => ({ from: `v${i}`, to: `v${(i + 1) % labels.length}`, weight })),
+});
+const chainOf = (labels: string[], extra: [number, number][], directed = true): GraphInput => ({
+  ...base,
+  directed,
+  layout: "chain",
+  nodes: mkNodes(labels),
+  edges: [...labels.slice(1).map((_, i) => ({ from: `v${i}`, to: `v${i + 1}` })), ...extra.map(([a, b]) => ({ from: `v${a}`, to: `v${b}` }))],
+});
+
+/** Самый мелкий текст на экране телефона: кегль × (328 / ширина области), если область шире 328. */
+function minScreenFont(lay: GraphLayout): number {
+  const fonts = [...lay.nodes.map((n) => n.fontPx), ...lay.edges.flatMap((e) => (e.pill ? [e.pill.fontPx] : []))];
+  return Math.min(...fonts) * Math.min(1, 328 / lay.width);
+}
+
+/** Подписи весов не лежат на вершинах и друг на друге. */
+function expectPillsClean(lay: GraphLayout) {
+  const pills = lay.edges.flatMap((e) => (e.pill ? [{ key: e.key, ...e.pill }] : []));
+  for (const p of pills) {
+    for (const n of lay.nodes) {
+      const near = n.shape === "circle"
+        ? Math.hypot(n.cx - Math.max(p.x - p.w / 2, Math.min(n.cx, p.x + p.w / 2)), n.cy - Math.max(p.y - p.h / 2, Math.min(n.cy, p.y + p.h / 2))) < n.r
+        : p.x - p.w / 2 < n.cx + n.w / 2 && n.cx - n.w / 2 < p.x + p.w / 2 && p.y - p.h / 2 < n.cy + n.h / 2 && n.cy - n.h / 2 < p.y + p.h / 2;
+      expect(near, `подпись ${p.key} на вершине ${n.id}`).toBe(false);
+    }
+  }
+  for (let i = 0; i < pills.length; i++)
+    for (let j = i + 1; j < pills.length; j++) {
+      const a = pills[i];
+      const b = pills[j];
+      const hit = a.x - a.w / 2 < b.x + b.w / 2 && b.x - b.w / 2 < a.x + a.w / 2 && a.y - a.h / 2 < b.y + b.h / 2 && b.y - b.h / 2 < a.y + a.h / 2;
+      expect(hit, `подписи ${a.key} и ${b.key} налезают`).toBe(false);
+    }
+}
+
+describe("широкое дерево: читается на телефоне", () => {
+  const dirs = treeOf(
+    ["C:\\", "Документы", "Музыка", "Загрузки", "кесте.xlsx", "отчёт.docx", "музыка.mp3", "фильм.mp4", "фото.jpg", "заметки.txt"],
+    (i) => (i <= 3 ? 0 : 1 + ((i - 4) % 3)),
+  );
+  const binary = treeOf(nums(15), (i) => Math.floor((i - 1) / 2), "12");
+  for (const [name, input] of [
+    ["«ёжик» из 15 цифр", toInput(SAMPLES[9])],
+    ["дерево каталогов с 6 файлами", dirs],
+    ["двоичное дерево на 15 вершин с весами", binary],
+  ] as [string, GraphInput][])
+    it(`${name}: ширина 320, кегль на телефоне не меньше 10 px, без наложений и рёбер сквозь вершины`, () => {
+      const lay = layoutGraph(input);
+      expect(lay.width).toBe(GRAPH_W);
+      expect(minScreenFont(lay)).toBeGreaterThanOrEqual(10);
+      expect(overlapsAny(lay)).toEqual([]);
+      expect(countEdgeHits(lay)).toBe(0);
+      expect(countCrossings(lay)).toBe(0);
+      expectPillsClean(lay);
+      expectInside(lay);
+    });
+
+  it("двоичное дерево с весами: подписи у ребёнка, шаг листьев меньше «ширина подписи + 2»", () => {
+    const lay = layoutGraph(binary);
+    const leaves = lay.nodes.filter((n) => Number(n.id.slice(1)) >= 7).sort((a, b) => a.cx - b.cx);
+    const step = (leaves[leaves.length - 1].cx - leaves[0].cx) / (leaves.length - 1);
+    expect(step).toBeLessThan(44);
+  });
+
+  it("слишком широкое дерево: листья 15 городов — столбцом слева направо, без наложений", () => {
+    const lay = layoutGraph(treeOf(["Корень", ...cities.slice(0, 15)], () => 0));
+    expect(lay.width).toBe(GRAPH_W);
+    expect(overlapsAny(lay)).toEqual([]);
+    expect(countEdgeHits(lay)).toBe(0);
+    expect(minScreenFont(lay)).toBeGreaterThanOrEqual(10);
+  });
+
+  it("подпись переносится также по «.» и «_»", () => {
+    expect(fitLines("кесте.xlsx", 14, 40).lines).toEqual(["кесте.", "xlsx"]);
+    expect(fitLines("my_file_name", 14, 50).lines.length).toBeGreaterThan(1);
+  });
+
+  it("предельная ширина области шире 320 только если ничего не помогло (16 длинных слов в двоичном дереве)", () => {
+    const lay = layoutGraph(treeOf(cities, (i) => Math.floor((i - 1) / 2)));
+    expect(overlapsAny(lay)).toEqual([]);
+    expect(countEdgeHits(lay)).toBe(0);
+  });
+});
+
+describe("круг с прямоугольными подписями", () => {
+  for (const [name, labels] of [
+    ["16 вершин «ПК-N»", Array.from({ length: 16 }, (_, i) => `ПК-${i + 1}`)],
+    ["16 вершин «Хост N»", Array.from({ length: 16 }, (_, i) => `Хост ${i + 1}`)],
+    ["12 городов", cities.slice(0, 12)],
+    ["14 городов", cities.slice(0, 14)],
+    ["16 городов", cities],
+  ] as [string, string[]][])
+    it(`${name}: без наложений, всё в области 320`, () => {
+      const lay = layoutGraph(ringOf(labels));
+      expect(overlapsAny(lay)).toEqual([]);
+      expect(lay.width).toBe(GRAPH_W);
+      expect(lay.fits).toBe(true);
+      expectInside(lay);
+    });
+
+  it("если на круге не хватает длины, он вытягивается по вертикали", () => {
+    const lay = layoutGraph(ringOf(Array.from({ length: 16 }, (_, i) => `ПК-${i + 1}`)));
+    const xs = lay.nodes.map((n) => n.cx);
+    const ys = lay.nodes.map((n) => n.cy);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(Math.max(...xs) - Math.min(...xs));
+  });
+});
+
+describe("круг с весами на коротких рёбрах", () => {
+  for (const [name, labels, weight] of [
+    ["16 вершин, вес 120", nums(16), "120"],
+    ["12 вершин, вес 120", nums(12), "120"],
+    ["10 вершин, вес 1000", nums(10), "1000"],
+    ["8 городов, вес 120", cities.slice(0, 8), "120"],
+  ] as [string, string[], string][])
+    it(`${name}: подписи не на вершинах и не друг на друге`, () => {
+      const lay = layoutGraph(ringOf(labels, weight));
+      expectPillsClean(lay);
+      expect(overlapsAny(lay)).toEqual([]);
+      expectInside(lay);
+      expect(lay.width).toBe(GRAPH_W);
+    });
+
+  it("подпись, которой нет места на ребре, стоит рядом с выноской к ребру", () => {
+    const lay = layoutGraph(ringOf(cities.slice(0, 8), "120"));
+    const moved = lay.edges.filter((e) => e.pill?.anchor);
+    expect(moved.length).toBeGreaterThan(0);
+    for (const e of moved) expect(Math.hypot(e.pill!.x - e.pill!.anchor![0], e.pill!.y - e.pill!.anchor![1])).toBeLessThan(45);
+  });
+});
+
+describe("цепочка змейкой: ребро между рядами обходит чужие вершины", () => {
+  const blocks = Array.from({ length: 10 }, (_, i) => `Блок ${i + 1}`);
+  for (const [name, input] of [
+    ["10 блоков, v9→v0", chainOf(blocks, [[9, 0]])],
+    ["10 блоков, v9→v0, неориентированная", chainOf(blocks, [[9, 0]], false)],
+    ["10 блоков, v8→v1 и v9→v0", chainOf(blocks, [[8, 1], [9, 0]])],
+    ["8 цифр, v0→v5", chainOf(nums(8), [[0, 5]])],
+    ["12 цифр, v2→v7", chainOf(nums(12), [[2, 7]])],
+    ["16 цифр, v15→v0", chainOf(nums(16), [[15, 0]])],
+    ["16 цифр, v0→v15", chainOf(nums(16), [[0, 15]])],
+  ] as [string, GraphInput][])
+    it(`${name}: линия не проходит сквозь чужие вершины, всё в области 320`, () => {
+      const lay = layoutGraph(input);
+      expect(countEdgeHits(lay)).toBe(0);
+      expect(overlapsAny(lay)).toEqual([]);
+      expect(lay.width).toBe(GRAPH_W);
+    });
+
+  it("проверка рёбер идёт по всей кривой, а не по хорде: дуга сквозь вершину засчитывается", () => {
+    const lay = layoutGraph(chainOf(nums(5), [[0, 4]]));
+    expect(countEdgeHits(lay)).toBe(0);
+    // подменяем ломаную ребра v0→v4 хордой через середину ряда
+    const bad: GraphLayout = { ...lay, edges: lay.edges.map((e) => (e.key === "v0>v4" ? { ...e, poly: [e.poly[0], e.poly[e.poly.length - 1]] } : e)) };
+    expect(edgeThroughNode(bad)).toBe(true);
+  });
+
+  it("обход идёт ломаной по просвету между рядами (есть опорные точки, стрелка в конце)", () => {
+    const lay = layoutGraph(chainOf(blocks, [[9, 0]]));
+    const back = lay.edges.find((e) => e.key === "v9>v0")!;
+    expect(back.poly.length).toBeGreaterThan(2);
+    expect(back.arrow).toMatch(/^M.*Z$/);
+  });
+});
+
+describe("длинные подписи вершин", () => {
+  for (const label of ["Ақпараттық қауіпсіздік және деректерді қорғау жүйесі", "Бағдарламалаушылардың", "Жергілікті желідегі компьютерлерді басқару жүйесінің жұмысы"]) {
+    it(`«${label.slice(0, 18)}…»: не больше 3 строк, каждая строка внутри вершины`, () => {
+      const lay = layoutGraph({ ...base, layout: "chain", nodes: [{ id: "a", label }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }] });
+      const n = lay.nodes[0];
+      expect(n.lines.length).toBeLessThanOrEqual(3);
+      for (const line of n.lines) expect(estimateTextWidth(line, n.fontPx)).toBeLessThanOrEqual(n.w - 2);
+      expect(lay.width).toBe(GRAPH_W);
+    });
+  }
 });

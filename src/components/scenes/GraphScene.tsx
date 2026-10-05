@@ -53,6 +53,7 @@ export function GraphScene({ scene }: { scene: GraphSceneData }) {
                   fill="none"
                   strokeWidth={e.onPath ? 4 : 2}
                   strokeLinecap="butt"
+                  strokeLinejoin="round"
                   className={cn("transition-[stroke,stroke-width] duration-300", EDGE_STROKE[key])}
                 />
                 {e.arrow && (
@@ -70,6 +71,19 @@ export function GraphScene({ scene }: { scene: GraphSceneData }) {
           })}
 
           {lay.edges.map((e) =>
+            e.pill?.anchor ? (
+              <m.line
+                key={`l:${e.key}`}
+                initial={{ opacity: 0, x1: e.pill.anchor[0], y1: e.pill.anchor[1], x2: e.pill.x, y2: e.pill.y }}
+                animate={{ opacity: 1, x1: e.pill.anchor[0], y1: e.pill.anchor[1], x2: e.pill.x, y2: e.pill.y }}
+                transition={{ x1: spring, y1: spring, x2: spring, y2: spring, opacity: fade }}
+                strokeWidth={1.5}
+                className={cn("transition-[stroke] duration-300", EDGE_STROKE[e.tone ?? "none"])}
+              />
+            ) : null,
+          )}
+
+          {lay.edges.map((e) =>
             e.pill ? (
               <m.g
                 key={`p:${e.key}`}
@@ -84,7 +98,7 @@ export function GraphScene({ scene }: { scene: GraphSceneData }) {
                   height={e.pill.h}
                   rx={e.pill.h / 2}
                   strokeWidth={e.onPath ? 2 : 1.5}
-                  className={cn("fill-surface transition-[stroke] duration-300", e.onPath ? "stroke-primary" : "stroke-muted")}
+                  className={cn("fill-surface transition-[stroke] duration-300", EDGE_STROKE[e.tone ?? "none"])}
                 />
                 <text textAnchor="middle" dy="0.35em" fontSize={e.pill.fontPx} fontWeight={700} className={cn("tabular-nums", PILL_TEXT[e.tone ?? "none"])}>
                   {e.pill.text}

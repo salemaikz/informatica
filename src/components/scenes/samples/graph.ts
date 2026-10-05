@@ -16,7 +16,7 @@ export const SAMPLES: G[] = [
     nodes: [{ id: "A", x: 10, y: 50 }, { id: "B", x: 40, y: 15 }, { id: "C", x: 40, y: 85 }, { id: "D", x: 80, y: 50 }],
     edges: [{ from: "A", to: "B", weight: "4" }, { from: "A", to: "C", weight: "2" }, { from: "B", to: "D", weight: "5" }, { from: "C", to: "D", weight: "8" }],
     path: ["A", "B", "D"],
-    caption: { ru: "Кратчайший путь из A в D: 4 + 5 = 9", kk: "A-дан D-ға дейінгі ең қысқа жол: 4 + 5 = 9" },
+    caption: { ru: "Кратчайший путь из A в D: 4 + 5 = 9", kk: "Ең қысқа жол A → D: 4 + 5 = 9" },
   },
   // 1. Дерево вызовов рекурсии (tree, directed, подписи длиннее 3 символов)
   {
@@ -47,14 +47,14 @@ export const SAMPLES: G[] = [
     directed: true,
     nodes: [
       { id: "pc", label: { ru: "Компьютер", kk: "Компьютер" }, x: 10, y: 45 },
-      { id: "dns", label: "DNS", x: 50, y: 6, tone: "success" },
+      { id: "dns", label: "DNS", x: 50, y: 6, tone: "primary" },
       { id: "srv", label: { ru: "Сервер", kk: "Сервер" }, x: 92, y: 40 },
       { id: "rt", label: { ru: "Роутер", kk: "Роутер" }, x: 55, y: 62 },
       { id: "ph", label: { ru: "Телефон", kk: "Телефон" }, x: 14, y: 94 },
     ],
     edges: [
       { from: "pc", to: "dns" },
-      { from: "dns", to: "pc", tone: "success" },
+      { from: "dns", to: "pc", tone: "primary" },
       { from: "pc", to: "rt" },
       { from: "rt", to: "srv" },
       { from: "srv", to: "rt" },
@@ -121,7 +121,7 @@ export const SAMPLES: G[] = [
     path: ["ast", "kar", "alm"],
     caption: { ru: "Расстояния между городами, км", kk: "Қалалар арасындағы қашықтық, км" },
   },
-  // 9. «Ёжик»: корень и 15 листьев — худший случай ширины дерева (вершины уменьшаются)
+  // 9. «Ёжик»: корень и 15 листьев — худший случай ширины дерева (листья в два яруса, рёбра с изломом)
   {
     kind: "graph",
     layout: "tree",
@@ -129,7 +129,7 @@ export const SAMPLES: G[] = [
     nodes: [{ id: "r", label: "root" }, ...Array.from({ length: 15 }, (_, i) => ({ id: `l${i + 1}`, label: String(i + 1) }))],
     edges: Array.from({ length: 15 }, (_, i) => ({ from: "r", to: `l${i + 1}` })),
   },
-  // 10. Дерево каталогов (tree, длинные подписи, две строки, разные тона)
+  // 10. Дерево каталогов (tree, длинные подписи, две строки, highlight)
   {
     kind: "graph",
     layout: "tree",
@@ -139,10 +139,11 @@ export const SAMPLES: G[] = [
       { id: "home", label: "/home", tone: "primary" },
       { id: "u1", label: { ru: "анна", kk: "әлия" } },
       { id: "u2", label: { ru: "борис", kk: "бауыржан" } },
-      { id: "d1", label: { ru: "Документы\nи отчёты", kk: "Құжаттар\nмен есептер" }, tone: "gold" },
+      { id: "d1", label: { ru: "Документы\nи отчёты", kk: "Құжаттар\nмен есептер" } },
       { id: "d2", label: { ru: "Музыка", kk: "Музыка" } },
       { id: "d3", label: { ru: "Загрузки", kk: "Жүктемелер" } },
     ],
     edges: [{ from: "home", to: "u1" }, { from: "home", to: "u2" }, { from: "u1", to: "d1" }, { from: "u1", to: "d2" }, { from: "u2", to: "d3" }],
+    highlight: ["d1"],
   },
 ];
