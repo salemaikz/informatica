@@ -7,7 +7,6 @@ import { groupById } from "@/components/app/nav";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
-import { PageTip } from "@/components/tour/PageTip";
 
 const DESC: Record<string, DictKey> = {
   notes: "nav2.hub.notes",
@@ -24,7 +23,6 @@ export default function MaterialsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageTip id="page-materials" />
       <header>
         <h1 className="text-2xl font-extrabold">{t("nav2.materials")}</h1>
         <p className="mt-1 text-sm font-semibold text-muted">{t("nav2.hub.subtitle")}</p>
@@ -32,6 +30,8 @@ export default function MaterialsPage() {
       <div className="grid gap-3 min-[520px]:grid-cols-2">
         {group.subs.map((sub) => {
           const Icon = sub.icon;
+          // Метки для Бита-проводника: конспекты и теория.
+          const tour = sub.id === "notes" ? "materials-notes" : sub.id === "theory" ? "materials-theory" : undefined;
           const className =
             "flex min-h-24 w-full items-center gap-4 rounded-3xl border-2 border-border bg-surface p-4 text-left transition-colors hover:bg-surface-2 active:translate-y-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
           const body = (
@@ -49,7 +49,7 @@ export default function MaterialsPage() {
             </>
           );
           return sub.href ? (
-            <Link key={sub.id} href={sub.href} className={className}>
+            <Link key={sub.id} href={sub.href} data-tour={tour} className={className}>
               {body}
             </Link>
           ) : (

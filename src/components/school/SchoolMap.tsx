@@ -10,7 +10,6 @@ import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { MascotSays } from "@/components/mascot/Mascot";
-import { PageTip } from "@/components/tour/PageTip";
 import { DirectionPicker } from "./DirectionPicker";
 import { GradePicker } from "./GradePicker";
 import { GradeProgressCard } from "./GradeProgressCard";
@@ -47,10 +46,11 @@ export function SchoolMap() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageTip id="page-school" />
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("school.grade.label")}</p>
-        <GradePicker />
+        <div data-tour="school-grades" className="flex flex-col gap-2">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("school.grade.label")}</p>
+          <GradePicker />
+        </div>
         {hasDirections(grade) && (
           <>
             <p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-muted">{t("school.dir.label")}</p>

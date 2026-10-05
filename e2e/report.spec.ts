@@ -32,7 +32,7 @@ async function seed(page: Page, opts: { lang?: "ru" | "kk"; theme?: "light" | "d
             exams: [{ id: "e1", kind: "mini", seed: 7, at: Date.now() - 3600_000, points: 9, maxPoints: 19, durationSec: 900, byTopic: { t01: { points: 1, max: 2 } } }],
             paywall: { lastShownAt: 4102444800000, views: 1 },
             // Проводник первого входа (#104) уже пройден — не закрывает экран.
-            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1 },
+            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
             hearts: { count: 5, updatedAt: 0, day: "" },
           },
           version: 2,

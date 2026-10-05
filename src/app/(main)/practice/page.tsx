@@ -22,7 +22,6 @@ import { useSkillStats } from "@/components/progress/useSkillStats";
 import { iconFor } from "@/components/scenes/icons";
 import { GAMES } from "@/games/registry";
 import { useEntVisible } from "@/components/school/useEntVisible";
-import { PageTip } from "@/components/tour/PageTip";
 
 /** Разделы курса с навыками — считаем один раз (данные курса не меняются). */
 const GROUPS = skillsByUnit();
@@ -49,7 +48,6 @@ export default function PracticePage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageTip id="page-practice" />
       <div>
         <h1 className="text-2xl font-extrabold">{t("prac.title")}</h1>
         <p className="font-semibold text-muted">{t("prac.subtitle")}</p>
@@ -58,6 +56,7 @@ export default function PracticePage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <Link
           href="/drill?mode=smart"
+          data-tour="practice-train"
           className="flex flex-col gap-2 rounded-3xl bg-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
         >
           <Brain size={30} />
@@ -160,8 +159,11 @@ export default function PracticePage() {
 
       {GAMES.length > 0 && (
         <section>
-          <h2 className="text-lg font-extrabold">{t("games.title")}</h2>
-          <p className="mb-3 text-sm font-semibold text-muted">{t("games.subtitle")}</p>
+          {/* Заголовок раздела — метка для Бита-проводника. */}
+          <div data-tour="practice-games" className="mb-3">
+            <h2 className="text-lg font-extrabold">{t("games.title")}</h2>
+            <p className="text-sm font-semibold text-muted">{t("games.subtitle")}</p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {GAMES.map((g) => {
               const open = gameOpen(g, completedSkills);
