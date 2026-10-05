@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { liveStreak } from "@/lib/gamification";
-import { msUntilReminder, reminderText, shouldRemind } from "@/lib/reminders";
+import { pickReminder } from "@/lib/reminder-texts";
+import { msUntilReminder, shouldRemind } from "@/lib/reminders";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 import { badgeCount } from "@/components/app/badge";
-import { pushSupport, readReminded, registerWorker, showNotification, writeMirror, writeReminded } from "@/components/goals/push";
+import { mirrorFrom, pushSupport, readReminded, registerWorker, reminderCtxFrom, showNotification, writeMirror, writeReminded } from "@/components/goals/push";
 
 const MAX_TIMEOUT = 2 ** 31 - 1;
 
@@ -20,7 +20,7 @@ async function fire() {
   const lastRemindedDay = await readReminded();
   if (!shouldRemind({ now, reminder: { enabled, time }, lastActiveDay: s.streak.lastDay, lastRemindedDay })) return;
   const today = todayKey(now);
-  const text = reminderText({ streak: liveStreak(s.streak, today), freezes: s.streak.freezes ?? 0, lang: s.profile.lang });
+  const text = pickReminder(reminderCtxFrom(s, now));
   if (await showNotification(text.title, text.body)) await writeReminded(today);
 }
 
@@ -37,13 +37,17 @@ export function ReminderAgent() {
   const streak = useApp((s) => s.streak.current);
   const lastDay = useApp((s) => s.streak.lastDay);
   const freezes = useApp((s) => s.streak.freezes ?? 0);
+  const name = useApp((s) => s.profile.name);
+  const goalXp = useApp((s) => s.profile.dailyGoalXp);
+  const dayXp = useApp((s) => s.days[todayKey(new Date())]?.xp ?? 0);
+  const lessons = useApp((s) => s.lessons);
 
+  // Зеркало для воркера: настройки, серия и всё для дружеских текстов (имя, повторения, следующий урок, цель дня).
   useEffect(() => {
-    void writeMirror({ enabled, push, time, lang, streak, lastActiveDay: lastDay, freezes });
-  }, [enabled, push, time, lang, streak, lastDay, freezes]);
+    void writeMirror(mirrorFrom(useApp.getState(), new Date()));
+  }, [enabled, push, time, lang, streak, lastDay, freezes, name, goalXp, dayXp, lessons]);
 
   // Значок на иконке установленного приложения: уроки «пора повторить» + серия под угрозой.
-  const lessons = useApp((s) => s.lessons);
   const streakState = useApp((s) => s.streak);
   useEffect(() => {
     const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
