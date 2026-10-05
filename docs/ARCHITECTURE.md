@@ -347,3 +347,19 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Сервер: `app/api/events` (sameOrigin → лимит по хешу IP до чтения тела → тело ≤ 4000 байт → проверка → потолки событий и новых полей) → `server/kv.ts` (`hincrMany` в хеш дня `ev:<день>`). Общие помощники — `server/body.ts`, `server/ip-hash.ts`.
 - Владелец: `app/owner` + `app/api/owner/{login,logout}` (`server/owner-auth.ts` — cookie с HMAC и сроком, `OWNER_SECRET`; `server/owner-data.ts`, `lib/owner-report.ts` — сводка из счётчиков и списков жалоб/ошибок). Не кэшируется сервис-воркером, не требует онбординга.
 - Отзывы: `/feedback` (`components/issue/FeedbackScreen.tsx`, вид обращения `feedback` в `lib/issue.ts`), «Что помешало?» — `components/issue/BreakReasonCard.tsx` в `AppShell`.
+
+## v0.12: этап 13 — поделиться результатом, вызов другу, отчёт родителю
+
+### Три транспорта ссылок (решения #72–#74)
+- **Результат** — `/r/<код>`: код в пути (`lib/share-code.ts`: `x1-…` пробник, `c1-…` курс/класс, `s1-…` серия; только числа и метки, строгий разбор, принимается только каноническая запись). Сервер видит код → `app/r/[code]/page.tsx` (`generateMetadata` на языке из кода, `noindex`) и `opengraph-image.tsx` / `twitter-image.tsx` (картинка 1200×630, разметка — `components/share/og-image.tsx`, шрифты — `assets/fonts/*.ttf`, кэш на год; новая версия дизайна — новый префикс). Экран получателя — `components/share/ResultLanding.tsx` (модель — `components/share/landing.ts`).
+- **Вызов** — `/exam/run?kind&seed[&topics]&ch=<баллы>-<максимум>-<тег>` (`lib/challenge.ts`). Тег банка — `lib/exam-pool.ts` (`currentPoolTag`: FNV по id заданий + `EXAM_BUILD_VERSION`; сторож — `tests/challenge.test.ts`). Попытка хранит `pool` и `challenge` (`lib/exam-store.ts`), итог — `pool` (`ExamSummary`). `ChallengeBanner` перед стартом, `ChallengeCompare` в итогах.
+- **Отчёт родителю** — `/report#d=<z|r><base64url>`: данные во фрагменте (`lib/hash-pack.ts`: JSON → deflate-raw → base64url, защита от «бомбы», без сжатия — `r`), схема — `lib/parent-report.ts` (v2: `buildParentReport`, `parseParentReport`). Страница — `app/report/page.tsx` (`noindex`, `no-referrer`) + `components/report/ReportView.tsx`; окно в профиле — `components/report/ReportShareSheet.tsx`.
+
+### Отправка
+- `lib/share.ts` (WhatsApp/Telegram, системное меню с файлом и без, буфер) и `components/share/ShareTargets.tsx` — общий блок «Отправить / WhatsApp / Telegram / Скопировать ссылку» (событие `share`). Карточка-картинка 1080×1920 — `lib/share-card.ts` (canvas, светлая палитра = `:root` из `globals.css`, сверка тестом), лист — `components/share/ShareSheet.tsx` (картинка рисуется по нажатию; «Сохранить картинку» — только если меню не принимает файлы). Кнопки: `ExamShareActions` (итоги пробника), `CourseProgressCard`, плитка серии в `StatsTiles`.
+- Шкала курса для карточки и отчёта — `lib/course-view.ts` (`courseViewOf`, хук `useCourseView` — обёртка).
+
+### Возврат после онбординга и страницы получателя
+- `lib/pending-link.ts`: `Providers` перед редиректом на онбординг сохраняет адрес варианта с вызовом (только `/exam/run` с верными `kind`, `seed`, `ch`; адрес пересобирается из разобранных полей; час), онбординг после «Поехали» открывает его вместо диагностики.
+- `lib/public-paths.ts`: `/report` и `/r/*` — без онбординга; `isRecipientPath` — на этих страницах `AnalyticsAgent` не шлёт `active`, а сбой чтения сохранения не показывает экран восстановления. Сервис-воркер не кэширует `/r/`.
+- Статистика (#69): `share {what, how}`, `share_open {what}`, `challenge {step}` → поля `sh:`, `so:`, `chl:`; раздел «Поделиться» на `/owner`.
