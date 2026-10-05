@@ -88,6 +88,16 @@ import {
   type Wallet,
 } from "./economy";
 import { casesForLevelUp, claimLevelCase, queueCases, type LevelCaseRoll } from "./level-case";
+import {
+  buyAndEquipCosmetic,
+  EMPTY_COSMETICS,
+  equipCosmetic as equipCosmeticPure,
+  sanitizeCosmetics,
+  type CosmeticBuyResult,
+  type CosmeticId,
+  type CosmeticSlot,
+  type CosmeticsState,
+} from "./cosmetics";
 import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
 import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
 import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
@@ -265,6 +275,8 @@ export interface AppState {
   ledger: LedgerEntry[];
   /** Активный множитель чипов. */
   boost: Boost | null;
+  /** Украшения профиля (этап 16В, lib/cosmetics.ts): что есть и что надето. */
+  cosmetics: CosmeticsState;
   /** Сколько тренировок сегодня уже вернули сердечко. */
   practiceHearts: { day: string; count: number };
   /** Незаконченные уроки (#41): id урока → сохранённое прохождение (lib/lesson-run.ts). В резервную копию не входит. */
@@ -391,6 +403,10 @@ export interface AppActions {
   recordDiagnostic: (summary: DiagnosticSummary, skillAnswers: Record<string, boolean[]>, opts?: { skipBasics?: boolean }) => void;
   /** Покупка за чипы: сердечко, полный запас, бустер. */
   buy: (id: ShopItemId) => BuyResult;
+  /** Покупка украшения профиля за чипы: списывает чипы, пишет строку в историю и сразу надевает купленное. */
+  buyCosmetic: (id: CosmeticId) => CosmeticBuyResult;
+  /** Надеть украшение в слот или снять (`null`). Чужой слот и не купленное — без изменений. */
+  equipCosmetic: (slot: CosmeticSlot, id: CosmeticId | null) => void;
   /**
    * Открыть кейс за уровень (волна 1Б, R3): код бросает приз по seed, сразу выдаёт его и убирает кейс из очереди.
    * Нет такого кейса — null. Опыт из приза новых кейсов не порождает.
@@ -483,6 +499,7 @@ const initialState: AppState = {
   wallet: START_WALLET,
   ledger: [],
   boost: null,
+  cosmetics: EMPTY_COSMETICS,
   practiceHearts: { day: "", count: 0 },
   lessonRuns: {},
   theoryPaid: {},
@@ -703,6 +720,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     wallet: sanitizeWallet(p.wallet),
     ledger: Array.isArray(p.ledger) ? p.ledger.filter((e) => !!e && typeof e.amount === "number").slice(0, 50) : [],
     boost: sanitizeBoost(p.boost),
+    cosmetics: sanitizeCosmetics(p.cosmetics),
     practiceHearts:
       p.practiceHearts && typeof p.practiceHearts.day === "string" && typeof p.practiceHearts.count === "number"
         ? p.practiceHearts
@@ -1158,17 +1176,36 @@ export const useApp = create<AppState & AppActions>()(
         return { ok: true };
       },
 
+      buyCosmetic: (id) => {
+        const s = get();
+        const res = buyAndEquipCosmetic(s.cosmetics, s.wallet, id);
+        if (!res.ok) return res;
+        const price = s.wallet.chips - res.wallet.chips;
+        set({
+          cosmetics: res.state,
+          wallet: res.wallet,
+          ledger: pushLedger(s.ledger, { id: uid(), at: Date.now(), amount: -price, reason: "buy", note: id }),
+        });
+        return { ok: true };
+      },
+
+      equipCosmetic: (slot, id) => {
+        const s = get();
+        const next = equipCosmeticPure(s.cosmetics, slot, id);
+        if (next !== s.cosmetics) set({ cosmetics: next });
+      },
+
       openLevelCase: (level, seed) => {
         const s = get();
         const now = Date.now();
         const claim = claimLevelCase(s, level, seed, { now, today: todayKey(), tier: tierOf(s, now), ledgerId: uid() });
         if (!claim) return null;
-        const { xp, wallet, hearts, boost, ledger, pendingCases } = claim.state;
+        const { xp, wallet, hearts, boost, ledger, pendingCases, cosmetics } = claim.state;
         // Опыт из приза мог пересечь порог достижения (xp_500): проверяем и платим за него, но кейсов не плодим.
         // Для этого settleChips получает prev с тем же xp: чипов «за опыт» и нового кейса нет, остаются только чипы за достижения.
-        const merged: AppState = { ...s, xp, wallet, hearts, boost, ledger, pendingCases };
+        const merged: AppState = { ...s, xp, wallet, hearts, boost, ledger, pendingCases, cosmetics };
         const settled = settleChips(merged, { ...merged, ...evaluate(merged) }, [], now);
-        set({ xp, wallet: settled.wallet, hearts, boost, ledger: settled.ledger, pendingCases, achievements: settled.achievements, newAchievements: settled.newAchievements });
+        set({ xp, wallet: settled.wallet, hearts, boost, cosmetics, ledger: settled.ledger, pendingCases, achievements: settled.achievements, newAchievements: settled.newAchievements });
         return claim.roll;
       },
 

@@ -12,9 +12,10 @@ import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
-import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
+import { MyCosmetics } from "@/components/cosmetics/MyCosmetics";
+import { ProfileCard } from "@/components/cosmetics/ProfileCard";
 import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
 import { Row, Segmented } from "@/components/goals/controls";
 import { NumberStepper } from "@/components/goals/NumberStepper";
@@ -102,74 +103,57 @@ export default function ProfilePage() {
       <h1 className="sr-only">{t("prof.title")}</h1>
       <CaseWaiting />
 
-      {/* Аватар и имя */}
-      <Card>
-        <div className="flex items-start gap-4">
-          <div className="relative shrink-0">
-            <Avatar config={profile.avatar} name={profile.name} size={76} />
-            <button
-              type="button"
-              onClick={() => setPickAvatar(true)}
-              aria-label={t("prof2.avatar.edit")}
-              className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border-2 border-surface bg-primary text-white shadow transition-transform active:scale-95"
+      {/* Карточка профиля: фон, аватар с рамкой, имя, титул и уровень (украшения — из магазина и кейса) */}
+      <ProfileCard
+        tour
+        onEditAvatar={() => setPickAvatar(true)}
+        nameEditor={
+          editingName ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveName();
+              }}
+              className="flex w-full flex-col gap-2"
             >
-              <Pencil size={16} />
-            </button>
-          </div>
-          <div className="min-w-0 flex-1">
-            {editingName ? (
               <label htmlFor="prof-name" className="text-xs font-extrabold uppercase tracking-wide text-muted">
                 {t("prof2.name.label")}
               </label>
-            ) : (
-              <p id="prof-name-label" className="text-xs font-extrabold uppercase tracking-wide text-muted">
-                {t("prof2.name.label")}
-              </p>
-            )}
-            {editingName ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  saveName();
-                }}
-                className="mt-1 flex flex-col gap-2"
-              >
-                <input
-                  id="prof-name"
-                  autoFocus
-                  value={draft}
-                  maxLength={NAME_MAX}
-                  placeholder={t("prof2.name.placeholder")}
-                  onChange={(e) => setDraft(e.target.value.slice(0, NAME_MAX))}
-                  className="h-11 w-full rounded-xl border-2 border-primary bg-surface px-3 text-lg font-extrabold outline-none"
-                />
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm" className="h-10" disabled={!draft.trim()}>
-                    {t("prof2.name.save")}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-10" onClick={() => setEditingName(false)}>
-                    {t("common.cancel")}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="mt-0.5 flex flex-col items-start gap-2">
-                <p aria-labelledby="prof-name-label" className="max-w-full break-words text-2xl font-extrabold leading-tight">
-                  {profile.name || "—"}
-                </p>
-                <Button size="sm" variant="secondary" className="h-10" icon={<Pencil size={14} />} onClick={startEditName}>
-                  {t("prof2.name.edit")}
+              <input
+                id="prof-name"
+                autoFocus
+                value={draft}
+                maxLength={NAME_MAX}
+                placeholder={t("prof2.name.placeholder")}
+                onChange={(e) => setDraft(e.target.value.slice(0, NAME_MAX))}
+                className="h-11 w-full rounded-xl border-2 border-primary bg-surface px-3 text-lg font-extrabold outline-none"
+              />
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" className="h-10" disabled={!draft.trim()}>
+                  {t("prof2.name.save")}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-10" onClick={() => setEditingName(false)}>
+                  {t("common.cancel")}
                 </Button>
               </div>
-            )}
-            <p className="mt-2 text-xs font-semibold text-muted">{t("prof2.name.hint")}</p>
-          </div>
-        </div>
-      </Card>
+            </form>
+          ) : undefined
+        }
+      >
+        {!editingName && (
+          <Button size="sm" variant="secondary" className="h-10" icon={<Pencil size={14} />} onClick={startEditName}>
+            {t("prof2.name.edit")}
+          </Button>
+        )}
+        <p className="text-xs font-semibold text-muted">{t("prof2.name.hint")}</p>
+      </ProfileCard>
 
       <LevelCard />
       {/* % курса (у школьника — % класса, #71) */}
       <CourseProgressBadge />
+
+      {/* Украшения: купленное и выпавшее из кейса — надеть / снять */}
+      <MyCosmetics />
 
       {/* Цели */}
       {/* Тариф: бесплатный / Лайт / Безлимит (пробный) */}
@@ -301,7 +285,7 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      <Card className="divide-y-2 divide-border py-1">
+      <Card data-tour="profile-settings" className="divide-y-2 divide-border py-1">
         <Row label={t("prof.lang")}>
           <Segmented<Lang>
             label={t("prof.lang")}

@@ -11,7 +11,10 @@ import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/mascot/Mascot";
 import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
-import { PrizeIcon, prizeDesc, prizeName } from "./prize";
+import { cosmeticDef } from "@/lib/cosmetics";
+import { cn } from "@/lib/cn";
+import { COSMETIC_PRIZE_BOX, CosmeticPrizeBody, EquipPrizeButton } from "./CosmeticPrize";
+import { PrizeIcon, prizeDesc, prizeName, prizeShortName } from "./prize";
 
 /** Размеры карточки ленты и шаг между ними, px. */
 const CARD_W = 104;
@@ -66,6 +69,9 @@ export function LevelCase({
   const reduce = useReduceMotion();
   const [phase, setPhase] = useState<Phase>(initialRoll ? "reveal" : "closed");
   const [roll, setRoll] = useState<LevelCaseRoll | null>(initialRoll ?? null);
+  // Выпало украшение профиля: итог показывает его превью и кнопку «Надеть».
+  const cosmeticId = roll?.prize.kind === "cosmetic" ? roll.prize.cosmetic : undefined;
+  const cosmetic = cosmeticDef(cosmeticId);
   // Фокус до открытия окна: вернём его при закрытии (читается один раз, до первой отрисовки).
   const [returnTo] = useState<Element | null>(() => (typeof document === "undefined" ? null : document.activeElement));
   const x = useMotionValue(-CARD_W / 2);
@@ -214,7 +220,7 @@ export function LevelCase({
                 {roll.strip.map((p, i) => (
                   <div key={i} className="flex h-30 shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-border bg-surface" style={{ width: CARD_W }}>
                     <PrizeIcon prize={p} size={32} className="h-14 w-14" />
-                    <span className="px-1 text-sm font-extrabold leading-tight">{prizeName(p, t)}</span>
+                    <span className="px-1 text-sm font-extrabold leading-tight">{prizeShortName(p, t)}</span>
                   </div>
                 ))}
               </m.div>
@@ -235,18 +241,25 @@ export function LevelCase({
               <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("case.reveal")}</p>
             </m.div>
             <m.div
-              className="flex w-full flex-col items-center gap-3 rounded-3xl border-2 border-gold/60 bg-gold-soft p-5"
+              className={cn("flex w-full flex-col items-center gap-3 rounded-3xl border-2 p-5", cosmeticId && cosmetic ? COSMETIC_PRIZE_BOX[cosmetic.rarity] : "border-gold/60 bg-gold-soft")}
               role="group"
               aria-label={t("case.prize.aria", { name: prizeName(roll.prize, t) })}
               initial={{ scale: 0.7, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ ...springBouncy, delay: 0.15 }}
             >
-              <PrizeIcon prize={roll.prize} size={44} className="h-20 w-20 bg-surface" />
-              <p className="text-3xl font-extrabold leading-tight">{prizeName(roll.prize, t)}</p>
-              <p className="text-balance font-semibold text-muted">{prizeDesc(roll.prize, t)}</p>
+              {cosmeticId ? (
+                <CosmeticPrizeBody id={cosmeticId} />
+              ) : (
+                <>
+                  <PrizeIcon prize={roll.prize} size={44} className="h-20 w-20 bg-surface" />
+                  <p className="text-3xl font-extrabold leading-tight">{prizeName(roll.prize, t)}</p>
+                  <p className="text-balance font-semibold text-muted">{prizeDesc(roll.prize, t)}</p>
+                </>
+              )}
             </m.div>
-            <m.div className="w-full" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.5 }}>
+            <m.div className={cn("w-full", cosmeticId && "grid grid-cols-2 gap-2")} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.5 }}>
+              {cosmeticId && <EquipPrizeButton id={cosmeticId} />}
               <Button variant="primary" size="lg" block onClick={onClose} autoFocus>
                 {t("case.done")}
               </Button>

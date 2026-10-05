@@ -2,6 +2,7 @@
 // Приз выбирает код ДО анимации (честно: лента только показывает уже выпавшее). Кейс нельзя купить ни за чипы, ни за деньги.
 // Веса и размеры призов — в lib/economy.ts (LEVEL_CASE_*). Тесты — tests/level-case.test.ts.
 
+import { pickCaseCosmetic, type CosmeticId, type CosmeticsState } from "./cosmetics";
 import {
   LEVEL_CASE_BOOST,
   LEVEL_CASE_CHIPS,
@@ -27,9 +28,11 @@ export type CasePrizeKey = CasePrizeId | "chips15";
 
 export interface CasePrize {
   id: CasePrizeKey;
-  kind: "xp" | "hearts" | "chips" | "boost";
-  /** XP или чипы; для бустера — множитель; для сердечек 0. */
+  kind: "xp" | "hearts" | "chips" | "boost" | "cosmetic";
+  /** XP или чипы; для бустера — множитель; для сердечек и украшения 0. */
   amount: number;
+  /** Только у `kind: "cosmetic"`: какое украшение выпало (выбрано кодом до анимации). */
+  cosmetic?: CosmeticId;
 }
 
 /** Длина ленты и позиция приза в ней (лента «докручивается» до приза). */
@@ -47,7 +50,9 @@ export interface LevelCaseRoll {
 
 const IDS = Object.keys(LEVEL_CASE_WEIGHTS) as CasePrizeId[];
 
-export function prizeOf(id: CasePrizeKey): CasePrize {
+/** Приз по id. Для `cosmetic` нужен выбранный id украшения; без него (выдавать нечего) — чипы вместо украшения (`chips30`). */
+export function prizeOf(id: CasePrizeKey, cosmetic?: CosmeticId): CasePrize {
+  if (id === "cosmetic") return cosmetic ? { id, kind: "cosmetic", amount: 0, cosmetic } : prizeOf("chips30");
   if (id === "chips15") return { id, kind: "chips", amount: LEVEL_CASE_HEARTS_SUBSTITUTE_CHIPS };
   if (id === "hearts") return { id, kind: "hearts", amount: 0 };
   if (id === "boost") return { id, kind: "boost", amount: LEVEL_CASE_BOOST.mult };
@@ -67,17 +72,22 @@ export function pickPrizeId(r: number): CasePrizeId {
   return IDS[IDS.length - 1];
 }
 
-const resolve = (id: CasePrizeId, heartsFull: boolean): CasePrize => prizeOf(id === "hearts" && heartsFull ? "chips15" : id);
+/** Приз с заменами: полные сердечки → чипы 15; украшение выбирает код (`pickCaseCosmetic`), нечего выдать → чипы 30. */
+function resolve(id: CasePrizeId, heartsFull: boolean, owned: readonly CosmeticId[], rand: () => number): CasePrize {
+  if (id === "cosmetic") return prizeOf("cosmetic", pickCaseCosmetic(owned, rand()) ?? undefined);
+  return prizeOf(id === "hearts" && heartsFull ? "chips15" : id);
+}
 
 /**
- * Бросок кейса: детерминирован по (level, seed). Если сердечки уже полные (heartsFull) — «полное восстановление»
- * заменяется чипами; то же в ленте, чтобы показанное совпадало с выдаваемым.
+ * Бросок кейса: детерминирован по (level, seed, owned). Если сердечки уже полные (heartsFull) — «полное восстановление»
+ * заменяется чипами; если выпало украшение — код выбирает его среди тех, которых у ученика ещё нет (owned), а когда выдавать
+ * нечего, вместо него чипы. То же в ленте, чтобы показанное совпадало с выдаваемым.
  */
-export function rollLevelCase(level: number, seed: number, heartsFull = false): LevelCaseRoll {
+export function rollLevelCase(level: number, seed: number, heartsFull = false, owned: readonly CosmeticId[] = []): LevelCaseRoll {
   const rand = seeded((seed ^ Math.imul(level | 0, 0x9e3779b1)) >>> 0);
-  const prize = resolve(pickPrizeId(rand()), heartsFull);
+  const prize = resolve(pickPrizeId(rand()), heartsFull, owned, rand);
   const strip: CasePrize[] = [];
-  for (let i = 0; i < CASE_STRIP_LENGTH; i++) strip.push(i === CASE_WIN_INDEX ? prize : resolve(pickPrizeId(rand()), heartsFull));
+  for (let i = 0; i < CASE_STRIP_LENGTH; i++) strip.push(i === CASE_WIN_INDEX ? prize : resolve(pickPrizeId(rand()), heartsFull, owned, rand));
   return { level, prize, strip, landing: 0.15 + rand() * 0.7 };
 }
 
@@ -106,6 +116,8 @@ export interface CaseState {
   boost: Boost | null;
   ledger: LedgerEntry[];
   pendingCases: number[];
+  /** Украшения профиля: приз-украшение добавляется в `owned` (сам кейс его не надевает). */
+  cosmetics: CosmeticsState;
 }
 
 export interface CaseClaim {
@@ -126,12 +138,13 @@ export function claimLevelCase(
 ): CaseClaim | null {
   if (!s.pendingCases.includes(level)) return null;
   const view = heartsView(s.hearts, ctx.tier, ctx.now, ctx.today);
-  const roll = rollLevelCase(level, seed, view.unlimited || view.count >= view.max);
+  const roll = rollLevelCase(level, seed, view.unlimited || view.count >= view.max, s.cosmetics.owned);
   const { prize } = roll;
   const next: CaseState = { ...s, pendingCases: s.pendingCases.filter((l) => l !== level) };
   if (prize.kind === "xp") next.xp = s.xp + prize.amount;
   else if (prize.kind === "hearts") next.hearts = refillHearts(ctx.tier, ctx.now, ctx.today);
   else if (prize.kind === "boost") next.boost = extendBoost(s.boost, LEVEL_CASE_BOOST.mult, LEVEL_CASE_BOOST.minutes, ctx.now);
+  else if (prize.kind === "cosmetic" && prize.cosmetic && !s.cosmetics.owned.includes(prize.cosmetic)) next.cosmetics = { ...s.cosmetics, owned: [...s.cosmetics.owned, prize.cosmetic] };
   else if (prize.kind === "chips") {
     next.wallet = { ...s.wallet, chips: s.wallet.chips + prize.amount, earned: s.wallet.earned + prize.amount };
     next.ledger = pushLedger(s.ledger, { id: ctx.ledgerId, at: ctx.now, amount: prize.amount, reason: "case", note: String(level) });

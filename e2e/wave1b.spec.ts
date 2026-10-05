@@ -48,7 +48,9 @@ test("кейс за уровень: открывается сам на «Учи�
   const before = { chips: 20, hearts: 2, xp: 300 };
   const s = await saved(page);
   expect(s.pendingCases ?? []).toEqual([]);
-  const changed = s.wallet.chips > before.chips || s.hearts.count > before.hearts || s.xp > before.xp || (s.boost?.until ?? 0) > Date.now();
+  // Приз — XP, чипы, сердечки, бустер или украшение профиля (оно попадает в cosmetics.owned).
+  const changed =
+    s.wallet.chips > before.chips || s.hearts.count > before.hearts || s.xp > before.xp || (s.boost?.until ?? 0) > Date.now() || (s.cosmetics?.owned?.length ?? 0) > 0;
   expect(changed).toBe(true);
 
   await dialog.getByRole("button", { name: "Отлично" }).click();

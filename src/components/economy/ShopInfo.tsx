@@ -32,9 +32,11 @@ import {
 import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { AI_COST, CHIP_REWARD, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { cosmeticDef } from "@/lib/cosmetics";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
+import { cosmeticWhat } from "@/components/cosmetics/names";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
@@ -297,7 +299,9 @@ export function LedgerList() {
   const title = (e: LedgerEntry): string => {
     if (e.reason === "buy") {
       const id = knownShopId(e.note);
-      return t("shop.ledger.buy", { what: id ? t(ITEM_NAME[id]) : "" }).replace(/:\s*$/, "");
+      const cosmetic = cosmeticDef(e.note);
+      const what = id ? t(ITEM_NAME[id]) : cosmetic ? cosmeticWhat(cosmetic.id, t) : "";
+      return t("shop.ledger.buy", { what }).replace(/:\s*$/, "");
     }
     if (e.reason === "ai" || e.reason === "refund") {
       const kind = knownAiKind(e.note);

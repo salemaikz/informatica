@@ -13,6 +13,7 @@ import { useState } from "react";
 import { track } from "@/lib/analytics";
 import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
+import { CosmeticsShop } from "@/components/cosmetics/CosmeticsShop";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
 import { formatHours } from "@/components/plans/plans-helpers";
 import { AiPricing, EarnList, HeartRules, LedgerList } from "@/components/economy/ShopInfo";
@@ -66,6 +67,8 @@ export default function ShopPage() {
 
       <ShopStatus />
       <ShopPlanBanner />
+
+      <CosmeticsShop />
 
       <ShopSection
         title={t("shop.hearts.title")}
@@ -220,9 +223,11 @@ export default function ShopPage() {
         </div>
       </ShopSection>
 
-      <ShopSection title={t("shop.earn.title")}>
-        <EarnList />
-      </ShopSection>
+      <div id="shop-earn" className="scroll-mt-20">
+        <ShopSection title={t("shop.earn.title")}>
+          <EarnList />
+        </ShopSection>
+      </div>
 
       <ShopSection title={t("shop.ai.title")}>
         <AiPricing />
