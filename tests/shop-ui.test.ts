@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AI_COST, SHOP_ITEMS, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
+import { AI_COST, ENTRY_COST, HOUR, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
 import { chipRate, dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
-import { dict } from "@/i18n/dict";
+import { FREE_ENTRIES, entryRules, practiceRule, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
+import { compareRows } from "@/components/plans/plans-helpers";
+import { dict, type DictKey } from "@/i18n/dict";
 
 const view = (count: number, max = 5, extra: Partial<HeartsView> = {}): HeartsView => ({ count, max, unlimited: false, nextAt: count < max ? 1000 : null, ...extra });
 const UNLIMITED: HeartsView = { count: Infinity, max: Infinity, unlimited: true, nextAt: null };
@@ -224,5 +226,131 @@ describe("строка сердечек и бустера в магазине", 
   });
   it("старые ключи карточки баланса удалены", () => {
     expect(Object.keys(dict).filter((k) => k.startsWith("shop.balance"))).toEqual([]);
+  });
+});
+
+describe("цены и «Полный запас» в магазине (#60)", () => {
+  const full = shopItem("hearts-full")!;
+  const T0 = 1_800_000_000_000;
+  const today = "2027-01-15";
+
+  it("полный запас: цена за недостающие и «+N»", () => {
+    expect(shownPrice(full, view(0))).toBe(5 * full.price);
+    expect(refillGain(full, view(0))).toBe(5);
+    expect(shownPrice(full, view(1))).toBe(4 * full.price);
+    expect(refillGain(full, view(1))).toBe(4);
+    // у «Лайта» запас 10: не хватает 6 — 6 × 45
+    expect(shownPrice(full, view(4, 10))).toBe(6 * full.price);
+    expect(refillGain(full, view(4, 10))).toBe(6);
+  });
+  it("ниже порога продажи цена всё равно за недостающие (кнопка неактивна, причина — overflow)", () => {
+    const missing = REFILL_MIN_MISSING - 1;
+    expect(shownPrice(full, view(5 - missing))).toBe(missing * full.price);
+    expect(shopAvailability(full, view(5 - missing), 999)).toEqual({ ok: false, reason: "overflow" });
+  });
+  it("запас полон или безлимит — недостающих нет, показываем цену запаса, пустого до конца", () => {
+    expect(refillGain(full, view(5))).toBe(0);
+    expect(shownPrice(full, view(5))).toBe(5 * full.price);
+    expect(shownPrice(full, view(10, 10))).toBe(10 * full.price);
+    expect(refillGain(full, UNLIMITED)).toBe(0);
+    expect(shownPrice(full, UNLIMITED)).toBe(PLAN_FEATURES.free.maxHearts * full.price);
+  });
+  it("остальные товары — цена товара, «+N» только у полного запаса", () => {
+    for (const item of SHOP_ITEMS.filter((i) => i.kind !== "refill")) {
+      expect(shownPrice(item, view(2)), item.id).toBe(item.price);
+      expect(refillGain(item, view(2)), item.id).toBe(0);
+    }
+  });
+  it("цена на кнопке — ровно то, что спишет покупка (buyItem), когда покупка возможна", () => {
+    for (const item of SHOP_ITEMS) {
+      for (const count of [0, 1, 2, 3, 4]) {
+        const hearts = { count, updatedAt: T0, day: today };
+        const bought = buyItem({ wallet: { chips: 999, earned: 999, spent: 0 }, hearts, boost: null }, item.id, "free", T0, today);
+        if (!bought.ok) continue;
+        expect(bought.wallet.spent, `${item.id} ${count}`).toBe(shownPrice(item, view(count)));
+        expect(bought.wallet.spent, `${item.id} ${count}`).toBe(itemPrice(item, view(count)));
+      }
+    }
+  });
+});
+
+describe("«Как работают сердечки»: числа из констант", () => {
+  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, контрольная 2, экстерн 2, игра 1", () => {
+    const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
+    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1 });
+    expect(rules.lesson).toBe(ENTRY_COST.lesson);
+    expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
+    expect(rules.extern).toBe(ENTRY_COST.extern);
+  });
+  it("восстановление: бесплатный 5 за 6 ч, «Лайт» 10 за 3 ч, «Безлимит» не тратится", () => {
+    const [free, lite, unl] = regenRules();
+    expect(free).toMatchObject({ tier: "free", max: 5, regenMs: 6 * HOUR, unlimited: false });
+    expect(lite).toMatchObject({ tier: "lite", max: 10, regenMs: 3 * HOUR, unlimited: false });
+    expect(unl).toMatchObject({ tier: "unlimited", unlimited: true });
+    expect(formatRemaining(free.regenMs, "ru")).toBe("6 ч");
+    expect(formatRemaining(lite.regenMs, "kk")).toBe("3 сағ");
+  });
+  it("возврат за тренировку: от 6 ответов, точность 70%, до 3 раз в день", () => {
+    expect(practiceRule()).toEqual({ answers: PRACTICE_HEART_MIN_ANSWERS, percent: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100), daily: PRACTICE_HEART_DAILY });
+    expect(practiceRule()).toEqual({ answers: 6, percent: 70, daily: 3 });
+  });
+  it("у каждой строки правил есть подпись в словаре (ru и kk)", () => {
+    const keys: string[] = [...entryRules().map((r) => `shop.rules.${r.id}`), ...FREE_ENTRIES.map((id) => `shop.rules.free.${id}`)];
+    keys.push("shop.rules.title", "shop.rules.hint", "shop.rules.paid", "shop.rules.when", "shop.rules.free", "shop.rules.regen", "shop.rules.regen.row", "shop.rules.regen.unlimited", "shop.rules.practice");
+    for (const k of keys) {
+      const v = dict[k as DictKey];
+      expect(v, k).toBeDefined();
+      expect(v.ru.length, k).toBeGreaterThan(0);
+      expect(v.kk.length, k).toBeGreaterThan(0);
+    }
+  });
+  it("числа в текстах правил — только плейсхолдерами (кроме «+1» у возврата за время)", () => {
+    const keys = Object.keys(dict).filter((k) => /^shop\.rules\.|^shop\.item\.hearts-full|^shop\.fail\.overflowRefill|^shop\.hearts\.hint$|^shop\.free\.practice$/.test(k));
+    expect(keys.length).toBeGreaterThan(20);
+    for (const k of keys) {
+      const v = dict[k as DictKey];
+      const strip = (s: string) => s.replace(/\{\w+\}/g, "").replace("+1", "");
+      expect(strip(v.ru), k).not.toMatch(/\d/);
+      expect(strip(v.kk), k).not.toMatch(/\d/);
+    }
+  });
+  it("плейсхолдеры правил: {max}/{time}, {n}/{p}/{d}", () => {
+    const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    expect(ph(dict["shop.rules.regen.row"].ru)).toEqual(["max", "time"]);
+    expect(ph(dict["shop.rules.practice"].ru)).toEqual(["d", "n", "p"]);
+    expect(ph(dict["shop.free.practice"].ru)).toEqual(["n", "p"]);
+    expect(ph(dict["shop.item.hearts-full.plus"].ru)).toEqual(["n"]);
+    expect(ph(dict["shop.item.hearts-full.desc"].ru)).toEqual(["p"]);
+  });
+  it("причина overflow у полного запаса — «Выгоднее по одному или тройкой»; у тройки текст прежний", () => {
+    expect(dict["shop.fail.overflowRefill"].ru).toBe("Выгоднее по одному или тройкой");
+    expect(dict["shop.fail.overflow"].ru).toBe("Столько не поместится — бери по одному");
+  });
+});
+
+describe("тексты магазина и тарифов: сердечко — за вход, не за ошибку (#40)", () => {
+  const keys = Object.keys(dict).filter((k) => /^(shop|plans|soon)\./.test(k));
+  it("нет текстов, что сердечко снимается за ошибку", () => {
+    const old = /тратится за ошибку|за ошибку в уроке|ошибка с первой попытки|Сабақтағы қате үшін|қате үшін бір жүрек/i;
+    for (const k of keys) {
+      expect(dict[k as DictKey].ru, k).not.toMatch(old);
+      expect(dict[k as DictKey].kk, k).not.toMatch(old);
+    }
+  });
+  it("время восстановления в тарифах — из PLAN_FEATURES: 6 ч и 3 ч (не 4 и не 5)", () => {
+    expect(PLAN_FEATURES.free.regenMs).toBe(6 * HOUR);
+    expect(PLAN_FEATURES.lite.regenMs).toBe(3 * HOUR);
+    const texts = keys.map((k) => `${dict[k as DictKey].ru}\n${dict[k as DictKey].kk}`).join("\n");
+    expect(texts).not.toMatch(/\b[45] ?(ч|сағ)\b/);
+  });
+  it("строка сердечек в таблице тарифов: подпись «вход в урок, тест или игру»", () => {
+    const row = compareRows("ru").find((r) => r.id === "hearts")!;
+    expect(row.sub).toBe("plans.cmp.heartsFor");
+    expect(dict["plans.cmp.heartsFor"].ru).toBe("вход в урок, тест или игру");
+    expect(dict["plans.cmp.heartsFor"].kk.length).toBeGreaterThan(0);
+  });
+  it("«Безлимит»: уроки, тесты и игры без сердечек", () => {
+    expect(dict["plans.perk.unl.hearts"].ru).toBe("Уроки, тесты и игры без сердечек");
+    expect(dict["plans.perk.unl.hearts"].kk).toBe("Сабақ, тест пен ойын жүрексіз");
   });
 });

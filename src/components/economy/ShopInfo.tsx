@@ -1,6 +1,34 @@
 "use client";
 
-import { BadgeCheck, BookOpen, Bot, Camera, Cpu, GraduationCap, Lightbulb, MessageCircle, Mic, Sparkles, Target, Trophy, Wand2, Zap, type LucideIcon } from "lucide-react";
+import {
+  BadgeCheck,
+  BookOpen,
+  Bot,
+  Camera,
+  ClipboardCheck,
+  Clock,
+  Code2,
+  Cpu,
+  Dumbbell,
+  Flag,
+  Gamepad2,
+  GraduationCap,
+  Heart,
+  Infinity as InfinityIcon,
+  Layers,
+  Lightbulb,
+  ListChecks,
+  MessageCircle,
+  Mic,
+  RefreshCw,
+  Sparkles,
+  Target,
+  Trophy,
+  Undo2,
+  Wand2,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { AI_COST, AI_DAILY_CAP, CHIP_BONUS, PLAN_FEATURES, SHOP_ITEMS, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
@@ -11,11 +39,134 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { chipRate, dayDiff, formatClock, formatMult, formatNum, knownAiKind, knownShopId } from "./shop-helpers";
+import { chipRate, dayDiff, formatClock, formatMult, formatNum, formatRemaining, knownAiKind, knownShopId } from "./shop-helpers";
+import { entryRules, practiceRule, regenRules, FREE_ENTRIES, type EntryRuleId, type FreeEntryId } from "./shop-rules";
 import { ChipPrice, IconTile } from "./ShopParts";
 import { useAiQuote, useNow } from "./useEconomy";
 
-// Информационные блоки магазина: как заработать чипы, цена ИИ, история чипов.
+// Информационные блоки магазина: как работают сердечки, как заработать чипы, цена ИИ, история чипов.
+
+const ENTRY_ROWS: Record<EntryRuleId, { icon: LucideIcon; key: DictKey }> = {
+  lesson: { icon: BookOpen, key: "shop.rules.lesson" },
+  bigLesson: { icon: Layers, key: "shop.rules.bigLesson" },
+  check: { icon: ClipboardCheck, key: "shop.rules.check" },
+  exam: { icon: GraduationCap, key: "shop.rules.exam" },
+  checkpoint: { icon: Flag, key: "shop.rules.checkpoint" },
+  extern: { icon: ListChecks, key: "shop.rules.extern" },
+  game: { icon: Gamepad2, key: "shop.rules.game" },
+};
+
+const FREE_ROWS: Record<FreeEntryId, { icon: LucideIcon; key: DictKey }> = {
+  practice: { icon: Dumbbell, key: "shop.rules.free.practice" },
+  review: { icon: RefreshCw, key: "shop.rules.free.review" },
+  mistakes: { icon: Undo2, key: "shop.rules.free.mistakes" },
+  code: { icon: Code2, key: "shop.rules.free.code" },
+  theory: { icon: BookOpen, key: "shop.rules.free.theory" },
+  chat: { icon: MessageCircle, key: "shop.rules.free.chat" },
+};
+
+const TIER_NAME: Record<"free" | "lite" | "unlimited", DictKey> = {
+  free: "plans.tier.free",
+  lite: "plans.tier.lite",
+  unlimited: "plans.tier.unlimited",
+};
+
+/** Цена входа в сердечках — всегда видна (у HeartCost при безлимите значок скрыт, а здесь это справка). */
+function CostBadge({ n }: { n: number }) {
+  const { t } = useT();
+  const label = t("hearts.cost.aria", { n });
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-heart-soft px-2.5 py-1 text-sm font-extrabold leading-none text-heart-strong"
+    >
+      <Heart size={14} fill="currentColor" aria-hidden />
+      <span className="tabular-nums" aria-hidden>
+        {n}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * «Как работают сердечки» (#40, #60): за что платятся (цены входа), что бесплатно, как возвращаются по тарифам и
+ * что даёт тренировка. Числа — из ENTRY_COST, PLAN_FEATURES, PRACTICE_HEART_* (через shop-rules.ts).
+ */
+export function HeartRules() {
+  const { t, lang } = useT();
+  const practice = practiceRule();
+
+  return (
+    <Card className="divide-y-2 divide-border p-0 sm:p-0">
+      <section className="p-3.5" aria-labelledby="heart-rules-paid">
+        <h3 id="heart-rules-paid" className="text-sm font-extrabold text-muted">
+          {t("shop.rules.paid")}
+        </h3>
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {entryRules().map((r) => {
+            const row = ENTRY_ROWS[r.id];
+            return (
+              <li key={r.id} className="flex min-h-11 items-center gap-3">
+                <row.icon size={20} className="shrink-0 text-heart" aria-hidden />
+                <span className="min-w-0 flex-1 text-base font-extrabold leading-tight">{t(row.key)}</span>
+                <CostBadge n={r.cost} />
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-2 text-sm font-semibold text-muted">{t("shop.rules.when")}</p>
+      </section>
+
+      <section className="p-3.5" aria-labelledby="heart-rules-free">
+        <h3 id="heart-rules-free" className="text-sm font-extrabold text-muted">
+          {t("shop.rules.free")}
+        </h3>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {FREE_ENTRIES.map((id) => {
+            const row = FREE_ROWS[id];
+            return (
+              <li key={id}>
+                <Pill tone="success" icon={<row.icon size={14} aria-hidden />} className="gap-1.5 px-3 py-1.5 text-sm">
+                  {t(row.key)}
+                </Pill>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="p-3.5" aria-labelledby="heart-rules-regen">
+        <h3 id="heart-rules-regen" className="text-sm font-extrabold text-muted">
+          {t("shop.rules.regen")}
+        </h3>
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {regenRules().map((r) => (
+            <li key={r.tier} className="flex min-h-11 items-center gap-3">
+              {r.unlimited ? (
+                <InfinityIcon size={20} strokeWidth={3} className="shrink-0 text-heart" aria-hidden />
+              ) : (
+                <Clock size={20} className="shrink-0 text-heart" aria-hidden />
+              )}
+              <span className="shrink-0 text-base font-extrabold leading-tight">{t(TIER_NAME[r.tier])}</span>
+              <span className="min-w-0 flex-1 text-right text-[15px] font-bold leading-tight tabular-nums text-muted">
+                {r.unlimited ? t("shop.rules.regen.unlimited") : t("shop.rules.regen.row", { max: r.max, time: formatRemaining(r.regenMs, lang) })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="flex items-start gap-3 p-3.5">
+        <Dumbbell size={20} className="mt-0.5 shrink-0 text-success" aria-hidden />
+        <p className="min-w-0 flex-1 text-[15px] font-bold leading-snug">
+          {t("shop.rules.practice", { n: practice.answers, p: practice.percent, d: practice.daily })}
+        </p>
+      </section>
+    </Card>
+  );
+}
 
 const EARN_ROWS: { id: "lesson" | "perfect" | "dailyGoal" | "achievement" | "exam"; icon: LucideIcon; key: DictKey }[] = [
   { id: "lesson", icon: BookOpen, key: "shop.earn.lesson" },

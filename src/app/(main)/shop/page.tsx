@@ -14,7 +14,7 @@ import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, pack
 import { useT } from "@/i18n/useT";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
 import { formatHours } from "@/components/plans/plans-helpers";
-import { AiPricing, EarnList, LedgerList } from "@/components/economy/ShopInfo";
+import { AiPricing, EarnList, HeartRules, LedgerList } from "@/components/economy/ShopInfo";
 import { ShopStatus } from "@/components/economy/ShopStatus";
 import { ShopPlanBanner } from "@/components/economy/ShopPlanBanner";
 import {
@@ -29,8 +29,9 @@ import {
   formatSpan,
   formatMult,
 } from "@/components/economy/shop-helpers";
+import { practiceRule } from "@/components/economy/shop-rules";
 
-/** Магазин: строка сердечек и бустера (баланс — в шапке), тариф, сердечки и множитель за чипы, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
+/** Магазин: строка сердечек и бустера (баланс — в шапке), тариф, сердечки за чипы и «Как работают сердечки», множитель, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
 export default function ShopPage() {
   const { t, lang } = useT();
   // Что выбрал ученик — показывается в шторке «Оплата скоро» (open отдельно, чтобы текст не пропадал при закрытии).
@@ -40,6 +41,7 @@ export default function ShopPage() {
   const hearts = useHearts();
   const tier = usePlanTier();
   const showPractice = !hearts.unlimited && hearts.count < hearts.max;
+  const practice = practiceRule();
   const pick = (what: string) => setSoon({ open: true, what });
 
   const heart1 = shopItem("heart-1");
@@ -103,7 +105,7 @@ export default function ShopPage() {
                 <Dumbbell size={24} />
               </IconTile>
               <span className="min-w-0 flex-1 font-extrabold leading-snug text-success-strong">
-                {t("shop.free.practice")}
+                {t("shop.free.practice", { n: practice.answers, p: practice.percent })}
               </span>
               <ChevronRight
                 size={20}
@@ -112,6 +114,10 @@ export default function ShopPage() {
             </Link>
           )}
         </div>
+      </ShopSection>
+
+      <ShopSection title={t("shop.rules.title")} hint={t("shop.rules.hint")}>
+        <HeartRules />
       </ShopSection>
 
       <ShopSection title={t("shop.passes.title")} hint={t("shop.passes.hint")}>

@@ -50,6 +50,49 @@ test("магазин: покупка бустера за чипы, окно та
   expect(errors).toEqual([]);
 });
 
+test("магазин: полный запас — цена за недостающие, правила «Как работают сердечки»", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  // Остался 1 из 5: не хватает 4 — «Полный запас (+4)» стоит 4 × 45 = 180 (сердечко — 60, три — 150).
+  await seed(page, { wallet: { chips: 300, earned: 300, spent: 0 }, hearts: { count: 1, updatedAt: Date.now(), day: "2099-01-01" } });
+  await page.goto("/shop");
+  await expect(page.getByRole("heading", { name: "Магазин" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Купить: \+1 сердечко/ })).toContainText("60");
+  await expect(page.getByRole("button", { name: /^Купить: \+3 сердечка/ })).toContainText("150");
+  const refill = page.getByRole("button", { name: "Купить: Полный запас (+4)" });
+  await expect(refill).toContainText("180");
+
+  // Сердечко — плата за вход: цены из констант, бесплатное, восстановление по тарифам, возврат за тренировку.
+  await expect(page.getByRole("heading", { name: "Как работают сердечки" })).toBeVisible();
+  await expect(page.getByText("Сердечко — плата за вход, а не за ошибку.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(3);
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(4);
+  await expect(page.getByText("Чат с Битом")).toBeVisible();
+  await expect(page.getByText("запас 5, +1 за 6 ч")).toBeVisible();
+  await expect(page.getByText("запас 10, +1 за 3 ч")).toBeVisible();
+  await expect(page.getByText("Тренировка возвращает сердечко: от 6 заданий, верно от 70%, до 3 раз в день.")).toBeVisible();
+
+  // Покупка полного запаса: 300 − 180 = 120 чипов, сердечек 5.
+  await refill.click();
+  await expect(page.getByLabel("Чипы: 120. Открыть магазин").first()).toBeVisible();
+  await expect(page.getByLabel("Сердечки: 5. Открыть магазин").first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("магазин: полный запас не продаётся, пока не хватает меньше четырёх", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  // Осталось 3 из 5: «Полный запас (+2)» невыгоден, тройка не помещается — берём по одному.
+  await seed(page, { wallet: { chips: 300, earned: 300, spent: 0 }, hearts: { count: 3, updatedAt: Date.now(), day: "2099-01-01" } });
+  await page.goto("/shop");
+  await expect(page.getByRole("button", { name: "Купить: Полный запас (+2)" })).toBeDisabled();
+  await expect(page.getByText("Выгоднее по одному или тройкой")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Купить: \+3 сердечка/ })).toBeDisabled();
+  await expect(page.getByText("Столько не поместится — бери по одному")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Купить: \+1 сердечко/ })).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
 test("история тестов: ошибка из урока исправляется работой над ошибками этого теста", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));

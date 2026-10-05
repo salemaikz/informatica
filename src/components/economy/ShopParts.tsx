@@ -14,6 +14,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Shake } from "@/components/motion/Shake";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { formatNum, shopAvailability } from "./shop-helpers";
+import { refillGain, shownPrice } from "./shop-rules";
 import { useChips, useHearts } from "./useEconomy";
 
 /** Раздел магазина: заголовок, подсказка и содержимое. */
@@ -79,6 +80,7 @@ export function ChipPrice({ n, className, plus }: { n: number; className?: strin
 /**
  * Строка товара за чипы (сердечки, бустеры). Кнопка «Купить»:
  * хватает чипов — покупка (звук, пульс строки, «Куплено»); не хватает — встряска и причина; запас полон/безлимит — неактивна.
+ * Цена — shownPrice (у «Полного запаса» — за недостающие сейчас, в названии «+N»; при overflow — «Выгоднее по одному или тройкой»).
  */
 export function ChipItemRow({
   item,
@@ -113,6 +115,10 @@ export function ChipItemRow({
 
   const av = shopAvailability(item, hearts, chips);
   const blocked = !av.ok && av.reason !== "chips";
+  const price = shownPrice(item, hearts);
+  const gain = refillGain(item, hearts);
+  const name = gain > 0 ? t("shop.item.hearts-full.plus", { n: gain }) : t(nameKey);
+  const desc = t(descKey, { p: item.price });
 
   const onBuy = () => {
     if (done) return;
@@ -142,7 +148,7 @@ export function ChipItemRow({
         : av.reason === "unlimited"
           ? t("shop.fail.unlimited")
           : av.reason === "overflow"
-            ? t("shop.fail.overflow")
+            ? t(item.kind === "refill" ? "shop.fail.overflowRefill" : "shop.fail.overflow")
             : t("shop.fail.chips", { n: av.missing ?? 0 });
 
   return (
@@ -152,8 +158,8 @@ export function ChipItemRow({
     >
       <IconTile tone={tone}>{icon}</IconTile>
       <div className="min-w-0 flex-1 break-words">
-        <p className="font-extrabold leading-tight">{t(nameKey)}</p>
-        <p className="text-sm font-semibold text-muted">{t(descKey)}</p>
+        <p className="font-extrabold leading-tight">{name}</p>
+        <p className="text-sm font-semibold text-muted">{desc}</p>
         {reason && (
           <p
             className={cn(
@@ -172,9 +178,7 @@ export function ChipItemRow({
           size="md"
           disabled={blocked && !done}
           onClick={onBuy}
-          aria-label={
-            done ? t("shop.bought") : `${t("shop.buy")}: ${t(nameKey)}`
-          }
+          aria-label={done ? t("shop.bought") : `${t("shop.buy")}: ${name}`}
           className="w-28 justify-center"
         >
           {done ? (
@@ -185,7 +189,7 @@ export function ChipItemRow({
                 size={17}
                 className={av.ok || blocked ? undefined : "text-gold"}
               />
-              {formatNum(item.price)}
+              {formatNum(price)}
             </>
           )}
         </Button>
