@@ -36,7 +36,7 @@ import {
   unitOfSkill,
 } from "@/lib/drill";
 import { LESSONS, UNITS } from "@/content/course";
-import { SKILLS } from "@/content/skills";
+import { isSchoolSkill, SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
 import { isQuestion } from "@/lib/evaluate";
 import { DAY_MS, type LessonStat } from "@/lib/review";
@@ -307,8 +307,10 @@ describe("разделы и навигация", () => {
   it("каждый навык попадает ровно в один раздел", () => {
     const groups = skillsByUnit();
     const all = groups.flatMap((g) => g.skills.map((s) => s.id));
-    expect(all.length).toBe(SKILLS.length);
-    expect(new Set(all).size).toBe(SKILLS.length);
+    // Навыки школьных уроков (этап 15) — не разделы курса ЕНТ.
+    const course = SKILLS.filter((s) => !isSchoolSkill(s.id));
+    expect(all.length).toBe(course.length);
+    expect(new Set(all).size).toBe(course.length);
     for (const g of groups) for (const s of g.skills) expect(unitOfSkill(s.id).id).toBe(g.unit.id);
   });
   it("флаг hasBank совпадает с банком", () => {

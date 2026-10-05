@@ -2,11 +2,11 @@
 
 import { ArrowLeft, ChevronRight, Code2, Database, FileCode, Globe, Shuffle, Table2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { READ_KINDS } from "@/lib/code-read";
-import { REVIEW_AREAS, REVIEW_MIN_ITEMS, reviewCounts, type ReviewArea } from "@/lib/code-review-drill";
+import { REVIEW_MIN_ITEMS, type ReviewArea } from "@/lib/code-review-areas";
+import type { ReadKind } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 
 const AREA_ICON: Record<ReviewArea, LucideIcon> = {
@@ -18,15 +18,23 @@ const AREA_ICON: Record<ReviewArea, LucideIcon> = {
   mix: Shuffle,
 };
 
-/** /code/review: тренировка «Чтение кода» как на ЕНТ (#87) — выбор области, 10 заданий в тренировке. */
-export function CodeReviewHub() {
+export interface ReviewAreaCount {
+  id: ReviewArea;
+  total: number;
+  byKind: Partial<Record<ReadKind, number>>;
+}
+
+/**
+ * /code/review: тренировка «Чтение кода» как на ЕНТ (#87) — выбор области, 10 заданий в тренировке.
+ * Счётчики считает сервер (page.tsx): банк ЕНТ не попадает в клиентский код страницы.
+ */
+export function CodeReviewHub({ areas }: { areas: readonly ReviewAreaCount[] }) {
   const { t } = useT();
-  const areas = useMemo(() => REVIEW_AREAS.map((a) => ({ id: a.id, ...reviewCounts(a.id) })), []);
 
   return (
     <div className="flex flex-col gap-5">
-      <ButtonLink href="/code" variant="ghost" size="sm" icon={<ArrowLeft size={16} />} className="-ml-2 self-start">
-        {t("ide.back.all")}
+      <ButtonLink href="/code" variant="ghost" icon={<ArrowLeft size={18} />} className="-ml-2 self-start">
+        {t("ide.title")}
       </ButtonLink>
 
       <div>
@@ -70,7 +78,7 @@ export function CodeReviewHub() {
                   {body}
                 </Link>
               ) : (
-                <div aria-disabled className="flex h-full min-h-16 flex-col gap-2 rounded-3xl border-2 border-dashed border-border bg-surface p-4 opacity-70">
+                <div className="flex h-full min-h-16 flex-col gap-2 rounded-3xl border-2 border-dashed border-border bg-surface p-4 opacity-70">
                   {body}
                 </div>
               )}

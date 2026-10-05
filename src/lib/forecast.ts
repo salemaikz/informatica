@@ -1,4 +1,4 @@
-import { SKILLS } from "@/content/skills";
+import { isSchoolSkill, SKILLS } from "@/content/skills";
 import { ENT_POINTS, ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import type { ExamKind } from "./exam";
 import type { SkillStat } from "./mastery";
@@ -118,8 +118,8 @@ export function topicMastery(skills: Record<string, SkillStat>): Record<EntTopic
 }
 
 function skillAnswers(skills: Record<string, SkillStat>): number {
-  // Только навыки ЕНТ: ответы по школьным урокам (навык без темы ЕНТ, этап 15) прогноз ЕНТ не двигают.
-  const known = new Set(SKILLS.filter((s) => s.ent).map((s) => s.id));
+  // Ответы по школьным урокам (навыки «school.*», этап 15) прогноз ЕНТ не двигают.
+  const known = new Set(SKILLS.filter((s) => !isSchoolSkill(s.id)).map((s) => s.id));
   return Object.entries(skills).reduce((acc, [id, s]) => acc + (known.has(id) ? attemptsOf(s) : 0), 0);
 }
 

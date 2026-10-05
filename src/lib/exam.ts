@@ -1,5 +1,5 @@
 import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_TOPICS } from "@/content/ent-topics";
-import { isReadItem, leastUsedRead, readKindOf, readTarget, UNIT_READ_MIN_POOL, UNIT_READ_SHARE } from "./code-read";
+import { isReadItem, pickRead, readKindOf, readTarget, UNIT_READ_MIN_POOL, UNIT_READ_SHARE } from "./code-read";
 import { matchPoints, multiPoints } from "./ent";
 import { hashString, seeded, shuffle } from "./text";
 import type { EntContext, EntItem, EntMatch, EntMulti, EntSingle, EntTopicId, Level, ReadKind, Text } from "./types";
@@ -275,14 +275,13 @@ function planFlexible(
 }
 
 /**
- * Задание ближайшего уровня. readUsed — слот «на чтение» (#87): среди равных по уровню берём вид чтения, который
- * в варианте встречался реже (вывод, ошибка, исправление, пропуск — а не три «что выведет» подряд).
+ * Задание ближайшего уровня. readUsed — слот «на чтение» (#87): среди равных по уровню вид чтения выбирается с мягким
+ * разнообразием (`pickRead`: вывод, ошибка, исправление, пропуск — а не три «что выведет» подряд).
  */
 function nearestLevelPick<T extends EntItem>(cands: T[], want: Level, rand: () => number, readUsed?: ReadonlyMap<ReadKind, number>): T {
   const best = Math.min(...cands.map((c) => Math.abs(c.level - want)));
-  let tied = cands.filter((c) => Math.abs(c.level - want) === best);
-  if (readUsed) tied = leastUsedRead(tied, readUsed);
-  return tied[Math.floor(rand() * tied.length)];
+  const tied = cands.filter((c) => Math.abs(c.level - want) === best);
+  return readUsed ? pickRead(tied, readUsed, rand) : tied[Math.floor(rand() * tied.length)];
 }
 
 /** Учесть вид «чтения» выбранного задания. */

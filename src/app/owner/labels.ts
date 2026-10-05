@@ -36,6 +36,7 @@ const DRILL_MODE: Dict = {
   recap: "повторение раздела (курс 3.0)",
   minitest: "мини-тест группы",
   context: "контекстное задание практикума",
+  codeview: "«чтение кода» как на ЕНТ",
 };
 const EXAM_KIND: Dict = { full: "полный пробник", mini: "мини-пробник", topic: "по теме", unit: "по разделу" };
 const BREAK: Dict = {

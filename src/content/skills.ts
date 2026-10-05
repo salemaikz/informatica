@@ -164,6 +164,9 @@ export const SKILLS: Skill[] = [
   { id: "school.design", topic: SCHOOL, title: { ru: "Основы дизайна", kk: "Дизайн негіздері" } },
 ];
 
+/** Навык школьного урока (этап 15): id «school.*», без темы ЕНТ; в курсе ЕНТ, прогнозе и «Практике» его нет. */
+export const isSchoolSkill = (id: string): boolean => id.startsWith("school.");
+
 export function skillById(id: string): Skill | undefined {
   return SKILLS.find((s) => s.id === id);
 }

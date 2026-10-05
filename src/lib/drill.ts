@@ -9,7 +9,7 @@ import { MAX_WRONG_PER_ENTRY, openWrong, type HistoryEntry } from "./history";
 import { hashString, seeded } from "./text";
 import { shuffleOptions } from "./bank/pool";
 import { LESSONS, UNITS, findStep } from "@/content/course";
-import { SKILLS } from "@/content/skills";
+import { isSchoolSkill, SKILLS } from "@/content/skills";
 import type { GameMeta } from "@/games/types";
 import { collectWorked } from "@/games/build/logic";
 
@@ -104,21 +104,12 @@ export interface UnitSkills {
   skills: { id: SkillId; hasBank: boolean }[];
 }
 
-/**
- * Навык только школьных уроков (этап 15): без темы ЕНТ и ни в одном готовом уроке карты ЕНТ. В разделах курса ЕНТ
- * его не показываем (он попал бы в последний раздел «Как решать ЕНТ»); его тренируют со школьной карты.
- */
-export function isSchoolOnlySkill(skill: SkillId): boolean {
-  if (SKILLS.find((s) => s.id === skill)?.ent) return false;
-  if (UNITS.some((u) => readyLessons(u).some((l) => l.skills.includes(skill)))) return false;
-  return Object.values(LESSONS).some((l) => l.school && l.skills.includes(skill));
-}
-
 /** Навыки, сгруппированные по разделам курса (пустые разделы не возвращаются; навыки только школьных уроков — нет). */
 export function skillsByUnit(): UnitSkills[] {
   const groups = new Map<string, UnitSkills>(UNITS.map((u) => [u.id, { unit: u, skills: [] }]));
   for (const s of SKILLS) {
-    if (isSchoolOnlySkill(s.id)) continue;
+    // Навык школьного урока (этап 15) — не раздел курса ЕНТ: иначе он попал бы в последний раздел «Как решать ЕНТ».
+    if (isSchoolSkill(s.id)) continue;
     groups.get(unitOfSkill(s.id).id)?.skills.push({ id: s.id, hasBank: hasBank(s.id) });
   }
   return [...groups.values()].filter((g) => g.skills.length > 0);

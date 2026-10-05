@@ -52,6 +52,7 @@ export const historyDict = {
   "history.mode.recap": { ru: "Повторение раздела", kk: "Бөлімді қайталау" },
   "history.mode.minitest": { ru: "Мини-тест", kk: "Шағын тест" },
   "history.mode.context": { ru: "Контекстное задание", kk: "Контекстік тапсырма" },
+  "history.mode.codeview": { ru: "Чтение кода", kk: "Кодты оқу" },
   "history.exam.mini": { ru: "Пробный ЕНТ · мини", kk: "Сынақ ҰБТ · шағын" },
   "history.exam.full": { ru: "Пробный ЕНТ · полный", kk: "Сынақ ҰБТ · толық" },
   "history.exam.topic": { ru: "Пробный ЕНТ · по теме", kk: "Сынақ ҰБТ · тақырып бойынша" },

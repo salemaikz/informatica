@@ -1,8 +1,8 @@
 "use client";
 
 import { GraduationCap } from "lucide-react";
-import type { Grade, Track } from "@/lib/types";
-import { SCHOOL_GRADES } from "@/lib/school";
+import type { Grade, SchoolDirection, Track } from "@/lib/types";
+import { hasDirections, SCHOOL_GRADES, toSchoolGrade } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Row, Segmented, Switch } from "@/components/goals/controls";
@@ -15,6 +15,7 @@ export function TrackSettings() {
   const grade = useApp((s) => s.profile.grade);
   const updateProfile = useApp((s) => s.updateProfile);
   const skipBasics = useApp((s) => s.profile.skipBasics);
+  const direction = useApp((s) => s.profile.direction);
 
   const tracks: { id: Track; label: string }[] = [
     { id: "ent", label: t("school.track.ent") },
@@ -37,6 +38,16 @@ export function TrackSettings() {
         <Row label={t("school.settings.grade")} hint={t("school.settings.grade.hint")}>
           <Segmented value={grade} options={grades} onChange={(v) => updateProfile({ grade: v })} label={t("school.settings.grade")} />
         </Row>
+        {hasDirections(toSchoolGrade(grade)) && (
+          <Row label={t("school.dir.label")} hint={t("school.dir.hint")}>
+            <Segmented
+              value={direction}
+              options={(["emn", "ogn"] as SchoolDirection[]).map((d) => ({ id: d, label: t(`school.dir.${d}`) }))}
+              onChange={(v) => updateProfile({ direction: v })}
+              label={t("school.dir.label")}
+            />
+          </Row>
+        )}
         <Row label={t("prof.basics")} hint={t("prof.basics.hint")}>
           <Switch checked={!skipBasics} onChange={(on) => updateProfile({ skipBasics: !on })} label={t("prof.basics")} />
         </Row>

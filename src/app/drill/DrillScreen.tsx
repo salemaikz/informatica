@@ -29,7 +29,8 @@ import {
 import { decaySkills } from "@/lib/mastery";
 import { buildMiniTest, buildPractice, buildRecap, miniTestPoints, weakestSkill } from "@/lib/course-mix";
 import { buildContextDrill } from "@/lib/context-drill";
-import { buildReviewDrill, parseReviewArea } from "@/lib/code-review-drill";
+import { buildReviewDrill } from "@/lib/code-review-drill";
+import { parseReviewArea } from "@/lib/code-review-areas";
 import { groupOfPracticeNode, recapNodeId } from "@/content/groups";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";

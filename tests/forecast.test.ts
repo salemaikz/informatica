@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_POINTS, ENT_TOPICS, ORDINARY_COUNT, topicTaskShare, topicWeight } from "@/content/ent-topics";
-import { SKILLS } from "@/content/skills";
+import { isSchoolSkill, SKILLS } from "@/content/skills";
 import { DIAGNOSTIC_MARGIN, DIAGNOSTIC_UNTIL_ANSWERS, forecastFromDiagnostic, forecastMargin, forecastScore, topicMastery, type ForecastExam } from "@/lib/forecast";
 import type { SkillStat } from "@/lib/mastery";
 import type { DiagnosticSummary } from "@/lib/store";
@@ -143,7 +143,7 @@ describe("forecastScore", () => {
     expect(forecastMargin(99)).toBe(5);
     expect(forecastMargin(100)).toBe(3);
     const few = forecastScore({ skills: allSkills(0.5, 1), exams: [], now: NOW });
-    expect(few.answers).toBe(SKILLS.filter((s) => s.ent).length); // только навыки ЕНТ (этап 15)
+    expect(few.answers).toBe(SKILLS.filter((s) => !isSchoolSkill(s.id)).length); // без школьных навыков (этап 15)
     // навыков ≥ 30 → ±5, а ответов 1 на навык — зависит от числа навыков
     expect(few.high - few.low).toBeLessThanOrEqual(2 * forecastMargin(few.answers));
     const top = forecastScore({ skills: allSkills(1, 10), exams: [], now: NOW });

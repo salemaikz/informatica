@@ -14,7 +14,6 @@ export const codeviewDict = {
     kk: "Қатені тап, түзет, толықтыр — ҰБТ-дағыдай 10 тапсырма",
   },
   "codeview.session": { ru: "Чтение кода: {area}", kk: "Кодты оқу: {area}" },
-  "codeview.start": { ru: "Начать", kk: "Бастау" },
   "codeview.count": { ru: "Заданий: {n}", kk: "Тапсырма саны: {n}" },
   "codeview.few": { ru: "Заданий пока мало", kk: "Тапсырма әзірге аз" },
   "codeview.note": {

@@ -24,7 +24,7 @@ export function SchoolMap() {
   const lessons = useApp((s) => s.lessons);
   const updateProfile = useApp((s) => s.updateProfile);
   const grade = toSchoolGrade(gradeRaw);
-  const plan = grade ? schoolPlan(grade, direction) : undefined;
+  const plan = useMemo(() => (grade ? schoolPlan(grade, direction) : undefined), [grade, direction]);
 
   const progress = useMemo(() => (plan ? gradeProgress(plan, lessons) : null), [plan, lessons]);
   const next = useMemo(() => (plan ? nextSchoolLesson(plan, lessons) : null), [plan, lessons]);

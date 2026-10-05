@@ -16,7 +16,7 @@ import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, SHOP_ITEMS } from "@/lib/economy
 export const OTHER_ID = "other";
 
 /** Режимы тренировки (lib/drill.ts → DrillMode). Тест сверяет список с подписями страницы владельца. */
-export const DRILL_MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context"];
+export const DRILL_MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context", "codeview"];
 /** Шаги короткого онбординга (app/onboarding/page.tsx → StepId). */
 export const ONBOARDING_STEPS: readonly string[] = ["lang", "name", "track", "date", "target", "grade"];
 

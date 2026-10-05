@@ -72,11 +72,21 @@ export function inferReadKind(prompt: string, topic: EntTopicId): ReadKind {
  * (понятие, определение, задача без кода и таблицы). Явное поле `read` главнее вывода по тексту.
  */
 export function readKindOf(item: EntItem, sub?: number): ReadKind | null {
-  if (item.kind === "context") {
-    const q = item.questions[sub ?? 0];
-    if (!q) return null;
-    return q.read ?? inferReadKind(q.prompt.ru, item.topic);
+  if (item.kind !== "context") {
+    // Кэш: вид задания не меняется, а сборка варианта спрашивает его тысячи раз (ревью этапа 15).
+    const hit = KIND_CACHE.get(item);
+    if (hit !== undefined) return hit;
+    const k = plainReadKind(item);
+    KIND_CACHE.set(item, k);
+    return k;
   }
+  const q = item.questions[sub ?? 0];
+  return q ? (q.read ?? inferReadKind(q.prompt.ru, item.topic)) : null;
+}
+
+const KIND_CACHE = new WeakMap<EntItem, ReadKind | null>();
+
+function plainReadKind(item: Exclude<EntItem, { kind: "context" }>): ReadKind | null {
   if (item.read) return item.read;
   const prompt = item.prompt.ru;
   return hasMaterial(item, prompt) ? inferReadKind(prompt, item.topic) : null;
@@ -86,15 +96,38 @@ export function readKindOf(item: EntItem, sub?: number): ReadKind | null {
 export const isReadItem = (item: EntItem): boolean => item.kind !== "context" && readKindOf(item) !== null;
 
 /**
- * Из кандидатов одного уровня — те, чей вид «чтения» встречался в варианте реже всего (разнообразие: не три
- * «что выведет» подряд, а вывод, ошибка, исправление). Кандидаты без вида — как есть.
+ * Больше заданий вида вес не растёт: «что выведет» (их в банке в разы больше) не вытесняет ошибки и правки.
+ * 6 и штраф 1 / (1 + взято) подобраны прогоном 100 тренировок по каждой области: самое частое задание — ≤ 47%
+ * (кроме ключей БД, где «вставить» одно на всю тему, — 71%), доля «что выведет» в Python ≈ 16%.
  */
-export function leastUsedRead<T extends EntItem>(cands: T[], used: ReadonlyMap<ReadKind, number>): T[] {
-  const kinds = cands.map((c) => readKindOf(c));
-  const uses = kinds.map((k) => (k ? (used.get(k) ?? 0) : Infinity));
-  const min = Math.min(...uses);
-  if (!Number.isFinite(min)) return cands;
-  return cands.filter((_, i) => uses[i] === min);
+const KIND_WEIGHT_CAP = 6;
+
+/**
+ * Выбор задания «на чтение» с мягким разнообразием (ревью этапа 15): вид — случайно с весом
+ * min(заданий вида, 6) / (1 + сколько раз вид уже взят), затем случайное задание вида. Не три «что выведет» подряд,
+ * но и редкий вид (1–2 задания) не «прибивает» одно и то же задание к каждому варианту. Кандидаты без вида — как один вид.
+ */
+export function pickRead<T extends EntItem>(cands: readonly T[], used: ReadonlyMap<ReadKind, number>, rand: () => number): T {
+  const groups = new Map<ReadKind | "none", T[]>();
+  for (const c of cands) {
+    const k = readKindOf(c) ?? "none";
+    const g = groups.get(k);
+    if (g) g.push(c);
+    else groups.set(k, [c]);
+  }
+  const kinds = [...groups.keys()];
+  const weights = kinds.map((k) => Math.min(groups.get(k)!.length, KIND_WEIGHT_CAP) / (1 + (k === "none" ? 0 : (used.get(k) ?? 0))));
+  let r = rand() * weights.reduce((a, b) => a + b, 0);
+  let kind = kinds[kinds.length - 1];
+  for (let i = 0; i < kinds.length; i++) {
+    r -= weights[i];
+    if (r < 0) {
+      kind = kinds[i];
+      break;
+    }
+  }
+  const pool = groups.get(kind)!;
+  return pool[Math.floor(rand() * pool.length)];
 }
 
 /** Сколько заданий каждого вида «чтения» в наборе (для статистики и тестов). */

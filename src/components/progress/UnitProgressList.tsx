@@ -65,7 +65,7 @@ export function UnitProgressList({ className }: { className?: string }) {
       ratio: r.ratio,
       mastery: r.mastery,
     }));
-  }, [school, gradeRaw, lessons, skills, skipBasics, l]);
+  }, [school, gradeRaw, direction, lessons, skills, skipBasics, l]);
 
   return (
     <Card className={className}>

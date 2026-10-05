@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ENT_POOL } from "@/content/ent";
 import { ENT_TOPICS } from "@/content/ent-topics";
-import { inferReadKind, isReadItem, leastUsedRead, readKindOf, readStats, readTarget, READ_SHARE } from "@/lib/code-read";
+import { inferReadKind, isReadItem, pickRead, readKindOf, readStats, readTarget, READ_SHARE } from "@/lib/code-read";
 import { buildExam } from "@/lib/exam";
+import { seeded } from "@/lib/text";
 import type { EntContext, EntItem, EntSingle, EntTopicId, Level, ReadKind } from "@/lib/types";
 
 // «Чтение кода» (#87): вид задания и квота в пробном ЕНТ.
@@ -91,13 +92,25 @@ describe("readTarget — квота темы", () => {
   });
 });
 
-describe("leastUsedRead — разнообразие видов", () => {
-  it("оставляет виды, которые встречались реже", () => {
-    const a = single("a:1", "t06", 1, { read: "output" });
-    const b = single("a:2", "t06", 1, { read: "bug" });
-    const c = single("a:3", "t06", 1, { read: "fix" });
-    const used = new Map<ReadKind, number>([["output", 2], ["bug", 1]]);
-    expect(leastUsedRead([a, b, c], used).map((x) => x.id)).toEqual(["a:3"]);
+describe("pickRead — мягкое разнообразие видов", () => {
+  it("чаще берёт вид, который ещё не встречался", () => {
+    const pool = [
+      ...[0, 1, 2, 3].map((i) => single(`a:o${i}`, "t06", 1, { read: "output" })),
+      ...[0, 1, 2, 3].map((i) => single(`a:b${i}`, "t06", 1, { read: "bug" })),
+    ];
+    const used = new Map<ReadKind, number>([["output", 2]]);
+    const rand = seeded(1);
+    let bug = 0;
+    for (let i = 0; i < 200; i++) if (readKindOf(pickRead(pool, used, rand)) === "bug") bug++;
+    expect(bug).toBeGreaterThan(130); // вес bug 4, output 4/3
+  });
+  it("редкий вид не «прибивает» единственное задание к каждому выбору", () => {
+    const pool = [...[0, 1, 2, 3, 4].map((i) => single(`a:s${i}`, "t09", 1, { read: "schema" })), single("a:fill", "t09", 1, { read: "fill" })];
+    const rand = seeded(7);
+    let fill = 0;
+    for (let i = 0; i < 400; i++) if (pickRead(pool, new Map(), rand).id === "a:fill") fill++;
+    expect(fill / 400).toBeLessThan(0.35); // вес fill 1 против 5 у schema
+    expect(fill).toBeGreaterThan(0);
   });
 });
 
@@ -120,14 +133,21 @@ describe("пробный ЕНТ — квота «чтения кода»", () =>
     }
   });
 
-  it("вид «чтения» разнообразится: при равных уровнях не три одинаковых вида подряд", () => {
+  it("вид «чтения» разнообразится: виды делят слоты примерно поровну, ни один не забирает вариант целиком", () => {
     const pool: EntItem[] = [];
     const kinds: ReadKind[] = ["output", "bug", "fix"];
     for (const lv of [1, 2, 3] as Level[]) for (const k of kinds) for (let i = 0; i < 4; i++) pool.push(single(`p:${k}-${lv}-${i}`, "t06", lv, { read: k }));
-    const paper = buildExam({ kind: "topic", seed: 5, pool, topics: ["t06"] });
-    const stats = readStats(paper.items.map((q) => q.item));
-    expect(paper.items.length).toBe(10);
-    for (const k of kinds) expect(stats[k], k).toBeGreaterThanOrEqual(3);
+    const total: Record<string, number> = {};
+    for (let seed = 1; seed <= 20; seed++) {
+      const paper = buildExam({ kind: "topic", seed, pool, topics: ["t06"] });
+      const stats = readStats(paper.items.map((q) => q.item));
+      expect(paper.items.length).toBe(10);
+      for (const k of kinds) {
+        expect(stats[k], `seed ${seed}, ${k}`).toBeLessThanOrEqual(6);
+        total[k] = (total[k] ?? 0) + stats[k];
+      }
+    }
+    for (const k of kinds) expect(total[k], k).toBeGreaterThanOrEqual(50); // из 200 слотов
   });
 
   it("слот «на чтение» берёт задание с кодом, даже если без кода их больше", () => {

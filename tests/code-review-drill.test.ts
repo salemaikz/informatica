@@ -64,6 +64,16 @@ describe("buildReviewDrill", () => {
     for (const k of ["bug", "fix", "fill"]) expect(kinds.filter((x) => x === k).length, k).toBeGreaterThanOrEqual(2);
   });
 
+  it("одно и то же задание не попадает в каждую тренировку (ревью этапа 15)", () => {
+    for (const area of ["py", "db", "sql", "sheet", "web"] as const) {
+      const seen = new Map<string, number>();
+      const runs = 60;
+      for (let s = 1; s <= runs; s++) for (const st of buildReviewDrill(area, s * 7919)) seen.set(st.id, (seen.get(st.id) ?? 0) + 1);
+      const top = Math.max(...seen.values());
+      expect(top / runs, area).toBeLessThan(0.8);
+    }
+  });
+
   it("мало заданий — пустая тренировка", () => {
     expect(buildReviewDrill("py", 1, [item("p:a", 1, "bug")])).toEqual([]);
   });
