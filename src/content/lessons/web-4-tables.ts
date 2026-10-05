@@ -386,17 +386,18 @@ export const lesson: Lesson = {
       lines: [
         [
           T(
-            "Впиши недостающие значения: имена тегов — без угловых скобок, значения `type` — без кавычек.",
-            "Жетіспейтін мәндерді жаз: тег аттарын — бұрыштық жақшасыз, `type` мәндерін — тырнақшасыз.",
+            "Выбери недостающие значения: имена тегов — без угловых скобок, значения `type` — без кавычек.",
+            "Жетіспейтін мәндерді таңда: тег аттарын — бұрыштық жақшасыз, `type` мәндерін — тырнақшасыз.",
           ),
         ],
-        ["<", { blank: ["form"], mode: "text" }, ">"],
-        ['    <input type="', { blank: ["text"], mode: "text" }, '" name="login">'],
-        ['    <input type="', { blank: ["password"], mode: "text" }, '" name="pwd">'],
-        ['    <input type="', { blank: ["checkbox"], mode: "text" }, '" name="agree"> I agree'],
-        ['    <button type="', { blank: ["submit"], mode: "text" }, '">Send</button>'],
-        ["</", { blank: ["form"], mode: "text" }, ">"],
+        ["<", { blank: ["form"], mode: "text", label: { ru: "form", kk: "form" } }, ">"],
+        ['    <input type="', { blank: ["text"], mode: "text", label: { ru: "text", kk: "text" } }, '" name="login">'],
+        ['    <input type="', { blank: ["password"], mode: "text", label: { ru: "password", kk: "password" } }, '" name="pwd">'],
+        ['    <input type="', { blank: ["checkbox"], mode: "text", label: { ru: "checkbox", kk: "checkbox" } }, '" name="agree"> I agree'],
+        ['    <button type="', { blank: ["submit"], mode: "text", label: { ru: "submit", kk: "submit" } }, '">Send</button>'],
+        ["</", { blank: ["form"], mode: "text", label: { ru: "form", kk: "form" } }, ">"],
       ],
+      bank: [{ ru: "input", kk: "input" }, { ru: "radio", kk: "radio" }, { ru: "reset", kk: "reset" }],
       explanation: T(
         "Форму оборачивает пара `<form>` … `</form>`. Обычное поле — `type=\"text\"`, пароль — `type=\"password\"`, квадратик — `type=\"checkbox\"`. Кнопка отправки — `type=\"submit\"`.",
         "Форманы `<form>` … `</form>` жұбы орайды. Қарапайым өріс — `type=\"text\"`, құпия сөз — `type=\"password\"`, шаршы — `type=\"checkbox\"`. Жіберу түймесі — `type=\"submit\"`.",

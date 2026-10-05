@@ -515,13 +515,14 @@ export const lesson: Lesson = {
       lines: [
         [
           T(
-            "Впиши имена атрибутов. Ссылка «Menu» ведёт на файл menu.html из той же папки и открывается в новой вкладке. Рисунок tea.jpg лежит в папке img; если файл не найдётся, вместо него должно быть написано Tea.",
-            "Атрибут аттарын жаз. «Menu» сілтемесі сол қалтадағы menu.html файлына апарады және жаңа қойындыда ашылады. tea.jpg суреті img қалтасында тұр; файл табылмаса, оның орнында Tea деп жазылуы керек.",
+            "Выбери имена атрибутов. Ссылка «Menu» ведёт на файл menu.html из той же папки и открывается в новой вкладке. Рисунок tea.jpg лежит в папке img; если файл не найдётся, вместо него должно быть написано Tea.",
+            "Атрибут аттарын таңда. «Menu» сілтемесі сол қалтадағы menu.html файлына апарады және жаңа қойындыда ашылады. tea.jpg суреті img қалтасында тұр; файл табылмаса, оның орнында Tea деп жазылуы керек.",
           ),
         ],
-        ["<a ", { blank: ["href"], mode: "text" }, '="menu.html" ', { blank: ["target"], mode: "text" }, '="_blank">Menu</a>'],
-        ["<img ", { blank: ["src"], mode: "text" }, '="img/tea.jpg" ', { blank: ["alt"], mode: "text" }, '="Tea" width="80">'],
+        ["<a ", { blank: ["href"], mode: "text", label: { ru: "href", kk: "href" } }, '="menu.html" ', { blank: ["target"], mode: "text", label: { ru: "target", kk: "target" } }, '="_blank">Menu</a>'],
+        ["<img ", { blank: ["src"], mode: "text", label: { ru: "src", kk: "src" } }, '="img/tea.jpg" ', { blank: ["alt"], mode: "text", label: { ru: "alt", kk: "alt" } }, '="Tea" width="80">'],
       ],
+      bank: [{ ru: "link", kk: "link" }, { ru: "title", kk: "title" }, { ru: "name", kk: "name" }],
       explanation: T(
         "`href` — куда ведёт ссылка, `target=\"_blank\"` — открыть в новой вкладке. У рисунка `src` — откуда взять файл (`img/tea.jpg`: папка `img`, потом файл), `alt` — текст вместо рисунка.",
         "`href` — сілтеме қайда апарады, `target=\"_blank\"` — жаңа қойындыда ашу. Суретте `src` — файлды қайдан алу (`img/tea.jpg`: алдымен `img` қалтасы, содан кейін файл), `alt` — сурет орнындағы мәтін.",

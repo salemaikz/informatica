@@ -157,9 +157,10 @@ export const lesson: Lesson = {
       lines: [
         [{ ru: "Левый номер — 1, правый — 4 (он не входит).", kk: "Сол жақ нөмір — 1, оң жақ нөмір — 4 (ол кірмейді)." }],
         [{ ru: "Номера букв:", kk: "Әріп нөмірлері:" }, " 1, ", { blank: ["2"], mode: "number" }, ", ", { blank: ["3"], mode: "number" }],
-        ["s[1] = K,  s[2] = ", { blank: ["T"], mode: "text" }, ",  s[3] = ", { blank: ["O"], mode: "text" }],
-        ["s[1:4] = ", { blank: ["KTO", "'KTO'"], mode: "text" }],
+        ["s[1] = K,  s[2] = ", { blank: ["T"], mode: "text", label: { ru: "T", kk: "T" } }, ",  s[3] = ", { blank: ["O"], mode: "text", label: { ru: "O", kk: "O" } }],
+        ["s[1:4] = ", { blank: ["KTO", "'KTO'"], mode: "text", label: { ru: "KTO", kk: "KTO" } }],
       ],
+      bank: [{ ru: "K", kk: "K" }, { ru: "B", kk: "B" }, { ru: "TOB", kk: "TOB" }],
       explanation: {
         ru: "Берём номера 1, 2, 3: правая граница 4 в срез не входит. Это буквы `K`, `T`, `O`. Вместе — `KTO`.",
         kk: "1, 2, 3 нөмірлерін аламыз: оң жақ шекара 4 тілімге кірмейді. Бұл `K`, `T`, `O` әріптері. Бірге — `KTO`.",
