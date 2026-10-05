@@ -24,10 +24,10 @@ import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
-import { useChips, useHearts } from "@/components/economy/useEconomy";
+import { useHearts } from "@/components/economy/useEconomy";
 import { pluralKey } from "@/components/learn/useLearn";
 import { XpIcon } from "@/components/economy/XpIcon";
-import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { chipsKey } from "@/components/economy/xp-chips";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 
@@ -64,7 +64,6 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const router = useRouter();
   const { t, l, lang } = useT();
   const meta = gameById(id)!;
-  const { multiplier: chipMult } = useChips();
   const sound = useApp((s) => s.profile.sound);
   const mode = useApp((s) => s.profile.gameMode);
   const updateProfile = useApp((s) => s.updateProfile);
@@ -275,13 +274,14 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
                 <p className="text-2xl font-extrabold text-warning-strong">+{phase.reward.xp}</p>
               </div>
             </div>
-            <div className="rounded-2xl border-2 border-gold bg-surface p-3 text-center">
-              <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
-                <Cpu size={14} className="text-gold" aria-hidden /> {t("xp.chips")}
-              </p>
-              <p className="text-2xl font-extrabold text-warning-strong">{t(chipsKey("xp.chipsPlus", phase.chips), { n: phase.chips })}</p>
-              <p className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</p>
-            </div>
+            {phase.chips > 0 && (
+              <div className="rounded-2xl border-2 border-gold bg-surface p-3 text-center">
+                <p className="flex items-center justify-center gap-1 text-xs font-extrabold text-muted">
+                  <Cpu size={14} className="text-gold" aria-hidden /> {t("xp.chips")}
+                </p>
+                <p className="text-2xl font-extrabold text-warning-strong">{t(chipsKey("xp.chipsPlus", phase.chips), { n: phase.chips })}</p>
+              </div>
+            )}
             <StreakIgnite />
             {!phase.reward.newBest && stat && statKey && (
               <MascotSays mood="happy" size={56}>

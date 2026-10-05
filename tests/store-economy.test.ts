@@ -45,7 +45,7 @@ const drill = (n = 3, accuracy = 1, over: Partial<SessionResult> = {}): SessionR
 
 const exam = (over: Partial<ExamSummary> = {}): ExamSummary => ({
   id: "ex1",
-  kind: "mini",
+  kind: "full",
   seed: 7,
   at: Date.now(),
   points: 20,
@@ -156,6 +156,7 @@ describe("стор: finishSession", () => {
     useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } }); // без бонуса дневной цели
     const out1 = st().finishSession(lesson());
     expect(out1.perfect).toBe(true);
+    expect(out1).toMatchObject({ firstPass: true, lessonChips: 3, perfectChips: 5 });
     expect(st().ledger.find((e) => e.reason === "lesson")?.amount).toBe(3);
     expect(st().ledger.find((e) => e.reason === "perfect")?.amount).toBe(5);
     const perfectSum = () => st().ledger.filter((e) => e.reason === "perfect").reduce((a, e) => a + e.amount, 0);
@@ -163,6 +164,7 @@ describe("стор: finishSession", () => {
     const before = chips();
     const out = st().finishSession(lesson());
     expect(out.perfect).toBe(true); // урок без ошибок и при повторе, но бонуса чипов нет
+    expect(out).toMatchObject({ firstPass: false, lessonChips: 1, perfectChips: 0 });
     expect(perfectSum()).toBe(5);
     // повтор: только 1 чип за прохождение (достижения уже получены)
     expect(chips() - before).toBe(CHIP_REWARD.lessonRepeat);
@@ -172,7 +174,8 @@ describe("стор: finishSession", () => {
   it("множитель тарифа применяется к чипам за урок (Безлимит ×2: 3 → 6, идеально 5 → 10)", () => {
     useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } });
     st().startTrial();
-    st().finishSession(lesson());
+    const out = st().finishSession(lesson());
+    expect(out).toMatchObject({ lessonChips: 6, perfectChips: 10 }); // суммы с множителем — их показывают итоги
     expect(st().ledger.find((e) => e.reason === "lesson")?.amount).toBe(6);
     expect(st().ledger.find((e) => e.reason === "perfect")?.amount).toBe(10);
   });
@@ -192,6 +195,45 @@ describe("стор: finishSession", () => {
     expect(st().ledger.some((e) => e.reason === "unit")).toBe(false);
     st().recordExam(exam({ id: "u2", kind: "unit", unit: "u1", points: 8, maxPoints: 10 }), { "ns.bin2dec": [1] });
     expect(st().ledger.find((e) => e.reason === "unit")?.amount).toBe(10);
+  });
+
+  it("тест по разделу: +10 только за первую сдачу раздела, пересдача и другой раздел", () => {
+    useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } });
+    // Подряд идущие записи одной причины в журнале склеиваются — считаем сумму.
+    const unitChips = () => st().ledger.filter((e) => e.reason === "unit").reduce((a, e) => a + e.amount, 0) / 10;
+    st().recordExam(exam({ id: "u1", kind: "unit", unit: "a", points: 9, maxPoints: 10 }), { "ns.bin2dec": [1] });
+    expect(unitChips()).toBe(1);
+    st().recordExam(exam({ id: "u2", kind: "unit", unit: "a", points: 10, maxPoints: 10 }), { "ns.bin2dec": [1] });
+    expect(unitChips()).toBe(1); // раздел уже сдан
+    st().recordExam(exam({ id: "u3", kind: "unit", unit: "b", points: 10, maxPoints: 10 }), { "ns.bin2dec": [1] });
+    expect(unitChips()).toBe(2); // другой раздел — снова награда
+  });
+
+  it("мини-ЕНТ и тест по теме чипов не дают; пробный ЕНТ с менее чем половиной ответов — тоже", () => {
+    useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } });
+    const examChips = () => st().ledger.filter((e) => e.reason === "exam").reduce((a, e) => a + e.amount, 0) / 10;
+    st().recordExam(exam({ id: "m1", kind: "mini" }), { "ns.bin2dec": [1, 1, 1] });
+    st().recordExam(exam({ id: "t1", kind: "topic" }), { "ns.bin2dec": [1, 1, 1] });
+    expect(examChips()).toBe(0);
+    st().recordExam(exam({ id: "f1", kind: "full", questions: 40 }), { "ns.bin2dec": [1] });
+    expect(examChips()).toBe(0);
+    st().recordExam(exam({ id: "f2", kind: "full", questions: 40 }), { "ns.bin2dec": Array(20).fill(1) });
+    expect(examChips()).toBe(1);
+  });
+
+  it("игра, практикум и комбо без новых достижений и без цели дня чипов не дают", () => {
+    useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } });
+    const gameRes = { score: 5, correct: 4, total: 5, attempts: [] };
+    const task = { id: "py-1-x", lang: "python", level: "A", title: { ru: "x", kk: "x" }, prompt: { ru: "x", kk: "x" }, starter: "", solution: "", check: {} } as never;
+    // Первая игра и первая задача выдают свои достижения (чипы за них — отдельно, их не считаем).
+    st().recordGame("bit-rush", gameRes, "normal");
+    st().recordCodeTask(task, true);
+    st().noteCombo(2);
+    const base = st().wallet.earned;
+    st().recordGame("bit-rush", { ...gameRes, score: 9 }, "normal");
+    st().recordCodeTask({ ...(task as object), id: "py-1-y" } as never, true);
+    st().noteCombo(3);
+    expect(st().wallet.earned).toBe(base);
   });
 
   it("серия идеальных: растёт на первых прохождениях, ошибка сбрасывает, повтор и тренировка не трогают", () => {
@@ -585,7 +627,7 @@ describe("стор: пробный ЕНТ и работа над ошибкам�
     expect(st().mistakes.map((m) => m.stepId).sort()).toEqual(["ent:aaa", "ent:bbb:2"]);
     expect(st().exams).toHaveLength(1);
     const h = st().history[0];
-    expect(h).toMatchObject({ id: "exam-ex1", kind: "exam", mode: "mini", examId: "ex1", points: 20, maxPoints: 50, xp: 0, title: "" });
+    expect(h).toMatchObject({ id: "exam-ex1", kind: "exam", mode: "full", examId: "ex1", points: 20, maxPoints: 50, xp: 0, title: "" });
     expect(h.wrong.map((w) => w.stepId)).toEqual(["ent:aaa", "ent:bbb:2"]);
     expect(h.fixed).toEqual([]);
     expect(h.total).toBe(3);

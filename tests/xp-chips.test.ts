@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipsEstimate, chipsKey, lessonXpMax, multSuffix } from "@/components/economy/xp-chips";
+import { chipsEstimate, chipsKey, lessonXpMax } from "@/components/economy/xp-chips";
 
 describe("xp-chips", () => {
   it("оценка чипов за урок: 3 за первое прохождение, 1 за повтор, множитель сверху", () => {
@@ -19,8 +19,6 @@ describe("xp-chips", () => {
     expect(chipsKey("xp.chipsPlus", 4)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 22)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 11)).toBe("xp.chipsPlus.many");
-    expect(multSuffix(1)).toBe("");
-    expect(multSuffix(2)).toBe(" · ×2");
     expect(chipsKey("perfect.chips", 5)).toBe("perfect.chips.many");
   });
 });

@@ -1,4 +1,4 @@
-import { CHIP_REWARD, MINUTE, DAY, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
+import { MINUTE, DAY, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, type BuyFail, type HeartsView, type ShopItem } from "@/lib/economy";
 import { daysText } from "@/lib/goals";
 import type { Lang } from "@/lib/types";
 
@@ -21,14 +21,6 @@ export function formatRemaining(ms: number, lang: Lang): string {
 export function formatSpan(hours: number, lang: Lang): string {
   const text = hours >= 48 && hours % 24 === 0 ? daysText(hours / 24, lang) : `${hours} ${lang === "kk" ? "сағ" : "ч"}`;
   return text.replace(/ /g, "\u00a0");
-}
-
-/**
- * @deprecated Курса «XP → чипы» больше нет (решение #105): чипы дают за уроки и цели (`CHIP_REWARD`).
- * Заглушка нужна, пока `NoChipsNotice` не переведён на текст без курса; потом удалить.
- */
-export function chipRate(): { xp: number; n: number } {
-  return { xp: 1, n: CHIP_REWARD.lessonFirst };
 }
 
 /** Множитель: «×2», «×1,5» (запятая и в русском, и в казахском). */

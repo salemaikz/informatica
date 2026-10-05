@@ -23,7 +23,7 @@ import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { sanitizeTips, type TipId, type TipsState } from "./tips";
 import { EMPTY_PERFECT_RUN, sanitizePendingCases, sanitizePerfectRun, type PerfectRun } from "./rewards-state";
 import { isPerfectSession, nextPerfectRun, PERFECT_RUN_GOAL } from "./perfect";
-import { unitPassed } from "./exam";
+import { unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -301,6 +301,11 @@ export interface FinishOutcome {
   heart: boolean;
   /** Урок без единой ошибки (все задания с первой попытки, без пропусков); у тренировки всегда false. */
   perfect: boolean;
+  /** Первое прохождение урока (до этого статы урока не было); у тренировки false. */
+  firstPass: boolean;
+  /** Чипы, начисленные за сам урок и за «идеально» (уже с множителем тарифа и бустера); 0 — не начислялись. */
+  lessonChips: number;
+  perfectChips: number;
 }
 
 export type BuyResult = { ok: true } | { ok: false; reason: BuyFail };
@@ -861,13 +866,20 @@ export const useApp = create<AppState & AppActions>()(
 
         // Чипы (#105): урок 3 (повтор 1), идеальный первый раз +5. Тренировка и игры чипов не дают.
         const extra: { base: number; reason: ChipReason }[] = [];
+        const chipMult = chipMultiplier(tier, next.boost, now);
+        let lessonGain = 0;
+        let perfectGain = 0;
         if (isLesson) {
           extra.push({ base: lessonChipBase(!prev), reason: "lesson" });
-          if (perfect && !prev) extra.push({ base: CHIP_REWARD.perfect, reason: "perfect" });
+          lessonGain = earnAmount(lessonChipBase(!prev), chipMult);
+          if (perfect && !prev) {
+            extra.push({ base: CHIP_REWARD.perfect, reason: "perfect" });
+            perfectGain = earnAmount(CHIP_REWARD.perfect, chipMult);
+          }
         }
         next = settleChips(s, next, extra, now);
         set(next);
-        return { bonusXp, heart, perfect: isLesson && perfect };
+        return { bonusXp, heart, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectChips: perfectGain };
       },
 
       completeLessons: (lessonIds, via, accuracy) =>
@@ -1323,11 +1335,15 @@ export const useApp = create<AppState & AppActions>()(
                 }
               : s.days,
           };
-          // Чипы за пробный ЕНТ (10) — за завершённую попытку; за тест раздела (10) — только если он сдан (≥ 80% баллов).
+          // Чипы (#105): 10 за завершённый пробный ЕНТ (отвечено не меньше половины заданий) и 10 за сданный тест раздела
+          // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
           const examChips: { base: number; reason: ChipReason }[] = [];
           if (isNew && answered > 0) {
-            if (summary.kind !== "unit") examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
-            else if (unitPassed(summary.points, summary.maxPoints)) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
+            if (summary.kind === "full" && answered >= Math.ceil(asked / 2)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
+            else if (summary.kind === "unit" && unitPassed(summary.points, summary.maxPoints)) {
+              const passedBefore = s.exams.some((e) => e.id !== summary.id && e.kind === "unit" && e.unit === summary.unit && unitPassed(e.points, e.maxPoints));
+              if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
+            }
           }
           return settleChips(s, { ...next, ...evaluate(next) }, examChips);
         }),

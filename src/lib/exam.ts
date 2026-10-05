@@ -18,8 +18,6 @@ export const TOPIC_COUNTS = { single: 6, multi: 2, match: 2 } as const;
 export const UNIT_COUNTS = { single: 14, multi: 3, match: 2, context: 1 } as const;
 /** Меньше заданий в разделе — теста по разделу нет. */
 export const UNIT_MIN_ITEMS = 10;
-/** Доля баллов, с которой тест по разделу сдан: непройденные уроки раздела засчитываются. */
-export const UNIT_PASS_RATIO = 0.8;
 /** Время теста по разделу — пропорционально числу заданий: 90 секунд на задание. */
 export const UNIT_SEC_PER_QUESTION = 90;
 /** Секунд на тест по разделу из n заданий (до целой минуты вверх). */
@@ -447,8 +445,7 @@ export function lessonsToCredit(
   return ready.filter((x) => x.skills.length > 0 && !isDone(x.id) && x.skills.every((sk) => skills.has(sk))).map((x) => x.id);
 }
 
-/** Тест по разделу сдан: доля баллов не меньше UNIT_PASS_RATIO. */
-export const unitPassed = (points: number, max: number): boolean => max > 0 && Number.isFinite(points) && points / max >= UNIT_PASS_RATIO;
+export { UNIT_PASS_RATIO, unitPassed } from "./exam-pass";
 
 // ---------- Звёзды теста по разделу ----------
 

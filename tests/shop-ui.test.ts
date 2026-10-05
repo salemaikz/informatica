@@ -188,6 +188,16 @@ describe("словарь магазина, сердечек и тарифов", 
     const all = keys.map((k) => `${dict[k as keyof typeof dict].ru}\n${dict[k as keyof typeof dict].kk}`).join("\n");
     expect(all).not.toMatch(/Каждый день запас|Күн сайын қор|= 1 чип/);
   });
+
+  it("тексты магазина и тарифов не обещают чипов за опыт (#105)", () => {
+    const re = /за XP|за опыт|XP үшін|Тәжірибе үшін|XP\s*=/;
+    for (const k of Object.keys(dict)) {
+      if (!/^(shop|plans|aicost|xp)\./.test(k)) continue;
+      const v = dict[k as keyof typeof dict];
+      expect(v.ru, k).not.toMatch(re);
+      expect(v.kk, k).not.toMatch(re);
+    }
+  });
 });
 
 describe("строка сердечек и бустера в магазине", () => {

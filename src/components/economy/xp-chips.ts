@@ -2,7 +2,6 @@ import { XP } from "@/lib/gamification";
 import { scaleXp } from "@/lib/review";
 import { lessonChips } from "@/lib/economy";
 import { pluralForm } from "@/components/learn/map";
-import { chipRate, formatMult } from "./shop-helpers";
 
 /** Доля шагов урока, которые являются заданиями (остальное — объяснения); для оценки награды. */
 const QUESTION_SHARE = 0.5;
@@ -29,14 +28,6 @@ export function chipsEstimate(hasStat: boolean, multiplier = 1): number {
 }
 
 /** Ключ строки со склонением: `xp.chipsPlus.few` и т. п. */
-export function chipsKey(base: "xp.chipsPlus" | "xp.rate" | "xp.reward" | "perfect.chips", n: number): `${typeof base}.${"one" | "few" | "many"}` {
+export function chipsKey(base: "xp.chipsPlus" | "xp.reward" | "perfect.chips", n: number): `${typeof base}.${"one" | "few" | "many"}` {
   return `${base}.${pluralForm(n)}`;
 }
-
-/** Хвост подписи при множителе: « · ×2» (пусто при ×1). */
-export function multSuffix(multiplier: number): string {
-  return multiplier === 1 ? "" : ` · ${formatMult(multiplier)}`;
-}
-
-/** @deprecated Курса «XP → чипы» больше нет (#105); оставлено для `GameShell`, пока он не переведён. */
-export const xpChipRate = chipRate;

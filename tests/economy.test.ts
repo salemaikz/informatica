@@ -672,11 +672,6 @@ describe("чипы: заработок", () => {
     expect(lessonChips(true, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
     expect(lessonChips(true, 0)).toBe(0);
   });
-
-  it("чипы за урок не зависят от опыта: игра и тренировка в CHIP_REWARD не значатся", () => {
-    expect(Object.keys(CHIP_REWARD)).not.toContain("xp");
-    expect(Object.keys(CHIP_REWARD)).not.toContain("drill");
-  });
 });
 
 describe("pushLedger", () => {
