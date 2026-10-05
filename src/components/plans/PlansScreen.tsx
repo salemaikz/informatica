@@ -3,7 +3,8 @@
 import { Crown, Sparkles, X } from "lucide-react";
 import { m } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { track } from "@/lib/analytics";
 import { PRICES, TRIAL_DAYS, canStartTrial, formatTenge, type BillingPeriod, type PaidTier } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -35,6 +36,14 @@ export function PlansScreen() {
   const [sheet, setSheet] = useState<{ open: boolean; what?: string }>({ open: false });
   const [won, setWon] = useState(false);
 
+  // Статистика (#69): показ окна — один раз за открытие (защита от двойного вызова эффекта), все три пути приходят сюда.
+  const viewed = useRef(false);
+  useEffect(() => {
+    if (viewed.current) return;
+    viewed.current = true;
+    track({ e: "paywall_view", from: from ?? "other" });
+  }, [from]);
+
   // Окно показано вручную — сбрасываем таймер автопоказа (онбординг и auto отмечаются сами).
   useEffect(() => {
     if (from !== "onboarding" && from !== "auto") useApp.getState().notePaywallShown();
@@ -46,12 +55,16 @@ export function PlansScreen() {
   };
 
   const choose = (paid: PaidTier) => {
+    track({ e: "plan_click", tier: paid, period });
     const name = t(paid === "unlimited" ? "plans.tier.unlimited" : "plans.tier.lite");
     setSheet({ open: true, what: planWhat(name, formatTenge(PRICES[paid][period]), t(period === "year" ? "plans.per.year" : "plans.per.month")) });
   };
 
   const onTrial = () => {
-    if (startTrial()) setWon(true);
+    if (startTrial()) {
+      track({ e: "trial_start", from: from ?? "other" });
+      setWon(true);
+    }
   };
 
   const tierName = tier === "free" ? "" : `${t(tier === "lite" ? "plans.tier.lite" : "plans.tier.unlimited")}${trial ? ` (${t("plans.tier.trial")})` : ""}`;
@@ -135,7 +148,7 @@ export function PlansScreen() {
         </m.div>
       )}
 
-      <ComingSoonSheet open={sheet.open} what={sheet.what} onClose={() => setSheet((s) => ({ ...s, open: false }))} />
+      <ComingSoonSheet open={sheet.open} what={sheet.what} from={from ?? "other"} onClose={() => setSheet((s) => ({ ...s, open: false }))} />
       {won && <TrialCelebration onStart={() => router.replace("/learn")} />}
     </div>
   );

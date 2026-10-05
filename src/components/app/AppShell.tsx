@@ -21,6 +21,7 @@ import { NAV_GROUPS, groupOf, normalizePath, subOf, underPath, visibleGroups } f
 import { useEntVisible } from "@/components/school/useEntVisible";
 import { SectionTabs, SubLink } from "./SectionTabs";
 import { LegalLinks } from "@/components/legal/LegalLinks";
+import { BreakReasonCard } from "@/components/issue/BreakReasonCard";
 
 /** Аватар ученика из профиля (буква, рисованный или фото). */
 function ProfileAvatar({ size = 36 }: { size?: number }) {
@@ -141,6 +142,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
           <main className={clsx("mx-auto w-full min-w-0 flex-1", wide ? "max-w-5xl" : "max-w-2xl")}>
             <SectionTabs />
+            {/* «Что помешало?» после перерыва от 3 дней — только на «Учиться» и только при включённом сборе статистики (#69). */}
+            {path === "/learn" && <BreakReasonCard />}
             {/* Страница мягко проявляется при каждой смене маршрута. */}
             <m.div key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: easeOut }}>
               {children}

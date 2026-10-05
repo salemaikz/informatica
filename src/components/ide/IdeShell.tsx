@@ -8,6 +8,7 @@ import { clearDraft, loadDraft, saveDraft, sandboxDraftId } from "@/lib/ide/draf
 import type { CheckResult, IdeLang, IdeTask } from "@/lib/ide/types";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
+import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { IdeAiHelp } from "./IdeAiHelp";
 import { IDE_REGISTRY } from "./registry";
 import { ResultBanner, type ResultState } from "./ResultBanner";
@@ -19,7 +20,7 @@ import { TaskPanel } from "./TaskPanel";
  * task = null — «песочница» (свободный режим, без проверки и XP). Родитель задаёт key по задаче/языку.
  */
 export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }) {
-  const { t } = useT();
+  const { t, l } = useT();
   const info = IDE_REGISTRY[lang];
   const Workspace = info.Workspace;
   const draftId = task ? task.id : sandboxDraftId(lang);
@@ -103,6 +104,13 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
             {t(confirmReset ? "ide.task.resetSure" : task ? "ide.task.reset" : "ide.sandbox.reset")}
           </Button>
         </div>
+
+        {/* Ошибка в условии, проверке или подсказке задачи — жалоба со своим местом «code» (в песочнице жаловаться не на что). */}
+        {task && (
+          <div className="flex justify-end">
+            <ReportIssueButton target={{ kind: "task", where: "code", itemId: task.id, snippet: `${l(task.title)}: ${l(task.prompt)}` }} />
+          </div>
+        )}
       </div>
     </div>
   );
