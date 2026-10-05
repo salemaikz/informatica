@@ -1,4 +1,12 @@
 import type { L } from "@/lib/types";
 
-// Этап 16В (docs/specs/stage16c.md). Ключи этого файла добавляет исполнитель своего пакета. Вычитано моделью, носителем — нет.
-export const dockDict = {} satisfies Record<string, L>;
+// Этап 16В (docs/specs/stage16c.md), пакет P2b: плавающая кнопка Бита и чат-панель. Вычитано моделью, носителем — нет.
+export const dockDict = {
+  "dock.ask": { ru: "Спросить Бита", kk: "Биттен сұрау" },
+  "dock.hideHint": { ru: "Смахни вправо, чтобы спрятать Бита", kk: "Битті жасыру үшін оңға сырғыт" },
+  "dock.show": { ru: "Показать Бита", kk: "Битті көрсету" },
+  "dock.showHint": { ru: "Нажми или смахни влево, чтобы вернуть Бита", kk: "Битті қайтару үшін бас немесе солға сырғыт" },
+  "dock.panel": { ru: "Чат с Битом", kk: "Битпен чат" },
+  "dock.allChats": { ru: "Все чаты", kk: "Барлық чаттар" },
+  "dock.newChat": { ru: "Новый чат", kk: "Жаңа чат" },
+} satisfies Record<string, L>;

@@ -10,7 +10,6 @@ import {
   NotebookPen,
   ScrollText,
   Search,
-  Sparkles,
   Store,
   Target,
   UserRound,
@@ -18,10 +17,11 @@ import {
 } from "lucide-react";
 import type { DictKey } from "@/i18n/dict";
 
-// Навигация v0.8: пять групп (Учиться, Практика, ИИ-чат, Материалы, Прогресс). Единый источник
+// Навигация: четыре группы (Учиться, Практика, Материалы, Прогресс). Единый источник
 // для нижней панели телефона, бокового меню компьютера и строки подразделов (SectionTabs).
+// ИИ-чат — не вкладка, а плавающая кнопка Бита (components/guide/BitDock); страница /tutor остаётся, но вне навигации.
 
-export type GroupId = "learn" | "practice" | "tutor" | "materials" | "progress";
+export type GroupId = "learn" | "practice" | "materials" | "progress";
 
 export interface NavSub {
   id: string;
@@ -64,7 +64,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "history", href: "/history", label: "nav2.history", icon: History, match: ["/history"] },
     ],
   },
-  { id: "tutor", href: "/tutor", label: "nav.tutor", icon: Sparkles, ai: true, match: ["/tutor"], subs: [] },
   {
     id: "materials",
     href: "/materials",

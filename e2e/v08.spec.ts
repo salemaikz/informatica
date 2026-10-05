@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// v0.8: навигация из пяти групп с подразделами, хаб «Материалы», магазин со строкой сердечек,
+// v0.8: навигация из четырёх групп с подразделами (ИИ-чат — плавающая кнопка Бита, этап 16В), хаб «Материалы», магазин со строкой сердечек,
 // страница плана подготовки и «Тест по разделу» на карте курса.
 
 function trackErrors(page: Page) {
@@ -44,19 +44,19 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
 });
 
-test("нижняя панель: пять групп, каждая открывается", async ({ page }) => {
+test("нижняя панель: четыре группы (без ИИ-чата), каждая открывается", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/learn");
   const bottom = page.getByRole("navigation", { name: "Главное меню" });
-  await expect(bottom.getByRole("link")).toHaveCount(5);
-  for (const name of ["Учиться", "Практика", "ИИ-чат", "Материалы", "Прогресс"]) {
+  await expect(bottom.getByRole("link")).toHaveCount(4);
+  for (const name of ["Учиться", "Практика", "Материалы", "Прогресс"]) {
     await expect(bottom.getByRole("link", { name, exact: true })).toBeVisible();
   }
+  await expect(bottom.getByRole("link", { name: "ИИ-чат" })).toHaveCount(0);
 
   const groups: [string, RegExp][] = [
     ["Практика", /\/practice$/],
-    ["ИИ-чат", /\/tutor$/],
     ["Материалы", /\/materials$/],
     ["Прогресс", /\/stats$/],
     ["Учиться", /\/learn$/],
