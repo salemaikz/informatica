@@ -68,15 +68,24 @@ export function touchedSkills(lessons: Record<string, LessonStat>, stats: Record
 
 const skillsOfGroups = (groups: readonly CourseGroup[]): SkillId[] => skillsOfLessons(groups.flatMap((g) => g.lessons));
 
-/** Три набора навыков для группы(п) на позиции firstIdx в порядке курса. */
-function setsFor(current: readonly CourseGroup[], firstIdx: number, lessons: Record<string, LessonStat>, stats: Record<string, SkillStat>): MixSets {
+/**
+ * Три набора навыков для группы(п) на позиции firstIdx в порядке групп order (по умолчанию — курс ЕНТ;
+ * школьная дорожка передаёт группы своего класса, lib/school-path.ts).
+ */
+function setsFor(
+  current: readonly CourseGroup[],
+  firstIdx: number,
+  lessons: Record<string, LessonStat>,
+  stats: Record<string, SkillStat>,
+  order: readonly CourseGroup[] = COURSE_GROUPS,
+): MixSets {
   const touched = touchedSkills(lessons, stats);
   const cur = skillsOfGroups(current);
   const curSet = new Set(cur);
   const from = Math.max(0, firstIdx - RECENT_GROUPS);
-  const recent = skillsOfGroups(COURSE_GROUPS.slice(from, Math.max(0, firstIdx))).filter((s) => touched.has(s) && !curSet.has(s));
+  const recent = skillsOfGroups(order.slice(from, Math.max(0, firstIdx))).filter((s) => touched.has(s) && !curSet.has(s));
   const recentSet = new Set(recent);
-  const old = skillsOfGroups(COURSE_GROUPS.slice(0, from)).filter((s) => touched.has(s) && !curSet.has(s) && !recentSet.has(s));
+  const old = skillsOfGroups(order.slice(0, from)).filter((s) => touched.has(s) && !curSet.has(s) && !recentSet.has(s));
   return { current: cur, recent, old };
 }
 
@@ -110,18 +119,30 @@ function assemble(sets: MixSets, stats: Record<string, SkillStat>, n: number, se
 
 // ---------- Практика и повторение ----------
 
-/** «Практика» после группы уроков. */
-export function buildPractice(group: CourseGroup, lessons: Record<string, LessonStat>, stats: Record<string, SkillStat>, seed: number): QuestionStep[] {
-  const idx = Math.max(0, COURSE_GROUPS.findIndex((g) => g.id === group.id));
-  return assemble(setsFor([group], idx, lessons, stats), stats, PRACTICE_COUNT, seed);
+/** «Практика» после группы уроков (order — порядок групп: курс ЕНТ или класс школьной дорожки). */
+export function buildPractice(
+  group: CourseGroup,
+  lessons: Record<string, LessonStat>,
+  stats: Record<string, SkillStat>,
+  seed: number,
+  order: readonly CourseGroup[] = COURSE_GROUPS,
+): QuestionStep[] {
+  const idx = Math.max(0, order.findIndex((g) => g.id === group.id));
+  return assemble(setsFor([group], idx, lessons, stats, order), stats, PRACTICE_COUNT, seed);
 }
 
 /** «Повторение» в конце раздела unitId: текущий раздел 50%, три группы перед ним 30%, всё раньше 20%. */
-export function buildRecap(unitId: string, lessons: Record<string, LessonStat>, stats: Record<string, SkillStat>, seed: number): QuestionStep[] {
-  const groups = COURSE_GROUPS.filter((g) => g.unitId === unitId);
+export function buildRecap(
+  unitId: string,
+  lessons: Record<string, LessonStat>,
+  stats: Record<string, SkillStat>,
+  seed: number,
+  order: readonly CourseGroup[] = COURSE_GROUPS,
+): QuestionStep[] {
+  const groups = order.filter((g) => g.unitId === unitId);
   if (!groups.length) return [];
-  const first = COURSE_GROUPS.indexOf(groups[0]);
-  return assemble(setsFor(groups, first, lessons, stats), stats, RECAP_COUNT, seed);
+  const first = order.indexOf(groups[0]);
+  return assemble(setsFor(groups, first, lessons, stats, order), stats, RECAP_COUNT, seed);
 }
 
 // ---------- Мини-тест ----------
