@@ -7,6 +7,7 @@ import { useDaily, useLevel, useStreak } from "@/lib/hooks";
 import { levelTitle } from "@/lib/gamification";
 import { useT } from "@/i18n/useT";
 import { XpIcon } from "@/components/economy/XpIcon";
+import { LevelBadge } from "./LevelBadge";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 
@@ -33,8 +34,8 @@ export function LevelChip() {
   const { level } = useLevel();
   const { t } = useT();
   return (
-    <span title={t("stats.level")} className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-primary px-1.5 text-sm font-extrabold text-white">
-      {level}
+    <span title={t("stats.level")} className="flex">
+      <LevelBadge level={level} size="sm" />
     </span>
   );
 }
@@ -64,9 +65,7 @@ export function LevelCard() {
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl font-extrabold text-white shadow-[0_4px_0_var(--primary-strong)]">
-          {level}
-        </span>
+        <LevelBadge level={level} size="md" />
         <div className="flex-1">
           <p className="font-extrabold">{l(levelTitle(level))}</p>
           <p className="text-sm font-bold text-muted">

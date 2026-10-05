@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { BadgeCheck, BookOpen, Library, Clock, Cpu, Flame, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
+import { LevelBadge, TierPill } from "@/components/app/LevelBadge";
+import { RARITY_BORDER, RARITY_SOFT } from "@/components/ui/rarity";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Lesson, LessonVia, SessionResult } from "@/lib/types";
@@ -12,7 +14,8 @@ import { useApp } from "@/lib/store";
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
-import { achievementById } from "@/lib/gamification";
+import { achievementById, levelInfo, levelTitle, newTierOnLevelUp } from "@/lib/gamification";
+import { ACHIEVEMENT_CHIPS, earnAmount } from "@/lib/economy";
 import { isPerfectSession, PERFECT_RUN_SHOW_FROM } from "@/lib/perfect";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill-meta";
@@ -160,6 +163,12 @@ export function Results({
 
   const accuracy = Math.round(result.accuracy * 100);
   const totalXp = result.xp + bonusXp;
+  // Новый уровень и ступень (этап 16В, J): опыт сессии уже в сторе, поэтому «до» — вычитанием; снимок при показе итогов.
+  const [levels] = useState(() => {
+    const xp = useApp.getState().xp;
+    return { from: levelInfo(Math.max(0, xp - totalXp)).level, to: levelInfo(xp).level };
+  });
+  const newTier = newTierOnLevelUp(levels.from, levels.to);
   // Пропущенное задание — не ошибка (#66): в «ошибки» и в темы урока не попадает.
   const answered = result.answers.filter((a) => !a.skipped);
   const mistakes = answered.filter((a) => !a.correct && !a.retry);
@@ -326,6 +335,31 @@ export function Results({
       {/* Первый урок: короткое «что всё это значит» (проводник, #104); компонент сам решает, показываться ли. */}
       {kind === "lesson" && <AfterFirstLesson />}
 
+      {/* Новый уровень: бейдж уровня по ступени; при переходе на новую ступень (5, 10, 20, 30) — строка в её цвете. */}
+      {levels.to > levels.from && (
+        <m.div
+          className="flex flex-col gap-3 rounded-2xl border-2 border-primary bg-primary-soft px-4 py-3"
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ ...springBouncy, delay: 0.8 }}
+        >
+          <div className="flex items-center gap-4">
+            <LevelBadge level={levels.to} size="lg" />
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold uppercase text-primary">{t("gamify.newLevel")}</p>
+              <p className="text-lg font-extrabold leading-tight">
+                {t("stats.level")} {levels.to} · {l(levelTitle(levels.to))}
+              </p>
+            </div>
+          </div>
+          {newTier && (
+            <TierPill tier={newTier} className="w-full">
+              {t("gamify.newTier", { tier: t(`gamify.tier.${newTier}`) })}
+            </TierPill>
+          )}
+        </m.div>
+      )}
+
       {achievements.length > 0 && (
         <div className="flex flex-col gap-2">
           {achievements.map((id, i) => {
@@ -334,16 +368,20 @@ export function Results({
             return (
               <m.div
                 key={id}
-                className="flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold-soft px-4 py-3"
+                className={clsx("flex items-center gap-3 rounded-2xl border-2 px-4 py-3", RARITY_BORDER[a.rarity], RARITY_SOFT[a.rarity])}
                 initial={{ opacity: 0, scale: 0.6, rotate: -3 }}
                 animate={{ opacity: 1, scale: 1, rotate: 0 }}
                 transition={{ ...springBouncy, delay: 0.9 + i * 0.28 }}
               >
-                <AchievementBadge icon={a.icon} size={44} />
-                <div>
-                  <p className="text-xs font-extrabold uppercase text-warning-strong">{t("res.achievement")}</p>
-                  <p className="font-extrabold">{l(a.title)}</p>
+                <AchievementBadge icon={a.icon} rarity={a.rarity} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-extrabold uppercase text-muted">{t("res.achievement")}</p>
+                  <p className="font-extrabold leading-tight">{l(a.title)}</p>
+                  <p className="text-xs font-bold text-muted">{t(`gamify.kind.${a.rarity}`)}</p>
                 </div>
+                <Pill tone="gold" className="shrink-0" icon={<Cpu size={12} aria-hidden />}>
+                  {t("gamify.chips", { n: earnAmount(ACHIEVEMENT_CHIPS[a.rarity], chipMult) })}
+                </Pill>
               </m.div>
             );
           })}

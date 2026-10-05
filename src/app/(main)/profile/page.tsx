@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { ACHIEVEMENTS } from "@/lib/gamification";
 import { TARGET_MAX, TARGET_MIN, WEEKLY_MAX, WEEKLY_MIN, daysText, daysUntil, isExamDateValid } from "@/lib/goals";
 import { cn } from "@/lib/cn";
 import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
-import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
@@ -27,6 +25,7 @@ import { PlanStatusCard } from "@/components/plans/PlanStatusCard";
 import { TrackSettings } from "@/components/school/TrackSettings";
 import { useEntVisible } from "@/components/school/useEntVisible";
 import { LegalLinks } from "@/components/legal/LegalLinks";
+import { AchievementsSection } from "@/components/profile/AchievementsSection";
 import { AnalyticsToggle } from "@/components/profile/AnalyticsToggle";
 import { TipsReset } from "@/components/profile/TipsReset";
 import { CaseWaiting } from "@/components/rewards/CaseWaiting";
@@ -54,11 +53,10 @@ function OnOff({ value, onChange, label }: { value: boolean; onChange: (v: boole
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { t, l, lang } = useT();
+  const { t, lang } = useT();
   const ent = useEntVisible();
   const profile = useApp((s) => s.profile);
   const update = useApp((s) => s.updateProfile);
-  const achievements = useApp((s) => s.achievements);
   const reset = useApp((s) => s.resetProgress);
   const now = useMinuteClock();
   const today = todayKey(new Date(now));
@@ -281,25 +279,7 @@ export default function ProfilePage() {
         <ReminderSettings />
       </Card>
 
-      <Card>
-        <p className="mb-3 text-lg font-extrabold">{t("prof.achievements")}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {ACHIEVEMENTS.map((a) => {
-            const got = !!achievements[a.id];
-            return (
-              <div
-                key={a.id}
-                className={cn("flex flex-col items-center gap-1 rounded-2xl border-2 p-3 text-center", got ? "border-gold bg-gold-soft" : "border-border opacity-70")}
-                title={l(a.description)}
-              >
-                <AchievementBadge icon={a.icon} got={got} size={44} />
-                <span className="text-sm font-extrabold">{l(a.title)}</span>
-                <span className="text-xs font-semibold text-muted">{l(a.description)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+      <AchievementsSection />
 
       <Card className="divide-y-2 divide-border py-1">
         <Row label={t("prof.lang")}>
