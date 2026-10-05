@@ -239,7 +239,7 @@ export const lesson: Lesson = {
       level: 2,
       prompt: {
         ru: "Для s = 'SHYMKENT' соедини срез с результатом.",
-        kk: "s = 'SHYMKENT' үшін тілімді нәтижесімен жалғастыр.",
+        kk: "s = 'SHYMKENT' үшін тілімді нәтижесімен сәйкестендір.",
       },
       pairs: [
         { left: "s[1::2]", right: "HMET" },
