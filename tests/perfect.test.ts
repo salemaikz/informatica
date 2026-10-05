@@ -70,4 +70,10 @@ describe("строки R1/R2", () => {
       expect(ru, k).not.toMatch(/\p{Extended_Pictographic}/u);
     }
   });
+
+  it("ответ с подсказкой — не идеально (идеально — сам, с первой попытки)", () => {
+    const a = { stepId: "q1", correct: true, score: 1, given: "", expected: "", prompt: "", retry: false, timeMs: 1 };
+    expect(isPerfectSession({ answers: [a], skipped: 0 } as never)).toBe(true);
+    expect(isPerfectSession({ answers: [{ ...a, hinted: true }], skipped: 0 } as never)).toBe(false);
+  });
 });
