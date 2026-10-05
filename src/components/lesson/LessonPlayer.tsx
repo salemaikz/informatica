@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Heart, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -9,6 +9,7 @@ import type { AnswerRecord, Lang, LessonVia, QuestionStep, Scene, SessionResult,
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
+import type { LessonRun } from "@/lib/lesson-run";
 import { lessonXpFactorNow, useApp } from "@/lib/store";
 import { scaleXp } from "@/lib/review";
 import { formatFactor } from "@/lib/drill";
@@ -27,7 +28,7 @@ import { Pill } from "@/components/ui/Pill";
 import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
 import { AiCost } from "@/components/economy/AiCost";
-import { HeartsBar, readHearts } from "@/components/economy/HeartsBar";
+import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { AiPanel } from "@/components/ai/AiPanel";
@@ -53,12 +54,7 @@ import { StoryView } from "./steps/StoryView";
 import { WorkedView } from "./steps/WorkedView";
 import type { StepProps } from "./steps/types";
 import { Results, requestLessonFeedback, type FeedbackState } from "./Results";
-
-interface QueueItem {
-  step: Step;
-  retry: boolean;
-  key: string;
-}
+import { buildRun, freshQueue, graceText, restoreRun, retryItem, type PlayerQueueItem } from "./run-snapshot";
 
 export interface PlayerProps {
   kind: "lesson" | "drill";
@@ -75,8 +71,12 @@ export interface PlayerProps {
   onSessionFinish?: (result: SessionResult) => void;
   /** Блок на экране итогов (например, «Раздел засчитан»). */
   resultsExtra?: ReactNode;
-  /** Цена входа в сердечках (#40): списывается при первом ответе. Нет или 0 — бесплатно (тренировка). */
+  /** Цена входа в сердечках (#40): списывается при первом ответе (или «Пропустить»). Нет или 0 — бесплатно (тренировка). */
   entryCost?: number;
+  /** Продолжить сохранённое прохождение (#41) — только урок в режиме «Учиться». */
+  resume?: LessonRun;
+  /** Сохранять прохождение после каждого шага (#41) — только урок в режиме «Учиться». */
+  saveRun?: boolean;
 }
 
 const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];
@@ -157,7 +157,20 @@ function AskInline({ label, onClick }: { label: string; onClick: () => void }) {
 /** Первые слова текста — заголовок шага для ИИ, когда у шага нет title. */
 const firstWords = (text: string, n = 8) => text.split(" ").slice(0, n).join(" ");
 
-export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mode, onSessionFinish, resultsExtra }: PlayerProps) {
+export function LessonPlayer({
+  kind,
+  lessonId,
+  title,
+  steps,
+  mistakeMap,
+  via,
+  mode,
+  onSessionFinish,
+  resultsExtra,
+  entryCost = 0,
+  resume,
+  saveRun = false,
+}: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
   const recordAnswer = useApp((s) => s.recordAnswer);
@@ -165,25 +178,33 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
   const finishSession = useApp((s) => s.finishSession);
   const dismissMistake = useApp((s) => s.dismissMistake);
 
+  // Продолжение сохранённого прохождения (#41): состояние берём из снимка один раз при монтировании.
+  // Очередь не собралась (шаг пропал из урока) — начинаем с нуля.
+  const [init] = useState(() => (resume ? restoreRun(resume, steps, Date.now()) : null));
+  // Сохраняем только урок в режиме «Учиться»; «Проверить себя» и тренировка собираются заново каждый раз.
+  const persist = saveRun && kind === "lesson" && !!lessonId && (via ?? "learn") === "learn";
+  const exitHref = kind === "lesson" ? "/learn" : "/practice";
+
   const total = steps.length;
-  const [queue, setQueue] = useState<QueueItem[]>(() => steps.map((s) => ({ step: s, retry: false, key: s.id })));
-  const [pos, setPos] = useState(0);
+  const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));
+  const [pos, setPos] = useState(init?.pos ?? 0);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [phase, setPhase] = useState<"answering" | "checking" | "feedback">("answering");
   const [result, setResult] = useState<StepResult | null>(null);
-  const [records, setRecords] = useState<AnswerRecord[]>([]);
-  const [done, setDone] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const [maxCombo, setMaxCombo] = useState(0);
-  const [xp, setXp] = useState(0);
+  const [records, setRecords] = useState<AnswerRecord[]>(() => init?.records ?? []);
+  const [done, setDone] = useState(init?.done ?? 0);
+  const [combo, setCombo] = useState(init?.combo ?? 0);
+  const [maxCombo, setMaxCombo] = useState(init?.maxCombo ?? 0);
+  const [xp, setXp] = useState(init?.xp ?? 0);
   const [gain, setGain] = useState(0);
   const [praise, setPraise] = useState<DictKey>(PRAISE[0]);
   const [checkError, setCheckError] = useState<DictKey | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
-  // Сердечки (только в уроках): шторка «закончились» перед новым заданием и пометка «−1» в панели ответа.
+  // Шторка «Не хватает сердечек» при первом ответе (#40); плата за вход — ensurePaid.
   const [outOpen, setOutOpen] = useState(false);
-  const [heartLost, setHeartLost] = useState(false);
+  // Вход оплачен (сердечки списаны): для подсказки в окне выхода. Сам учёт — paidAtRef.
+  const [paid, setPaid] = useState(!!init?.paid);
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
   // Разбор: сколько шагов уже открыто. Песочница: достигнута ли цель. Сбрасываются при переходе к следующему шагу.
   const [revealed, setRevealed] = useState(1);
@@ -196,12 +217,19 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
     heart: boolean;
   } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
-  // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется.
-  const [xpFactor] = useState(() => (kind === "lesson" ? lessonXpFactorNow(lessonId) : 1));
-  // Сколько чипов было заработано к началу сессии: в итогах показываем разницу.
-  const [earnedAtStart] = useState(() => useApp.getState().wallet.earned);
+  // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется (при продолжении — из сохранения).
+  const [xpFactor] = useState(() => init?.xpFactor ?? (kind === "lesson" ? lessonXpFactorNow(lessonId) : 1));
+  // Сколько чипов было заработано к началу прохождения: в итогах показываем разницу (при продолжении — за весь урок).
+  const [earnedAtStart] = useState(() => {
+    const earned = useApp.getState().wallet.earned;
+    return init ? Math.max(0, earned - init.chipsEarned) : earned;
+  });
   const startedAt = useRef(0);
-  const skippedRef = useRef(0);
+  // Когда начато прохождение (первый вход) — для сохранения.
+  const runStartedAt = useRef(0);
+  // Когда оплачен вход; null — платить при первом ответе. Ref, а не state: ответ проверяется в том же обработчике, что и плата.
+  const paidAtRef = useRef<number | null>(init?.paidAt ?? null);
+  const skippedRef = useRef(init?.skipped ?? 0);
   const stepStartedAt = useRef(0);
   // Высота нижней панели меняется (кнопка проверки → разбор с объяснением): отступ контента подстраиваем под неё,
   // чтобы последний вариант ответа можно было прокрутить над панелью даже на 360×640.
@@ -209,9 +237,11 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
   const [footerH, setFooterH] = useState(0);
 
   useEffect(() => {
-    startedAt.current = Date.now();
+    // При продолжении время урока идёт дальше от сохранённого.
+    startedAt.current = Date.now() - (init?.activeMs ?? 0);
+    runStartedAt.current = init?.startedAt ?? Date.now();
     stepStartedAt.current = Date.now();
-  }, []);
+  }, [init]);
 
   useEffect(() => {
     const el = footerRef.current;
@@ -255,45 +285,80 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
     [finishSession, kind, lessonId, via, mode, title, onSessionFinish, earnedAtStart],
   );
 
-  const next = useCallback(() => {
-    // Сердечек нет, а впереди новое задание — сначала шторка «Сердечки закончились».
-    // Теория, разборы и повтор ошибок (он сердечек не тратит) не блокируются.
-    const ahead = queue[pos + 1];
-    if (kind === "lesson" && ahead && !ahead.retry && isQuestion(ahead.step)) {
-      const h = readHearts();
-      if (!h.unlimited && h.count <= 0) {
-        setOutOpen(true);
+  // Снимок прохождения в стор (#41). Вызывается из обработчиков с уже посчитанными значениями: setState асинхронный.
+  const persistRun = useCallback(
+    (s: { queue: PlayerQueueItem[]; pos: number; done: number; records: AnswerRecord[]; xp: number; combo: number; maxCombo: number }) => {
+      if (!persist || !lessonId) return;
+      const now = Date.now();
+      useApp.getState().saveLessonRun(
+        buildRun({
+          ...s,
+          lessonId,
+          steps,
+          skipped: skippedRef.current,
+          activeMs: now - startedAt.current,
+          xpFactor,
+          chipsEarned: Math.max(0, useApp.getState().wallet.earned - earnedAtStart),
+          cost: entryCost,
+          startedAt: runStartedAt.current,
+          paidAt: paidAtRef.current,
+          now,
+        }),
+      );
+    },
+    [persist, lessonId, steps, xpFactor, earnedAtStart, entryCost],
+  );
+
+  // Плата за вход (#40) — при первом ответе (или «Пропустить»), один раз. Только из обработчиков: в эффектах двойной вызов спишет дважды.
+  // Не хватает сердечек — шторка «Не хватает сердечек», ответ не проверяем (после покупки ученик нажмёт «Проверить» снова).
+  const ensurePaid = useCallback((): boolean => {
+    if (entryCost <= 0 || paidAtRef.current !== null) return true;
+    const res = useApp.getState().payEntry(entryCost);
+    if (!res.ok) {
+      setOutOpen(true);
+      return false;
+    }
+    paidAtRef.current = Date.now();
+    setPaid(res.paid > 0);
+    return true;
+  }, [entryCost]);
+
+  // Переход к следующему шагу: doneNow — сколько шагов пройдено после него (теория засчитывается здесь, задание — при ответе).
+  const advance = useCallback(
+    (doneNow: number) => {
+      if (doneNow !== done) setDone(doneNow);
+      if (pos + 1 >= queue.length) {
+        finish(records, xp, maxCombo);
         return;
       }
-    }
-    const isTheory = step && !isQuestion(step);
-    const doneNow = isTheory ? done + 1 : done;
-    if (isTheory) setDone(doneNow);
-    if (pos + 1 >= queue.length) {
-      finish(records, xp, maxCombo);
-      return;
-    }
-    setPos(pos + 1);
-    setAnswer(null);
-    setResult(null);
-    setCheckError(null);
-    setAiNote(null);
-    setHeartLost(false);
-    setRevealed(1);
-    setGoalReached(false);
-    setPhase("answering");
-    stepStartedAt.current = Date.now();
-    window.scrollTo({ top: 0 });
-  }, [step, done, pos, queue, kind, finish, records, xp, maxCombo]);
+      persistRun({ queue, pos: pos + 1, done: doneNow, records, xp, combo, maxCombo });
+      setPos(pos + 1);
+      setAnswer(null);
+      setResult(null);
+      setCheckError(null);
+      setAiNote(null);
+      setRevealed(1);
+      setGoalReached(false);
+      setPhase("answering");
+      stepStartedAt.current = Date.now();
+      window.scrollTo({ top: 0 });
+    },
+    [done, pos, queue, finish, persistRun, records, xp, combo, maxCombo],
+  );
+
+  const next = useCallback(() => {
+    advance(step && !isQuestion(step) ? done + 1 : done);
+  }, [advance, step, done]);
 
   // Песочница сообщает о достижении цели; достигнутую цель не «отзываем».
   const onGoalChange = useCallback((reached: boolean) => {
     if (reached) setGoalReached(true);
   }, []);
   // «Продолжить» в песочнице с целью закрыто, пока цель не достигнута.
-  const infoBlocked = step.type === "explore" && !!step.goal && !goalReached;
+  const infoBlocked = step?.type === "explore" && !!step.goal && !goalReached;
   // Кнопка/Enter на информационном шаге: в разборе открывает следующий подшаг, иначе — дальше.
   const advanceInfo = useCallback(() => {
+    if (!step) return;
     if (step.type === "worked" && revealed < step.steps.length) {
       giveFeedback("tap");
       setRevealed(revealed + 1);
@@ -323,36 +388,40 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       recordAnswer(rec, gained, lessonId);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
-      // Сердечки за ошибки больше не снимаются (#40): плата — за вход. Каркас этапа 11; плеер дорабатывает пакет A.
-      setHeartLost(false);
+      // Сердечки за ошибки не снимаются (#40): плата — за вход, при первом ответе (ensurePaid).
       noteCombo(newCombo);
+      const newMaxCombo = Math.max(maxCombo, newCombo);
+      // Развёрнутое решение засчитываем сразу (оно не повторяется), остальное — верный ответ или повтор ошибки.
+      const newDone = done + (res.correct || item.retry || question.type === "solution" ? 1 : 0);
+      // Ошибку повторяем один раз в конце («работа над ошибками»). Развёрнутые решения не повторяем — это дорого.
+      const needRetry = !res.correct && !item.retry && question.type !== "solution";
+      const newQueue = needRetry ? [...queue, retryItem(question)] : queue;
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
-      setMaxCombo((m) => Math.max(m, newCombo));
+      setMaxCombo(newMaxCombo);
       setXp((x) => x + gained);
       setGain(gained);
       setResult(res);
       setPhase("feedback");
       setPraise(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
-      if (res.correct || item.retry) setDone((d) => d + 1);
-      // Ошибку повторяем один раз в конце («работа над ошибками»). Развёрнутые решения не повторяем — это дорого.
-      if (!res.correct && !item.retry && question.type !== "solution") {
-        setQueue((q) => [...q, { step: question, retry: true, key: `${question.id}:retry` }]);
-      } else if (!res.correct && question.type === "solution") {
-        setDone((d) => d + 1);
-      }
+      setDone(newDone);
+      if (needRetry) setQueue(newQueue);
+      // Шаг пройден — сохраняем прохождение со следующей позиции (повтор ошибки уже в очереди).
+      persistRun({ queue: newQueue, pos: pos + 1, done: newDone, records: [...records, rec], xp: xp + gained, combo: newCombo, maxCombo: newMaxCombo });
       // Отклик: звук + вибрация. Комбо с 3-го ответа, новый уровень — фанфара; «монетка» XP чуть позже.
       if (leveledUp) giveFeedback("levelUp");
       else if (res.correct) giveFeedback(newCombo >= 3 ? "combo" : "correct", { combo: newCombo });
       else giveFeedback("wrong");
       if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
-    [question, combo, item, lang, kind, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor],
+    [question, combo, maxCombo, done, pos, queue, records, xp, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor, persistRun],
   );
 
   const check = useCallback(
     async (a: Answer | null = answer) => {
       if (!question || !a || !isReady(question, a) || phase !== "answering") return;
+      // Первый ответ сессии платный (#40): до проверки и до оплаты ИИ-проверки по фото.
+      if (!ensurePaid()) return;
       if (question.type === "solution" && a.type === "solution" && a.image) {
         setPhase("checking");
         setCheckError(null);
@@ -404,7 +473,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       const res = evaluate(question, a, lang);
       apply(question.type === "solution" ? { ...res, offline: false } : res);
     },
-    [answer, question, phase, lang, apply, t],
+    [answer, question, phase, lang, apply, t, ensurePaid],
   );
 
   const onAnswer = useCallback(
@@ -417,14 +486,17 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
 
   const skip = () => {
     if (!question) return;
+    // «Пропустить» — тоже первый ответ: вход платный и здесь (иначе урок можно пройти, пропуская всё).
+    if (!ensurePaid()) return;
     skippedRef.current += 1;
-    setDone((d) => d + 1);
-    next();
+    advance(done + 1);
   };
 
   // Enter — проверить / продолжить.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Все шаги пройдены (экран «Посмотреть итоги»): Enter нажимает кнопку экрана сам.
+      if (!step) return;
       const el = e.target as HTMLElement | null;
       // Поля ввода и инструменты (калькулятор, черновик в [data-toolbox]) не запускают быстрые клавиши урока.
       // Исключение — поле ответа самого задания (внутри main): там Enter, как и раньше, проверяет ответ.
@@ -457,6 +529,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
 
   // Контекст для ИИ: задание (с ответом, если ученик уже ответил) или теория текущего шага.
   const taskCtx = useMemo<TaskContext | null>(() => {
+    if (!step) return null;
     if (step.type === "theory") return { prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
     if (step.type === "video") return { prompt: tx(step.title, lang), theory: tx(step.title, lang) };
     if (step.type === "story") {
@@ -510,7 +583,22 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
       />
     );
   }
-  if (!item || !step) return null;
+  if (!item || !step) {
+    // Продолжение, когда все шаги уже пройдены (ученик вышел, не нажав «Продолжить» на последнем): сразу к итогам, без платы.
+    if (queue.length === 0 || pos < queue.length) return null;
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 px-4 py-8 text-center">
+        <m.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={springBouncy}>
+          <Mascot mood="happy" size={104} />
+        </m.div>
+        <h1 className="text-2xl font-extrabold leading-tight">{t("hearts.resume.allDone")}</h1>
+        <p className="font-semibold text-muted">{t("hearts.resume.allDoneText")}</p>
+        <Button size="lg" block variant="success" onClick={() => finish(records, xp, maxCombo)} autoFocus>
+          {t("hearts.resume.results")}
+        </Button>
+      </main>
+    );
+  }
 
   const progress = done / total;
   const ready = question ? isReady(question, answer) : true;
@@ -531,7 +619,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
-          {kind === "lesson" && <HeartsBar />}
+          {entryCost > 0 && <HeartsBar />}
           <button
             type="button"
             onClick={() => setAi("ask")}
@@ -737,16 +825,6 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
                         +{gain} XP
                       </m.span>
                     )}
-                    {heartLost && (
-                      <m.span
-                        className="ml-2 inline-flex items-center gap-1 rounded-full bg-heart-soft px-2 py-0.5 align-middle text-sm text-heart-strong"
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ ...springBouncy, delay: 0.2 }}
-                      >
-                        <Heart size={14} fill="currentColor" aria-hidden /> {t("hearts.lost")}
-                      </m.span>
-                    )}
                   </p>
                   <ReportIssueButton
                     compact
@@ -837,27 +915,33 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap, via, mo
         <div className="flex flex-col items-center gap-3 text-center">
           <Mascot mood="sad" size={72} />
           <h3 className="text-xl font-extrabold">{t("lesson.exitTitle")}</h3>
-          <p className="text-muted">{t("lesson.exitText")}</p>
+          <p className="text-muted">{persist ? t("lesson.exitSaved") : t("lesson.exitText")}</p>
+          {/* Вход уже оплачен: с сохранением — вернуться без новой платы можно в пределах окна; без сохранения — сердечко не вернётся. */}
+          {paid && (
+            <p className="text-sm font-extrabold text-heart-strong">
+              {persist ? t("hearts.resume.grace", { time: graceText(lang) }) : t("lesson.exitPaid")}
+            </p>
+          )}
           <div className="mt-2 flex w-full flex-col gap-3">
             <Button size="lg" block onClick={() => setExitOpen(false)}>
               {t("lesson.stay")}
             </Button>
-            <Button variant="ghost" block onClick={() => router.push(kind === "lesson" ? "/learn" : "/practice")} className="text-danger">
+            <Button variant="ghost" block onClick={() => router.push(exitHref)} className="text-danger">
               {t("lesson.exit")}
             </Button>
           </div>
         </div>
       </Modal>
 
-      {kind === "lesson" && (
+      {/* Не хватило сердечек на вход при первом ответе: купить, вернуть тренировкой или выйти. «Продолжить» закрывает шторку — «Проверить» нажимается снова. */}
+      {entryCost > 0 && (
         <OutOfHearts
           open={outOpen}
+          need={entryCost}
           onClose={() => setOutOpen(false)}
-          onResume={() => {
-            setOutOpen(false);
-            next();
-          }}
-          onExit={() => router.push("/learn")}
+          onResume={() => setOutOpen(false)}
+          onExit={() => router.push(exitHref)}
+          theoryHref={kind === "lesson" && lessonId ? `/theory/${lessonId}` : undefined}
         />
       )}
 
