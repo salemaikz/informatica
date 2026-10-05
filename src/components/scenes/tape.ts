@@ -42,7 +42,7 @@ export function indexLabel(mode: NonNullable<TapeData["index"]>, i: number, n: n
   if (mode === "none") return null;
   if (mode === "one") return side === "top" ? String(i + 1) : null;
   if (mode === "py") return side === "top" ? String(i) : null;
-  return side === "top" ? String(i) : String(i - n);
+  return side === "top" ? String(i) : `\u2212${n - i}`;
 }
 
 /** Ширина строки: моноширинный шрифт — по 0.6 em на символ, иначе — оценка Nunito. */
@@ -78,7 +78,8 @@ export interface TapeCell {
   x: number;
   y: number;
   text: string;
-  state: "slice" | "highlight" | "dim" | "plain";
+  /** sliceHl — ячейка и в срезе, и подсвечена: заливка среза, обводка подсветки (приоритет: срез задаёт заливку, подсветка не теряется). */
+  state: "slice" | "sliceHl" | "highlight" | "dim" | "plain";
 }
 export interface TapeArc {
   key: string;
@@ -107,13 +108,14 @@ export interface TapeLayout {
   x0: number;
   cells: TapeCell[];
   /** Вторая лента («после»): ячейки и стрелка между лентами. */
-  after: { cells: TapeCell[]; arrow: { x: number; y1: number; y2: number } } | null;
+  after: { cells: TapeCell[]; arrow: { x: number; y1: number; y2: number }; empty: { x: number; y: number; text: string } | null } | null;
   indexTop: { x: number; y: number; text: string }[];
   indexBottom: { x: number; y: number; text: string }[];
   indexFs: number;
   arcs: TapeArc[];
   groups: { key: string; x1: number; x2: number; y: number; label: TapeLabelBox; level: number }[];
-  pointers: { key: string; x: number; yTop: number; yEnd: number; label: TapeLabelBox; tone: SceneTone; level: number }[];
+  /** line — соединительная линия вниз до подписи (не рисуется, если пересекла бы чужую подпись); triangle — свой треугольник. */
+  pointers: { key: string; at: number; x: number; yTop: number; yEnd: number; label: TapeLabelBox; tone: SceneTone; level: number; line: boolean; triangle: boolean }[];
   stop: { x: number; y1: number; y2: number; label: TapeLabelBox } | null;
   empty: { x: number; y: number; text: string } | null;
   names: { text: string; x: number; y: number; rowCy: number }[];
@@ -127,7 +129,7 @@ const NAME_FS = 13;
 /** Раскладка сцены. `txt` превращает Text в строку на языке ученика; `t` — словарь (подписи «не включая», «пусто»). */
 export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): TapeLayout {
   const n = scene.cells.length;
-  const after = scene.after && scene.after.length > 0 ? scene.after : null;
+  const after = scene.after ?? null;
   const mono = scene.mono ?? false;
   const mode = scene.index ?? "py";
   const cols = Math.max(n, after?.length ?? 0);
@@ -136,19 +138,21 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   // ---- имена слева ----
   const nameTexts = [scene.name, scene.alias].filter((s): s is string => !!s).map((s) => `${s} =`);
   const nameW = nameTexts.length ? Math.max(...nameTexts.map((s) => textWidth(s, NAME_FS, true))) : 0;
-  const leftW = nameTexts.length ? nameW + (scene.alias ? 14 : 8) : 0;
+  const leftW = nameTexts.length ? nameW + (scene.alias ? 26 : 8) : 0;
 
   // ---- размер ячейки и шрифта ----
   const avail = TAPE_W - 2 * PAD - leftW;
   let cellW = Math.min(MAX_CELL, Math.max(MIN_CELL, Math.floor(avail / cols)));
+  const baseCellW = cellW;
   const fits = (fs: number, w: number) => allTexts.every((s) => textWidth(s, fs, mono) <= w - 4);
   let cellFs = Math.min(MAX_FONT, Math.floor(cellW * 0.52));
   while (cellFs > MIN_FONT && !fits(cellFs, cellW)) cellFs--;
   if (!fits(cellFs, cellW)) {
-    // Даже самый мелкий шрифт не влезает — расширяем ячейку (рисунок целиком уменьшится вместе с viewBox).
+    // Даже самый мелкий шрифт не влезает — ячейка становится прямоугольной (высота прежняя, ширина по тексту);
+    // рисунок целиком уменьшится вместе с viewBox. Такие сцены validate.ts не пропускает (tapeLegible).
     cellW = Math.ceil(Math.max(...allTexts.map((s) => textWidth(s, cellFs, mono))) + 4);
   }
-  const cellH = Math.min(MAX_CELL, Math.max(MIN_CELL, cellW));
+  const cellH = Math.min(MAX_CELL, Math.max(MIN_CELL, baseCellW));
   const vbW = Math.max(TAPE_W, Math.ceil(2 * PAD + leftW + cols * cellW));
   // лента выравнивается по центру свободного места, но не левее имён
   const x0 = PAD + leftW + Math.max(0, Math.floor((vbW - 2 * PAD - leftW - cols * cellW) / 2));
@@ -158,7 +162,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   const takenSet = new Set(taken);
   const hl = new Set(scene.highlight ?? []);
   const dim = new Set(scene.dim ?? []);
-  const stateOf = (i: number): TapeCell["state"] => (takenSet.has(i) ? "slice" : hl.has(i) ? "highlight" : dim.has(i) ? "dim" : "plain");
+  const stateOf = (i: number): TapeCell["state"] => (takenSet.has(i) ? (hl.has(i) ? "sliceHl" : "slice") : hl.has(i) ? "highlight" : dim.has(i) ? "dim" : "plain");
 
   // ---- дуги ----
   const arcSpec: { key: string; xa: number; xb: number; kind: "jump" | "swap"; h: number }[] = [];
@@ -181,15 +185,20 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
     const w = textWidth(text, LABEL_FS, false) + 4;
     const mid = (cx(g.from) + cx(g.to)) / 2;
     const c = clampCenter(mid, w / 2, 2, vbW - 2);
-    return { k, g, text, w, c };
+    const bx1 = cx(g.from) - cellW / 2 + 2;
+    const bx2 = cx(g.to) + cellW / 2 - 2;
+    return { k, g, text, w, c, bx1, bx2 };
   });
-  const groupLevels = assignLevels(groupItems.map((it) => ({ x0: it.c - it.w / 2, x1: it.c + it.w / 2 })));
+  // уровень считаем по объединению скобки и подписи: чужая скобка не повисает над соседней подписью
+  const groupLevels = assignLevels(groupItems.map((it) => ({ x0: Math.min(it.bx1, it.c - it.w / 2), x1: Math.max(it.bx2, it.c + it.w / 2) })));
   const groupLv = groupItems.length ? Math.max(...groupLevels) + 1 : 0;
   const GROUP_ROW = 20;
   const groupZone = groupLv * GROUP_ROW;
 
   // ---- вертикаль ----
-  const hasStop = !!scene.slice;
+  // граница «не включая» не нужна, если совпадает с краем ленты (ничего не исключено)
+  const stopB = scene.slice ? stopBoundary(n, scene.slice) : 0;
+  const hasStop = !!scene.slice && !((scene.slice.step ?? 1) > 0 ? stopB === n : stopB === 0);
   let y = 4;
   const stopRowY = y;
   if (hasStop) y += 14;
@@ -213,6 +222,9 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   });
   const ptrLevels = assignLevels(ptrItems.map((it) => ({ x0: it.c - it.w / 2, x1: it.c + it.w / 2 })));
   const ptrLv = ptrItems.length ? Math.max(...ptrLevels) + 1 : 0;
+  // линия вниз к подписи нижнего уровня не должна проходить сквозь чужую подпись более близкого уровня
+  const crossesLabel = (i: number) =>
+    ptrItems.some((o, j) => j !== i && ptrLevels[j] < ptrLevels[i] && Math.abs(cx(ptrItems[i].p.at) - o.c) < o.w / 2 + 1);
   const ptrTop = y + 1;
   const PTR_ARROW = 8;
   const PTR_ROW = 15;
@@ -234,8 +246,9 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
     y += gap;
     afterY = y;
     after.forEach((text, i) => afterCells.push({ i, x: x0 + i * cellW, y: afterY, text, state: "plain" }));
+    const emptyAfter = after.length === 0 ? { x: arrow.x, y: afterY + cellH / 2, text: t("scene.tape.empty") } : null;
     y += cellH;
-    afterBlock = { cells: afterCells, arrow };
+    afterBlock = { cells: afterCells, arrow, empty: emptyAfter };
   }
   const vbH = y + 4;
 
@@ -266,14 +279,14 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   const cells: TapeCell[] = scene.cells.map((text, i) => ({ i, x: x0 + i * cellW, y: cellsY, text, state: stateOf(i) }));
   const indexFs = (() => {
     let fs = 11;
-    const worst = ["-" + n, String(n)].reduce((a, b) => (a.length >= b.length ? a : b));
-    while (fs > 7 && estimateTextWidth(worst, fs) > cellW - 1) fs--;
+    const worst = `\u2212${n}`;
+    // зазор между соседними индексами не меньше 4 px
+    while (fs > 6 && estimateTextWidth(worst, fs) > cellW - 4) fs--;
     return fs;
   })();
 
-  const stopB = scene.slice ? stopBoundary(n, scene.slice) : 0;
   let stop: TapeLayout["stop"] = null;
-  if (scene.slice) {
+  if (scene.slice && hasStop) {
     const text = t("scene.tape.stop");
     const w = textWidth(text, LABEL_FS, false);
     const bx = x0 + stopB * cellW;
@@ -305,17 +318,21 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
       const bottom = groupTop + groupZone - lv * GROUP_ROW;
       return {
         key: `g${it.k}`,
-        x1: cx(it.g.from) - cellW / 2 + 2,
-        x2: cx(it.g.to) + cellW / 2 - 2,
-        y: bottom - 2,
+        x1: it.bx1,
+        x2: it.bx2,
+        y: bottom - 6, // горизонтальная линия скобки; засечки идут вниз, к ячейкам, подпись — над линией
         level: lv,
-        label: { cx: it.c, w: it.w, y: bottom - 11, text: it.text },
+        label: { cx: it.c, w: it.w, y: bottom - 14, text: it.text },
       };
     }),
     pointers: ptrItems.map((it) => {
       const lv = ptrLevels[it.k];
+      const crossed = lv > 0 && crossesLabel(it.k);
       return {
-        key: `p${it.k}`,
+        key: `p:${it.p.label}:${ptrItems.filter((o) => o.k < it.k && o.p.label === it.p.label).length}`,
+        at: it.p.at,
+        line: lv > 0 && !crossed,
+        triangle: !crossed,
         x: cx(it.p.at),
         yTop: ptrTop,
         yEnd: ptrTop + PTR_ARROW + lv * PTR_ROW,
@@ -332,9 +349,16 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   };
 }
 
-/** Текст для aria-label: что лежит в ленте, срез, обмены, указатели, группы, кадр «после». */
+/** Читаемо ли сцену на телефоне: эффективный шрифт ячеек (с учётом сжатия viewBox к 360 px) не меньше MIN_FONT. Для validate.ts. */
+export function tapeLegible(scene: TapeData): boolean {
+  const L = tapeLayout(scene, (v) => (typeof v === "string" ? v : v.ru), () => "");
+  return (L.cellFs * TAPE_W) / Math.max(TAPE_W, L.vbW) >= MIN_FONT - 0.01;
+}
+
+/** Текст для aria-label: что лежит в ленте, срез, обмены, указатели, группы, кадр «после». Номера — как на рисунке (при index "one" с 1). */
 export function tapeAria(scene: TapeData, txt: (v: Text) => string, t: Tr): string {
   const n = scene.cells.length;
+  const off = scene.index === "one" ? 1 : 0;
   const parts = [t("scene.tape.aria", { n, cells: scene.cells.join(", ") })];
   if (scene.name) parts.push(t("scene.tape.ariaName", { name: scene.name }));
   if (scene.alias) parts.push(t("scene.tape.ariaAlias", { alias: scene.alias }));
@@ -343,9 +367,10 @@ export function tapeAria(scene: TapeData, txt: (v: Text) => string, t: Tr): stri
     parts.push(taken.length ? t("scene.tape.ariaSlice", { cells: taken.map((i) => scene.cells[i]).join(", ") }) : t("scene.tape.ariaEmpty"));
   }
   if (scene.highlight?.length) parts.push(t("scene.tape.ariaHighlight", { cells: scene.highlight.map((i) => scene.cells[i]).join(", ") }));
-  for (const [a, b] of scene.swaps ?? []) parts.push(t("scene.tape.ariaSwap", { a, b }));
-  for (const p of scene.pointers ?? []) parts.push(t("scene.tape.ariaPointer", { label: p.label, at: p.at }));
-  for (const g of scene.groups ?? []) parts.push(t("scene.tape.ariaGroup", { from: g.from, to: g.to, label: txt(g.label) }));
-  if (scene.after?.length) parts.push(t("scene.tape.ariaAfter", { cells: scene.after.join(", ") }));
+  if (scene.dim?.length) parts.push(t("scene.tape.ariaDim", { cells: scene.dim.map((i) => scene.cells[i]).join(", ") }));
+  for (const [a, b] of scene.swaps ?? []) parts.push(t("scene.tape.ariaSwap", { a: a + off, b: b + off }));
+  for (const p of scene.pointers ?? []) parts.push(t("scene.tape.ariaPointer", { label: p.label, at: p.at + off }));
+  for (const g of scene.groups ?? []) parts.push(t("scene.tape.ariaGroup", { from: g.from + off, to: g.to + off, label: txt(g.label) }));
+  if (scene.after) parts.push(t("scene.tape.ariaAfter", { cells: scene.after.length ? scene.after.join(", ") : t("scene.tape.empty") }));
   return parts.join(" ");
 }

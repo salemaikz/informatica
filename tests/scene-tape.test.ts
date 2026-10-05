@@ -3,8 +3,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/tape";
-import { TAPE_W, assignLevels, clampCenter, indexLabel, sliceIndices, stopBoundary, tapeAria, tapeLayout, type TapeData } from "@/components/scenes/tape";
+import { TAPE_W, assignLevels, clampCenter, indexLabel, sliceIndices, stopBoundary, tapeAria, tapeLayout, tapeLegible, type TapeData } from "@/components/scenes/tape";
 import { dict, type DictKey } from "@/i18n/dict";
+import { estimateTextWidth } from "@/components/scenes/text-width";
 import { fmt } from "@/lib/text";
 import type { Lang, Text } from "@/lib/types";
 import { validateScene } from "./validate";
@@ -45,8 +46,8 @@ describe("tape: индексы", () => {
   it("py, both, one, none", () => {
     expect(indexLabel("py", 2, 6, "top")).toBe("2");
     expect(indexLabel("py", 2, 6, "bottom")).toBeNull();
-    expect(indexLabel("both", 2, 6, "bottom")).toBe("-4");
-    expect(indexLabel("both", 0, 6, "bottom")).toBe("-6");
+    expect(indexLabel("both", 2, 6, "bottom")).toBe("\u22124");
+    expect(indexLabel("both", 0, 6, "bottom")).toBe("\u22126");
     expect(indexLabel("one", 0, 6, "top")).toBe("1");
     expect(indexLabel("none", 0, 6, "top")).toBeNull();
   });
@@ -74,8 +75,8 @@ describe("tape: раскладка", () => {
     expect(L.x0 + 16 * L.cellW).toBeLessThanOrEqual(L.vbW);
     expect(L.indexTop).toHaveLength(16);
     expect(L.indexBottom).toHaveLength(16);
-    // индексы не наезжают: подпись уже ячейки
-    expect(L.indexFs).toBeLessThanOrEqual(11);
+    // индексы не наезжают: самая широкая подпись уже ячейки минимум на 4 px
+    expect(estimateTextWidth("\u221216", L.indexFs)).toBeLessThanOrEqual(L.cellW - 4);
     expect(L.arcs.filter((a) => a.kind === "jump")).toHaveLength(L.taken.length - 1);
   });
   it("6 ячеек — крупные, шрифт не больше 18", () => {
@@ -109,6 +110,52 @@ describe("tape: раскладка", () => {
   it("указатели на одной ячейке идут на разные уровни", () => {
     const L = layout(tape({ cells: ["1", "2", "3"], pointers: [{ at: 1, label: "m" }, { at: 1, label: "min" }] }));
     expect(new Set(L.pointers.map((p) => p.level)).size).toBe(2);
+  });
+  it("линия нижнего указателя не пересекает чужую подпись (m и min на одной ячейке)", () => {
+    const check = (s: TapeData) => {
+      const L = layout(s);
+      for (const p of L.pointers) {
+        if (!p.line) continue;
+        for (const o of L.pointers) {
+          if (o !== p && o.level < p.level) expect(Math.abs(p.x - o.label.cx)).toBeGreaterThanOrEqual(o.label.w / 2);
+        }
+      }
+      return L;
+    };
+    const L = check(tape({ cells: ["1", "2", "3", "4", "5", "6"], pointers: [{ at: 5, label: "m" }, { at: 5, label: "min" }] }));
+    expect(L.pointers.filter((p) => p.line)).toHaveLength(0);
+    for (const s of SAMPLES) check(s);
+    // раздельные ячейки: линия остаётся
+    expect(layout(tape({ cells: Array.from({ length: 12 }, () => "x"), pointers: [{ at: 3, label: "abcd" }, { at: 4, label: "abcd" }] })).pointers.some((p) => p.line)).toBe(true);
+  });
+  it("читаемость: шрифт ячеек на 360 px не меньше 8 у всех образцов; слишком широкое не проходит", () => {
+    for (const s of SAMPLES) {
+      const L = layout(s);
+      expect((L.cellFs * TAPE_W) / Math.max(TAPE_W, L.vbW)).toBeGreaterThanOrEqual(8 - 0.01);
+      expect(tapeLegible(s)).toBe(true);
+    }
+    expect(tapeLegible(tape({ cells: Array.from({ length: 16 }, () => "12345678"), mono: true }))).toBe(false);
+    expect(tapeLegible(tape({ cells: Array.from({ length: 8 }, () => "10110010"), mono: true }))).toBe(true);
+  });
+  it("граница stop не рисуется на краю ленты", () => {
+    expect(layout(tape({ cells: ["a", "b", "c"], slice: { start: 0, stop: 3, step: 2 } })).stop).toBeNull();
+    expect(layout(tape({ cells: ["a", "b", "c"], slice: { start: 2, stop: -1, step: -1 } })).stop).toBeNull();
+    expect(layout(tape({ cells: ["a", "b", "c"], slice: { start: 0, stop: 2 } })).stop).not.toBeNull();
+  });
+  it("скобка группы вместе с подписью не пересекает другие скобки и подписи; длинные подписи kk внутри viewBox", () => {
+    const longKk = { ru: "Қ әрпінің екі байты", kk: "Қазақ әрпінің екі байты UTF-8" };
+    const L = layout(tape({ cells: ["01", "10", "11", "00"], mono: true, groups: [{ from: 0, to: 1, label: longKk }, { from: 2, to: 3, label: longKk }] }), "kk");
+    for (const g of L.groups) {
+      expect(g.label.cx - g.label.w / 2).toBeGreaterThanOrEqual(-0.5);
+      expect(g.label.cx + g.label.w / 2).toBeLessThanOrEqual(L.vbW + 0.5);
+    }
+    const [a, b] = L.groups;
+    const span = (g: typeof a) => [Math.min(g.x1, g.label.cx - g.label.w / 2), Math.max(g.x2, g.label.cx + g.label.w / 2)];
+    if (a.level === b.level) expect(span(a)[1] <= span(b)[0] || span(b)[1] <= span(a)[0]).toBe(true);
+  });
+  it("after: [] — пустая вторая лента с подписью; срез и подсветка не теряют друг друга", () => {
+    const L = layout(tape({ cells: ["5"], after: [] }));
+    expect(L.after?.empty?.text).toBe("пусто");
   });
   it("соседние указатели 16-ячеечной ленты не наезжают друг на друга", () => {
     const L = layout(tape({ cells: Array.from({ length: 16 }, () => "x"), pointers: [{ at: 3, label: "min" }, { at: 4, label: "min" }, { at: 5, label: "min" }] }));
@@ -151,12 +198,11 @@ describe("tape: раскладка", () => {
   });
   it("состояния ячеек: срез сильнее подсветки, подсветка сильнее приглушения", () => {
     const L = layout(tape({ cells: ["a", "b", "c", "d"], slice: { start: 0, stop: 2 }, highlight: [0, 2], dim: [2, 3] }));
-    expect(L.cells.map((c) => c.state)).toEqual(["slice", "slice", "highlight", "dim"]);
+    expect(L.cells.map((c) => c.state)).toEqual(["sliceHl", "slice", "highlight", "dim"]);
   });
   it("пустые необязательные поля не ломают раскладку", () => {
-    const L = layout(tape({ cells: ["x"], pointers: [], swaps: [], groups: [], after: [], highlight: [], dim: [] }));
+    const L = layout(tape({ cells: ["x"], pointers: [], swaps: [], groups: [], highlight: [], dim: [] }));
     expect(L.cells).toHaveLength(1);
-    expect(L.after).toBeNull();
     expect(L.vbH).toBeGreaterThan(0);
   });
 });
@@ -164,6 +210,11 @@ describe("tape: раскладка", () => {
 describe("tape: образцы и отрисовка", () => {
   it("образцы проходят validateScene", () => {
     for (const [i, s] of SAMPLES.entries()) expect(validateScene(s), `tape[${i}]`).toEqual([]);
+  });
+  it("aria: нумерация как на рисунке (index one — с 1)", () => {
+    const a = tapeAria(tape({ cells: ["a", "b"], index: "one", pointers: [{ at: 0, label: "i" }] }), txt("ru"), tr("ru"));
+    expect(a).toContain("ячейка 1");
+    expect(tapeAria(tape({ cells: ["a"] }), txt("ru"), tr("ru"))).toContain("ячеек: 1");
   });
   it("рисуются на ru и kk с role=img и aria-label", () => {
     for (const s of SAMPLES) {

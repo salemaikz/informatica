@@ -33,7 +33,7 @@ export const SAMPLES: Extract<Scene, { kind: "tape" }>[] = [
     pointers: [
       { at: 4, label: "l", tone: "primary" },
       { at: 5, label: "m", tone: "warning" },
-      { at: 5, label: "min", tone: "ai" },
+      { at: 5, label: "min", tone: "gold" },
       { at: 7, label: "r", tone: "primary" },
     ],
   },
@@ -50,7 +50,7 @@ export const SAMPLES: Extract<Scene, { kind: "tape" }>[] = [
     pointers: [
       { at: 0, label: "i" },
       { at: 1, label: "j" },
-      { at: 2, label: "min", tone: "ai" },
+      { at: 2, label: "min", tone: "gold" },
     ],
   },
   // 16 ячеек, ячейки по 3 символа

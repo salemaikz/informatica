@@ -43,9 +43,9 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
 
   const cell = (c: TapeCell, prefix: string) => {
     const fill =
-      c.state === "slice" ? "var(--primary-soft)" : c.state === "highlight" ? "var(--warning-soft)" : "var(--surface)";
+      c.state === "slice" || c.state === "sliceHl" ? "var(--primary-soft)" : c.state === "highlight" ? "var(--warning-soft)" : "var(--surface)";
     const stroke =
-      c.state === "slice" ? "var(--primary)" : c.state === "highlight" ? "var(--warning)" : "var(--border)";
+      c.state === "slice" ? "var(--primary)" : c.state === "highlight" || c.state === "sliceHl" ? "var(--warning)" : "var(--border)";
     const dimmed = c.state === "dim";
     return (
       <g key={`${prefix}${c.i}`} style={{ transition: fade }} opacity={dimmed ? 0.4 : 1}>
@@ -57,7 +57,7 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           rx={Math.min(6, L.cellW / 4)}
           fill={fill}
           stroke={stroke}
-          strokeWidth={c.state === "slice" || c.state === "highlight" ? 2 : 1.5}
+          strokeWidth={c.state === "slice" || c.state === "highlight" || c.state === "sliceHl" ? 2 : 1.5}
           style={{ transition: fade }}
         />
         <text
@@ -67,7 +67,7 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           textAnchor="middle"
           fontSize={L.cellFs}
           fontWeight={L.mono ? 700 : 800}
-          fill={c.state === "slice" ? "var(--primary-strong)" : c.state === "highlight" ? "var(--warning-strong)" : "var(--text)"}
+          fill={c.state === "slice" || c.state === "sliceHl" ? "var(--primary-strong)" : c.state === "highlight" ? "var(--warning-strong)" : "var(--text)"}
           className={monoCls}
         >
           {c.text}
@@ -111,8 +111,8 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           {/* граница «не включая» */}
           {L.stop && (
             <m.g {...appear}>
-              <line x1={L.stop.x} x2={L.stop.x} y1={L.stop.y1} y2={L.stop.y2} stroke="var(--danger)" strokeWidth={2} strokeDasharray="4 3" strokeLinecap="round" />
-              <text x={L.stop.label.cx} y={L.stop.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--danger-strong)">
+              <line x1={L.stop.x} x2={L.stop.x} y1={L.stop.y1} y2={L.stop.y2} stroke="var(--muted)" strokeWidth={2} strokeDasharray="4 3" strokeLinecap="round" />
+              <text x={L.stop.label.cx} y={L.stop.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--muted)">
                 {L.stop.label.text}
               </text>
             </m.g>
@@ -133,8 +133,8 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           {/* группы: скобки с подписью */}
           {L.groups.map((g) => (
             <m.g key={g.key} {...appear}>
-              <path d={`M ${g.x1} ${g.y - 5} V ${g.y} H ${g.x2} V ${g.y - 5}`} fill="none" stroke="var(--ai)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              <text x={g.label.cx} y={g.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--ai-strong)">
+              <path d={`M ${g.x1} ${g.y + 5} V ${g.y} H ${g.x2} V ${g.y + 5}`} fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              <text x={g.label.cx} y={g.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--text)">
                 {g.label.text}
               </text>
             </m.g>
@@ -142,10 +142,16 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
 
           {/* указатели под лентой */}
           {L.pointers.map((p) => (
-            <m.g key={p.key} {...appear}>
-              {p.level > 0 && <line x1={p.x} x2={p.x} y1={p.yTop + 6} y2={p.yEnd} stroke={TONE_VAR[p.tone]} strokeWidth={1.25} opacity={0.6} />}
-              <path d={`M ${p.x - 4.5} ${p.yTop + 6} L ${p.x} ${p.yTop} L ${p.x + 4.5} ${p.yTop + 6} Z`} fill={TONE_VAR[p.tone]} />
-              <text x={p.label.cx} y={p.label.y} dy="0.35em" textAnchor="middle" fontSize={12} fontWeight={800} fill={TONE_VAR[p.tone]} className="font-mono">
+            // группа переезжает (transform) между шагами разбора: ключ — подпись указателя, а не порядковый номер
+            <m.g
+              key={p.key}
+              initial={reduce ? false : { opacity: 0, x: p.x, y: p.yTop }}
+              animate={{ opacity: 1, x: p.x, y: p.yTop }}
+              transition={reduce ? { duration: 0 } : springSoft}
+            >
+              {p.line && <line x1={0} x2={0} y1={6} y2={p.yEnd - p.yTop} stroke={TONE_VAR[p.tone]} strokeWidth={1.25} opacity={0.6} />}
+              {p.triangle && <path d="M -4.5 6 L 0 0 L 4.5 6 Z" fill={TONE_VAR[p.tone]} />}
+              <text x={p.label.cx - p.x} y={p.label.y - p.yTop} dy="0.35em" textAnchor="middle" fontSize={12} fontWeight={800} fill={TONE_VAR[p.tone]} className="font-mono">
                 {p.label.text}
               </text>
             </m.g>
@@ -166,6 +172,11 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
                 <path d={`M ${L.after.arrow.x - 5} ${L.after.arrow.y2 - 6} L ${L.after.arrow.x} ${L.after.arrow.y2} L ${L.after.arrow.x + 5} ${L.after.arrow.y2 - 6}`} />
               </g>
               {L.after.cells.map((c) => cell(c, "a"))}
+              {L.after.empty && (
+                <text x={L.after.empty.x} y={L.after.empty.y} dy="0.35em" textAnchor="middle" fontSize={13} fontWeight={800} fill="var(--muted)" fontStyle="italic">
+                  {L.after.empty.text}
+                </text>
+              )}
             </m.g>
           )}
         </g>
