@@ -159,16 +159,17 @@ describe("стор v2", () => {
     expect(st.achievements.exam_first).toBeTruthy();
   });
 
-  it("импорт резервной копии: проверка формата и миграция v1", () => {
-    expect(useApp.getState().importProgress({ hello: 1 })).toBe(false);
-    const ok = useApp.getState().importProgress({
-      xp: 120,
-      profile: { name: "Айым", lang: "kk" },
-      notes: { general: { own: "моя заметка", saved: [] } },
-      lessons: { "ns-2-read": { completions: 1, bestAccuracy: 0.9, lastAt: 1000, totalXp: 50 } },
-    });
-    expect(ok).toBe(true);
-    const st = useApp.getState();
+  it("сохранение v1 при запуске: миграция заметок и уроков, профиль проверяется", () => {
+    const migrated = migrateState(
+      {
+        xp: 120,
+        profile: { name: "Айым", lang: "kk" },
+        notes: { general: { own: "моя заметка", saved: [] } },
+        lessons: { "ns-2-read": { completions: 1, bestAccuracy: 0.9, lastAt: 1000, totalXp: 50 } },
+      },
+      1,
+    );
+    const st = mergeState(migrated, useApp.getState());
     expect(st.xp).toBe(120);
     expect(st.profile.lang).toBe("kk");
     expect(st.profile.avatar).toEqual({ kind: "initial", color: "primary" });

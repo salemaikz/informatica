@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
-  BROKEN_KEY,
+  LEGACY_BROKEN_KEY,
   STORAGE_KEY,
   createPersistRequest,
   createSafeStorage,
@@ -37,18 +37,6 @@ function fakeBackend(initial: Record<string, string> = {}) {
     },
   };
   return { backend, data, ctl };
-}
-
-/** Подделка localStorage с общей ёмкостью (знаки ключей и значений): запись сверх неё — QuotaExceededError. */
-function cappedBackend(initial: Record<string, string>, capacity: number) {
-  const f = fakeBackend(initial);
-  const size = (skip?: string) => [...f.data].reduce((n, [k, v]) => (k === skip ? n : n + k.length + v.length), 0);
-  const setItem = f.backend.setItem;
-  f.backend.setItem = (k, v) => {
-    if (size(k) + k.length + v.length > capacity) throw new QuotaError("quota");
-    setItem(k, v);
-  };
-  return f;
 }
 
 describe("safe-storage: обычная работа и недоступное хранилище", () => {
@@ -149,33 +137,22 @@ describe("safe-storage: переполнение", () => {
 });
 
 describe("safe-storage: битое сохранение", () => {
-  it("ошибка гидратации: копия в informatica-v1-broken, запись в основной ключ заблокирована", () => {
+  it("ошибка гидратации: запись в основной ключ заблокирована, сохранение лежит нетронутым, копий нет", () => {
     const f = fakeBackend({ [STORAGE_KEY]: "{" });
     const s = createSafeStorage({ backend: () => f.backend });
     expect(s.getItem(STORAGE_KEY)).toBe("{");
     s.finishHydration(new SyntaxError("Unexpected end of JSON input"));
     expect(s.hydrationFailed()).toBe(true);
-    expect(f.data.get(BROKEN_KEY)).toBe("{");
-    expect(s.rawForDownload()).toBe("{");
+    expect(s.peekSaved()).toBe("{");
     s.setItem(STORAGE_KEY, '{"state":{}}');
     expect(f.data.get(STORAGE_KEY)).toBe("{"); // не затёрто
     s.setItem("other", "1"); // другие ключи не блокируются
     expect(f.data.get("other")).toBe("1");
+    // Никаких копий сохранения в браузере не появляется: только основной ключ и чужой.
+    expect([...f.data.keys()].sort()).toEqual(["other", STORAGE_KEY].sort());
   });
 
-  it("copy в broken — одна последняя: новая копия заменяет прежнюю", () => {
-    const f = fakeBackend({ [STORAGE_KEY]: "первая" });
-    const s = createSafeStorage({ backend: () => f.backend });
-    s.getItem(STORAGE_KEY);
-    s.finishHydration(new Error("x"));
-    expect(f.data.get(BROKEN_KEY)).toBe("первая");
-    f.data.set(STORAGE_KEY, "вторая");
-    s.getItem(STORAGE_KEY);
-    s.finishHydration(new Error("y"));
-    expect(f.data.get(BROKEN_KEY)).toBe("вторая");
-  });
-
-  it("«Начать заново»: основной ключ очищен, копия осталась, запись снова работает", () => {
+  it("«Начать заново»: основной ключ удалён, сбой снят, запись снова работает", () => {
     const f = fakeBackend({ [STORAGE_KEY]: "{" });
     const s = createSafeStorage({ backend: () => f.backend });
     s.getItem(STORAGE_KEY);
@@ -184,112 +161,39 @@ describe("safe-storage: битое сохранение", () => {
     s.subscribe(() => calls.push(1));
     s.discard();
     expect(f.data.has(STORAGE_KEY)).toBe(false);
-    expect(f.data.get(BROKEN_KEY)).toBe("{");
     expect(s.hydrationFailed()).toBe(false);
+    expect(s.peekSaved()).toBeNull();
     expect(calls.length).toBeGreaterThan(0);
     s.setItem(STORAGE_KEY, "новое");
     expect(f.data.get(STORAGE_KEY)).toBe("новое");
+    expect([...f.data.keys()]).toEqual([STORAGE_KEY]); // и копии тоже нет
   });
 
-  it("discard до сбоя (таймаут гидратации) тоже сохраняет копию", () => {
+  it("«Начать заново» до сбоя (таймаут гидратации) тоже удаляет сохранение и снимает блокировку", () => {
     const f = fakeBackend({ [STORAGE_KEY]: '{"state":{"xp":5},"version":2}' });
     const s = createSafeStorage({ backend: () => f.backend });
     s.getItem(STORAGE_KEY);
     s.discard();
-    expect(f.data.get(BROKEN_KEY)).toBe('{"state":{"xp":5},"version":2}');
     expect(f.data.has(STORAGE_KEY)).toBe(false);
-  });
-
-  it("«Начать заново» при сохранении больше половины квоты: основной ключ освобождает место, копия ложится", () => {
-    const raw = "x".repeat(60);
-    const f = cappedBackend({ [STORAGE_KEY]: raw }, 100);
-    const s = createSafeStorage({ backend: () => f.backend });
-    expect(s.getItem(STORAGE_KEY)).toBe(raw);
-    s.finishHydration(new Error("битое"));
-    // Копия не поместилась рядом с оригиналом (60 + 60 > 100) — остаётся в памяти.
-    expect(f.data.has(BROKEN_KEY)).toBe(false);
-    expect(s.discard()).toBe(true);
-    expect(f.data.has(STORAGE_KEY)).toBe(false);
-    expect(f.data.get(BROKEN_KEY)).toBe(raw); // после «Начать заново» копия лежит в браузере
-    expect(s.hydrationFailed()).toBe(false);
-    s.setItem(STORAGE_KEY, "новое");
-    expect(f.data.get(STORAGE_KEY)).toBe("новое");
-  });
-
-  it("копию не удалось сохранить даже после освобождения места: ничего не стёрто, discard() = false, скачать можно", () => {
-    const raw = '{"state":{"xp":5},"version":2';
-    const f = fakeBackend({ [STORAGE_KEY]: raw });
-    const s = createSafeStorage({ backend: () => f.backend });
-    s.getItem(STORAGE_KEY);
-    s.finishHydration(new SyntaxError("битый JSON"));
-    // Хранилище принимает только основной ключ: BROKEN_KEY всегда «нет места».
-    const setItem = f.backend.setItem;
-    f.backend.setItem = (k, v) => {
-      if (k === BROKEN_KEY) throw new QuotaError("quota");
-      setItem(k, v);
-    };
-    f.data.delete(BROKEN_KEY);
-    expect(s.discard()).toBe(false);
-    expect(f.data.get(STORAGE_KEY)).toBe(raw); // сохранение вернули на место
-    expect(f.data.has(BROKEN_KEY)).toBe(false);
-    expect(s.hydrationFailed()).toBe(true); // всё ещё на экране восстановления
-    expect(s.rawForDownload()).toBe(raw);
-    s.setItem(STORAGE_KEY, "пусто"); // и запись по-прежнему заблокирована
-    expect(f.data.get(STORAGE_KEY)).toBe(raw);
-    // Файл скачан — тогда можно начать заново и без копии в браузере.
-    expect(s.discard({ downloaded: true })).toBe(true);
-    expect(f.data.has(STORAGE_KEY)).toBe(false);
+    expect([...f.data.keys()]).toEqual([]);
     expect(s.hydrationFailed()).toBe(false);
   });
 
-  it("основной ключ вернуть на место не вышло — он остаётся в памяти (getItem отдаёт его, а не null)", () => {
-    const raw = "x".repeat(40);
-    const f = fakeBackend({ [STORAGE_KEY]: raw });
-    const s = createSafeStorage({ backend: () => f.backend });
-    s.getItem(STORAGE_KEY);
-    s.finishHydration(new Error("x"));
-    f.ctl.setError = new QuotaError("quota"); // ни копия, ни возврат основного ключа записаться не могут
-    expect(s.discard()).toBe(false);
-    expect(s.getItem(STORAGE_KEY)).toBe(raw);
-    expect(s.rawForDownload()).toBe(raw);
-  });
-
-  it("копия повреждённого сохранения: есть / скачать / удалить", () => {
+  it("основной ключ не прочитался вовсе (getItem бросил): peekSaved = null, discard не бросает", () => {
     const f = fakeBackend({ [STORAGE_KEY]: "{" });
+    f.ctl.getError = new SecurityError("denied");
     const s = createSafeStorage({ backend: () => f.backend });
-    expect(s.hasBrokenCopy()).toBe(false);
-    s.getItem(STORAGE_KEY);
+    expect(() => s.getItem(STORAGE_KEY)).toThrow();
     s.finishHydration(new Error("x"));
-    expect(s.hasBrokenCopy()).toBe(true);
-    expect(s.brokenCopy()).toBe("{");
-    const calls: number[] = [];
-    s.subscribe(() => calls.push(1));
-    s.deleteBrokenCopy();
-    expect(calls.length).toBe(1);
-    expect(f.data.has(BROKEN_KEY)).toBe(false);
-    expect(s.hasBrokenCopy()).toBe(false);
-    expect(s.brokenCopy()).toBeNull();
-    // Копия, оставшаяся с прошлого запуска, находится сразу.
-    const old = fakeBackend({ [BROKEN_KEY]: "старая" });
-    const s2 = createSafeStorage({ backend: () => old.backend });
-    expect(s2.hasBrokenCopy()).toBe(true);
-    expect(s2.rawForDownload()).toBe("старая");
+    expect(s.peekSaved()).toBeNull();
+    expect(() => s.discard()).not.toThrow();
+    expect(s.hydrationFailed()).toBe(false);
   });
 
-  it("копию не удалось положить в браузер (нет места) — остаётся в памяти для скачивания", () => {
-    const f = fakeBackend({ [STORAGE_KEY]: "{" });
-    const s = createSafeStorage({ backend: () => f.backend });
-    s.getItem(STORAGE_KEY);
-    f.ctl.setError = new QuotaError("quota");
-    s.finishHydration(new Error("x"));
-    expect(f.data.has(BROKEN_KEY)).toBe(false);
-    expect(s.rawForDownload()).toBe("{");
-  });
-
-  it("нечего скачивать — null; успешная повторная гидратация снимает блокировку", () => {
+  it("успешная повторная гидратация снимает блокировку", () => {
     const f = fakeBackend();
     const s = createSafeStorage({ backend: () => f.backend });
-    expect(s.rawForDownload()).toBeNull();
+    expect(s.peekSaved()).toBeNull();
     s.getItem(STORAGE_KEY);
     s.finishHydration(new Error("x"));
     expect(s.hydrationFailed()).toBe(true);
@@ -298,6 +202,52 @@ describe("safe-storage: битое сохранение", () => {
     s.finishHydration();
     s.setItem(STORAGE_KEY, "ok");
     expect(f.data.get(STORAGE_KEY)).toBe("ok");
+  });
+
+  it("peekSaved: строка нечитаемого сохранения живёт в памяти только до успешной гидратации", () => {
+    const f = fakeBackend({ [STORAGE_KEY]: "{broken" });
+    const s = createSafeStorage({ backend: () => f.backend });
+    s.getItem(STORAGE_KEY);
+    s.finishHydration(new Error("x"));
+    expect(s.peekSaved()).toBe("{broken");
+    f.data.set(STORAGE_KEY, "{}");
+    s.beginHydration();
+    s.getItem(STORAGE_KEY);
+    s.finishHydration();
+    expect(s.peekSaved()).toBeNull();
+  });
+});
+
+describe("safe-storage: копия повреждённого сохранения из прежней версии", () => {
+  it("при запуске ключ informatica-v1-broken удаляется, основное сохранение не трогается", () => {
+    const f = fakeBackend({ [LEGACY_BROKEN_KEY]: "x".repeat(100), [STORAGE_KEY]: '{"state":{"xp":1},"version":2}', other: "1" });
+    const s = createSafeStorage({ backend: () => f.backend });
+    expect(s.status()).toBe("ok");
+    expect(f.data.has(LEGACY_BROKEN_KEY)).toBe(false);
+    expect(f.data.get(STORAGE_KEY)).toBe('{"state":{"xp":1},"version":2}');
+    expect(f.data.get("other")).toBe("1");
+  });
+
+  it("старая копия освобождает место до пробы записи: память не считается заполненной", () => {
+    const f = fakeBackend({ [LEGACY_BROKEN_KEY]: "копия" });
+    // Пока копия лежит, даже проба записи не помещается.
+    const setItem = f.backend.setItem;
+    f.backend.setItem = (k, v) => {
+      if (f.data.has(LEGACY_BROKEN_KEY)) throw new QuotaError("quota");
+      setItem(k, v);
+    };
+    const s = createSafeStorage({ backend: () => f.backend });
+    expect(s.status()).toBe("ok");
+  });
+
+  it("removeItem бросает (запрет записи): запуск не падает", () => {
+    const f = fakeBackend({ [LEGACY_BROKEN_KEY]: "копия" });
+    f.backend.removeItem = () => {
+      throw new SecurityError("denied");
+    };
+    const s = createSafeStorage({ backend: () => f.backend });
+    expect(() => s.status()).not.toThrow();
+    expect(s.getItem(LEGACY_BROKEN_KEY)).toBe("копия");
   });
 });
 
@@ -329,15 +279,15 @@ describe("safe-storage + zustand persist: гидратация не висит",
     expect(JSON.parse(f.data.get(STORAGE_KEY)!).state.n).toBe(8);
   });
 
-  it("битый JSON: гидратация падает, но ошибка поймана; сохранение не затирается, копия есть", () => {
+  it("битый JSON: гидратация падает, но ошибка поймана; сохранение не затирается", () => {
     const f = fakeBackend({ [STORAGE_KEY]: "{broken" });
     const s = createSafeStorage({ backend: () => f.backend });
     const store = makeStore(s);
     expect(store.persist.hasHydrated()).toBe(false);
     expect(s.hydrationFailed()).toBe(true);
-    expect(f.data.get(BROKEN_KEY)).toBe("{broken");
     store.setState({ n: 1 }); // действия работают, но не пишут поверх нечитаемого
     expect(f.data.get(STORAGE_KEY)).toBe("{broken");
+    expect([...f.data.keys()]).toEqual([STORAGE_KEY]); // копий нет
   });
 
   it("getItem основного ключа бросает: это сбой чтения, а не «сохранения нет» — запись заблокирована, стор не затирает данные", () => {
@@ -350,7 +300,7 @@ describe("safe-storage + zustand persist: гидратация не висит",
     expect(s.hydrationFailed()).toBe(true);
     store.setState({ n: 1 }); // действия работают в памяти, но поверх нечитаемого не пишут
     expect(f.data.get(STORAGE_KEY)).toBe(saved);
-    expect(s.rawForDownload()).toBeNull(); // копировать нечего — экран скажет «скачивать нечего»
+    expect(s.peekSaved()).toBeNull(); // строки нет — язык экрана восстановления угадаем по браузеру
     // Доступ вернулся — «Попробовать ещё раз» открывает сохранение.
     f.ctl.getError = null;
     void store.persist.rehydrate();
@@ -385,7 +335,7 @@ describe("safe-storage + zustand persist: гидратация не висит",
       },
     });
     expect(s1.hydrationFailed()).toBe(true);
-    expect(f1.data.get(BROKEN_KEY)).toBe(old);
+    expect(f1.data.get(STORAGE_KEY)).toBe(old); // сохранение не тронуто
 
     const cur = JSON.stringify({ state: { n: 1 }, version: 2 });
     const f2 = fakeBackend({ [STORAGE_KEY]: cur });
@@ -397,7 +347,7 @@ describe("safe-storage + zustand persist: гидратация не висит",
     });
     expect(s2.hydrationFailed()).toBe(true);
     expect(store.persist.hasHydrated()).toBe(false);
-    expect(f2.data.get(BROKEN_KEY)).toBe(cur);
+    expect(f2.data.get(STORAGE_KEY)).toBe(cur); // сохранение не тронуто
   });
 
   it("localStorage недоступен: persist существует, стор работает из памяти и хранит между rehydrate", () => {

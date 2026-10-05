@@ -1,12 +1,10 @@
 "use client";
 
-import { Download, Pencil, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Pencil, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import type { ExplainStyle, Goal, Lang, Theme } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { exportBackup, importBackup } from "@/lib/backup-idb";
-import { brokenCopy, deleteBrokenCopy, hasBrokenCopy, requestPersistentStorage, subscribeStorage } from "@/lib/safe-storage";
 import { ACHIEVEMENTS } from "@/lib/gamification";
 import { daysText, daysUntil } from "@/lib/goals";
 import { cn } from "@/lib/cn";
@@ -17,7 +15,6 @@ import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { Avatar } from "@/components/app/Avatar";
 import { AvatarPicker } from "@/components/app/AvatarPicker";
 import { LevelCard } from "@/components/app/Widgets";
-import { BACKUP_LIMITS, downloadBlob, parseBackup, summarizeBackup, type ParsedBackup } from "@/components/goals/backup";
 import { Row, Segmented } from "@/components/goals/controls";
 import { ReminderSettings } from "@/components/goals/ReminderSettings";
 import { useMinuteClock } from "@/components/goals/useClock";
@@ -62,13 +59,6 @@ export default function ProfilePage() {
   const [pickAvatar, setPickAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<ParsedBackup | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [backupMsg, setBackupMsg] = useState<{ tone: "success" | "warning" | "danger"; text: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  // Копия повреждённого сохранения (informatica-v1-broken): остаётся в браузере, пока ученик её не удалит.
-  const brokenExists = useSyncExternalStore(subscribeStorage, hasBrokenCopy, () => false);
-  const [confirmBroken, setConfirmBroken] = useState(false);
 
   const startEditName = () => {
     setDraft(profile.name);
@@ -80,65 +70,6 @@ export default function ProfilePage() {
     update({ name });
     setEditingName(false);
   };
-
-  // Полная копия v3: прогресс, чипы, история, чаты (с сообщениями), фото конспектов, листы черновика. Тариф не входит.
-  const exportData = async () => {
-    setBackupMsg(null);
-    setBusy(true);
-    try {
-      const { blob, droppedImages, unreadable } = await exportBackup();
-      downloadBlob(blob, "informatica-progress.json");
-      // Часть IndexedDB не прочиталась — файл без этих чатов и фото не должен выглядеть полным.
-      const notes = [unreadable > 0 ? t("prof2.export.unreadable") : "", droppedImages > 0 ? t("prof2.export.partial", { n: droppedImages }) : ""].filter(Boolean);
-      if (notes.length) setBackupMsg({ tone: "warning", text: notes.join(" ") });
-    } catch {
-      setBackupMsg({ tone: "danger", text: t("prof2.export.error") });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const pickFile = async (file: File | undefined) => {
-    if (fileRef.current) fileRef.current.value = "";
-    if (!file) return;
-    setBackupMsg(null);
-    if (file.size > BACKUP_LIMITS.fileBytes) {
-      setBackupMsg({ tone: "danger", text: t("prof2.import.big", { mb: BACKUP_LIMITS.fileBytes / (1024 * 1024) }) });
-      return;
-    }
-    try {
-      const data = parseBackup(JSON.parse(await file.text()));
-      if (!data) throw new Error("not a backup");
-      setPending(data);
-    } catch {
-      setBackupMsg({ tone: "danger", text: t("prof2.import.bad") });
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!pending || busy) return;
-    const data = pending;
-    // Просим браузер не стирать данные сайта — сразу из нажатия (до await), пока жест «свежий».
-    requestPersistentStorage();
-    setBusy(true);
-    const outcome = await importBackup(data);
-    setBusy(false);
-    setPending(null);
-    if (outcome === "error") setBackupMsg({ tone: "danger", text: t("prof2.import.error") });
-    else {
-      // Чаты или фото остались только в памяти вкладки — об этом важнее всего; затем — пропущенные битые поля.
-      const notes = [outcome === "partial" ? t("prof2.import.idbPartial") : "", data.skipped.length > 0 || data.droppedImages > 0 ? t("prof2.import.partial") : ""].filter(Boolean);
-      setBackupMsg(notes.length ? { tone: "warning", text: notes.join(" ") } : { tone: "success", text: t("prof2.import.ok") });
-    }
-  };
-
-  const downloadBroken = () => {
-    const raw = brokenCopy();
-    if (raw === null) return;
-    downloadBlob(new Blob([raw], { type: "application/json" }), "informatica-broken.json");
-  };
-
-  const summary = pending ? summarizeBackup(pending) : null;
 
   const daysLeft = daysUntil(profile.examDate, today);
 
@@ -355,94 +286,20 @@ export default function ProfilePage() {
         </Row>
       </Card>
 
-      {/* Резервная копия */}
-      <Card>
-        <h2 className="text-lg font-extrabold">{t("prof2.backup.title")}</h2>
-        <p className="mb-3 mt-1 text-sm font-semibold text-muted">{t("prof2.backup.desc")}</p>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button variant="secondary" onClick={() => void exportData()} disabled={busy} icon={<Download size={18} />}>
-            {t("prof.export")}
-          </Button>
-          <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy} icon={<Upload size={18} />}>
-            {t("prof2.import")}
-          </Button>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => void pickFile(e.target.files?.[0])} />
-        </div>
-        {backupMsg && (
-          <p
-            role="status"
-            className={cn(
-              "mt-3 rounded-xl px-3 py-2 text-sm font-bold",
-              backupMsg.tone === "success" && "bg-success-soft text-success-strong",
-              backupMsg.tone === "warning" && "bg-warning-soft text-warning-strong",
-              backupMsg.tone === "danger" && "bg-danger-soft text-danger",
-            )}
-          >
-            {backupMsg.text}
-          </p>
-        )}
-        {brokenExists && (
-          <div className="mt-3 rounded-2xl bg-warning-soft p-3">
-            <p className="font-extrabold text-warning-strong">{t("storage.broken.title")}</p>
-            <p className="mt-1 text-sm font-semibold text-muted">{t("storage.broken.desc")}</p>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="secondary" className="h-10" icon={<Download size={16} />} onClick={downloadBroken}>
-                {t("storage.broken.download")}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-10 text-danger" icon={<Trash2 size={16} />} onClick={() => setConfirmBroken(true)}>
-                {t("storage.broken.delete")}
-              </Button>
-            </div>
-          </div>
-        )}
-        <Button variant="ghost" onClick={() => setConfirm(true)} icon={<RotateCcw size={18} />} className="mt-3 text-danger">
-          {t("prof.reset")}
-        </Button>
-      </Card>
-
-      {/* Документы: политика, условия, «Кто мы» */}
+      {/* Документы: политика и условия */}
       <Card>
         <h2 className="text-lg font-extrabold">{t("legal.docs.title")}</h2>
         <LegalLinks className="mt-1" />
       </Card>
 
+      {/* Сброс прогресса — небольшой карточкой внизу */}
+      <Card className="flex justify-center p-2 sm:p-2">
+        <Button variant="ghost" onClick={() => setConfirm(true)} icon={<RotateCcw size={18} />} className="text-danger">
+          {t("prof.reset")}
+        </Button>
+      </Card>
+
       <AvatarPicker open={pickAvatar} value={profile.avatar} name={profile.name} onChange={(avatar) => update({ avatar })} onClose={() => setPickAvatar(false)} />
-
-      <Modal open={pending !== null} onClose={() => !busy && setPending(null)} label={t("prof2.import")}>
-        <div className="flex flex-col gap-4 text-center">
-          <p className="text-lg font-extrabold">{t("prof2.import.confirm")}</p>
-          {summary && (
-            <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm font-bold text-muted">
-              {t("prof2.import.summary", { xp: summary.xp, lessons: summary.lessons, chats: summary.chats, images: summary.images })}
-            </p>
-          )}
-          <Button variant="danger" block disabled={busy} onClick={() => void confirmImport()}>
-            {t("prof2.import.replace")}
-          </Button>
-          <Button variant="secondary" block disabled={busy} onClick={() => setPending(null)}>
-            {t("common.cancel")}
-          </Button>
-        </div>
-      </Modal>
-
-      <Modal open={confirmBroken} onClose={() => setConfirmBroken(false)} label={t("storage.broken.delete")}>
-        <div className="flex flex-col gap-4 text-center">
-          <p className="text-lg font-extrabold">{t("storage.broken.deleteConfirm")}</p>
-          <Button
-            variant="danger"
-            block
-            onClick={() => {
-              deleteBrokenCopy();
-              setConfirmBroken(false);
-            }}
-          >
-            {t("storage.broken.delete")}
-          </Button>
-          <Button variant="secondary" block onClick={() => setConfirmBroken(false)}>
-            {t("common.cancel")}
-          </Button>
-        </div>
-      </Modal>
 
       <Modal open={confirm} onClose={() => setConfirm(false)} label={t("prof.reset")}>
         <div className="flex flex-col gap-4 text-center">
