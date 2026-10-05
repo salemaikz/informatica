@@ -3,7 +3,7 @@ import { SKILLS } from "@/content/skills";
 import { forecastScore, type ForecastBasis } from "./forecast";
 import { liveStreak } from "./gamification";
 import { courseViewOf } from "./course-view";
-import { MASTERED_FROM } from "./mastery";
+import { MASTERED_FROM, decaySkills } from "./mastery";
 import { dayTotals, lastDays } from "./progress";
 import { entVisible } from "./school";
 import type { AppState } from "./store";
@@ -144,12 +144,14 @@ export function buildParentReport(state: ReportInput, now: number, opts: ReportO
 
 function buildEnt(state: ReportInput, now: number): ReportEnt {
   const exams = (Array.isArray(state.exams) ? state.exams : []).filter((e) => e && e.kind !== "unit");
-  const f = forecastScore({ skills: state.skills ?? {}, exams, now, diagnostic: state.profile.diagnostic });
+  // Освоение на момент создания отчёта — с затуханием без практики (#45, #80): снимок не завышает давно не тренированное.
+  const skills = decaySkills(state.skills ?? {}, now);
+  const f = forecastScore({ skills, exams, now, diagnostic: state.profile.diagnostic });
   const topics = TOPIC_IDS.map((t) => pct(f.byTopic[t]));
 
   // Тема «с данными»: по ней есть ответы по навыкам, баллы пробника или задания диагностики.
   const hasData = (t: EntTopicId) =>
-    SKILLS.some((s) => s.ent === t && (state.skills?.[s.id]?.attempts ?? 0) > 0) ||
+    SKILLS.some((s) => s.ent === t && (skills[s.id]?.attempts ?? 0) > 0) ||
     exams.some((e) => (e.byTopic?.[t]?.max ?? 0) > 0) ||
     (state.profile.diagnostic?.byTopic?.[t]?.max ?? 0) > 0;
   const weak =

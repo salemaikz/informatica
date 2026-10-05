@@ -11,6 +11,7 @@ import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { percent } from "./format";
+import { useSkillStats } from "./useSkillStats";
 
 interface Row {
   id: string;
@@ -31,7 +32,7 @@ const barColor = (color: string) => `color-mix(in oklab, ${color} 78%, var(--tex
 export function UnitProgressList({ className }: { className?: string }) {
   const { t, l } = useT();
   const lessons = useApp((s) => s.lessons);
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const skipBasics = useApp((s) => s.profile.skipBasics);
   const track = useApp((s) => s.profile.track);
   const gradeRaw = useApp((s) => s.profile.grade);

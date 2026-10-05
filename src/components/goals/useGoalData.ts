@@ -5,6 +5,7 @@ import { forecastScore } from "@/lib/forecast";
 import { daysUntil, goalStatus, weekProgress } from "@/lib/goals";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { useMinuteClock } from "./useClock";
 
 /**
@@ -29,7 +30,8 @@ export function useGoalData() {
   const targetScore = useApp((s) => s.profile.targetScore);
   const targetScoreSet = useApp((s) => s.profile.targetScoreSet);
   const diagnostic = useApp((s) => s.profile.diagnostic);
-  const skills = useApp((s) => s.skills);
+  // Прогноз считается по освоению с затуханием: после перерыва он честно снижается (#45, #80).
+  const skills = useSkillStats();
   const exams = useApp((s) => s.exams);
   const week = useWeekData();
   const clock = useMinuteClock();

@@ -12,6 +12,7 @@ import { Pill } from "@/components/ui/Pill";
 import { useNow } from "@/components/economy/useEconomy";
 import { DataSince } from "./DataSince";
 import { percent } from "./format";
+import { useSkillStats } from "./useSkillStats";
 import { REASON_KEY, REASON_TONE } from "./weak-tone";
 
 export { REASON_TONE };
@@ -22,7 +23,7 @@ export { REASON_TONE };
  */
 export function WeakSpotsCard({ limit = 5, className }: { limit?: number; className?: string }) {
   const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const skillDays = useApp((s) => s.skillDays);
   const now = useNow();
   const spots = useMemo(() => weakSpots({ skills, skillDays, now }, limit), [skills, skillDays, now, limit]);

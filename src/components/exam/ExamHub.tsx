@@ -24,6 +24,7 @@ import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { ICONS } from "@/components/scenes/icons";
 import { unitVars } from "@/components/learn/useLearn";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { checkpointOf, examTitle } from "./checkpoint";
 import { ExamChart } from "./ExamChart";
 import { StarRow } from "./StarRow";
@@ -86,7 +87,8 @@ export function ExamHub() {
   const { t, l, lang } = useT();
   const router = useRouter();
   const exams = useApp((s) => s.exams);
-  const skills = useApp((s) => s.skills);
+  // Освоение с затуханием (#45, #80): прогноз здесь тот же, что в «Целях» и «Прогрессе».
+  const skills = useSkillStats();
   // Прогноз — тот же, что в «Целях» и «Прогрессе»: с опорой на входную диагностику (#70).
   const diagnostic = useApp((s) => s.profile.diagnostic);
   // Цель «пока не знаю» (#70) — без линии цели и «до цели осталось».

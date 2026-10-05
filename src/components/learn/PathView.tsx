@@ -9,6 +9,7 @@ import { useT } from "@/i18n/useT";
 import { Ring } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { unitProgress } from "./map";
 import { unitShortKey, unitVars } from "./useLearn";
 import { UnitSection } from "./UnitSection";
@@ -88,7 +89,8 @@ function UnitBar({ active, onPick }: { active: string; onPick: (unitId: string) 
 
 export function PathView({ recommendedId, now, onOpen }: { recommendedId: string | undefined; now: number; onOpen: (lessonId: string) => void }) {
   const lessons = useApp((s) => s.lessons);
-  const skills = useApp((s) => s.skills);
+  // Освоение на карте — с затуханием без практики (#45, #80).
+  const skills = useSkillStats();
   const reduce = useReduceMotion();
   const [active, setActive] = useState(UNITS[0].id);
   /** Пока страница едет к разделу после нажатия на чип — подсветку от прокрутки не меняем. */

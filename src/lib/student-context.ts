@@ -2,7 +2,7 @@ import type { StudentContext } from "./ai-types";
 import type { WithTrack } from "./school";
 import type { AppState } from "./store";
 import { liveStreak, levelInfo } from "./gamification";
-import { masteryLevel } from "./mastery";
+import { decaySkills, masteryLevel } from "./mastery";
 import { weakSpots } from "./progress";
 import { todayKey, tx } from "./text";
 import { ownNotesText } from "./notebook";
@@ -15,16 +15,20 @@ export function buildStudentContext(s: AppState): StudentContext & WithTrack {
   // Слабые места — те же, что видит ученик в «Прогрессе» (lib/progress → weakSpots): низкая оценка, падение точности, давность.
   // Названия — на языке ученика, чтобы ИИ не смешивал языки в ответе.
   const titled = (id: string, mastery: number) => `${skillById(id) ? tx(skillById(id)!.title, lang) : id} (${Math.round(mastery * 100)}%)`;
-  const spots = weakSpots({ skills: s.skills, skillDays: s.skillDays, now: Date.now() }, 5);
+  // Освоение — с затуханием без практики (#45, #80): давно не тренированный навык не «сильный», а «слабое место: давно не было практики».
+  // Вызывается из обработчиков, не из рендера, поэтому Date.now() здесь допустим.
+  const now = Date.now();
+  const skills = decaySkills(s.skills, now);
+  const spots = weakSpots({ skills, skillDays: s.skillDays, now }, 5);
   const weak: string[] = spots.map((w) => titled(w.skill, w.mastery));
   // Слабые навыки, у которых ответов ещё мало для «Слабых мест» (например, после диагностики), — тоже наставнику, до 5 всего.
   const listed = new Set(spots.map((w) => w.skill));
-  for (const [id, stat] of Object.entries(s.skills)) {
+  for (const [id, stat] of Object.entries(skills)) {
     if (weak.length >= 5) break;
     if (!listed.has(id) && skillById(id) && masteryLevel(stat) === "weak") weak.push(titled(id, stat.mastery));
   }
   const strong: string[] = [];
-  for (const [id, stat] of Object.entries(s.skills)) {
+  for (const [id, stat] of Object.entries(skills)) {
     if (masteryLevel(stat) !== "mastered") continue;
     strong.push(titled(id, stat.mastery));
   }

@@ -17,7 +17,7 @@ import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill";
 import { getLesson } from "@/content/course";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
-import { masteryLevel } from "@/lib/mastery";
+import { decaySkills, masteryLevel } from "@/lib/mastery";
 import { breakdownOf } from "@/lib/player-events";
 import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
@@ -26,6 +26,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { Mascot } from "@/components/mascot/Mascot";
 import { CountUp } from "@/components/motion/CountUp";
 import { Reveal } from "@/components/motion/Reveal";
@@ -70,13 +71,15 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
   const answered = result.answers.filter((a) => !a.skipped);
   const mistakes = answered.filter((a) => !a.correct && !a.retry);
   const skills = [...new Set(answered.map((a) => a.skill).filter(Boolean))] as string[];
+  // Освоение для ИИ — с затуханием (#80), как у наставника.
+  const stats = decaySkills(app.skills, Date.now());
   lessonFeedback({
     context: buildStudentContext(app),
     lesson: result.title,
     accuracy: result.accuracy,
     durationSec: result.durationSec,
     mistakes: mistakes.slice(0, 8).map((m) => ({ q: m.prompt, given: m.given, expected: m.expected })),
-    skills: skills.map((id) => ({ title: skillById(id)?.title[app.profile.lang] ?? id, mastery: app.skills[id]?.mastery ?? 0 })),
+    skills: skills.map((id) => ({ title: skillById(id)?.title[app.profile.lang] ?? id, mastery: stats[id]?.mastery ?? 0 })),
   })
     .then((data) => {
       if (data.memory) useApp.getState().setMemory(data.memory);
@@ -122,7 +125,7 @@ export function Results({
 }) {
   const router = useRouter();
   const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const lessons = useApp((s) => s.lessons);
   const dueAt = useApp((s) => (lessonId ? s.lessons[lessonId]?.dueAt : undefined));
   // «Сейчас» фиксируем при показе итогов: для расчёта «повторение через N дней».

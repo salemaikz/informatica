@@ -3,12 +3,12 @@
 import { Check, Flame, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { liveMastery } from "@/games/live-mastery";
 import type { GameAttempt, GameMode, GameProps } from "@/games/types";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { ignoreKey } from "@/lib/keys";
 import { playSound } from "@/lib/sound";
-import { useApp } from "@/lib/store";
 import { fmt, seeded, tx } from "@/lib/text";
 import type { Lang } from "@/lib/types";
 import {
@@ -177,7 +177,7 @@ export default function BugHuntGame({ lang, sound, mode, onFinish }: GameProps) 
 
     const startPuzzle = () => {
       if (g.key === 0) g.rand = seeded((Date.now() ^ 0x5bd1e995) >>> 0);
-      const mastery = (skill: string) => useApp.getState().skills[skill]?.mastery ?? 0.3;
+      const mastery = (skill: string) => liveMastery(skill) ?? 0.3;
       const tier = tierFor(mode, g.index, g.tier);
       const template = pickTemplate(g.rand, mastery, g.prevTemplate);
       const noFault = wantNoFault(g.rand, tier, g.prevNoFault);

@@ -14,6 +14,7 @@ import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from
 import { currentPoolTag } from "@/lib/exam-pool";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
+import { decaySkills } from "@/lib/mastery";
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
 import type { EntTopicId } from "@/lib/types";
@@ -25,6 +26,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ExamShareActions } from "@/components/share/ExamShareActions";
+import { useSkillStats } from "@/components/progress/useSkillStats";
 import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
@@ -65,7 +67,8 @@ export function ExamResult({ id }: { id: string }) {
   const { t, l, lang } = useT();
   const summary = useApp((s) => s.exams.find((e) => e.id === id));
   const exams = useApp((s) => s.exams);
-  const skills = useApp((s) => s.skills);
+  // Освоение с затуханием (#45, #80): прогноз здесь тот же, что в «Целях» и «Прогрессе».
+  const skills = useSkillStats();
   // Прогноз — тот же, что в «Целях» и «Прогрессе»: с опорой на входную диагностику (#70).
   const diagnostic = useApp((s) => s.profile.diagnostic);
 
@@ -185,6 +188,8 @@ export function ExamResult({ id }: { id: string }) {
     setAi({ status: "loading" });
     try {
       const weakSkills = [...new Set(onlyMistakes(rows).map((r) => r.q.item.skill))].slice(0, 10);
+      // Освоение для ИИ — с затуханием, как у наставника (#80).
+      const stats = decaySkills(app.skills, Date.now());
       const data = await lessonFeedback({
         context: buildStudentContext(app),
         lesson: t("exam.ai.lesson", {
@@ -197,7 +202,7 @@ export function ExamResult({ id }: { id: string }) {
         mistakes: aiMistakes(rows, attempt.answers, lang, 8),
         skills: weakSkills.map((sid) => ({
           title: skillById(sid) ? l(skillById(sid)!.title) : sid,
-          mastery: app.skills[sid]?.mastery ?? 0,
+          mastery: stats[sid]?.mastery ?? 0,
         })),
       });
       if (!data.feedback?.trim()) throw new Error("empty");

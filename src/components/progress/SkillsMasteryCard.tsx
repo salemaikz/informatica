@@ -3,13 +3,13 @@
 import { useMemo, useState } from "react";
 import { SKILLS } from "@/content/skills";
 import { MASTERED_FROM, masteryLevel, masteryNeeds } from "@/lib/mastery";
-import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { pluralForm } from "@/components/learn/map";
 import { LEVEL_COLOR, percent } from "./format";
+import { useSkillStats } from "./useSkillStats";
 
 /** Сколько навыков показываем, пока список не раскрыт. */
 const FOLDED = 12;
@@ -36,7 +36,7 @@ export function needsText(needs: { clean: number; days: number }, t: Translate):
  */
 export function SkillsMasteryCard({ className }: { className?: string }) {
   const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
+  const skills = useSkillStats();
   const [open, setOpen] = useState(false);
 
   const { rows, counts } = useMemo(() => {
