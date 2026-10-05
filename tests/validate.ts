@@ -16,6 +16,11 @@ export function validateScene(scene: Scene): string[] {
     case "binary":
       need(/^[01]+$/.test(scene.bits), "bits — только 0 и 1");
       need((scene.highlight ?? []).every((i) => Number.isInteger(i) && i >= 0 && i < scene.bits.length), "highlight вне диапазона");
+      need(scene.bits.length <= (scene.groups || scene.and !== undefined ? 32 : 16), "bits: не больше 16 разрядов (с groups или and — 32)");
+      need(!scene.gap || (Number.isInteger(scene.gap[0]) && Number.isInteger(scene.gap[1]) && scene.gap[0] >= 1 && scene.gap[0] < scene.gap[1] && scene.gap[1] < scene.bits.length), "gap: 1 ≤ начало < конец < длины");
+      need(scene.and === undefined || (/^[01]+$/.test(scene.and) && scene.and.length === scene.bits.length), "and: только 0 и 1, той же длины, что bits");
+      need(!scene.andLabels || (scene.and !== undefined && scene.andLabels.every(filledText)), "andLabels — только вместе с and, ru/kk");
+      need(!(scene.gap && scene.groups), "gap и groups вместе не рисуются");
       break;
     case "ladder":
       need(Number.isInteger(scene.number) && scene.number > 0, "number — целое > 0");
@@ -28,9 +33,14 @@ export function validateScene(scene: Scene): string[] {
       need(scene.values.length > 0 && scene.values.every((v) => v > 0), "values — положительные числа");
       need((scene.picked ?? []).every((v) => scene.values.includes(v)), "picked должны быть среди values");
       break;
-    case "decimal":
-      need(/^\d+$/.test(scene.number), "number — только цифры");
+    case "decimal": {
+      const base = scene.base ?? 10;
+      need(Number.isInteger(base) && base >= 2 && base <= 16, "base — целое 2..16");
+      const digits = "0123456789ABCDEF".slice(0, base);
+      need(scene.number.length >= 1 && scene.number.length <= 8 && [...scene.number].every((ch) => digits.includes(ch)), `number — цифры основания ${base} (заглавные A–F), до 8 знаков`);
+      need(scene.peel === undefined || typeof scene.peel === "boolean" || (Number.isInteger(scene.peel) && scene.peel >= 1 && scene.peel <= scene.number.length), "peel — true/false или число шагов 1..длины");
       break;
+    }
     case "quest":
       need(!scene.caption || filledText(scene.caption), "пустая подпись");
       break;
@@ -44,6 +54,24 @@ export function validateScene(scene: Scene): string[] {
       need((scene.highlightCols ?? []).every((i) => i >= 0 && i < width), "highlightCols вне диапазона");
       need((scene.highlightCells ?? []).every(([r, c]) => r >= 0 && r < scene.rows.length && c >= 0 && c < width), "highlightCells вне диапазона");
       need(width <= 8 && scene.rows.length <= 16, "не больше 8 столбцов и 16 строк (экран телефона)");
+      const inRow = (r: number) => Number.isInteger(r) && r >= 0 && r < scene.rows.length;
+      const inCell = ([r, c]: [number, number]) => inRow(r) && Number.isInteger(c) && c >= 0 && c < width;
+      need((scene.rowStates ?? []).every((x) => inRow(x.row)), "rowStates: строка вне диапазона");
+      need(new Set((scene.rowStates ?? []).map((x) => x.row)).size === (scene.rowStates ?? []).length, "rowStates: повтор строки");
+      need((scene.changes ?? []).every((x) => inCell(x.cell) && filledText(x.from)), "changes: ячейка вне диапазона или пустое «было»");
+      need((scene.tones ?? []).every((x) => x.cells.length > 0 && x.cells.every(inCell)), "tones: ячейка вне диапазона");
+      need(!scene.range || (inCell(scene.range.from) && inCell(scene.range.to) && scene.range.from[0] <= scene.range.to[0] && scene.range.from[1] <= scene.range.to[1]), "range: углы вне таблицы или перевёрнуты");
+      need((scene.arrows ?? []).every((a) => inCell(a.from) && inCell(a.to)), "arrows: ячейка вне диапазона");
+      need(!scene.formula || (!!scene.sheet && scene.formula.cell.trim() !== "" && scene.formula.text.trim() !== ""), "formula — только в режиме sheet, поля не пустые");
+      need(!scene.rowNumbers || (!!scene.sheet && scene.rowNumbers.length === scene.rows.length && scene.rowNumbers.every((n) => Number.isInteger(n) && n >= 1)), "rowNumbers — только в sheet, по одному на строку, целые ≥ 1");
+      if (scene.join) {
+        const j = scene.join;
+        const jw = j.columns?.length ?? j.rows[0]?.length ?? 0;
+        need(j.rows.length > 0 && jw > 0 && j.rows.every((r) => r.length === jw), "join: строки правой таблицы разной длины");
+        need(width + jw <= 7 && j.rows.length <= 8 && scene.rows.length <= 8, "join: вместе не больше 7 столбцов и 8 строк в каждой (экран телефона)");
+        need(j.links.every(([a, b]) => inRow(a) && Number.isInteger(b) && b >= 0 && b < j.rows.length), "join: links — строка вне диапазона");
+        need([...j.rows.flat(), ...(j.columns ?? [])].every((c) => typeof c === "string" || filledL(c)), "join: ячейка ru/kk");
+      }
       break;
     }
     case "code":
@@ -65,6 +93,8 @@ export function validateScene(scene: Scene): string[] {
         ids.add(g.id);
       }
       need(scene.gates.some((g) => g.id === scene.output), "output — id вентиля");
+      need((scene.outputs ?? []).every((o) => scene.gates.some((g) => g.id === o.gate) && o.name.trim() !== "" && o.name.length <= 3), "outputs: id вентиля и имя до 3 символов");
+      need(!scene.outputs?.length || scene.outputs[0].gate === scene.output, "outputs: первый выход — output");
       need(Object.keys(scene.values ?? {}).every((k) => scene.inputs.includes(k)), "values — только для входов");
       break;
     }
@@ -92,7 +122,8 @@ export function validateScene(scene: Scene): string[] {
     }
     case "web":
       need(scene.html.trim().length > 0, "пустой html");
-      need(!/<script|on\w+\s*=|javascript:/i.test(scene.html + (scene.css ?? "")), "скрипты и обработчики запрещены");
+      need(!/<script|on\w+\s*=|javascript:/i.test(scene.html + (scene.htmlKk ?? "") + (scene.css ?? "")), "скрипты и обработчики запрещены");
+      need(scene.htmlKk === undefined || scene.htmlKk.trim().length > 0, "пустой htmlKk");
       break;
     case "hardware":
       need(scene.items.length >= 1 && scene.items.length <= 9, "hardware: 1–9 рисунков");
@@ -138,6 +169,192 @@ export function validateScene(scene: Scene): string[] {
       need(scene.highlight === undefined || (scene.highlight >= 0 && scene.highlight < scene.items.length), "layers: highlight вне диапазона");
       need(scene.items.every((i) => filledText(i.title)), "layers: пустой заголовок");
       break;
+    // ---- волна 3 (этап 16Б) ----
+    case "numberline": {
+      const { min, max } = scene;
+      const on = (x: number) => Number.isInteger(x) && x >= min && x <= max;
+      need(Number.isInteger(min) && Number.isInteger(max) && min < max && max - min <= 40, "numberline: min < max, целые, не больше 40 делений");
+      need(scene.ticks === undefined || (scene.ticks === "all" ? max - min <= 20 : scene.ticks.every(on)), "numberline: ticks — \"all\" при ≤ 21 делении или числа на оси");
+      need(scene.rows.length >= 1 && scene.rows.length <= 3, "numberline: 1–3 строки");
+      for (const r of scene.rows) {
+        need(!r.label || filledText(r.label), "numberline: пустая подпись строки");
+        need(!!(r.ranges?.length || r.points?.length || r.jumps), "numberline: пустая строка (нет ranges, points, jumps)");
+        for (const g of r.ranges ?? []) {
+          need((g.from === null || on(g.from)) && (g.to === null || on(g.to)), "numberline: конец промежутка вне оси");
+          need(g.from === null || g.to === null || g.from <= g.to, "numberline: from > to");
+          need(!(g.from === null && g.fromIn) && !(g.to === null && g.toIn), "numberline: у луча нет закрашенного конца на бесконечности");
+        }
+        need((r.points ?? []).every((p) => on(p.at) && (!p.label || filledText(p.label))), "numberline: точка вне оси или пустая подпись");
+        if (r.jumps) {
+          const { start, stop, step } = r.jumps;
+          need(Number.isInteger(step) && step !== 0 && on(start) && on(stop), "numberline: jumps — шаг ≠ 0, start и stop на оси");
+          need(Math.ceil((stop - start) / step) <= 20, "numberline: jumps — не больше 20 прыжков");
+        }
+      }
+      break;
+    }
+    case "tape": {
+      const n = scene.cells.length;
+      const at = (i: number) => Number.isInteger(i) && i >= 0 && i < n;
+      need(n >= 1 && n <= 16, "tape: 1–16 ячеек");
+      need(scene.cells.every((c) => c.length <= 8), "tape: ячейка длиннее 8 символов");
+      if (scene.slice) {
+        const { start, stop, step = 1 } = scene.slice;
+        need(Number.isInteger(step) && step !== 0, "tape: slice.step — целое ≠ 0");
+        need(Number.isInteger(start) && start >= 0 && start <= n && Number.isInteger(stop) && stop >= -1 && stop <= n, "tape: slice — start 0..n, stop −1..n");
+      }
+      need((scene.pointers ?? []).every((p) => at(p.at) && p.label.trim() !== "" && p.label.length <= 4), "tape: указатель вне ленты или подпись длиннее 4 символов");
+      need((scene.swaps ?? []).every(([a, b]) => at(a) && at(b) && a !== b), "tape: swaps — индексы вне ленты или одинаковые");
+      need([...(scene.highlight ?? []), ...(scene.dim ?? [])].every(at), "tape: highlight/dim вне ленты");
+      need((scene.groups ?? []).every((g) => at(g.from) && at(g.to) && g.from <= g.to && filledText(g.label)), "tape: группа вне ленты или пустая подпись");
+      need(!scene.after || (scene.after.length <= 16 && scene.after.every((c) => c.length <= 8)), "tape: after — до 16 ячеек по 8 символов");
+      need(!scene.alias || !!scene.name, "tape: alias — только вместе с name");
+      break;
+    }
+    case "chart": {
+      const k = scene.labels.length;
+      need(k >= 2 && k <= 12, "chart: 2–12 категорий");
+      need(scene.labels.every(filledText), "chart: пустая подпись категории");
+      need(scene.series.length >= 1 && scene.series.length <= (scene.type === "pie" ? 1 : 4), "chart: 1–4 серии (у pie — одна)");
+      need(scene.series.every((s) => s.values.length === k && s.values.every((v) => Number.isFinite(v) && v >= 0)), "chart: у серии по значению ≥ 0 на категорию");
+      need(scene.series.every((s) => !s.name || filledText(s.name)), "chart: пустое имя серии");
+      need(scene.series.length === 1 || scene.series.every((s) => !!s.name), "chart: у нескольких серий нужны имена (легенда)");
+      need(scene.type !== "pie" || scene.series[0].values.reduce((a, b) => a + b, 0) > 0, "chart: pie — сумма > 0");
+      need(scene.type !== "pie" || (!scene.threshold && !scene.axes && !scene.funnel), "chart: у pie нет threshold, axes, funnel");
+      need(!scene.funnel || (scene.type === "bar" && scene.series.length === 1), "chart: funnel — bar с одной серией");
+      need((scene.highlight ?? []).every((i) => Number.isInteger(i) && i >= 0 && i < k), "chart: highlight вне диапазона");
+      need(!scene.threshold || (Number.isFinite(scene.threshold.value) && (!scene.threshold.label || filledText(scene.threshold.label))), "chart: threshold");
+      break;
+    }
+    case "graph": {
+      const ids = new Set(scene.nodes.map((v) => v.id));
+      const layout = scene.layout ?? "free";
+      need(scene.nodes.length >= 2 && scene.nodes.length <= 16, "graph: 2–16 вершин");
+      need(ids.size === scene.nodes.length, "graph: повтор id вершины");
+      need(scene.nodes.every((v) => /^[\p{L}\p{N}_-]{1,12}$/u.test(v.id)), "graph: id — буквы, цифры, _ и -, до 12 символов");
+      need(scene.nodes.every((v) => !v.label || filledText(v.label)), "graph: пустая подпись вершины");
+      need(layout !== "free" || scene.nodes.every((v) => [v.x, v.y].every((c) => c !== undefined && Number.isFinite(c) && c >= 0 && c <= 100)), "graph: layout free — x и y 0..100 у каждой вершины");
+      need(scene.edges.every((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to), "graph: ребро к несуществующей вершине или петля");
+      need(scene.edges.every((e) => e.weight === undefined || (e.weight.trim() !== "" && e.weight.length <= 6)), "graph: вес ребра — до 6 символов");
+      const key = (a: string, b: string) => (scene.directed ? `${a}>${b}` : [a, b].sort().join("~"));
+      need(new Set(scene.edges.map((e) => key(e.from, e.to))).size === scene.edges.length, "graph: повтор ребра");
+      if (layout === "tree") {
+        need(!!scene.root && ids.has(scene.root), "graph: tree — root среди вершин");
+        need(scene.edges.length === scene.nodes.length - 1, "graph: tree — рёбер на одно меньше вершин");
+        const seen = new Set<string>(scene.root ? [scene.root] : []);
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const e of scene.edges)
+            for (const [a, b] of [[e.from, e.to], [e.to, e.from]] as const)
+              if (seen.has(a) && !seen.has(b) && (!scene.directed || a === e.from)) {
+                seen.add(b);
+                grew = true;
+              }
+        }
+        need(seen.size === scene.nodes.length, "graph: tree — не все вершины достижимы от root");
+      }
+      const edgeSet = new Set(scene.edges.map((e) => key(e.from, e.to)));
+      const path = scene.path ?? [];
+      need(path.every((v) => ids.has(v)), "graph: path — неизвестная вершина");
+      need(path.every((v, i) => i === 0 || edgeSet.has(key(path[i - 1], v))), "graph: path — соседние вершины не соединены ребром");
+      need((scene.highlight ?? []).every((v) => ids.has(v)), "graph: highlight — неизвестная вершина");
+      break;
+    }
+    case "grid": {
+      const { rows, cols } = scene;
+      const at = ([r, c]: [number, number]) => Number.isInteger(r) && Number.isInteger(c) && r >= 0 && r < rows && c >= 0 && c < cols;
+      need(Number.isInteger(rows) && Number.isInteger(cols) && rows >= 1 && rows <= 10 && cols >= 1 && cols <= 10, "grid: от 1×1 до 10×10");
+      need(!scene.values || (scene.values.length === rows && scene.values.every((r) => r.length === cols && r.every((c) => c.length <= 4))), "grid: values — rows × cols, клетка до 4 символов");
+      for (const mk of scene.marks ?? []) {
+        need((mk.cells ?? []).every(at), "grid: marks.cells вне сетки");
+        need((mk.rows ?? []).every((r) => Number.isInteger(r) && r >= 0 && r < rows) && (mk.cols ?? []).every((c) => Number.isInteger(c) && c >= 0 && c < cols), "grid: marks.rows/cols вне сетки");
+        need(!mk.region || rows === cols, "grid: region — только у квадратной сетки");
+      }
+      need((scene.path ?? []).every(at), "grid: path вне сетки");
+      need(!scene.numbered || !!scene.path?.length, "grid: numbered — только с path");
+      const taken = new Set<string>();
+      let overlap = false;
+      for (const mg of scene.merges ?? []) {
+        const rs = mg.rs ?? 1, cs = mg.cs ?? 1;
+        need(at([mg.r, mg.c]) && rs >= 1 && cs >= 1 && rs * cs > 1 && mg.r + rs <= rows && mg.c + cs <= cols, "grid: объединение вне сетки или из одной клетки");
+        for (let r = mg.r; r < mg.r + rs; r++)
+          for (let c = mg.c; c < mg.c + cs; c++) {
+            if (taken.has(`${r}:${c}`)) overlap = true;
+            taken.add(`${r}:${c}`);
+          }
+      }
+      need(!overlap, "grid: объединения пересекаются");
+      need(!scene.axes || ((!scene.axes.row || scene.axes.row.length <= 3) && (!scene.axes.col || scene.axes.col.length <= 3)), "grid: имя оси до 3 символов");
+      break;
+    }
+    case "db-schema": {
+      const tables = new Map(scene.tables.map((t) => [t.name, t]));
+      const fieldOk = (ref: string) => {
+        const [t, f, extra] = ref.split(".");
+        return extra === undefined && !!tables.get(t)?.fields.some((x) => x.name === f);
+      };
+      need(scene.tables.length >= 1 && scene.tables.length <= 4, "db-schema: 1–4 таблицы");
+      need(tables.size === scene.tables.length, "db-schema: повтор имени таблицы");
+      for (const t of scene.tables) {
+        need(t.name.trim() !== "" && t.name.length <= 14, `db-schema: имя таблицы ${t.name} — до 14 символов`);
+        need(t.fields.length >= 1 && t.fields.length <= 7, `db-schema: ${t.name} — 1–7 полей`);
+        need(new Set(t.fields.map((f) => f.name)).size === t.fields.length, `db-schema: ${t.name} — повтор поля`);
+        need(t.fields.every((f) => f.name.trim() !== "" && `${f.name} ${f.type ?? ""}`.length <= 22), `db-schema: ${t.name} — поле с типом длиннее 22 символов`);
+        for (const f of t.fields.filter((x) => x.fk)) {
+          const [tt, ff] = f.fk!.split(".");
+          need(fieldOk(f.fk!) && !!tables.get(tt)?.fields.find((x) => x.name === ff)?.pk, `db-schema: ${t.name}.${f.name} — fk должен указывать на PK «Таблица.поле»`);
+        }
+      }
+      need((scene.cards ?? []).every((c) => fieldOk(c.field) && !!tables.get(c.field.split(".")[0])?.fields.find((x) => x.name === c.field.split(".")[1])?.fk), "db-schema: cards — поле с fk");
+      need((scene.highlight ?? []).every((h) => tables.has(h) || fieldOk(h)), "db-schema: highlight — «Таблица» или «Таблица.поле»");
+      break;
+    }
+    case "box": {
+      const sides = (x: number | [number, number, number, number] | undefined) =>
+        x === undefined ? [] : typeof x === "number" ? [x] : x;
+      const all = [...sides(scene.padding), ...sides(scene.border), ...sides(scene.margin)];
+      need(Number.isInteger(scene.width) && scene.width > 0 && scene.width <= 2000, "box: width — целое 1..2000");
+      need(scene.height === undefined || (Number.isInteger(scene.height) && scene.height > 0), "box: height — целое > 0");
+      need(all.every((v) => Number.isInteger(v) && v >= 0 && v <= 200), "box: стороны — целые 0..200 px");
+      need(!scene.borderBox || scene.width >= 2 * Math.max(0, ...sides(scene.padding)) + 2 * Math.max(0, ...sides(scene.border)), "box: border-box — width меньше padding + border");
+      need(!scene.collapse || (Number.isInteger(scene.collapse.top) && scene.collapse.top >= 0 && scene.collapse.top <= 200), "box: collapse.top — 0..200");
+      break;
+    }
+    case "wave": {
+      const ok = (s: number, b?: number) => Number.isInteger(s) && s >= 0 && s <= 40 && (b === undefined || (Number.isInteger(b) && b >= 1 && b <= 16));
+      need(ok(scene.samples, scene.bits), "wave: samples 0..40, bits 1..16");
+      need(!scene.digital || scene.samples >= 2, "wave: digital — нужно ≥ 2 отсчётов");
+      need(!scene.compare || ok(scene.compare.samples, scene.compare.bits), "wave: compare — samples 0..40, bits 1..16");
+      need((!scene.label || filledText(scene.label)) && (!scene.compare?.label || filledText(scene.compare.label)), "wave: пустая подпись");
+      break;
+    }
+    case "url": {
+      const url = scene.parts.map((p) => p.text).join("");
+      need(scene.parts.length >= 1 && scene.parts.every((p) => p.text !== ""), "url: части не пустые");
+      need(url.length <= 48 && !/\s/.test(url), "url: без пробелов, до 48 символов (экран телефона)");
+      need((scene.highlight ?? []).every((r) => scene.parts.some((p) => p.role === r)), "url: highlight — роль, которой нет среди частей");
+      break;
+    }
+    case "message": {
+      need(filledText(scene.from) && filledText(scene.text) && (!scene.subject || filledText(scene.subject)), "message: from и text ru/kk");
+      need(scene.channel === "email" || !scene.subject, "message: subject — только у email");
+      const text = scene.text;
+      const inText = (m: Text) =>
+        typeof m === "string" ? (typeof text === "string" ? text.includes(m) : text.ru.includes(m) && text.kk.includes(m)) : typeof text !== "string" && text.ru.includes(m.ru) && text.kk.includes(m.kk);
+      need((scene.marks ?? []).length <= 4 && (scene.marks ?? []).every((m) => filledText(m.text) && inText(m.text) && (!m.note || filledText(m.note))), "message: marks — до 4 точных подстрок текста на обоих языках");
+      break;
+    }
+    case "gates":
+      need(scene.ops.length >= 1 && scene.ops.length <= 6 && new Set(scene.ops).size === scene.ops.length, "gates: 1–6 разных вентилей");
+      need((scene.highlight ?? []).every((o) => scene.ops.includes(o)), "gates: highlight — из ops");
+      break;
+    case "switches": {
+      const k = scene.values?.length ?? scene.names?.length ?? (scene.mode === "not" ? 1 : 2);
+      need(scene.mode === "not" ? k === 1 : scene.mode === "xor" ? k === 2 : k === 2 || k === 3, "switches: not — 1 ключ, xor — 2, and/or — 2 или 3");
+      need(!scene.names || (scene.names.length === k && scene.names.every((x) => x.trim() !== "" && x.length <= 3)), "switches: names — по имени до 3 символов на ключ");
+      need(!scene.values || !scene.names || scene.values.length === scene.names.length, "switches: values и names разной длины");
+      break;
+    }
   }
   if ("caption" in scene && scene.caption !== undefined) need(filledText(scene.caption), "пустая подпись");
   return errors;

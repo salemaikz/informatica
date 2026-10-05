@@ -58,6 +58,20 @@ export type Scene =
       wrongDirection?: boolean;
       /** Подсветить разряды (индексы слева направо). */
       highlight?: number[];
+      // ---- волна 3 (этап 16Б) ----
+      /**
+       * Группы по 3 / 4 / 8 разряда справа налево: скобка под группой и её цифра (8-я, 16-я система) или «байт».
+       * Недостающие слева разряды дописываются бледными нулями. До 32 разрядов: на телефоне группы переносятся по строкам.
+       */
+      groups?: 3 | 4 | 8;
+      /** Стрелка сдвига: "left" — ×2 (справа приписан 0), "right" — :2 (правый разряд отброшен). */
+      shift?: "left" | "right";
+      /** Пропуск середины: показаны разряды до gap[0] и с gap[1] (индексы слева направо), между ними «…» (числа вида 2ⁿ − 1). */
+      gap?: [number, number];
+      /** Режим «адрес / маска / И»: второе число той же длины — вторая строка, третья — поразрядное И (считает код). */
+      and?: string;
+      /** Подписи трёх строк режима and (по умолчанию «IP», «Маска», «Сеть»). */
+      andLabels?: [Text, Text, Text];
     }
   /** Деление на основание с остатками («лесенка»). rows — сколько строк уже показано. */
   | { kind: "ladder"; number: number; base?: number; rows?: number; readUp?: boolean }
@@ -66,7 +80,18 @@ export type Scene =
   /** Монеты-веса (1, 2, 4, 8…): какие взяты, сколько набрано. */
   | { kind: "coins"; values: number[]; picked?: number[]; target?: number }
   /** Обычное десятичное число с весами разрядов ×100 ×10 ×1. */
-  | { kind: "decimal"; number: string }
+  | {
+      kind: "decimal";
+      number: string;
+      // ---- волна 3 (этап 16Б) ----
+      /** Основание 2–16 (цифры 0–9, A–F): веса — степени основания (q³ q² q¹ q⁰) и строка суммы в десятичной. По умолчанию 10. */
+      base?: number;
+      /**
+       * Режим «отрываем цифру» (n % q → последняя цифра, n // q → число без неё): true — все шаги до нуля,
+       * число — сколько шагов показать (разбор по кадрам).
+       */
+      peel?: boolean | number;
+    }
   /** Иллюстрация сюжета «квест-комната». */
   | { kind: "quest"; art: QuestArt; code?: string; caption?: Text }
   /**
@@ -85,6 +110,23 @@ export type Scene =
       /** Моноширинный шрифт ячеек (код, двоичные числа). */
       mono?: boolean;
       caption?: Text;
+      // ---- волна 3 (этап 16Б); индексы строк и столбцов — с 0 без заголовков ----
+      /** Вид строк: "struck" — зачёркнута (DELETE), "dim" — приглушена (не прошла WHERE, вне LIMIT), "rejected" — отклонена (нарушает ключ), "new" — добавлена (INSERT). */
+      rowStates?: { row: number; state: "struck" | "dim" | "rejected" | "new" }[];
+      /** «Было → стало»: в ячейке новое значение, рядом зачёркнутое старое (UPDATE, пересчёт формулы). */
+      changes?: { cell: [number, number]; from: Text }[];
+      /** Подсветка ячеек разными тонами — поверх highlight* (две-три группы: «условие», «результат»). */
+      tones?: { tone: SceneTone; cells: [number, number][] }[];
+      /** Рамка диапазона (B2:C4 в режиме sheet). */
+      range?: { from: [number, number]; to: [number, number] };
+      /** Стрелки между ячейками: ссылка формулы, вектор сдвига при копировании. */
+      arrows?: { from: [number, number]; to: [number, number]; tone?: SceneTone }[];
+      /** Строка формул над таблицей (sheet): поле имени «C2» и текст «=A2*B2». */
+      formula?: { cell: string; text: string };
+      /** Свои номера строк в режиме sheet (после фильтра видны 2, 5, 7). Длина — rows.length. */
+      rowNumbers?: number[];
+      /** Вторая таблица справа (JOIN): линии между строками левой и правой с совпавшим ключом — пары [строка слева, строка справа]. */
+      join?: { columns?: Text[]; rows: Text[][]; links: [number, number][] };
     }
   /** Код с подсветкой текущей строки, значениями переменных и выводом — трассировка программы. */
   | {
@@ -111,9 +153,11 @@ export type Scene =
   | {
       kind: "circuit";
       inputs: string[];
-      gates: { id: string; op: "and" | "or" | "not" | "xor" | "nand" | "nor"; in: string[] }[];
+      gates: { id: string; op: GateOp; in: string[] }[];
       /** id вентиля, чей выход — результат схемы. */
       output: string;
+      /** Волна 3: ещё выходы со своими подписями (полусумматор: S — xor, C — and). output — первый выход. */
+      outputs?: { gate: string; name: string }[];
       values?: Record<string, 0 | 1>;
       caption?: Text;
     }
@@ -139,7 +183,16 @@ export type Scene =
   /** Растровая картинка: строки одинаковой длины из символов палитры; codes — показать коды пикселей. */
   | { kind: "pixels"; rows: string[]; palette: Record<string, string>; codes?: boolean; caption?: Text }
   /** HTML-код и его вид в браузере (рендерится в изолированном iframe без скриптов). */
-  | { kind: "web"; html: string; css?: string; caption?: Text }
+  | {
+      kind: "web";
+      html: string;
+      css?: string;
+      caption?: Text;
+      /** Волна 3: разметка для казахского языка (тексты на странице); без неё — html на обоих языках. */
+      htmlKk?: string;
+      /** Волна 3: только вид в браузере, без панели кода (афиша, страница сайта, вкладка). */
+      page?: boolean;
+    }
   // ---- v0.7: иллюстрации «компьютер с нуля» (решение #36) ----
   /** Галерея рисунков устройств и деталей (SVG): items — что показать, highlight — что выделить. */
   | { kind: "hardware"; items: HardwareId[]; highlight?: HardwareId[]; labels?: boolean; caption?: Text }
@@ -162,7 +215,215 @@ export type Scene =
    * highlight — области, залитые сильнее (остальные приглушены); universe — подпись внешнего прямоугольника
    * (универсума); рамка рисуется, если задан universe или используется область "out" (значение или подсветка).
    */
-  | { kind: "venn"; sets: Text[]; values?: Partial<Record<VennRegion, string>>; highlight?: VennRegion[]; universe?: Text; caption?: Text };
+  | { kind: "venn"; sets: Text[]; values?: Partial<Record<VennRegion, string>>; highlight?: VennRegion[]; universe?: Text; caption?: Text }
+  // ---- волна 3 (этап 16Б): новые виды сцен, ТЗ — docs/specs/stage16b-wave3.md §1 ----
+  /**
+   * Числовая ось: 1–3 строки над общей шкалой min..max (целые). В строке — промежутки (отрезки и лучи), точки
+   * (закрашенная — входит, выколотая — нет) и «прыжки» шага как у range. Пересечение двух условий — третьей строкой своим тоном.
+   */
+  | {
+      kind: "numberline";
+      min: number;
+      max: number;
+      /** Подписанные деления: "all" — каждое целое (если их ≤ 21), список — только эти; по умолчанию — min, max, концы промежутков и точки. */
+      ticks?: "all" | number[];
+      rows: NumberlineRow[];
+      caption?: Text;
+    }
+  /**
+   * Лента ячеек: строка или список Python, диапазон Excel, байты символа. Индексы: "py" — сверху 0..n−1, "both" — ещё снизу −n..−1,
+   * "one" — 1..n («бусины» для ПСТР/ЛЕВСИМВ), "none" — без индексов (по умолчанию "py").
+   */
+  | {
+      kind: "tape";
+      cells: string[];
+      index?: "py" | "both" | "one" | "none";
+      /** Имя слева от ленты (s, a); alias — второе имя на ту же ленту (b = a: один список, два имени). */
+      name?: string;
+      alias?: string;
+      /**
+       * Срез с шагом — как range(start, stop, step) по индексам ленты: взятые ячейки подсвечены, прыжки — дугами, stop — граница «не включая».
+       * Индексы уже неотрицательные; при отрицательном шаге stop может быть −1 («до начала ленты»).
+       */
+      slice?: { start: number; stop: number; step?: number };
+      /** Указатели под ячейками: i, l, m, r, min. */
+      pointers?: { at: number; label: string; tone?: SceneTone }[];
+      /** Дуги обмена над ячейками (пары индексов). */
+      swaps?: [number, number][];
+      highlight?: number[];
+      /** Приглушённые ячейки (отброшенная половина в двоичном поиске, отсортированный хвост). */
+      dim?: number[];
+      /** Скобки над ячейками с подписью (байты одного символа UTF-8: «Қ» над двумя ячейками). */
+      groups?: { from: number; to: number; label: Text }[];
+      /** Кадр «после» — вторая лента под первой со стрелкой (insert, pop, сдвиг). */
+      after?: string[];
+      /** Моноширинный шрифт (байты, двоичные коды). */
+      mono?: boolean;
+      caption?: Text;
+    }
+  /**
+   * Диаграмма: столбчатая, линейная или круговая. Значения ≥ 0; у круговой — одна серия. funnel — воронка (bar с подписями «% от предыдущего»).
+   */
+  | {
+      kind: "chart";
+      type: "bar" | "line" | "pie";
+      /** Категории: ось X у bar и line, секторы у pie. */
+      labels: Text[];
+      series: { name?: Text; values: number[]; tone?: SceneTone }[];
+      /** Подписи значений над столбцами, у точек, в секторах. */
+      values?: boolean;
+      /** Единица в подписях значений: «%», «₸», «млн». */
+      unit?: string;
+      /** Горизонтальная пороговая линия (bar, line): цель, точка безубыточности. */
+      threshold?: { value: number; label?: Text };
+      /** Подсвеченные категории (индексы labels). */
+      highlight?: number[];
+      funnel?: boolean;
+      /** Подписи осей (bar, line). */
+      axes?: { x?: Text; y?: Text };
+      caption?: Text;
+    }
+  /**
+   * Граф: дороги между городами, дерево вызовов рекурсии, DNS, топология сети, цепочка блоков.
+   * layout "free" — координаты x, y вершин 0..100 (обязательны); "tree" — дерево от root; "circle" — по кругу; "chain" — в линию слева направо.
+   */
+  | {
+      kind: "graph";
+      /** label — до 2 строк через \n; без label подписью служит id. */
+      nodes: { id: string; label?: Text; x?: number; y?: number; tone?: SceneTone }[];
+      edges: { from: string; to: string; weight?: string; tone?: SceneTone }[];
+      layout?: "free" | "tree" | "circle" | "chain";
+      root?: string;
+      /** Рёбра — стрелки from → to. */
+      directed?: boolean;
+      /** Подсвеченный путь — id вершин по порядку (рёбра между соседними подсвечиваются). */
+      path?: string[];
+      highlight?: string[];
+      /** Подписать степень каждой вершины. */
+      degrees?: boolean;
+      caption?: Text;
+    }
+  /**
+   * Сетка (матрица a[i][j], зал, лесенка звёздочек, HTML-таблица с объединениями): оси индексов, подсветка строк, столбцов,
+   * диагоналей и областей, порядок обхода, объединённые ячейки.
+   */
+  | {
+      kind: "grid";
+      rows: number;
+      cols: number;
+      /** Содержимое клеток [строка][столбец] (пустая строка — пустая клетка). */
+      values?: string[][];
+      /** Подписи осей с номерами: row — у строк («i»), col — у столбцов («j»); from — нумерация с 0 (Python) или с 1. */
+      axes?: { row?: string; col?: string; from?: 0 | 1 };
+      /** Подсветка слоями (следующий — поверх): клетки, строки, столбцы, область (диагональ, побочная, над и под диагональю). */
+      marks?: { tone: SceneTone; cells?: [number, number][]; rows?: number[]; cols?: number[]; region?: "diag" | "anti" | "upper" | "lower" }[];
+      /** Порядок обхода: стрелка по клеткам; numbered — номера 1, 2, 3… в клетках. */
+      path?: [number, number][];
+      numbered?: boolean;
+      /** Объединённые ячейки (colspan / rowspan): левая верхняя клетка и размеры; hatch — штриховка «съеденных» мест. */
+      merges?: { r: number; c: number; rs?: number; cs?: number }[];
+      hatch?: boolean;
+      caption?: Text;
+    }
+  /**
+   * Схема БД: таблицы-блоки со списком полей и типами, значки PK / FK, стрелки FK → PK с подписями 1 и N у концов.
+   * Связь N:M — через таблицу-связку с двумя FK.
+   */
+  | {
+      kind: "db-schema";
+      tables: { name: string; fields: { name: string; type?: string; pk?: boolean; fk?: string }[] }[];
+      /** Подписи концов связи для поля с fk («Таблица.поле»): по умолчанию "1:N" (один у PK, много у FK). */
+      cards?: { field: string; card: "1:1" | "1:N" }[];
+      /** Подсвеченные таблицы («Ученики») и поля («Оценки.StudentID»). */
+      highlight?: string[];
+      caption?: Text;
+    }
+  /**
+   * Блочная модель CSS: margin (пунктир) → border → padding → content, числа px на каждой стороне, линейка итоговой ширины снизу.
+   * Стороны — одно число или [верх, право, низ, лево], как в CSS.
+   */
+  | {
+      kind: "box";
+      width: number;
+      height?: number;
+      padding?: BoxSides;
+      border?: BoxSides;
+      margin?: BoxSides;
+      /** box-sizing: border-box — width включает padding и border (линейка это показывает). */
+      borderBox?: boolean;
+      highlight?: "content" | "padding" | "border" | "margin";
+      /** Линейка снизу: «margin + border + padding + width + … = N px». */
+      total?: boolean;
+      /** Второй блок ниже с margin-top: между блоками виден больший из двух отступов, а не сумма (схлопывание). */
+      collapse?: { top: number };
+      caption?: Text;
+    }
+  /**
+   * Звук: аналоговая волна, отсчёты с шагом 1/f, сетка уровней 2ⁱ и ступенчатая «цифровая» кривая.
+   * compare — второй вариант качества рядом (меньше отсчётов или уровней).
+   */
+  | {
+      kind: "wave";
+      /** Отсчётов на показанном отрезке (0 — без отсчётов, только волна). */
+      samples: number;
+      /** Глубина: сетка из 2^bits уровней (1–4 бита — видимая сетка; больше — без сетки). */
+      bits?: number;
+      /** Ступенчатая кривая по отсчётам. */
+      digital?: boolean;
+      label?: Text;
+      compare?: { samples: number; bits?: number; label?: Text };
+      caption?: Text;
+    }
+  /**
+   * Адресная строка браузера: URL по частям; highlight — подсвеченные части с подписью роли под ними
+   * (протокол, поддомен, домен, зона, порт, путь, параметры). Склейка частей — сам URL.
+   */
+  | { kind: "url"; parts: { text: string; role: UrlRole }[]; highlight?: UrlRole[]; caption?: Text }
+  /**
+   * Сообщение: SMS, письмо или чат. marks — фрагменты текста (точные подстроки на обоих языках), подсвеченные как признаки
+   * (фишинг, нарушенное свойство информации); подписи признаков — номера 1, 2, 3 со списком под сообщением.
+   */
+  | {
+      kind: "message";
+      channel: "sms" | "email" | "chat";
+      from: Text;
+      subject?: Text;
+      text: Text;
+      marks?: { text: Text; note?: Text }[];
+      caption?: Text;
+    }
+  /** Значки логических вентилей с подписями — галерея для узнавания (тот же рисунок вентиля, что в сцене circuit). */
+  | { kind: "gates"; ops: GateOp[]; highlight?: GateOp[]; caption?: Text }
+  /**
+   * Ключи и лампа: "and" — ключи последовательно, "or" — параллельно, "not" — кнопка-размыкатель, "xor" — коридорная лампа
+   * (два переключателя). values — положения ключей (1 — замкнут / нажат; "not" — один ключ, остальные — 2 или 3); горит ли лампа — считает код.
+   */
+  | { kind: "switches"; mode: "and" | "or" | "not" | "xor"; values?: (0 | 1)[]; names?: string[]; caption?: Text };
+
+/** Часть URL в сцене url. */
+export type UrlRole = "protocol" | "subdomain" | "domain" | "zone" | "port" | "path" | "query" | "fragment";
+
+/** Тон подсветки в сценах волны 3 — по смыслу цветов (CLAUDE.md, «Семантика цветов»). */
+export type SceneTone = "primary" | "success" | "danger" | "warning" | "ai" | "gold" | "muted";
+
+/** Вентиль логической схемы. */
+export type GateOp = "and" | "or" | "not" | "xor" | "nand" | "nor";
+
+/** Стороны блочной модели CSS: одно число или [верх, право, низ, лево]. */
+export type BoxSides = number | [number, number, number, number];
+
+/** Строка числовой оси (сцена numberline). */
+export interface NumberlineRow {
+  /** Подпись строки слева: «x > 3», «A», «range(2, 9, 3)». */
+  label?: Text;
+  tone?: SceneTone;
+  /** Промежутки: from / to — концы (null — луч в бесконечность), fromIn / toIn — конец входит (закрашенная точка). */
+  ranges?: { from: number | null; to: number | null; fromIn?: boolean; toIn?: boolean }[];
+  /** Отдельные точки: open — выколотая; label — подпись над точкой. */
+  points?: { at: number; open?: boolean; label?: Text }[];
+  /** Прыжки шага как range(start, stop, step): дуги от числа к числу, взятые числа закрашены, stop — выколотая граница. */
+  jumps?: { start: number; stop: number; step: number };
+}
 
 /**
  * Область диаграммы Эйлера для сцены venn. Область = «лежит РОВНО в этих кругах и ни в каких других»:
@@ -185,7 +446,11 @@ export type HardwareId =
   // вывод
   | "monitor" | "printer" | "speakers" | "headphones" | "projector"
   // компьютеры вокруг нас
-  | "desktop" | "laptop" | "phone" | "tablet" | "smartwatch" | "atm" | "pos" | "car" | "server" | "router";
+  | "desktop" | "laptop" | "phone" | "tablet" | "smartwatch" | "atm" | "pos" | "car" | "server" | "router"
+  // волна 3 (этап 16Б): сеть, печать, ввод, роботы
+  | "switch" | "hub" | "modem" | "access-point" | "nic" | "cable-utp" | "cable-fiber"
+  | "printer-dot" | "printer-inkjet" | "printer-laser" | "plotter" | "pen-tablet"
+  | "sensor" | "vr-headset" | "robot-vacuum" | "drone" | "manipulator";
 
 /** Детали на схеме «системный блок изнутри». */
 export type PcPart = "motherboard" | "cpu" | "cooler" | "ram" | "ssd" | "hdd" | "gpu" | "psu" | "fans" | "ports";

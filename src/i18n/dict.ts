@@ -57,6 +57,16 @@ import { unitTestDict } from "./parts/unit-test";
 import { xpSignDict } from "./parts/xp-sign";
 import { aiLimitsDict } from "./parts/ai-limits";
 import { resumeDict } from "./parts/resume";
+import { sceneNumberlineDict } from "./parts/scene-numberline";
+import { sceneTapeDict } from "./parts/scene-tape";
+import { sceneChartDict } from "./parts/scene-chart";
+import { sceneGraphDict } from "./parts/scene-graph";
+import { sceneGridDict } from "./parts/scene-grid";
+import { sceneDbDict } from "./parts/scene-db";
+import { sceneWebDict } from "./parts/scene-web";
+import { sceneSignalDict } from "./parts/scene-signal";
+import { sceneLogicDict } from "./parts/scene-logic";
+import { topicTestDict } from "./parts/topic-test";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -547,6 +557,16 @@ export const dict = {
   ...xpSignDict,
   ...aiLimitsDict,
   ...resumeDict,
+  ...sceneNumberlineDict,
+  ...sceneTapeDict,
+  ...sceneChartDict,
+  ...sceneGraphDict,
+  ...sceneGridDict,
+  ...sceneDbDict,
+  ...sceneWebDict,
+  ...sceneSignalDict,
+  ...sceneLogicDict,
+  ...topicTestDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

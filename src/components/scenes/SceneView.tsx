@@ -25,6 +25,18 @@ import { SizesScene } from "./SizesScene";
 import { FilesScene } from "./FilesScene";
 import { LayersScene } from "./LayersScene";
 import { VennScene } from "./VennScene";
+import { NumberlineScene } from "./NumberlineScene";
+import { TapeScene } from "./TapeScene";
+import { ChartScene } from "./ChartScene";
+import { GraphScene } from "./GraphScene";
+import { GridScene } from "./GridScene";
+import { DbSchemaScene } from "./DbSchemaScene";
+import { BoxScene } from "./BoxScene";
+import { WaveScene } from "./WaveScene";
+import { GatesScene } from "./GatesScene";
+import { SwitchesScene } from "./SwitchesScene";
+import { UrlScene } from "./UrlScene";
+import { MessageScene } from "./MessageScene";
 
 function Body({ scene }: { scene: Scene }): ReactNode {
   switch (scene.kind) {
@@ -70,6 +82,30 @@ function Body({ scene }: { scene: Scene }): ReactNode {
       return <LayersScene scene={scene} />;
     case "venn":
       return <VennScene scene={scene} />;
+    case "numberline":
+      return <NumberlineScene scene={scene} />;
+    case "tape":
+      return <TapeScene scene={scene} />;
+    case "chart":
+      return <ChartScene scene={scene} />;
+    case "graph":
+      return <GraphScene scene={scene} />;
+    case "grid":
+      return <GridScene scene={scene} />;
+    case "db-schema":
+      return <DbSchemaScene scene={scene} />;
+    case "box":
+      return <BoxScene scene={scene} />;
+    case "wave":
+      return <WaveScene scene={scene} />;
+    case "gates":
+      return <GatesScene scene={scene} />;
+    case "switches":
+      return <SwitchesScene scene={scene} />;
+    case "url":
+      return <UrlScene scene={scene} />;
+    case "message":
+      return <MessageScene scene={scene} />;
   }
 }
 

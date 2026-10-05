@@ -18,6 +18,9 @@ const FALLBACK_ICON: Record<HardwareId, IconName> = {
   keyboard: "keyboard", mouse: "mouse", touchpad: "mouse", touchscreen: "phone", mic: "mic", webcam: "camera", scanner: "scanner", gamepad: "zap",
   monitor: "monitor", printer: "printer", speakers: "speaker", headphones: "speaker", projector: "monitor",
   desktop: "monitor", laptop: "laptop", phone: "phone", tablet: "phone", smartwatch: "clock", atm: "calculator", pos: "calculator", car: "settings", server: "server", router: "router",
+  switch: "network", hub: "network", modem: "router", "access-point": "wifi", nic: "network", "cable-utp": "link", "cable-fiber": "link",
+  "printer-dot": "printer", "printer-inkjet": "printer", "printer-laser": "printer", plotter: "printer", "pen-tablet": "image",
+  sensor: "zap", "vr-headset": "cube", "robot-vacuum": "bot", drone: "bot", manipulator: "bot",
 };
 
 /**
