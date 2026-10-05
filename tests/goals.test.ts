@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ENT_TOPICS } from "@/content/ent-topics";
-import { EXAM_DATE_MAX_DAYS, TARGET_CHOICES, daysText, daysUntil, examTrend, formatDayMonth, formatExamDate, goalStatus, isExamDateValid, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
+import { EXAM_DATE_MAX_DAYS, TARGET_CHOICES, TARGET_MAX, TARGET_MIN, WEEKLY_MAX, WEEKLY_MIN, daysText, daysUntil, examTrend, formatDayMonth, formatExamDate, goalStatus, hasGoal, isExamDateValid, lessonsForTopic, nextLessonId, pluralRu, weekProgress, weekStart, weeklyPlan } from "@/lib/goals";
 import type { EntTopicId } from "@/lib/types";
 
 describe("daysUntil", () => {
@@ -193,5 +193,19 @@ describe("даты без Intl (kk-KZ есть не везде)", () => {
   });
   it("короткая дата графика", () => {
     expect(formatDayMonth(new Date(2026, 8, 7, 15).getTime())).toBe("07.09");
+  });
+});
+
+describe("границы целей и hasGoal (этап 15, F1)", () => {
+  it("балл 5…50, уроков в неделю 1…14; быстрые варианты онбординга внутри границ", () => {
+    expect([TARGET_MIN, TARGET_MAX, WEEKLY_MIN, WEEKLY_MAX]).toEqual([5, 50, 1, 14]);
+    expect(TARGET_CHOICES.every((n) => n >= TARGET_MIN && n <= TARGET_MAX)).toBe(true);
+  });
+  it("цель есть, если указана дата ЕНТ или выбран балл", () => {
+    expect(hasGoal({ examDate: null, targetScoreSet: false })).toBe(false);
+    expect(hasGoal({ examDate: "", targetScoreSet: false })).toBe(false);
+    expect(hasGoal({ examDate: undefined, targetScoreSet: false })).toBe(false);
+    expect(hasGoal({ examDate: "2027-05-20", targetScoreSet: false })).toBe(true);
+    expect(hasGoal({ examDate: null, targetScoreSet: true })).toBe(true);
   });
 });

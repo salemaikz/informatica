@@ -57,7 +57,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.getByPlaceholder("Твоё имя").fill("Тест");
   await finishOnboarding(page);
   await knowBasics(page);
-  await expect(page.getByText("Привет, Тест!")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Начать" }).first()).toBeVisible();
 
   await page.getByRole("link", { name: "Начать" }).first().click();
   await page.waitForURL("**/lesson/ns-1-bits");

@@ -22,8 +22,18 @@ export function isExamDateValid(day: string | null | undefined, today: string): 
   return n !== null && n >= 0 && n <= EXAM_DATE_MAX_DAYS;
 }
 
-/** Целевые баллы из 50 на экране онбординга (дальше — ползунок в профиле, шаг 5). */
+/** Целевые баллы из 50 на экране онбординга (точнее — в профиле: ползунок и кнопки −/+, шаг 1). */
 export const TARGET_CHOICES = [25, 30, 35, 40, 45] as const;
+/** Границы целевого балла (из 50) и уроков в неделю — одни и те же для профиля, плана и тестов. */
+export const TARGET_MIN = 5;
+export const TARGET_MAX = 50;
+export const WEEKLY_MIN = 1;
+export const WEEKLY_MAX = 14;
+
+/** Цель есть: указана дата ЕНТ или выбран целевой балл (иначе на главной вместо карточки цели — приглашение в карточке плана). */
+export function hasGoal(p: { examDate: string | null | undefined; targetScoreSet: boolean }): boolean {
+  return !!p.examDate || p.targetScoreSet;
+}
 
 /** Склонение русского существительного по числу: 1 день, 2 дня, 5 дней. */
 export function pluralRu(n: number, forms: readonly [string, string, string]): string {

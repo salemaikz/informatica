@@ -327,7 +327,7 @@ export default function OnboardingPage() {
               >
                 <span className="text-lg">{t("onb.unknown")}</span>
               </Choice>
-              <p className="text-center text-sm font-semibold text-muted">{t("onb.target.hint")}</p>
+              <p className="text-balance text-center text-sm font-semibold text-muted">{t("goals15.onb.target.exact")}</p>
             </div>
           </>
         )}

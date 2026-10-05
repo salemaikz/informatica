@@ -4,10 +4,8 @@ import { ClipboardCheck, Timer } from "lucide-react";
 import { GoalSummaryCard } from "@/components/goals/GoalSummaryCard";
 import { StreakReminder } from "@/components/goals/StreakReminder";
 import { useCallback, useState } from "react";
-import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
-import { MascotSays } from "@/components/mascot/Mascot";
 import { QuickActions } from "@/components/learn/QuickActions";
 import { ContinueCard } from "@/components/learn/ContinueCard";
 import { CourseProgressBadge } from "@/components/progress/CourseProgressCard";
@@ -47,8 +45,6 @@ function MiniExamCard() {
 }
 
 export default function LearnPage() {
-  const { t } = useT();
-  const name = useApp((s) => s.profile.name);
   // Одна точка решения (lib/school.ts → entVisible): школьный трек — без целей, плана, пробного ЕНТ и карты ЕНТ (#52).
   const ent = useEntVisible();
   const { lessons, now, recommended, due } = useLearnData();
@@ -65,11 +61,6 @@ export default function LearnPage() {
   return (
     <div className="flex flex-col gap-5">
       <TrackSwitch />
-
-      <MascotSays mood="happy" size={56}>
-        <span className="block text-lg font-extrabold leading-tight">{name ? t("learn.greeting", { name }) : t("learn.hello")}</span>
-        <span className="text-sm text-muted">{firstTime ? t("learn2.sub.first") : recommended ? t("learn2.sub.go") : due.length ? t("learn2.sub.done") : t("learn2.sub.wait")}</span>
-      </MascotSays>
 
       <StreakReminder />
       {/* Цель (дата ЕНТ, балл) — для трека ЕНТ; у школьной программы своя карточка прогресса класса. */}

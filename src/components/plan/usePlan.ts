@@ -5,7 +5,7 @@ import { LESSONS, UNITS } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { checkpointOf, useEntPool } from "@/components/exam/checkpoint";
 import { useMinuteClock } from "@/components/goals/useClock";
-import { buildPlan, parseAnchor, resolveAnchor, type Plan, type PlanUnit, type SavedAnchor } from "@/lib/plan";
+import { buildPlan, parseAnchor, resolveAnchor, todayPlan, type Plan, type PlanUnit, type SavedAnchor, type TodayPlan } from "@/lib/plan";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 
@@ -51,6 +51,8 @@ const PLAN_UNITS: PlanUnit[] = UNITS.map((u) => ({
 export function usePlan(): Plan | null {
   const examDate = useApp((s) => s.profile.examDate);
   const skipBasics = useApp((s) => s.profile.skipBasics);
+  // Темп из профиля: план идёт в нём (с датой ЕНТ — не медленнее нужного, чтобы успеть).
+  const weeklyLessons = useApp((s) => s.profile.weeklyLessons);
   const lessons = useApp((s) => s.lessons);
   const exams = useApp((s) => s.exams);
   const days = useApp((s) => s.days);
@@ -84,8 +86,14 @@ export function usePlan(): Plan | null {
   return useMemo(
     () =>
       today && checkpoints
-        ? buildPlan({ units: PLAN_UNITS, today, start, examDate, skipBasics, lessons, exams, days, checkpoints })
+        ? buildPlan({ units: PLAN_UNITS, today, start, examDate, skipBasics, weeklyLessons, lessons, exams, days, checkpoints })
         : null,
-    [today, start, examDate, skipBasics, lessons, exams, days, checkpoints],
+    [today, start, examDate, skipBasics, weeklyLessons, lessons, exams, days, checkpoints],
   );
+}
+
+/** План на день (сколько уроков недели пройти сегодня и куда вести кнопку); null — плана нет. Часы — раз в минуту, как у плана. */
+export function useToday(plan: Plan | null): TodayPlan | null {
+  const now = useMinuteClock();
+  return useMemo(() => (plan && now ? todayPlan(plan, now) : null), [plan, now]);
 }
