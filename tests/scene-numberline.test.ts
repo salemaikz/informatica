@@ -10,8 +10,11 @@ import {
   jumpValues,
   layoutNumberline,
   numberlineAria,
+  labelRect,
   placePointLabels,
   type NlInput,
+  type NlLayout,
+  type Rect,
 } from "@/components/scenes/numberline";
 import { estimateTextWidth } from "@/components/scenes/text-width";
 import { dict, type DictKey } from "@/i18n/dict";
@@ -76,6 +79,7 @@ describe("промежутки", () => {
     const g = layoutNumberline(input({ rows: [{ ranges: [{ from: 2, to: 6, toIn: true }] }] })).rows[0].ranges[0];
     expect(g.dots.map((d) => d.open)).toEqual([true, false]);
     expect(g.drops).toHaveLength(2);
+    expect(g.drops.every((d) => d.segs.length >= 1)).toBe(true);
   });
   it("луч — со стрелкой до края, без точки на бесконечности", () => {
     const L = layoutNumberline(input({ rows: [{ ranges: [{ from: 3, to: null }] }, { ranges: [{ from: null, to: 3, toIn: true }] }] }));
@@ -178,11 +182,13 @@ describe("прыжки на оси", () => {
     expect(L.rows[0].jumps!.arcs).toHaveLength(20);
     expect(L.rows[0].y).toBeGreaterThan(0);
   });
-  it("пустой ход: только выколотый stop", () => {
-    const j = layoutNumberline(input({ rows: [{ jumps: { start: 5, stop: 3, step: 1 } }] })).rows[0].jumps!;
-    expect(j.dots).toHaveLength(1);
-    expect(j.dots[0].open).toBe(true);
+  it("пустой ход: видны и start, и stop (оба выколоты), start подписан", () => {
+    const L = layoutNumberline(input({ rows: [{ jumps: { start: 5, stop: 3, step: 1 } }] }));
+    const j = L.rows[0].jumps!;
+    expect(j.dots).toHaveLength(2);
+    expect(j.dots.every((d) => d.open)).toBe(true);
     expect(j.arcs).toHaveLength(0);
+    expect(L.ticks.find((t) => t.v === 5)?.label).toBe("5");
   });
   it("дуга: высота ограничена, наконечник на конце", () => {
     expect(arcPath(0, 400, 50).height).toBe(20);
@@ -209,7 +215,7 @@ describe("описание для диктора", () => {
       expect(s).toContain("2, 5, 8");
       expect(s).toContain("−2");
     }
-    expect(numberlineAria(inp, tr("ru"))).toContain("плюс бесконечность");
+    expect(numberlineAria(inp, tr("ru"))).toContain("плюс бесконечности");
     expect(numberlineAria(inp, tr("kk"))).toContain("шексіздік");
     expect(numberlineAria(inp, tr("ru"))).toContain("Строка 2");
   });
@@ -250,5 +256,185 @@ describe("образцы и отрисовка", () => {
         if (row.label && L.leftLabels) expect(estimateTextWidth(row.label.text, row.label.font) + 8).toBeLessThan(L.x0 - 12);
       }
     }
+  });
+});
+
+// ---------- Обязательные подписи, пунктиры, радиус ----------
+
+const TICK_FONT = 11;
+const labelled = (L: NlLayout) => new Map(L.ticks.filter((t) => t.label).map((t) => [t.v, t]));
+
+/** Подписи делений на одном уровне не пересекаются. */
+function expectTickLabelsApart(L: NlLayout) {
+  const shown = L.ticks.filter((t) => t.label);
+  for (const a of shown) {
+    for (const b of shown) {
+      if (a.v >= b.v || a.level !== b.level) continue;
+      const gap = b.x - a.x - (estimateTextWidth(a.label!, TICK_FONT) + estimateTextWidth(b.label!, TICK_FONT)) / 2;
+      expect(gap, `${a.label} и ${b.label}`).toBeGreaterThanOrEqual(2.9);
+    }
+  }
+}
+
+describe("обязательные подписи делений не теряются", () => {
+  it("конец промежутка [9; 10) на оси −20..20 подписан", () => {
+    const L = layoutNumberline({ min: -20, max: 20, rows: [{ label: "x", ranges: [{ from: 9, to: 10, fromIn: true }] }] });
+    const m = labelled(L);
+    for (const v of [-20, 9, 10, 20]) expect(m.has(v), String(v)).toBe(true);
+    expectTickLabelsApart(L);
+  });
+  it("соседние концы [3; 4) на оси 0..40 с длинной подписью", () => {
+    const L = layoutNumberline({ min: 0, max: 40, rows: [{ label: "қиылысуы (ортақ)", ranges: [{ from: 3, to: 4 }] }] });
+    const m = labelled(L);
+    for (const v of [0, 3, 4, 40]) expect(m.has(v), String(v)).toBe(true);
+    expectTickLabelsApart(L);
+  });
+  it("range(0, 20) на 40 делениях: подписаны start и stop", () => {
+    const L = layoutNumberline({ min: 0, max: 40, rows: [{ label: "range(0, 20)", jumps: { start: 0, stop: 20, step: 1 } }] });
+    const m = labelled(L);
+    for (const v of [0, 20, 40]) expect(m.has(v), String(v)).toBe(true);
+    expectTickLabelsApart(L);
+  });
+  it("точки на каждом целом −20..20: все подписаны, на нескольких уровнях, высота растёт", () => {
+    const pts = Array.from({ length: 41 }, (_, i) => ({ at: i - 20 }));
+    const L = layoutNumberline({ min: -20, max: 20, rows: [{ points: pts }] });
+    expect(labelled(L).size).toBe(41);
+    expect(Math.max(...L.ticks.map((t) => t.level))).toBeGreaterThanOrEqual(1);
+    expectTickLabelsApart(L);
+    expect(L.h).toBeGreaterThan(layoutNumberline({ min: -20, max: 20, rows: [{ points: [{ at: 0 }] }] }).h);
+  });
+  it("явный список ticks подписан целиком", () => {
+    const L = layoutNumberline({ min: 0, max: 40, ticks: [10, 11, 12, 30], rows: [{ points: [{ at: 1 }] }] });
+    for (const v of [10, 11, 12, 30]) expect(labelled(L).has(v)).toBe(true);
+    expectTickLabelsApart(L);
+  });
+  it('ticks "all": 0, min, max и концы подписаны, подписи не пересекаются', () => {
+    const a = layoutNumberline({ min: 0, max: 15, ticks: "all", rows: [{ label: "range(0, 15)", jumps: { start: 0, stop: 15, step: 1 } }] });
+    expect(labelled(a).has(15)).toBe(true);
+    expect(labelled(a).has(0)).toBe(true);
+    expectTickLabelsApart(a);
+    const b = layoutNumberline({ min: -7, max: 8, ticks: "all", rows: [{ label: "x ≥ −7", ranges: [{ from: -7, to: null, fromIn: true }] }] });
+    for (const v of [-7, 0, 8]) expect(labelled(b).has(v), String(v)).toBe(true);
+    expectTickLabelsApart(b);
+  });
+});
+
+describe("пунктиры не идут по подписям", () => {
+  const rectsOf = (L: NlLayout) => {
+    const rs: Rect[] = [];
+    for (const row of L.rows) {
+      if (row.label) rs.push(labelRect(row.label, estimateTextWidth));
+      for (const p of row.points) if (p.label) rs.push(labelRect(p.label, estimateTextWidth));
+    }
+    return rs;
+  };
+  for (const lang of ["ru", "kk"] as const) {
+    it(`образцы на ${lang}: ни один отрезок пунктира не пересекает прямоугольник подписи`, () => {
+      for (const [i, s] of SAMPLES.entries()) {
+        const pick = (t: unknown) => (typeof t === "string" || t === undefined ? (t as string | undefined) : (t as Record<Lang, string>)[lang]);
+        const L = layoutNumberline({
+          min: s.min,
+          max: s.max,
+          ticks: s.ticks,
+          rows: s.rows.map((r) => ({ ...r, label: pick(r.label), points: r.points?.map((p) => ({ ...p, label: pick(p.label) })) })) as NlInput["rows"],
+        });
+        const rs = rectsOf(L);
+        for (const row of L.rows)
+          for (const g of row.ranges)
+            for (const d of g.drops)
+              for (const [ya, yb] of d.segs)
+                for (const q of rs) {
+                  const hit = d.x >= q.x1 && d.x <= q.x2 && ya < q.y2 && yb > q.y1;
+                  expect(hit, `образец ${i}, x=${d.x}`).toBe(false);
+                }
+      }
+    });
+  }
+  it("образец 5 (kk): пунктиры всё же рисуются (не вырезаны целиком)", () => {
+    const s = SAMPLES[5];
+    const L = layoutNumberline({
+      min: s.min,
+      max: s.max,
+      rows: s.rows.map((r) => ({ ...r, label: typeof r.label === "object" ? r.label.kk : r.label, points: undefined })),
+    });
+    const total = L.rows.flatMap((r) => r.ranges.flatMap((g) => g.drops.flatMap((d) => d.segs))).length;
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
+describe("радиус кружков зависит от деления", () => {
+  const worst: NlInput[] = [
+    { min: 0, max: 40, rows: [{ label: "range(0, 20)", jumps: { start: 0, stop: 20, step: 1 } }] },
+    { min: -20, max: 20, rows: [{ points: Array.from({ length: 41 }, (_, i) => ({ at: i - 20 })) }] },
+    { min: 0, max: 20, ticks: "all", rows: [{ label: "range(0, 20): каждое число", jumps: { start: 0, stop: 20, step: 1 } }] },
+  ];
+  it("соседние кружки не налезают друг на друга", () => {
+    for (const inp of worst) {
+      const L = layoutNumberline(inp);
+      const unit = L.xOf(1) - L.xOf(0);
+      expect(2 * (L.r + L.sw / 2), JSON.stringify(inp.rows[0].jumps ?? "points")).toBeLessThanOrEqual(unit + 0.01);
+    }
+  });
+  it("на крупной шкале радиус не больше 5.5, на густой — меньше", () => {
+    expect(layoutNumberline({ min: 0, max: 4, rows: [{ points: [{ at: 1 }] }] }).r).toBe(5.5);
+    expect(layoutNumberline(worst[0]).r).toBeLessThan(3);
+  });
+  it("дуги короче 10 px без наконечников, длинные — с ними", () => {
+    const dense = layoutNumberline(worst[0]).rows[0].jumps!;
+    expect(dense.arcs.every((a) => a.head === "")).toBe(true);
+    const sparse = layoutNumberline(input({ rows: [{ jumps: { start: 0, stop: 9, step: 3 } }] })).rows[0].jumps!;
+    expect(sparse.arcs.every((a) => a.head !== "")).toBe(true);
+  });
+});
+
+describe("образцы: оба языка, подписи", () => {
+  it("на ru и kk обязательные значения подписаны, подписи делений не пересекаются, внутри экрана", () => {
+    for (const lang of ["ru", "kk"] as const) {
+      for (const s of SAMPLES) {
+        const pick = (t: unknown) => (typeof t === "string" || t === undefined ? (t as string | undefined) : (t as Record<Lang, string>)[lang]);
+        const L = layoutNumberline({
+          min: s.min,
+          max: s.max,
+          ticks: s.ticks,
+          rows: s.rows.map((r) => ({ ...r, label: pick(r.label), points: r.points?.map((p) => ({ ...p, label: pick(p.label) })) })) as NlInput["rows"],
+        });
+        const m = labelled(L);
+        if (Array.isArray(s.ticks)) {
+          // явный список — подписи ровно по выбору автора
+          for (const v of s.ticks) expect(m.has(v)).toBe(true);
+          expectTickLabelsApart(L);
+          continue;
+        }
+        expect(m.has(s.min) && m.has(s.max)).toBe(true);
+        for (const r of s.rows) {
+          for (const g of r.ranges ?? []) {
+            if (g.from !== null) expect(m.has(g.from)).toBe(true);
+            if (g.to !== null) expect(m.has(g.to)).toBe(true);
+          }
+          for (const p of r.points ?? []) expect(m.has(p.at)).toBe(true);
+          if (r.jumps) {
+            expect(m.has(r.jumps.start)).toBe(true);
+            expect(m.has(r.jumps.stop)).toBe(true);
+          }
+        }
+        expectTickLabelsApart(L);
+        for (const t of L.ticks) {
+          if (!t.label) continue;
+          const w = estimateTextWidth(t.label, TICK_FONT);
+          expect(t.x - w / 2).toBeGreaterThanOrEqual(0);
+          expect(t.x + w / 2).toBeLessThanOrEqual(NL_W);
+        }
+      }
+    }
+  });
+  it("validate ограничивает длину подписей", () => {
+    const long = "a".repeat(41);
+    expect(validateScene({ kind: "numberline", min: 0, max: 5, rows: [{ label: long, ranges: [{ from: 1, to: 2 }] }] } as Scene).length).toBeGreaterThan(0);
+    expect(validateScene({ kind: "numberline", min: 0, max: 5, rows: [{ points: [{ at: 1, label: "b".repeat(21) }] }] } as Scene).length).toBeGreaterThan(0);
+  });
+  it("грамматика описания: ru — родительный падеж, kk — без «мен» после слова", () => {
+    const inp: NlInput = { min: 0, max: 10, rows: [{ ranges: [{ from: null, to: 7, toIn: true }] }] };
+    expect(numberlineAria(inp, tr("ru"))).toContain("от минус бесконечности до 7");
+    expect(numberlineAria(inp, tr("kk"))).not.toMatch(/шексіздік мен/);
   });
 });

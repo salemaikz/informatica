@@ -34,13 +34,13 @@ export const SAMPLES: Extract<Scene, { kind: "numberline" }>[] = [
     rows: [
       {
         label: "A",
-        tone: "warning",
+        tone: "primary",
         points: [
           { at: -3, label: { ru: "входит", kk: "кіреді" } },
           { at: 3, open: true, label: { ru: "не входит", kk: "кірмейді" } },
         ],
       },
-      { label: "B", tone: "gold", points: [{ at: 0, label: "x = 0" }], ranges: [{ from: -5, to: -2, fromIn: true, toIn: true }] },
+      { label: "B", tone: "ai", points: [{ at: 0, label: "x = 0" }], ranges: [{ from: -5, to: -2, fromIn: true, toIn: true }] },
     ],
   },
   // максимум: 21 деление, 20 прыжков подряд, подпись длиннее — над строкой
@@ -57,7 +57,7 @@ export const SAMPLES: Extract<Scene, { kind: "numberline" }>[] = [
     min: -20,
     max: 20,
     rows: [
-      { label: { ru: "x < −10 или x > 10", kk: "x < −10 немесе x > 10" }, tone: "danger", ranges: [{ from: null, to: -10 }, { from: 10, to: null }] },
+      { label: { ru: "x < −10 или x > 10", kk: "x < −10 немесе x > 10" }, tone: "ai", ranges: [{ from: null, to: -10 }, { from: 10, to: null }] },
       { label: { ru: "−15 ≤ x ≤ 5", kk: "−15 ≤ x ≤ 5 болғанда" }, tone: "primary", ranges: [{ from: -15, to: 5, fromIn: true, toIn: true }] },
       { label: { ru: "пересечение", kk: "қиылысуы (ортақ бөлігі)" }, tone: "success", ranges: [{ from: -15, to: -10, fromIn: true }] },
     ],

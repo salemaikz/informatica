@@ -15,8 +15,16 @@ export const LABEL_FONT = 13;
 export const POINT_FONT = 12;
 /** Подпись строки слева, если её ширина не больше этого. */
 export const LEFT_LABEL_MAX = 84;
-const DOT_R = 5.5;
+/** Радиус кружка зависит от длины деления (чтобы соседние не сливались). */
+export function dotRadius(unit: number): number {
+  return Math.min(5.5, Math.max(2.1, unit * 0.33));
+}
+export function dotStroke(r: number): number {
+  return Math.min(2.5, Math.max(1.2, r * 0.4));
+}
 const LEVEL_H = 15;
+/** Шаг второго (третьего…) уровня подписей делений под осью. */
+export const TICK_LEVEL_H = 13;
 
 export type NlRange = { from: number | null; to: number | null; fromIn?: boolean; toIn?: boolean };
 
@@ -66,58 +74,91 @@ export interface NlTick {
   x: number;
   /** Подпись; undefined — только чёрточка. */
   label?: string;
+  /** Уровень подписи под осью: 0 — основной, 1 и ниже — если соседняя мешает. */
+  level: number;
 }
 
-/** Какие значения подписываем (до прореживания). */
-function tickCandidates(input: NlInput): number[] {
-  const { min, max, ticks } = input;
-  if (ticks === "all") return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+function inRange(input: NlInput, v: number): boolean {
+  return v >= input.min && v <= input.max;
+}
+
+/** Числа, без подписи которых сцену не прочитать: концы шкалы, концы промежутков, точки, start и stop прыжков. */
+function requiredValues(input: NlInput): number[] {
+  const set = new Set<number>([input.min, input.max]);
+  for (const r of input.rows) {
+    for (const g of r.ranges ?? []) {
+      if (g.from !== null) set.add(g.from);
+      if (g.to !== null) set.add(g.to);
+    }
+    for (const p of r.points ?? []) set.add(p.at);
+    if (r.jumps) {
+      set.add(r.jumps.start);
+      set.add(r.jumps.stop);
+    }
+  }
+  return [...set].filter((v) => inRange(input, v)).sort((a, b) => a - b);
+}
+
+/** Необязательные подписи (числа прыжков). */
+function jumpNumbers(input: NlInput): number[] {
   const set = new Set<number>();
-  if (ticks) ticks.forEach((v) => set.add(v));
-  else {
-    set.add(min);
-    set.add(max);
-    for (const r of input.rows) {
-      for (const g of r.ranges ?? []) {
-        if (g.from !== null) set.add(g.from);
-        if (g.to !== null) set.add(g.to);
-      }
-      for (const p of r.points ?? []) set.add(p.at);
-      if (r.jumps) {
-        jumpValues(r.jumps.start, r.jumps.stop, r.jumps.step).forEach((v) => set.add(v));
-        set.add(r.jumps.stop);
-      }
-    }
-  }
-  return [...set].filter((v) => v >= min && v <= max).sort((a, b) => a - b);
+  for (const r of input.rows) if (r.jumps) jumpValues(r.jumps.start, r.jumps.stop, r.jumps.step).forEach((v) => set.add(v));
+  return [...set].filter((v) => inRange(input, v)).sort((a, b) => a - b);
 }
 
-/** Жадный отбор подписей без наложения: сначала концы шкалы, затем по порядку. */
-function pickLabels(values: number[], xOf: (v: number) => number, min: number, max: number, est: Est): Set<number> {
-  const taken: { a: number; b: number }[] = [];
-  const out = new Set<number>();
-  const order = [...values.filter((v) => v === min || v === max), ...values.filter((v) => v !== min && v !== max)];
-  for (const v of order) {
+const TICK_GAP = 3;
+
+/**
+ * Подписи делений. Обязательные не теряются: если задевают соседнюю, опускаются на следующий уровень под осью.
+ * Необязательные ставятся только на нулевой уровень и только если там есть место.
+ * Возвращает уровень каждой подписанной цифры и число необязательных, которым места не хватило.
+ */
+function placeTickLabels(
+  required: number[],
+  optional: number[],
+  xOf: (v: number) => number,
+  min: number,
+  max: number,
+  est: Est,
+): { levels: Map<number, number>; skipped: number } {
+  const levels = new Map<number, number>();
+  const taken: { a: number; b: number; level: number }[] = [];
+  const span = (v: number) => {
     const w = est(fmtNum(v), TICK_FONT);
-    const a = xOf(v) - w / 2;
-    const b = xOf(v) + w / 2;
-    if (taken.every((t) => b + 4 <= t.a || a - 4 >= t.b)) {
-      taken.push({ a, b });
-      out.add(v);
-    }
+    return { a: xOf(v) - w / 2, b: xOf(v) + w / 2 };
+  };
+  const free = (a: number, b: number, level: number) => taken.every((t) => t.level !== level || b + TICK_GAP <= t.a || a - TICK_GAP >= t.b);
+  const first = [...required.filter((v) => v === min || v === max), ...required.filter((v) => v !== min && v !== max)];
+  for (const v of first) {
+    if (levels.has(v)) continue;
+    const { a, b } = span(v);
+    let level = 0;
+    while (!free(a, b, level)) level++;
+    taken.push({ a, b, level });
+    levels.set(v, level);
   }
-  return out;
+  let skipped = 0;
+  for (const v of optional) {
+    if (levels.has(v)) continue;
+    const { a, b } = span(v);
+    if (free(a, b, 0)) {
+      taken.push({ a, b, level: 0 });
+      levels.set(v, 0);
+    } else skipped++;
+  }
+  return { levels, skipped };
 }
 
-/** Подписи для "all": самый частый шаг k (каждое k-е число от min), при котором всё влезает. */
-function pickAllLabels(min: number, max: number, xOf: (v: number) => number, est: Est): Set<number> {
+/** Для "all": самый частый шаг k (числа, кратные k), при котором кратные не мешают друг другу. Считаем от нуля. */
+function pickAllStep(min: number, max: number, xOf: (v: number) => number, est: Est, required: Set<number>): number[] {
   for (let k = 1; k <= max - min; k++) {
     const vals: number[] = [];
-    for (let v = min; v <= max; v += k) vals.push(v);
-    const ok = pickLabels(vals, xOf, min, max, est);
-    if (ok.size === vals.length) return ok;
+    for (let v = min; v <= max; v++) if (((v % k) + k) % k === 0 && !required.has(v)) vals.push(v);
+    // кратные между собой — на одном уровне, без наложений
+    const { skipped } = placeTickLabels([], vals, xOf, min, max, est);
+    if (skipped === 0) return vals;
   }
-  return new Set([min, max]);
+  return [];
 }
 
 // ---------- Раскладка ----------
@@ -137,7 +178,7 @@ export interface NlDot {
 
 export interface NlArc {
   d: string;
-  /** Наконечник — треугольник «x,y x,y x,y». */
+  /** Наконечник — треугольник «x,y x,y x,y»; пусто, если дуга короче 10 px (на густой шкале наконечники слиплись бы). */
   head: string;
   dashed: boolean;
 }
@@ -153,8 +194,8 @@ export interface NlRowLayout {
     x2: number;
     heads: string[];
     dots: NlDot[];
-    /** Пунктиры от концов к оси: x. */
-    drops: number[];
+    /** Пунктиры от концов к оси: x и отрезки по y (с разрывами там, где проходят подписи). */
+    drops: { x: number; segs: [number, number][] }[];
   }[];
   points: { x: number; open: boolean; label?: NlLabel }[];
   jumps?: { dots: NlDot[]; arcs: NlArc[]; values: number[] };
@@ -168,6 +209,9 @@ export interface NlLayout {
   axisY: number;
   /** Подпись строки слева (true) или над строкой. */
   leftLabels: boolean;
+  /** Радиус кружков и толщина их обводки: зависят от длины деления. */
+  r: number;
+  sw: number;
   xOf: (v: number) => number;
   /** Все целые деления (чёрточки), подписанные — с label. */
   ticks: NlTick[];
@@ -198,7 +242,7 @@ export function arcPath(x1: number, x2: number, y: number): { d: string; head: s
   const r = (n: number) => Math.round(n * 100) / 100;
   return {
     d: `M ${r(x1)} ${r(y)} Q ${r(cx)} ${r(cy)} ${r(x2)} ${r(y)}`,
-    head: `${r(x2)},${r(y)} ${r(bx + px)},${r(by + py)} ${r(bx - px)},${r(by - py)}`,
+    head: span < 10 ? "" : `${r(x2)},${r(y)} ${r(bx + px)},${r(by + py)} ${r(bx - px)},${r(by - py)}`,
     height,
   };
 }
@@ -227,6 +271,38 @@ export function placePointLabels(
   return out;
 }
 
+/** Прямоугольник подписи (для разрывов пунктиров и тестов). */
+export interface Rect {
+  x1: number;
+  x2: number;
+  y1: number;
+  y2: number;
+}
+
+export function labelRect(l: NlLabel, est: Est): Rect {
+  const w = est(l.text, l.font) + 2;
+  const x1 = l.anchor === "middle" ? l.x - w / 2 : l.anchor === "end" ? l.x - w : l.x;
+  return { x1: x1 - 2, x2: x1 + w + 2, y1: l.y - l.font - 1, y2: l.y + 3 };
+}
+
+/** Отрезок x = const от yFrom до yTo без кусков, лежащих внутри прямоугольников подписей. */
+export function cutSegments(yFrom: number, yTo: number, x: number, rects: Rect[]): [number, number][] {
+  let segs: [number, number][] = [[yFrom, yTo]];
+  for (const q of rects) {
+    if (x < q.x1 || x > q.x2) continue;
+    const next: [number, number][] = [];
+    for (const [a, b] of segs) {
+      if (q.y2 <= a || q.y1 >= b) next.push([a, b]);
+      else {
+        if (q.y1 > a) next.push([a, q.y1]);
+        if (q.y2 < b) next.push([q.y2, b]);
+      }
+    }
+    segs = next;
+  }
+  return segs.filter(([a, b]) => b - a > 1);
+}
+
 export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): NlLayout {
   const { min, max } = input;
   const labels = input.rows.map((r) => r.label ?? "");
@@ -235,20 +311,36 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
   const leftLabels = hasLabels && maxLabelW <= LEFT_LABEL_MAX;
   const x0 = leftLabels ? PAD + Math.ceil(maxLabelW) + 8 + ARROW : PAD + ARROW + 6;
   const x1 = NL_W - PAD - ARROW - 6;
-  const xOf = (v: number) => x0 + ((v - min) * (x1 - x0)) / (max - min);
+  const unit = (x1 - x0) / (max - min);
+  const xOf = (v: number) => x0 + (v - min) * unit;
+  const R = dotRadius(unit);
+  const sw = dotStroke(R);
 
-  // деления
-  const cand = tickCandidates(input);
-  const shown = input.ticks === "all" ? pickAllLabels(min, max, xOf, est) : pickLabels(cand, xOf, min, max, est);
-  const tickVals = new Set<number>(cand);
+  // деления: обязательные подписи не теряются (при тесноте уходят на второй уровень), остальные — если есть место
+  let required: number[];
+  let optional: number[] = [];
+  if (Array.isArray(input.ticks)) required = input.ticks.filter((v) => inRange(input, v)).sort((a, b) => a - b);
+  else {
+    required = requiredValues(input);
+    if (input.ticks === "all") {
+      const req = new Set(required);
+      if (min <= 0 && max >= 0) req.add(0);
+      required = [...req].sort((a, b) => a - b);
+      optional = pickAllStep(min, max, xOf, est, req);
+    } else optional = jumpNumbers(input);
+  }
+  const { levels } = placeTickLabels(required, optional, xOf, min, max, est);
+  const tickVals = new Set<number>([...required, ...optional]);
   if (max - min <= 40) for (let v = min; v <= max; v++) tickVals.add(v);
   const ticks: NlTick[] = [...tickVals]
     .sort((a, b) => a - b)
-    .map((v) => ({ v, x: xOf(v), label: shown.has(v) ? fmtNum(v) : undefined }));
+    .map((v) => ({ v, x: xOf(v), label: levels.has(v) ? fmtNum(v) : undefined, level: levels.get(v) ?? 0 }));
+  const tickLevels = Math.max(-1, ...ticks.filter((t) => t.label).map((t) => t.level));
 
   // строки
   let cursor = 6;
   const rows: NlRowLayout[] = [];
+  const allRects: Rect[] = [];
   for (const r of input.rows) {
     const tone = r.tone ?? "primary";
     const aboveLabel = !leftLabels && r.label ? 18 : 0;
@@ -261,10 +353,10 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
     const jv = r.jumps ? jumpValues(r.jumps.start, r.jumps.stop, r.jumps.step) : [];
     let arcSpace = 0;
     if (r.jumps) {
-      const step = Math.abs(r.jumps.step) * ((x1 - x0) / (max - min));
+      const step = Math.abs(r.jumps.step) * unit;
       arcSpace = arcPath(0, step, 0).height + 8;
     }
-    const y = cursor + aboveLabel + levels * LEVEL_H + arcSpace + DOT_R + 4;
+    const y = cursor + aboveLabel + levels * LEVEL_H + arcSpace + R + 4;
     const row: NlRowLayout = { y, tone, base: [x0 - ARROW, x1 + ARROW], ranges: [], points: [] };
 
     if (r.label) {
@@ -274,6 +366,7 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
         const font = wFull > NL_W - 2 * PAD ? Math.max(10, Math.floor((LABEL_FONT * (NL_W - 2 * PAD)) / wFull)) : LABEL_FONT;
         row.label = { text: r.label, x: PAD, y: cursor + 13, anchor: "start", font };
       }
+      allRects.push(labelRect(row.label, est));
     }
 
     for (const g of r.ranges ?? []) {
@@ -298,7 +391,7 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
         dots.push({ x: xOf(g.to), open: !g.toIn });
         drops.push(xOf(g.to));
       }
-      row.ranges.push({ x1: a, x2: b, heads, dots, drops });
+      row.ranges.push({ x1: a, x2: b, heads, dots, drops: drops.map((x) => ({ x, segs: [[y + R + 1, 0]] })) });
     }
 
     let li = 0;
@@ -307,7 +400,8 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
       let label: NlLabel | undefined;
       if (p.label) {
         const pl = placed[li++];
-        label = { text: p.label, x: pl.x, y: y - DOT_R - 5 - pl.level * LEVEL_H - (r.jumps ? arcSpace : 0), anchor: "middle", font: POINT_FONT };
+        label = { text: p.label, x: pl.x, y: y - R - 5 - pl.level * LEVEL_H - (r.jumps ? arcSpace : 0), anchor: "middle", font: POINT_FONT };
+        allRects.push(labelRect(label, est));
       }
       row.points.push({ x, open: !!p.open, label });
     }
@@ -315,8 +409,10 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
     if (r.jumps) {
       const { stop, step } = r.jumps;
       const dots: NlDot[] = jv.map((v) => ({ x: xOf(v), open: false }));
+      // пустой ход (range(5, 2)): start всё равно виден — выколотым кружком
+      if (!jv.length) dots.push({ x: xOf(r.jumps.start), open: true });
       const arcs: NlArc[] = [];
-      const yb = y - DOT_R - 2;
+      const yb = y - R - 2;
       for (let i = 0; i + 1 < jv.length; i++) {
         const a = arcPath(xOf(jv[i]), xOf(jv[i + 1]), yb);
         arcs.push({ d: a.d, head: a.head, dashed: false });
@@ -333,13 +429,18 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
     }
 
     rows.push(row);
-    cursor = y + DOT_R + 8;
+    cursor = y + R + 8;
   }
 
   const axisY = cursor + 10;
-  const hasLabelTicks = ticks.some((t) => t.label);
-  const h = axisY + (hasLabelTicks ? 24 : 12);
-  return { w: NL_W, h, x0, x1, axisY, leftLabels, xOf, ticks, rows };
+  const h = axisY + (tickLevels >= 0 ? 24 + tickLevels * TICK_LEVEL_H : 12);
+  // пунктиры рвём там, где поперёк идут подписи строк и точек
+  for (const row of rows) {
+    for (const g of row.ranges) {
+      for (const d of g.drops) d.segs = cutSegments(d.segs[0][0], axisY, d.x, allRects);
+    }
+  }
+  return { w: NL_W, h, x0, x1, axisY, leftLabels, r: R, sw, xOf, ticks, rows };
 }
 
 // ---------- Описание для экранного диктора ----------
