@@ -555,9 +555,10 @@ export const lesson: Lesson = {
       scene: tree("before", "rep"),
       lines: [
         [l("Файл report.docx лежит в папке Docs. Его перемещают в папку Music.", "report.docx файлы Docs қалтасында жатыр. Оны Music қалтасына жылжытады.")],
-        [l("Новый путь: ", "Жаңа жол: "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text" }, "\\", { blank: ["report.docx"], mode: "text" }],
+        [l("Новый путь: ", "Жаңа жол: "), "C:\\Users\\Ali\\", { blank: ["Music"], mode: "text", label: { ru: "Music", kk: "Music" } }, "\\", { blank: ["report.docx"], mode: "text", label: { ru: "report.docx", kk: "report.docx" } }],
         [l("Сколько файлов report.docx на диске после перемещения: ", "Жылжытудан кейін дискідегі report.docx файлдарының саны: "), { blank: ["1"], mode: "number" }],
       ],
+      bank: [{ ru: "Docs", kk: "Docs" }, { ru: "Documents", kk: "Documents" }, { ru: "report.doc", kk: "report.doc" }],
       explanation: l(
         "Перемещение меняет только папку: после Ali вместо Docs идёт Music, а имя файла остаётся: C:\\Users\\Ali\\Music\\report.docx. При перемещении файл не остаётся в старом месте, поэтому файл один.",
         "Жылжыту тек қалтаны өзгертеді: Ali қалтасынан кейін Docs орнына Music тұрады, ал файл аты қалады: C:\\Users\\Ali\\Music\\report.docx. Жылжытқанда файл ескі орнында қалмайды, сондықтан файл біреу.",
