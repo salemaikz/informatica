@@ -7,11 +7,13 @@ import { CONTEXT_COUNT, CONTEXT_TOPICS, ENT_POINTS, ENT_TOPICS, ORDINARY_COUNT, 
 import { LESSONS, UNITS, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { masteryLevel } from "@/lib/mastery";
+import { ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
 import { tileSpan } from "./ent-grid";
@@ -184,6 +186,7 @@ function TopicSheet({
               <div className="flex flex-col gap-2 pt-1">
                 <ButtonLink href={`/exam/run?kind=topic&topics=${topic.id}`} block icon={<ClipboardCheck size={18} />}>
                   {t("learn2.topic.test")}
+                  <HeartCost n={ENTRY_COST.exam} variant="solid" />
                 </ButtonLink>
                 {firstSkill && (
                   <ButtonLink href={`/drill?mode=topic&topic=${topic.id}`} variant="secondary" block icon={<Dumbbell size={18} />}>

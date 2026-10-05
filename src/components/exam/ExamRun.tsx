@@ -23,6 +23,7 @@ import {
   type ExamAttempt,
 } from "@/lib/exam-store";
 import { examWrongItems } from "@/lib/ent-steps";
+import { canAfford, ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import type { EntTopicId } from "@/lib/types";
 import { ignoreKey } from "@/lib/keys";
@@ -30,6 +31,9 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import { ToolboxButton } from "@/components/tools/Toolbox";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { readHearts } from "@/components/economy/HeartsBar";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { checkpointById, examTitle } from "./checkpoint";
 import { ExamNotes } from "./ExamNotes";
@@ -68,6 +72,9 @@ const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics
   (seed === null || a.seed === seed) &&
   (kind !== "topic" || (a.topics ?? []).join() === topics.join()) &&
   (kind !== "unit" || a.unit === unit);
+
+/** Цена входа (#40): контрольная раздела — 2 сердечка, пробный ЕНТ любого вида — 1. Продолжение начатой попытки бесплатно. */
+const examCost = (kind: ExamKind): number => (kind === "unit" ? ENTRY_COST.checkpoint : ENTRY_COST.exam);
 
 function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string): Fresh {
   const s = seed ?? randomSeed();
@@ -122,7 +129,12 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
           paper={phase.paper}
           topics={phase.topics}
           unit={phase.unit}
+          cost={examCost(phase.paper.kind)}
           onStart={async () => {
+            // Порядок важен: сначала проверка сердечек, потом запись попытки, и только потом списание —
+            // сбой хранилища не должен съесть сердечко, а при нехватке старая попытка остаётся нетронутой.
+            const cost = examCost(phase.paper.kind);
+            if (!canAfford(readHearts(), cost)) return "short";
             if (phase.replaces) await deleteAttempt(phase.replaces.id);
             const now = Date.now();
             const attempt: ExamAttempt = {
@@ -139,7 +151,14 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
             };
             await createAttempt(attempt);
             await setActiveAttempt(attempt.id);
+            // Сердечки успели уйти (другая вкладка) — откатываем попытку, ничего не списано.
+            if (!useApp.getState().payEntry(cost).ok) {
+              await setActiveAttempt(null);
+              await deleteAttempt(attempt.id);
+              return "short";
+            }
             setPhase({ name: "run", attempt });
+            return "started";
           }}
         />
       )}
@@ -177,9 +196,26 @@ function ResumeChoice({ active, onContinue, onFresh }: { active: ExamAttempt; on
   );
 }
 
-function Intro({ paper, topics, unit, onStart }: { paper: ExamPaper; topics: EntTopicId[]; unit?: string; onStart: () => Promise<void> }) {
+function Intro({
+  paper,
+  topics,
+  unit,
+  cost,
+  onStart,
+}: {
+  paper: ExamPaper;
+  topics: EntTopicId[];
+  unit?: string;
+  /** Цена входа в сердечках (#40). */
+  cost: number;
+  /** "short" — сердечек не хватило, попытка не создана и ничего не списано. */
+  onStart: () => Promise<"started" | "short">;
+}) {
   const { t, l } = useT();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // Не хватило сердечек: шторка «Сердечки закончились»; после покупки ученик нажимает «Начать» снова.
+  const [noHearts, setNoHearts] = useState(false);
   const empty = paper.items.length === 0;
   return (
     <div className="flex flex-col gap-4 pt-6">
@@ -203,6 +239,7 @@ function Intro({ paper, topics, unit, onStart }: { paper: ExamPaper; topics: Ent
           <li>{t("exam.rule.tools")}</li>
           <li>{t("exam.rule.noAi")}</li>
           <li>{t("exam.rule.save")}</li>
+          <li>{t("exam.rule.keep")}</li>
         </ul>
       )}
       {paper.kind === "topic" && topics.length > 0 && <p className="text-sm font-bold text-muted">{t("exam.run.topics", { list: topics.map((x) => l(entTopicById(x).short)).join(", ") })}</p>}
@@ -215,15 +252,24 @@ function Intro({ paper, topics, unit, onStart }: { paper: ExamPaper; topics: Ent
           icon={<Play size={20} aria-hidden />}
           onClick={() => {
             setBusy(true);
-            onStart().catch(() => setBusy(false));
+            onStart()
+              .then((res) => {
+                if (res === "short") {
+                  setBusy(false);
+                  setNoHearts(true);
+                }
+              })
+              .catch(() => setBusy(false));
           }}
         >
           {t("exam.run.begin")}
+          <HeartCost n={cost} variant={busy ? "soft" : "solid"} />
         </Button>
       )}
       <ButtonLink href="/exam" variant="ghost">
         {empty ? t("exam.run.toHub") : t("common.cancel")}
       </ButtonLink>
+      <OutOfHearts open={noHearts} need={cost} onClose={() => setNoHearts(false)} onResume={() => setNoHearts(false)} onExit={() => router.push("/exam")} />
     </div>
   );
 }

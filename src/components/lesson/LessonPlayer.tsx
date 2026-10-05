@@ -75,6 +75,8 @@ export interface PlayerProps {
   onSessionFinish?: (result: SessionResult) => void;
   /** Блок на экране итогов (например, «Раздел засчитан»). */
   resultsExtra?: ReactNode;
+  /** Цена входа в сердечках (#40): списывается при первом ответе. Нет или 0 — бесплатно (тренировка). */
+  entryCost?: number;
 }
 
 const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];

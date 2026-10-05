@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Этап 3: новые экраны открываются без ошибок, любой урок доступен, мини-ЕНТ проходится до результата.
+// Вход в пробный ЕНТ стоит сердечко (#40): по умолчанию полный запас (5), отдельный тест — с нулём.
 
-async function seed(page: Page, lang: "ru" | "kk" = "ru") {
+async function seed(page: Page, lang: "ru" | "kk" = "ru", extra: Record<string, unknown> = {}) {
   await page.goto("/onboarding");
   await page.evaluate(
-    (lg) =>
+    ({ lg, more }) =>
       localStorage.setItem(
         "informatica-v1",
         JSON.stringify({
@@ -15,13 +16,18 @@ async function seed(page: Page, lang: "ru" | "kk" = "ru") {
             lessons: { "ns-1-binary": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 100 } },
             // Окно тарифов уже показано — не всплывает в автотестах.
             paywall: { lastShownAt: 4102444800000, views: 1 },
+            hearts: { count: 5, updatedAt: 0, day: "" },
+            ...more,
           },
           version: 1,
         }),
       ),
-    lang,
+    { lg: lang, more: extra },
   );
 }
+
+/** Сердечки в сохранении (стор пишет в localStorage сразу). */
+const savedHearts = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1") ?? "{}").state?.hearts?.count);
 
 function trackErrors(page: Page) {
   const errors: string[] = [];
@@ -93,12 +99,37 @@ test("мини-ЕНТ: старт, ответ, завершение, резул�
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/exam/run?kind=mini&seed=42");
-  await page.getByRole("button", { name: "Начать" }).click();
+  // На экране условий: цена входа на кнопке и правило про сохранение попытки; открытие экрана ничего не списывает.
+  const begin = page.getByRole("button", { name: "Начать" });
+  await expect(begin.getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
+  await expect(page.getByText("продолжить её можно без новых сердечек")).toBeVisible();
+  expect(await savedHearts(page)).toBe(5);
+  await begin.click();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
+  // Вход оплачен один раз: −1 сердечко.
+  await expect.poll(() => savedHearts(page)).toBe(4);
   await page.getByRole("button", { name: "Завершить" }).first().click();
   await page.getByRole("button", { name: "Завершить и показать результат" }).click();
   await page.waitForURL("**/exam/result/**");
   await expect(page.getByText("из 19").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "По темам" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("мини-ЕНТ: при 0 сердечек «Начать» открывает «Сердечки закончились», попытка не создаётся", async ({ page }) => {
+  const errors = trackErrors(page);
+  // Сердечки только что потрачены: за тест (раз в 6 часов по сердечку) не восстановятся.
+  await seed(page, "ru", { hearts: { count: 0, updatedAt: Date.now(), day: "" } });
+  await page.goto("/exam/run?kind=mini&seed=42");
+  await page.getByRole("button", { name: "Начать" }).click();
+  const sheet = page.getByRole("dialog", { name: "Сердечки закончились" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: "Сердечки закончились" })).toBeVisible();
+  // Заданий нет, условия на месте, ничего не списано, кнопку можно нажать снова.
+  await expect(page.getByText("Задание 1")).toHaveCount(0);
+  expect(await savedHearts(page)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Начать" })).toBeEnabled();
   expect(errors).toEqual([]);
 });

@@ -7,6 +7,7 @@ import { useApp } from "@/lib/store";
 import { getLesson } from "@/content/course";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
+import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import {
   buildExternSession,
@@ -25,6 +26,7 @@ import {
   type DrillMode,
 } from "@/lib/drill";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
+import { EntryGate } from "@/components/economy/EntryGate";
 import { ButtonLink } from "@/components/ui/Button";
 
 interface Built {
@@ -173,7 +175,9 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
     );
   }
 
-  return (
+  // Экстерн стоит 2 сердечка (#40): плеер спишет при первом ответе, на входе проверяем, что хватает. Остальные режимы — бесплатно.
+  const paid = mode === "extern";
+  const player = (
     <LessonPlayer
       kind="drill"
       title={title}
@@ -182,6 +186,14 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
       mistakeMap={session.mistakeMap}
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
+      entryCost={paid ? ENTRY_COST.extern : undefined}
     />
+  );
+  return paid ? (
+    <EntryGate need={ENTRY_COST.extern} exitHref="/learn">
+      {player}
+    </EntryGate>
+  ) : (
+    player
   );
 }

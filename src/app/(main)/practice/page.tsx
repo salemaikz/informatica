@@ -9,11 +9,13 @@ import { getLesson } from "@/content/course";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
 import { dueLessons } from "@/lib/review";
+import { ENTRY_COST } from "@/lib/economy";
 import { gameOpen, gameSkillsFor, skillsByUnit, skillsOfLessons } from "@/lib/drill";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { HistoryPracticeCard } from "@/components/history/HistoryCards";
 import { iconFor } from "@/components/scenes/icons";
@@ -157,10 +159,14 @@ export default function PracticePage() {
                   <span className="font-extrabold leading-tight">{l(g.title)}</span>
                   <span className="line-clamp-2 text-xs font-semibold text-muted">{l(g.description)}</span>
                   {(g.shape || g.source) && <span className="text-xs font-extrabold text-primary">{t("modes.prac.anyTopic")}</span>}
-                  <span className="mt-auto flex items-center gap-1 text-xs font-extrabold text-warning-strong">
+                  <span className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-extrabold text-warning-strong">
                     {open ? (
                       <>
-                        <Trophy size={14} className="text-gold" /> {best ?? "—"}
+                        <span className="flex items-center gap-1">
+                          <Trophy size={14} className="text-gold" /> {best ?? "—"}
+                        </span>
+                        {/* Каждый запуск игры стоит сердечко (#40). */}
+                        <HeartCost n={ENTRY_COST.game} />
                       </>
                     ) : (
                       <span className="text-muted">{t("common.soon")}</span>
