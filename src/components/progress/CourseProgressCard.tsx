@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import type { SchoolGrade } from "@/content/school-program";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
-import { encodeShare, type ShareResult } from "@/lib/share-code";
+import { encodeShare, sharePercent, type ShareResult } from "@/lib/share-code";
 import { ShareSheet } from "@/components/share/ShareSheet";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
@@ -30,9 +30,10 @@ export function CourseProgressCard({ className }: { className?: string }) {
   const full = v.ratio >= 1 && v.total > 0;
   const color = full ? "var(--success)" : "var(--primary)";
   const Icon = v.kind === "class" ? GraduationCap : BookOpenCheck;
-  // «Поделиться» — когда пройден хоть один урок; в коде только числа (#72), класс — у школьного трека.
+  // «Поделиться» — когда в процент входит хоть один пройденный урок (не «Старт» при skipBasics) и он не округляется до 0%;
+  // в коде только числа (#72), класс — у школьного трека. `anyDone` нужен только пустому состоянию.
   const share = useMemo<ShareResult | null>(() => {
-    if (!v.anyDone || v.total <= 0) return null;
+    if (v.done <= 0 || v.total <= 0 || sharePercent(v.done, v.total) < 1) return null;
     const r: ShareResult = { t: "course", done: Math.min(v.done, v.total), total: v.total, lang, grade: v.kind === "class" ? (v.grade as SchoolGrade) : null };
     return encodeShare(r) ? r : null;
   }, [v, lang]);
@@ -60,7 +61,7 @@ export function CourseProgressCard({ className }: { className?: string }) {
             icon={<Share2 size={16} className="text-primary" aria-hidden />}
             variant="secondary"
             size="sm"
-            className="mt-2"
+            className="mt-2 h-11"
           />
         )}
       </div>

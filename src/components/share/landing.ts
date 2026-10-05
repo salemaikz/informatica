@@ -75,7 +75,8 @@ export function landingModel(r: ShareResult | null, lang: Lang): LandingModel {
         big: `${p}%`,
         suffix: null,
         suffixFirst: false,
-        lines: [tr(lang, "progress.lessons", { done: r.done, total: r.total }), r.grade ? tr(lang, "share.card.class", { g: r.grade }) : tr(lang, "share.card.course")],
+        // Подпись курса — первой: после числа «39%» она читается как «39% курса подготовки к ЕНТ», затем «37 из 96 уроков».
+        lines: [r.grade ? tr(lang, "share.card.class", { g: r.grade }) : tr(lang, "share.card.course"), tr(lang, "progress.lessons", { done: r.done, total: r.total })],
         ratio: p / 100,
         text: tr(lang, "meta.description"),
         acceptHref: null,

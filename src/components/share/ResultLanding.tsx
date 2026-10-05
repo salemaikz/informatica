@@ -43,7 +43,7 @@ export function ResultLanding({ result }: { result: ShareResult | null }) {
   const after = model.suffix && !model.suffixFirst;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-4 py-6">
+    <main lang={lang} className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-4 py-6">
       <header className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Mascot size={40} className="shrink-0" />
@@ -54,10 +54,11 @@ export function ResultLanding({ result }: { result: ShareResult | null }) {
             <button
               key={l}
               type="button"
+              lang={l}
               aria-pressed={lang === l}
               onClick={() => setPicked(l)}
               className={cn(
-                "h-9 min-w-11 rounded-xl px-2.5 text-sm font-extrabold",
+                "h-11 min-w-11 rounded-xl px-2.5 text-sm font-extrabold",
                 "focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary",
                 lang === l ? "bg-primary text-white" : "text-muted hover:bg-surface-2",
               )}

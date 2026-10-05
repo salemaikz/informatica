@@ -39,6 +39,16 @@ async function seed(page: Page, extra: Record<string, unknown> = {}) {
   );
 }
 
+/** Нажать «Скопировать ссылку» в листе и прочитать буфер: буфер очищаем заранее и ждём «Ссылка скопирована», чтобы проверка могла упасть. */
+async function copyLink(page: Page, sheet: ReturnType<Page["getByRole"]>): Promise<string> {
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await sheet.getByRole("button", { name: "Скопировать ссылку" }).click();
+  await expect(sheet.getByText("Ссылка скопирована").first()).toBeVisible();
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  expect(link).not.toBe("");
+  return link;
+}
+
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 test.beforeEach(async ({ page }) => {
@@ -64,10 +74,11 @@ test("итоги мини-ЕНТ: «Поделиться результатом�
   await expect(img).toBeVisible();
   expect(await img.evaluate((el: HTMLImageElement) => [el.naturalWidth, el.naturalHeight])).toEqual([1080, 1920]);
 
-  await sheet.getByRole("button", { name: "Скопировать ссылку" }).click();
-  await expect(sheet.getByText("Ссылка скопирована")).toBeVisible();
-  const link = await page.evaluate(() => navigator.clipboard.readText());
+  const link = await copyLink(page, sheet);
   expect(new URL(link).pathname).toMatch(/^\/r\/x1-m-\d+-\d+-r-42-[a-z0-9]{4}$/);
+  // Сообщение результата — не вызов.
+  const resultMsg = decodeURIComponent((await sheet.getByRole("link", { name: "WhatsApp" }).getAttribute("href")) ?? "");
+  expect(resultMsg).toContain("Мой результат");
   // Имени в ссылке нет.
   expect(link).not.toContain("%D0%A2");
 
@@ -83,8 +94,11 @@ test("итоги мини-ЕНТ: «Поделиться результатом�
   const ch = page.getByRole("dialog", { name: "Вызвать друга" });
   await expect(ch).toBeVisible();
   await expect(ch.getByRole("img")).toHaveCount(0);
-  await ch.getByRole("button", { name: "Скопировать ссылку" }).click();
-  expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).pathname).toBe(new URL(link).pathname);
+  // Буфер очищается перед копированием: старая ссылка шага 1 не может «подтвердить» копирование вызова.
+  expect(new URL(await copyLink(page, ch)).pathname).toBe(new URL(link).pathname);
+  const challengeMsg = decodeURIComponent((await ch.getByRole("link", { name: "WhatsApp" }).getAttribute("href")) ?? "");
+  expect(challengeMsg).toContain("Пройди этот же вариант");
+  expect(challengeMsg).not.toContain("Мой результат");
   expect(errors).toEqual([]);
 });
 
@@ -98,16 +112,14 @@ test("«Прогресс»: «Поделиться» курсом и серие�
   await page.getByRole("button", { name: "Поделиться" }).first().click();
   let sheet = page.getByRole("dialog", { name: "Поделиться прогрессом" });
   await expect(sheet.getByRole("img", { name: "Карточка с результатом" })).toBeVisible();
-  await sheet.getByRole("button", { name: "Скопировать ссылку" }).click();
-  expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).pathname).toMatch(/^\/r\/c1-\d+-\d+-r$/);
+  expect(new URL(await copyLink(page, sheet)).pathname).toMatch(/^\/r\/c1-\d+-\d+-r$/);
   await page.keyboard.press("Escape");
 
   // Серия (плитка «Серия дней»)
   await page.getByRole("button", { name: "Поделиться" }).last().click();
   sheet = page.getByRole("dialog", { name: "Поделиться серией" });
   await expect(sheet.getByRole("img", { name: "Карточка с результатом" })).toBeVisible();
-  await sheet.getByRole("button", { name: "Скопировать ссылку" }).click();
-  expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).pathname).toMatch(/^\/r\/s1-\d+-\d+-r$/);
+  expect(new URL(await copyLink(page, sheet)).pathname).toMatch(/^\/r\/s1-\d+-\d+-r$/);
   expect(errors).toEqual([]);
 });
 
@@ -167,5 +179,27 @@ test("превью: один og:image и один twitter:image ведут на 
     expect(body.length).toBeLessThan(300 * 1024);
     // PNG-подпись
     expect([...body.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  }
+});
+
+test("превью: курс, серия и битый код тоже отдают PNG (адрес берём из og:image); у битого кода заголовок общий", async ({ page, request }) => {
+  for (const code of ["c1-37-96-r", "c1-3-12-k-g8", "s1-12-30-k", "garbage"]) {
+    const res = await page.goto(`/r/${code}`);
+    expect(res?.status(), code).toBe(200);
+    for (const sel of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
+      const meta = page.locator(sel);
+      await expect(meta, `${code} ${sel}`).toHaveCount(1);
+      const u = new URL((await meta.getAttribute("content")) ?? "");
+      const r = await request.get(u.pathname + u.search);
+      expect(r.status(), `${code} ${u.pathname}`).toBe(200);
+      expect(r.headers()["content-type"]).toBe("image/png");
+      const body = await r.body();
+      expect(body.length, code).toBeGreaterThan(3_000);
+      expect([...body.subarray(0, 4)], code).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    }
+    if (code === "garbage") {
+      // Битый код — общий заголовок сайта, а не заголовок результата.
+      await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", await page.title());
+    }
   }
 });
