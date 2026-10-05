@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { lessonBinary } from "../src/content/lessons/ns-1-binary";
 import { lessonBits } from "../src/content/lessons/ns-1-bits";
+import { withEntBoss } from "../src/lib/ent-boss";
 import { lessonSig } from "../src/lib/lesson-run";
-import type { AnswerRecord, Lesson } from "../src/lib/types";
+import type { AnswerRecord, EntMatchStep, Lesson, MultiStep } from "../src/lib/types";
 
 // Этап 12 (v0.11), пакет P4: честные цифры в итогах урока (#66) — пропуск и подсказка не дают «100%».
 // Чтобы не проходить урок целиком, ученика «возвращаем» в конец незаконченного урока: сохранение прохождения (#41)
@@ -41,8 +42,12 @@ async function seed(page: Page, { lessonRuns, days }: Seed) {
 /** Верный ответ с первой попытки — запись в сохранении. */
 const correct = (stepId: string, skill: string): AnswerRecord => ({ stepId, skill, correct: true, score: 1, given: "1", expected: "1", prompt: "?", retry: false, timeMs: 2000 });
 
-/** Сохранение урока на шаге stepId: все шаги до него пройдены, вход оплачен только что. */
-function runAt(lesson: Lesson, stepId: string, records: AnswerRecord[]) {
+/**
+ * Сохранение урока на шаге stepId: все шаги до него пройдены, вход оплачен только что.
+ * Шаги — как у плеера: с «боссом урока» (withEntBoss, этап 14), иначе отпечаток sig не совпадёт и сохранение сбросится.
+ */
+function runAt(base: Lesson, stepId: string, records: AnswerRecord[]) {
+  const lesson = withEntBoss(base);
   const pos = lesson.steps.findIndex((s) => s.id === stepId);
   if (pos < 0) throw new Error(`нет шага ${stepId}`);
   const now = Date.now();
@@ -124,14 +129,28 @@ test("урок: подсказка до ответа — «с подсказко
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toHaveCount(0);
 
-  // Дальше — теория «Где это встречается» и финальная история; потом итоги.
+  // Дальше — «босс урока», вставленный кодом: «соответствие» и «несколько верных» (ответы берём из самих шагов).
+  const boss = withEntBoss(lessonBits).steps;
+  const entmatch = boss.find((s) => s.type === "entmatch") as EntMatchStep;
+  const multi = boss.find((s) => s.type === "multi" && s.ent && s.options.length === 6) as MultiStep;
+  await footerButton(page).click(); // → «соответствие»
+  for (const [i, row] of ["A", "B"].entries()) {
+    await page.getByRole("radiogroup", { name: new RegExp(`^${row} —`) }).getByRole("radio", { name: `Описание ${entmatch.answer[i] + 1}` }).click();
+  }
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await footerButton(page).click(); // → «несколько верных»
+  for (const i of multi.correct) await page.locator("main button[aria-pressed]").nth(i).click();
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await expect(page.getByText("Неверно")).toHaveCount(0);
+
+  // Потом теория «Где это встречается» и финальная история; потом итоги.
   await footerButton(page).click(); // → теория
   await footerButton(page).click(); // → финальная история
   await footerButton(page).click(); // → итоги
 
   await expect(page.getByRole("heading", { name: "Урок пройден!" })).toBeVisible();
   await expect(page.getByText("с подсказкой: 1")).toBeVisible();
-  await expect(page.getByText("без подсказки: 2 из 3")).toBeVisible();
+  await expect(page.getByText("без подсказки: 4 из 5")).toBeVisible();
   // Верный ответ с подсказкой в точность входит, а «пропущено» не появляется.
   await expect(accuracyTile(page)).toContainText("100%");
   await expect(page.getByText(/пропущено:/)).toHaveCount(0);
