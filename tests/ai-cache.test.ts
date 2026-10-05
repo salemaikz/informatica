@@ -253,11 +253,14 @@ describe("клиентский кэш (LRU)", () => {
     const s = memStore();
     clientCachePut("a", "   ", s);
     expect(s.raw()).toBeNull();
-    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v2");
+    expect(CLIENT_CACHE_KEY).toBe("informatica:ai-cache:v3");
   });
 
-  it("v2: записи старого ключа v1 (с обрезанными ответами этапа ≤ 9) не читаются и стираются при первой записи", () => {
-    const store = new Map<string, string>([["informatica:ai-cache:v1", JSON.stringify([["k", "Обрезанный отв"]])]]);
+  it("v3: записи старых ключей v1 и v2 (ответы до правок промпта) не читаются и стираются при первой записи", () => {
+    const store = new Map<string, string>([
+      ["informatica:ai-cache:v1", JSON.stringify([["k", "Обрезанный отв"]])],
+      ["informatica:ai-cache:v2", JSON.stringify([["k", "Ответ до v0.9.1"]])],
+    ]);
     const s = {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, v),
@@ -266,6 +269,7 @@ describe("клиентский кэш (LRU)", () => {
     expect(clientCacheGet("k", s)).toBeNull();
     clientCachePut("n", "Новый ответ", s);
     expect(store.has("informatica:ai-cache:v1")).toBe(false);
+    expect(store.has("informatica:ai-cache:v2")).toBe(false);
     expect(clientCacheGet("n", s)).toBe("Новый ответ");
     expect(clientCacheGet("k", s)).toBeNull();
   });

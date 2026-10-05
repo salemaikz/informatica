@@ -15,7 +15,6 @@ import { scenesDict } from "./parts/scenes";
 import { pythonDict } from "./parts/python";
 import { legalDict } from "./parts/legal";
 import { shareDict } from "./parts/share";
-import { linksDict } from "./parts/links";
 import { onboardDict } from "./parts/onboard";
 import { offlineDict } from "./parts/offline";
 import { masteryDict } from "./parts/mastery";
@@ -410,11 +409,6 @@ const core = {
     ru: "Точно удалить весь прогресс? Это нельзя отменить.",
     kk: "Барлық прогресті шынымен жоясың ба? Мұны қайтару мүмкін емес.",
   },
-  "prof.export": { ru: "Скачать мои данные", kk: "Деректерімді жүктеп алу" },
-  "prof.local": {
-    ru: "Пока прогресс хранится только на этом устройстве",
-    kk: "Әзірге прогресс тек осы құрылғыда сақталады",
-  },
   "tools.open": { ru: "Инструменты", kk: "Құралдар" },
   "tools.calc": { ru: "Калькулятор", kk: "Калькулятор" },
   "tools.base": { ru: "Системы счисления", kk: "Санау жүйелері" },
@@ -488,7 +482,6 @@ export const dict = {
   ...pythonDict,
   ...legalDict,
   ...shareDict,
-  ...linksDict,
   ...onboardDict,
   ...offlineDict,
   ...masteryDict,
