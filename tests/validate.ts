@@ -6,6 +6,7 @@ import { VENN_NAME_MAX, isVennRegion } from "@/components/scenes/venn";
 import { TASKS as PY_TASKS } from "@/lib/ide/python/tasks";
 
 const filledL = (l: L) => !!l.ru?.trim() && !!l.kk?.trim();
+const textLens = (t: Text) => (typeof t === "string" ? [t.length] : [t.ru.length, t.kk.length]);
 const filledText = (t: Text) => (typeof t === "string" ? !!t.trim() : filledL(t));
 
 /** Проблемы параметров сцены (пустой список — сцену можно нарисовать). */
@@ -178,6 +179,7 @@ export function validateScene(scene: Scene): string[] {
       need(scene.rows.length >= 1 && scene.rows.length <= 3, "numberline: 1–3 строки");
       for (const r of scene.rows) {
         need(!r.label || filledText(r.label), "numberline: пустая подпись строки");
+        need(!r.label || textLens(r.label).every((n) => n <= 40), "numberline: подпись строки длиннее 40 символов");
         need(!!(r.ranges?.length || r.points?.length || r.jumps), "numberline: пустая строка (нет ranges, points, jumps)");
         for (const g of r.ranges ?? []) {
           need((g.from === null || on(g.from)) && (g.to === null || on(g.to)), "numberline: конец промежутка вне оси");
@@ -185,6 +187,7 @@ export function validateScene(scene: Scene): string[] {
           need(!(g.from === null && g.fromIn) && !(g.to === null && g.toIn), "numberline: у луча нет закрашенного конца на бесконечности");
         }
         need((r.points ?? []).every((p) => on(p.at) && (!p.label || filledText(p.label))), "numberline: точка вне оси или пустая подпись");
+        need((r.points ?? []).every((p) => !p.label || textLens(p.label).every((n) => n <= 20)), "numberline: подпись точки длиннее 20 символов");
         if (r.jumps) {
           const { start, stop, step } = r.jumps;
           need(Number.isInteger(step) && step !== 0 && on(start) && on(stop), "numberline: jumps — шаг ≠ 0, start и stop на оси");
