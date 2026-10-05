@@ -253,6 +253,9 @@ export function LessonPlayer({
     achievements: string[];
     chips: number;
     heart: boolean;
+    firstPass: boolean;
+    lessonChips: number;
+    perfectChips: number;
   } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется (при продолжении — из сохранения).
@@ -357,7 +360,7 @@ export function LessonPlayer({
         ...(kind === "lesson" && lesson?.micro ? { micro: true } : {}),
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
-      const { bonusXp, heart } = finishSession(result);
+      const { bonusXp, heart, firstPass, lessonChips, perfectChips } = finishSession(result);
       onSessionFinish?.(result);
       const doneEvent = finishEvent({ kind, lessonId, via, mode, accuracy: result.accuracy, durationSec: result.durationSec });
       if (doneEvent) track(doneEvent);
@@ -365,7 +368,7 @@ export function LessonPlayer({
       const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
       // Идеальный урок — своя фанфара вместо обычной (Results её не повторяет).
       giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : result.accuracy >= 1 ? "perfect" : "complete");
-      setSession({ result, bonusXp, achievements, chips, heart });
+      setSession({ result, bonusXp, achievements, chips, heart, firstPass, lessonChips, perfectChips });
       requestLessonFeedback(result, setFeedback);
     },
     [finishSession, kind, lessonId, lesson, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
@@ -710,6 +713,9 @@ export function LessonPlayer({
         bonusXp={session.bonusXp}
         chips={session.chips}
         heart={session.heart}
+        firstPass={session.firstPass}
+        lessonChips={session.lessonChips}
+        perfectChips={session.perfectChips}
         achievements={session.achievements}
         feedback={feedback}
         via={via}

@@ -2,7 +2,7 @@
 
 import { Cpu, Flame, Heart } from "lucide-react";
 import type { ReactNode } from "react";
-import { CHIP_BONUS, HOUR, PLAN_FEATURES, earnAmount } from "@/lib/economy";
+import { HOUR, PLAN_FEATURES, lessonChips, perfectChips } from "@/lib/economy";
 import { completedLessonsCount, showAfterFirst } from "@/lib/tour";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
@@ -34,7 +34,8 @@ export function AfterFirstLesson({ className }: { className?: string }) {
   // На «Безлимите» сердечки не кончаются — про срок восстановления не говорим; бонус чипов — с множителем тарифа.
   const unlimited = tier === "unlimited";
   const hours = PLAN_FEATURES[tier].regenMs / HOUR;
-  const bonus = earnAmount(CHIP_BONUS.lesson, multiplier);
+  const bonus = lessonChips(true, multiplier);
+  const perfect = perfectChips(multiplier);
 
   return (
     <section aria-label={t("tour.after.title")} className={cn("flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4 animate-fade-in", className)}>
@@ -44,7 +45,7 @@ export function AfterFirstLesson({ className }: { className?: string }) {
           {t("tour.after.xp")}
         </Row>
         <Row tone="bg-gold-soft text-gold" icon={<Cpu size={18} aria-hidden />}>
-          {t("tour.after.chips", { n: bonus })}
+          {t("tour.after.chips", { n: bonus, p: perfect })}
         </Row>
         <Row tone="bg-streak-soft text-streak" icon={<Flame size={18} aria-hidden />}>
           {t("tour.after.streak")}

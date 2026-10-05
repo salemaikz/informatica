@@ -4,7 +4,7 @@ import {
   AI_DAILY_CAP,
   AI_UNITS,
   BOOST_PACKS,
-  CHIPS_PER_XP,
+  CHIP_REWARD,
   CHIP_PACKS,
   DAY,
   HEART_PASSES,
@@ -28,7 +28,8 @@ import {
   canAfford,
   canStartTrial,
   chipMultiplier,
-  chipsForXp,
+  lessonChips,
+  perfectChips,
   earnAmount,
   effectiveTier,
   extendBoost,
@@ -643,7 +644,7 @@ describe("бустеры и множитель чипов", () => {
   });
 });
 
-describe("чипы за опыт", () => {
+describe("чипы: заработок", () => {
   it("earnAmount: вниз до целого, мусор — 0", () => {
     expect(earnAmount(5, 1.5)).toBe(7);
     expect(earnAmount(0, 2)).toBe(0);
@@ -652,32 +653,24 @@ describe("чипы за опыт", () => {
     expect(earnAmount(NaN, 1)).toBe(0);
   });
 
-  it("CHIPS_PER_XP: 5 XP = 2 чипа; приветственные 20 чипов", () => {
-    expect(CHIPS_PER_XP * 5).toBeCloseTo(2, 10);
+  it("приветственные 20 чипов", () => {
     expect(WELCOME_CHIPS).toBe(20);
     expect(START_WALLET).toEqual({ chips: 20, earned: 20, spent: 0 });
   });
 
-  it("chipsForXp: 5 XP = 2 чипа (вниз до целого)", () => {
-    expect(chipsForXp(5, 1)).toBe(2);
-    expect(chipsForXp(10, 1)).toBe(4);
-    expect(chipsForXp(12, 1)).toBe(4);
-    expect(chipsForXp(4, 1)).toBe(1);
-    expect(chipsForXp(2, 1)).toBe(0);
-    expect(chipsForXp(0, 2)).toBe(0);
-    expect(chipsForXp(-10, 2)).toBe(0);
+  it("CHIP_REWARD: числа решения #105", () => {
+    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, perfect: 5, dailyGoal: 5, unit: 10, exam: 10, achievement: 10 });
   });
 
-  it("chipsForXp: множители тарифа и бустера", () => {
-    expect(chipsForXp(10, 1.5)).toBe(6);
-    expect(chipsForXp(10, 2)).toBe(8);
-    expect(chipsForXp(5, 1.5)).toBe(3);
-    expect(chipsForXp(10, chipMultiplier("lite", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
-    expect(chipsForXp(10, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(16);
-  });
-
-  it("плавающая арифметика не съедает чип (0.4 * 35 и т.п.)", () => {
-    for (let xp = 0; xp <= 500; xp += 5) expect(chipsForXp(xp, 1)).toBe((xp / 5) * 2);
+  it("lessonChips / perfectChips: урок 3 (повтор 1), идеально 5; множитель тарифа и бустера", () => {
+    expect(lessonChips(true, 1)).toBe(3);
+    expect(lessonChips(false, 1)).toBe(1);
+    expect(perfectChips(1)).toBe(5);
+    expect(lessonChips(true, 1.5)).toBe(4);
+    expect(lessonChips(false, 1.5)).toBe(1);
+    expect(perfectChips(1.5)).toBe(7);
+    expect(lessonChips(true, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
+    expect(lessonChips(true, 0)).toBe(0);
   });
 });
 

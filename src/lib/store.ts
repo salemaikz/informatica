@@ -22,6 +22,8 @@ import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { sanitizeTips, type TipId, type TipsState } from "./tips";
 import { EMPTY_PERFECT_RUN, sanitizePendingCases, sanitizePerfectRun, type PerfectRun } from "./rewards-state";
+import { isPerfectSession, nextPerfectRun, PERFECT_RUN_GOAL } from "./perfect";
+import { unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -49,10 +51,10 @@ import {
   addHearts,
   applyAiUsage,
   buyItem,
-  CHIP_BONUS,
+  CHIP_REWARD,
   chipMultiplier,
-  chipsForXp,
   earnAmount,
+  lessonChipBase,
   effectiveTier,
   FREE_PLAN,
   heartsView,
@@ -297,6 +299,13 @@ export interface FinishOutcome {
   bonusXp: number;
   /** Тренировка вернула сердечко. */
   heart: boolean;
+  /** Урок без единой ошибки (все задания с первой попытки, без пропусков); у тренировки всегда false. */
+  perfect: boolean;
+  /** Первое прохождение урока (до этого статы урока не было); у тренировки false. */
+  firstPass: boolean;
+  /** Чипы, начисленные за сам урок и за «идеально» (уже с множителем тарифа и бустера); 0 — не начислялись. */
+  lessonChips: number;
+  perfectChips: number;
 }
 
 export type BuyResult = { ok: true } | { ok: false; reason: BuyFail };
@@ -491,21 +500,20 @@ const emptyDay = (): DayStat => ({ xp: 0, answers: 0, correct: 0, seconds: 0, le
 const tierOf = (s: Pick<AppState, "plan">, now = Date.now()) => effectiveTier(s.plan, now);
 
 /**
- * Чипы за то, что изменилось между prev и next: опыт (5 XP = 2 чипа), дневная цель, новые достижения
- * и бонусы extra. Всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
+ * Чипы за то, что изменилось между prev и next: дневная цель, новые достижения и награды extra (урок, идеальный урок,
+ * тест, ЕНТ). За опыт чипы не даём (#105): тренировка, игры и практикум чипов не приносят. Числа — CHIP_REWARD;
+ * всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
  */
 function settleChips(prev: AppState, next: AppState, extra: { base: number; reason: ChipReason }[] = [], now = Date.now()): AppState {
   const mult = chipMultiplier(tierOf(next, now), next.boost, now);
   const today = todayKey();
   const goal = next.profile.dailyGoalXp;
   const gains: { amount: number; reason: ChipReason }[] = [];
-  const xpDelta = next.xp - prev.xp;
-  if (xpDelta > 0) gains.push({ amount: chipsForXp(xpDelta, mult), reason: "xp" });
   const dayBefore = prev.days[today]?.xp ?? 0;
   const dayAfter = next.days[today]?.xp ?? 0;
-  if (goal > 0 && dayBefore < goal && dayAfter >= goal) gains.push({ amount: earnAmount(CHIP_BONUS.dailyGoal, mult), reason: "dailyGoal" });
+  if (goal > 0 && dayBefore < goal && dayAfter >= goal) gains.push({ amount: earnAmount(CHIP_REWARD.dailyGoal, mult), reason: "dailyGoal" });
   const newAch = Object.keys(next.achievements).length - Object.keys(prev.achievements).length;
-  if (newAch > 0) gains.push({ amount: earnAmount(CHIP_BONUS.achievement * newAch, mult), reason: "achievement" });
+  if (newAch > 0) gains.push({ amount: earnAmount(CHIP_REWARD.achievement * newAch, mult), reason: "achievement" });
   for (const e of extra) gains.push({ amount: earnAmount(e.base, mult), reason: e.reason });
   let wallet = next.wallet;
   let ledger = next.ledger;
@@ -540,6 +548,7 @@ function evaluate(state: AppState): Partial<AppState> {
   if (s.streak.current >= 3) apply("streak_3");
   if (s.streak.current >= 7) apply("streak_7");
   if (s.maxCombo >= 7) apply("combo_7");
+  if (s.perfectRun.best >= PERFECT_RUN_GOAL) apply("perfect_5");
   if (s.exams.length > 0) apply("exam_first");
   if (s.notebook.notes.some((n) => n.source === "own" || n.source === "scratch")) apply("explorer");
   const solid = (id: string) => masteryLevel(s.skills[id]) === "mastered" && (s.skills[id]?.attempts ?? 0) >= 10;
@@ -796,7 +805,7 @@ export const useApp = create<AppState & AppActions>()(
         const now = Date.now();
         const firstTry = result.answers.filter((a) => !a.retry);
         // Пропущенное задание (например, решение по фото) — уже не «без ошибок».
-        const perfect = firstTry.length > 0 && firstTry.every((a) => a.correct) && !result.skipped;
+        const perfect = isPerfectSession(result);
         const isLesson = result.kind === "lesson" && !!result.lessonId;
         const prev = isLesson ? s.lessons[result.lessonId!] : undefined;
         // Повтор урока даёт меньше XP (плановое повторение — почти полный). Бонус «без ошибок» — за первый раз.
@@ -833,6 +842,8 @@ export const useApp = create<AppState & AppActions>()(
           if ((result.via ?? "learn") === "learn") next.lessonRuns = dropRun(next.lessonRuns, result.lessonId!);
           next = { ...next, ...withAchievement(next, "first_lesson") };
           if (perfect) next = { ...next, ...withAchievement(next, "perfect") };
+          // Серия идеальных уроков (R2): растёт и сбрасывается только первыми прохождениями; тренировки её не трогают.
+          next = { ...next, perfectRun: nextPerfectRun(s.perfectRun, { perfect, first: !prev }) };
         }
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
         next = { ...next, ...evaluate(next) };
@@ -853,14 +864,22 @@ export const useApp = create<AppState & AppActions>()(
           }
         }
 
+        // Чипы (#105): урок 3 (повтор 1), идеальный первый раз +5. Тренировка и игры чипов не дают.
         const extra: { base: number; reason: ChipReason }[] = [];
+        const chipMult = chipMultiplier(tier, next.boost, now);
+        let lessonGain = 0;
+        let perfectGain = 0;
         if (isLesson) {
-          extra.push({ base: Math.round(CHIP_BONUS.lesson * size), reason: "lesson" });
-          if (perfect && !prev) extra.push({ base: CHIP_BONUS.perfect, reason: "perfect" });
+          extra.push({ base: lessonChipBase(!prev), reason: "lesson" });
+          lessonGain = earnAmount(lessonChipBase(!prev), chipMult);
+          if (perfect && !prev) {
+            extra.push({ base: CHIP_REWARD.perfect, reason: "perfect" });
+            perfectGain = earnAmount(CHIP_REWARD.perfect, chipMult);
+          }
         }
         next = settleChips(s, next, extra, now);
         set(next);
-        return { bonusXp, heart };
+        return { bonusXp, heart, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectChips: perfectGain };
       },
 
       completeLessons: (lessonIds, via, accuracy) =>
@@ -1316,7 +1335,17 @@ export const useApp = create<AppState & AppActions>()(
                 }
               : s.days,
           };
-          return settleChips(s, { ...next, ...evaluate(next) }, isNew && answered > 0 ? [{ base: CHIP_BONUS.exam, reason: "exam" }] : []);
+          // Чипы (#105): 10 за завершённый пробный ЕНТ (отвечено не меньше половины заданий) и 10 за сданный тест раздела
+          // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
+          const examChips: { base: number; reason: ChipReason }[] = [];
+          if (isNew && answered > 0) {
+            if (summary.kind === "full" && answered >= Math.ceil(asked / 2)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
+            else if (summary.kind === "unit" && unitPassed(summary.points, summary.maxPoints)) {
+              const passedBefore = s.exams.some((e) => e.id !== summary.id && e.kind === "unit" && e.unit === summary.unit && unitPassed(e.points, e.maxPoints));
+              if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
+            }
+          }
+          return settleChips(s, { ...next, ...evaluate(next) }, examChips);
         }),
 
       // Тариф и пробный период сброс прогресса не трогает.

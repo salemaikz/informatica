@@ -7,7 +7,6 @@ import { AI_COST, type AiKind } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { springSoft } from "@/components/motion/presets";
-import { chipRate } from "./shop-helpers";
 import { useChips } from "./useEconomy";
 
 /**
@@ -18,7 +17,6 @@ export function NoChipsNotice({ kind, className }: { kind: AiKind; className?: s
   const { t } = useT();
   const { chips } = useChips();
   const need = AI_COST[kind];
-  const rate = chipRate();
 
   return (
     <m.div
@@ -37,7 +35,7 @@ export function NoChipsNotice({ kind, className }: { kind: AiKind; className?: s
           <p className="font-bold text-text">{t("aicost.need.text", { need, have: chips })}</p>
         </div>
       </div>
-      <p className="text-sm font-semibold text-muted">{t("aicost.need.earn", { xp: rate.xp, n: rate.n })}</p>
+      <p className="text-sm font-semibold text-muted">{t("aicost.need.earn")}</p>
       <div className="grid grid-cols-2 gap-2">
         <ButtonLink href="/shop" size="md" block icon={<ShoppingBag size={18} />}>
           {t("aicost.need.shop")}

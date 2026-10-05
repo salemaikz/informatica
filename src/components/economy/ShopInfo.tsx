@@ -30,9 +30,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { XpIcon } from "./XpIcon";
 import { useApp } from "@/lib/store";
-import { AI_COST, CHIP_BONUS, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { AI_COST, CHIP_REWARD, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -40,7 +39,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { chipRate, dayDiff, formatClock, formatMult, formatNum, formatRemaining, knownAiKind, knownShopId } from "./shop-helpers";
+import { dayDiff, formatClock, formatMult, formatNum, formatRemaining, knownAiKind, knownShopId } from "./shop-helpers";
 import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, regenRules, type EntryRuleId, type FreeEntryId } from "./shop-rules";
 import { ChipPrice, IconTile } from "./ShopParts";
 import { useAiQuote, useNow } from "./useEconomy";
@@ -169,27 +168,22 @@ export function HeartRules() {
   );
 }
 
-const EARN_ROWS: { id: "lesson" | "perfect" | "dailyGoal" | "achievement" | "exam"; icon: LucideIcon; key: DictKey }[] = [
-  { id: "lesson", icon: BookOpen, key: "shop.earn.lesson" },
-  { id: "perfect", icon: BadgeCheck, key: "shop.earn.perfect" },
-  { id: "dailyGoal", icon: Target, key: "shop.earn.dailyGoal" },
-  { id: "achievement", icon: Trophy, key: "shop.earn.achievement" },
-  { id: "exam", icon: GraduationCap, key: "shop.earn.exam" },
+const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips: number }[] = [
+  { id: "lessonFirst", icon: BookOpen, key: "economy.earn.lessonFirst", chips: CHIP_REWARD.lessonFirst },
+  { id: "lessonRepeat", icon: RefreshCw, key: "economy.earn.lessonRepeat", chips: CHIP_REWARD.lessonRepeat },
+  { id: "perfect", icon: BadgeCheck, key: "economy.earn.perfect", chips: CHIP_REWARD.perfect },
+  { id: "dailyGoal", icon: Target, key: "economy.earn.dailyGoal", chips: CHIP_REWARD.dailyGoal },
+  { id: "unit", icon: ClipboardCheck, key: "economy.earn.unit", chips: CHIP_REWARD.unit },
+  { id: "exam", icon: GraduationCap, key: "economy.earn.exam", chips: CHIP_REWARD.exam },
+  { id: "achievement", icon: Trophy, key: "economy.earn.achievement", chips: CHIP_REWARD.achievement },
 ];
 
-/** «Как заработать чипы»: курс обмена и бонусы (значения из economy.ts). */
+/** «Как заработать чипы»: за что и сколько (числа — CHIP_REWARD из economy.ts, решение #105). */
 export function EarnList() {
   const { t } = useT();
-  const rate = chipRate();
   return (
     <Card className="p-0 sm:p-0">
       <ul className="divide-y-2 divide-border">
-        <li className="flex items-center gap-3 p-3.5">
-          <IconTile tone="gold">
-            <XpIcon size={20} />
-          </IconTile>
-          <span className="min-w-0 flex-1 font-extrabold">{t("shop.earn.xp", { xp: rate.xp, n: rate.n })}</span>
-        </li>
         {EARN_ROWS.map((r) => (
           <li key={r.id} className="flex items-center gap-3 p-3.5">
             <IconTile tone="gold">
@@ -198,11 +192,12 @@ export function EarnList() {
             <span className="min-w-0 flex-1 font-extrabold">{t(r.key)}</span>
             <Pill tone="gold" className="py-1 text-sm">
               +<Cpu size={13} />
-              {CHIP_BONUS[r.id]}
+              {r.chips}
             </Pill>
           </li>
         ))}
       </ul>
+      <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">{t("economy.earn.note")}</p>
       <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">
         {t("shop.earn.mult", {
           lite: formatMult(PLAN_FEATURES.lite.chipMultiplier),
@@ -279,6 +274,7 @@ const REASON_KEY: Record<Exclude<ChipReason, "buy" | "ai" | "refund">, DictKey> 
   dailyGoal: "shop.ledger.dailyGoal",
   achievement: "shop.ledger.achievement",
   exam: "shop.ledger.exam",
+  unit: "economy.ledger.unit",
 };
 
 const ITEM_NAME: Record<string, DictKey> = {

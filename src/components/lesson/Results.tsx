@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Library, Clock, Cpu, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
+import { BadgeCheck, BookOpen, Library, Clock, Cpu, Flame, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,8 @@ import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
+import { isPerfectSession, PERFECT_RUN_SHOW_FROM } from "@/lib/perfect";
+import { playSound } from "@/lib/sound";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill-meta";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -24,7 +26,8 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { XpIcon } from "@/components/economy/XpIcon";
 import { useChips } from "@/components/economy/useEconomy";
-import { chipsKey, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { chipsKey } from "@/components/economy/xp-chips";
+import { formatMult } from "@/components/economy/shop-helpers";
 import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
 import { StreakIgnite } from "@/components/motion/StreakIgnite";
 import { Card } from "@/components/ui/Card";
@@ -98,6 +101,9 @@ export function Results({
   bonusXp,
   chips = 0,
   heart = false,
+  firstPass = false,
+  lessonChips: lessonPart = 0,
+  perfectChips: perfectBonus = 0,
   achievements,
   feedback,
   via,
@@ -116,6 +122,10 @@ export function Results({
   chips?: number;
   /** Тренировка вернула сердечко. */
   heart?: boolean;
+  /** Первое прохождение урока и фактически начисленные чипы за урок / за «идеально» (из finishSession, уже с множителем). */
+  firstPass?: boolean;
+  lessonChips?: number;
+  perfectChips?: number;
   achievements: string[];
   feedback: FeedbackState;
   /** Режим урока (check — «Проверить себя»). */
@@ -137,6 +147,16 @@ export function Results({
   const [shownAt] = useState(() => Date.now());
   const nextDays = dueAt !== undefined ? Math.max(1, Math.round((dueAt - shownAt) / DAY_MS)) : null;
   const next = kind === "lesson" && lessonId ? nextLessonId(lessonId, lessons) : null;
+  // «Идеально!» (R2): урок без единой ошибки. Чипы и серия — только за первое прохождение (в сторе уже одно засчитанное).
+  const perfect = kind === "lesson" && isPerfectSession(result);
+  const perfectRun = useApp((s) => s.perfectRun.current);
+  // Из чего сложились чипы сессии: урок, идеально, прочее (цель дня, достижения). Суммы уже умножены — стор их и начислил.
+  const otherChips = Math.max(0, chips - lessonPart - perfectBonus);
+  const chipParts = [
+    lessonPart > 0 ? t(firstPass ? "perfect.break.lesson" : "perfect.break.repeat", { n: lessonPart }) : "",
+    perfectBonus > 0 ? t("perfect.break.perfect", { n: perfectBonus }) : "",
+    otherChips > 0 ? t("perfect.break.other", { n: otherChips }) : "",
+  ].filter(Boolean);
 
   const accuracy = Math.round(result.accuracy * 100);
   const totalXp = result.xp + bonusXp;
@@ -162,7 +182,7 @@ export function Results({
     void import("canvas-confetti").then(({ default: confetti }) => {
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.35 }, colors });
       // Идеальный результат — ещё два «залпа» с боков.
-      if (accuracy === 100) {
+      if (perfect || accuracy === 100) {
         timer = setTimeout(() => {
           confetti({ particleCount: 40, angle: 60, spread: 55, origin: { x: 0, y: 0.6 }, colors });
           confetti({ particleCount: 40, angle: 120, spread: 55, origin: { x: 1, y: 0.6 }, colors });
@@ -171,6 +191,16 @@ export function Results({
     });
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- конфетти запускаем один раз при показе итогов
+  }, []);
+
+  // Звуки итогов: фанфара «идеально» и монетка чипов — после общего сигнала завершения урока.
+  useEffect(() => {
+    if (!useApp.getState().profile.sound) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (perfect) timers.push(setTimeout(() => playSound("perfect"), 450));
+    if (chips > 0) timers.push(setTimeout(() => playSound("chips"), perfect ? 1100 : 600));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- звуки один раз при показе итогов
   }, []);
 
   // Достижения «выскакивают» по одному — каждое со своим звуком.
@@ -194,7 +224,7 @@ export function Results({
       >
         <Mascot mood="celebrate" size={112} />
         <h1 className="text-3xl font-extrabold">
-          {via === "check" ? t("modes.check.title") : kind === "lesson" ? t("res.lesson") : t("res.drill")}
+          {perfect ? t("perfect.title") : via === "check" ? t("modes.check.title") : kind === "lesson" ? t("res.lesson") : t("res.drill")}
         </h1>
         <p className="font-semibold text-muted">{title}</p>
         {kind === "lesson" && (xpFactor < 1 || nextDays !== null) && (
@@ -245,19 +275,31 @@ export function Results({
         </ul>
       )}
 
-      {/* Сколько чипов дал урок — всегда видно, с курсом обмена. */}
+      {/* Сколько чипов дала сессия — с разбивкой (урок · идеально · прочее). У тренировки без чипов плитки нет. */}
       <div className="flex flex-wrap items-start justify-center gap-2">
-        <m.div
-          className="flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
-          initial={{ opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ ...springBouncy, delay: 0.55 }}
-        >
-          <span className="inline-flex items-center gap-1.5 font-extrabold">
-            <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
-          </span>
-          <span className="text-xs font-bold text-muted">{t(chipsKey("xp.rate", xpChipRate().n), { ...xpChipRate() })}{multSuffix(chipMult)}</span>
-        </m.div>
+        {(kind === "lesson" || chips > 0) && (
+          <m.div
+            className="flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ ...springBouncy, delay: 0.55 }}
+          >
+            <span className="inline-flex items-center gap-1.5 font-extrabold">
+              <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
+            </span>
+            {chipParts.length > 0 && <span className="text-xs font-bold text-muted">{chipParts.join(" · ")}{chipMult !== 1 ? ` · ${t("perfect.multNote", { mult: formatMult(chipMult) })}` : ""}</span>}
+          </m.div>
+        )}
+        {perfectBonus > 0 && (
+          <m.span
+            className="inline-flex items-center gap-1.5 rounded-full border-2 border-gold bg-gold-soft px-3.5 py-1.5 font-extrabold text-warning-strong"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ ...springBouncy, delay: 0.7 }}
+          >
+            <BadgeCheck size={18} className="text-gold" aria-hidden /> {t(chipsKey("perfect.chips", perfectBonus), { n: perfectBonus })}
+          </m.span>
+        )}
         {heart && (
           <m.span
             className="inline-flex items-center gap-1.5 rounded-full border-2 border-heart bg-heart-soft px-3.5 py-1.5 font-extrabold text-heart-strong"
@@ -270,6 +312,21 @@ export function Results({
           </m.span>
         )}
       </div>
+
+      {/* Серия идеальных уроков подряд — с 2-го (R2). */}
+      {perfect && firstPass && perfectRun >= PERFECT_RUN_SHOW_FROM && (
+        <div className="-mt-2 flex flex-col items-center gap-1">
+          <m.p
+            className="inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-streak bg-streak-soft px-3.5 py-1.5 font-extrabold text-streak"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ ...springBouncy, delay: 0.85 }}
+          >
+            <Flame size={18} aria-hidden /> {t("perfect.run", { n: perfectRun })}
+          </m.p>
+          <p className="text-center text-xs font-bold text-muted">{t("perfect.runHint")}</p>
+        </div>
+      )}
 
       <StreakIgnite />
 

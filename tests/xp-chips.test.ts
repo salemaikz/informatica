@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { chipsEstimate, chipsKey, lessonXpMax, multSuffix, xpChipRate } from "@/components/economy/xp-chips";
+import { chipsEstimate, chipsKey, lessonXpMax } from "@/components/economy/xp-chips";
 
 describe("xp-chips", () => {
-  it("курс чипов берётся из экономики", () => {
-    expect(xpChipRate()).toEqual({ xp: 5, n: 2 });
-    expect(chipsEstimate(100)).toBe(40);
+  it("оценка чипов за урок: 3 за первое прохождение, 1 за повтор, множитель сверху", () => {
+    expect(chipsEstimate(false)).toBe(3);
+    expect(chipsEstimate(true)).toBe(1);
+    expect(chipsEstimate(false, 2)).toBe(6);
+    expect(chipsEstimate(true, 1.5)).toBe(1);
   });
   it("максимум XP за урок: повтор без бонусов", () => {
     // 8 заданий: 80 + комбо 6·5 + прохождение 20 + «идеально» 20
@@ -17,7 +19,6 @@ describe("xp-chips", () => {
     expect(chipsKey("xp.chipsPlus", 4)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 22)).toBe("xp.chipsPlus.few");
     expect(chipsKey("xp.chipsPlus", 11)).toBe("xp.chipsPlus.many");
-    expect(multSuffix(1)).toBe("");
-    expect(multSuffix(2)).toBe(" · ×2");
+    expect(chipsKey("perfect.chips", 5)).toBe("perfect.chips.many");
   });
 });
