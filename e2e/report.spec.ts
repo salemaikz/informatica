@@ -92,7 +92,7 @@ test("отчёт: ссылка с профиля открывается на ч�
 
   // Переключатель языка на странице
   await main.getByRole("button", { name: "Қазақша" }).click();
-  await expect(main.getByRole("heading", { name: "Үлгерім есебі" })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "Үлгерім туралы есеп" })).toBeVisible();
   await main.getByRole("button", { name: "Русский" }).click();
   await expect(main.getByRole("heading", { name: "Отчёт об успехах" })).toBeVisible();
 
@@ -117,14 +117,14 @@ test("отчёт: «Показать имя» добавляет имя; язы�
   const hrefKk = await view.getAttribute("href");
 
   // Имя включаем — ссылка меняется
-  await dialog.getByRole("switch", { name: "Атын көрсету" }).click();
+  await dialog.getByRole("switch", { name: "Атыңды көрсету" }).click();
   await expect.poll(async () => dialog.getByRole("link", { name: "Есепті қарау" }).getAttribute("href")).not.toBe(hrefKk);
   const hrefName = await dialog.getByRole("link", { name: "Есепті қарау" }).getAttribute("href");
 
   const fresh = await cleanDevice(browser);
   await fresh.page.goto(hrefName!);
   const main = fresh.page.locator("main");
-  await expect(main.getByRole("heading", { name: "Үлгерім есебі" })).toBeVisible(); // язык ученика — казахский
+  await expect(main.getByRole("heading", { name: "Үлгерім туралы есеп" })).toBeVisible(); // язык ученика — казахский
   await expect(main.getByText("Айдана")).toBeVisible();
   expect(await overflow(fresh.page)).toBeLessThanOrEqual(0);
 
@@ -140,7 +140,7 @@ test("отчёт: «Показать имя» добавляет имя; язы�
   // Снова открыть окно — имя снова выключено (не «залипает»)
   await dialog.getByRole("button", { name: "Жабу" }).last().click();
   await page.getByRole("button", { name: /Ата-аналарға арналған есеп/ }).click();
-  await expect(page.getByRole("dialog").getByRole("switch", { name: "Атын көрсету" })).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("dialog").getByRole("switch", { name: "Атыңды көрсету" })).toHaveAttribute("aria-checked", "false");
 });
 
 test("отчёт: без имени в профиле переключателя нет; повреждённая и пустая ссылки — понятные карточки", async ({ page, browser }) => {

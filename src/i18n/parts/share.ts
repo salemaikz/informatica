@@ -9,18 +9,18 @@ export const shareDict = {
   "share.targets.copy": { ru: "Скопировать ссылку", kk: "Сілтемені көшіру" },
   "share.targets.copied": { ru: "Ссылка скопирована", kk: "Сілтеме көшірілді" },
   "share.targets.shared": { ru: "Отправлено", kk: "Жіберілді" },
-  "share.targets.failed": { ru: "Не получилось — попробуй другой способ", kk: "Болмады — басқа тәсілмен көр" },
+  "share.targets.failed": { ru: "Не получилось — попробуй другой способ", kk: "Болмады — басқа тәсілді байқап көр" },
   "share.targets.manual": { ru: "Скопируй ссылку вручную:", kk: "Сілтемені қолмен көшір:" },
 
   // Кнопки «Поделиться» (итоги пробника, шкала курса, плитка серии)
   "share.btn.exam": { ru: "Поделиться результатом", kk: "Нәтижемен бөлісу" },
-  "share.btn.challenge": { ru: "Вызвать друга", kk: "Досты сынға шақыру" },
+  "share.btn.challenge": { ru: "Вызвать друга", kk: "Досты жарысқа шақыру" },
   "share.btn.short": { ru: "Поделиться", kk: "Бөлісу" },
 
   // Лист «Поделиться»
   "share.sheet.title.exam": { ru: "Поделиться результатом", kk: "Нәтижемен бөлісу" },
-  "share.sheet.title.challenge": { ru: "Вызвать друга", kk: "Досты сынға шақыру" },
-  "share.sheet.title.course": { ru: "Поделиться прогрессом", kk: "Жетістікпен бөлісу" },
+  "share.sheet.title.challenge": { ru: "Вызвать друга", kk: "Досты жарысқа шақыру" },
+  "share.sheet.title.course": { ru: "Поделиться прогрессом", kk: "Прогреспен бөлісу" },
   "share.sheet.title.streak": { ru: "Поделиться серией", kk: "Сериямен бөлісу" },
   "share.sheet.challengeNote": {
     ru: "Друг откроет этот же вариант и сравнит свой результат с твоим.",
@@ -31,7 +31,7 @@ export const shareDict = {
     ru: "На телефоне картинку можно нажать и удерживать — она сохранится в галерею.",
     kk: "Телефонда суретті басып тұрсаң, ол галереяға сақталады.",
   },
-  "share.sheet.previewAlt": { ru: "Карточка с результатом", kk: "Нәтиже картасы" },
+  "share.sheet.previewAlt": { ru: "Карточка с результатом", kk: "Нәтиже карточкасы" },
   "share.sheet.save": { ru: "Сохранить картинку", kk: "Суретті сақтау" },
   "share.sheet.renderFailed": {
     ru: "Картинку нарисовать не получилось — можно отправить ссылку.",
@@ -42,11 +42,11 @@ export const shareDict = {
   // Карточка-картинка
   "share.card.of": { ru: "из {m}", kk: "{m} ішінен" },
   "share.card.topics": { ru: "Сильные темы", kk: "Күшті тақырыптар" },
-  "share.card.footer.exam": { ru: "Пройди этот же вариант", kk: "Дәл осы нұсқаны өтіп көр" },
-  "share.card.footer.start": { ru: "Начни заниматься", kk: "Сен де бастап көр" },
-  "share.card.kicker.course": { ru: "Мой прогресс", kk: "Менің жетістігім" },
+  "share.card.footer.exam": { ru: "Пройди этот же вариант", kk: "Дәл осы нұсқаны шешіп көр" },
+  "share.card.footer.start": { ru: "Начни заниматься", kk: "Дайындалуды баста" },
+  "share.card.kicker.course": { ru: "Мой прогресс", kk: "Менің прогресім" },
   "share.card.kicker.streak": { ru: "Моя серия", kk: "Менің сериям" },
-  "share.card.lead": { ru: "Пройдено", kk: "Өтілді" },
+  "share.card.lead": { ru: "Пройдено", kk: "Өтілгені" },
   "share.card.course": { ru: "курса подготовки к ЕНТ", kk: "ҰБТ-ға дайындық курсы" },
   "share.card.class": { ru: "программы {g} класса", kk: "{g}-сынып бағдарламасы" },
   // «дней подряд» по числу (ru: день / дня / дней; kk без изменения)
@@ -58,7 +58,7 @@ export const shareDict = {
   "share.msg.exam": { ru: "Мой результат в Informatica — {kind}: {score}.", kk: "Informatica-дағы нәтижем — {kind}: {score}." },
   "share.msg.challenge": {
     ru: "У меня {score} в «{kind}». Пройди этот же вариант — сможешь больше?",
-    kk: "Менде «{kind}» бойынша {score}. Дәл осы нұсқаны өтіп көр — көбірек жинай аласың ба?",
+    kk: "Менде «{kind}» бойынша {score}. Дәл осы нұсқаны шешіп көр — көбірек жинай аласың ба?",
   },
   "share.msg.course": { ru: "{p}% курса подготовки к ЕНТ в Informatica уже позади.", kk: "Informatica-да ҰБТ-ға дайындық курсының {p}%-ы өтілді." },
   "share.msg.class": { ru: "{p}% программы {g} класса в Informatica уже позади.", kk: "Informatica-да {g}-сынып бағдарламасының {p}%-ы өтілді." },
@@ -66,10 +66,10 @@ export const shareDict = {
 
   // Страница результата /r/<код>
   "share.land.exam.eyebrow": { ru: "Результат друга в пробном ЕНТ", kk: "Достың сынақ ҰБТ-дағы нәтижесі" },
-  "share.land.exam.text": { ru: "Сможешь больше? Пройди этот же вариант.", kk: "Көбірек жинай аласың ба? Дәл осы нұсқаны өтіп көр." },
-  "share.land.course.eyebrow": { ru: "Прогресс друга", kk: "Достың жетістігі" },
+  "share.land.exam.text": { ru: "Сможешь больше? Пройди этот же вариант.", kk: "Көбірек жинай аласың ба? Дәл осы нұсқаны шешіп көр." },
+  "share.land.course.eyebrow": { ru: "Прогресс друга", kk: "Достың прогресі" },
   "share.land.streak.eyebrow": { ru: "Серия друга", kk: "Достың сериясы" },
-  "share.land.cta.accept": { ru: "Пройти этот же вариант", kk: "Дәл осы нұсқаны өту" },
+  "share.land.cta.accept": { ru: "Пройти этот же вариант", kk: "Дәл осы нұсқаны шешу" },
   "share.land.cta.start": { ru: "Начать заниматься", kk: "Дайындалуды бастау" },
   "share.land.invalid.title": { ru: "Ссылка не открылась", kk: "Сілтеме ашылмады" },
   "share.land.invalid.text": { ru: "Возможно, она скопирована не целиком. Но заниматься можно и без неё.", kk: "Мүмкін, ол толық көшірілмеген. Бірақ онсыз да дайындалуға болады." },
@@ -78,11 +78,11 @@ export const shareDict = {
 
   // Превью ссылки (читает сервер по языку из кода): заголовок и описание
   "share.og.exam.title": { ru: "{kind}: {score}", kk: "{kind}: {score}" },
-  "share.og.exam.desc": { ru: "Сможешь больше? Пройди этот же вариант в Informatica.", kk: "Көбірек жинай аласың ба? Informatica-да дәл осы нұсқаны өтіп көр." },
+  "share.og.exam.desc": { ru: "Сможешь больше? Пройди этот же вариант в Informatica.", kk: "Көбірек жинай аласың ба? Informatica-да дәл осы нұсқаны шешіп көр." },
   "share.og.course.title": { ru: "Пройдено {p}% курса подготовки к ЕНТ", kk: "ҰБТ-ға дайындық курсының {p}%-ы өтілді" },
   "share.og.class.title": { ru: "Пройдено {p}% программы {g} класса", kk: "{g}-сынып бағдарламасының {p}%-ы өтілді" },
-  "share.og.course.desc": { ru: "{done} из {total} уроков в Informatica. Занимайся вместе!", kk: "Informatica-да сабақтар: {done} / {total}. Бірге дайындалайық!" },
+  "share.og.course.desc": { ru: "{done} из {total} уроков в Informatica. Занимайся вместе!", kk: "Informatica-дағы сабақтар: {done} / {total}. Бірге дайындалайық!" },
   "share.og.streak.title": { ru: "Серия — {n} {days}", kk: "Серия — {n} {days}" },
-  "share.og.streak.desc": { ru: "Рекорд: {best}. Начни свою серию в Informatica.", kk: "Рекорд: {best}. Informatica-да өз сериянды баста." },
+  "share.og.streak.desc": { ru: "Рекорд: {best}. Начни свою серию в Informatica.", kk: "Рекорд: {best}. Informatica-да өз серияңды баста." },
   "share.og.alt": { ru: "Результат в Informatica", kk: "Informatica-дағы нәтиже" },
 } satisfies Record<string, L>;

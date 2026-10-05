@@ -121,7 +121,7 @@ test("/r/<код> без онбординга: тёмная тема, 390 px, я
   expect(new URL(page.url()).pathname).toBe(`/r/${KK_CODE}`);
   expect(await noHorizontalScroll(page)).toBe(true);
 
-  const accept = page.getByRole("link", { name: "Дәл осы нұсқаны өту" });
+  const accept = page.getByRole("link", { name: "Дәл осы нұсқаны шешу" });
   await expect(accept).toHaveAttribute("href", "/exam/run?kind=mini&seed=3051234567&ch=14-19-a9zq");
   await expect(page.getByRole("link", { name: "Дайындалуды бастау" })).toHaveAttribute("href", "/");
 
