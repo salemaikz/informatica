@@ -3,7 +3,7 @@
 import { ArrowRight, BookOpen, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
@@ -15,7 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Shake } from "@/components/motion/Shake";
 import { springBouncy, springSoft } from "@/components/motion/presets";
-import { useChips, useHearts, useNow } from "./useEconomy";
+import { useChips, useHearts, useNow, usePracticeHeartsLeft } from "./useEconomy";
 import { formatNum, formatRemaining, shopAvailability } from "./shop-helpers";
 import { readHearts } from "./HeartsBar";
 
@@ -136,15 +136,25 @@ function Content({
   const hearts = useHearts();
   const { chips } = useChips();
   const now = useNow();
+  // Карточку «Тренировка вернёт сердечко» показываем, только пока сегодняшний лимит возвратов не исчерпан.
+  const practiceLeft = usePracticeHeartsLeft();
   // Сердечек снова хватает на вход (вернулись по таймеру или куплены) — предлагаем продолжить.
   const back = canAfford(hearts, need);
   // Сердечки есть, но на вход за 2 не хватает — «Не хватает сердечек», а не «закончились».
   const short = !back && hearts.count > 0;
   const remaining = hearts.nextAt !== null && now > 0 ? formatRemaining(hearts.nextAt - now, lang) : null;
 
+  // Продолжаем один раз за открытие: закрывающееся окно ещё ~0,2 с принимает нажатия, а вызывающий (игра) по onResume
+  // сразу списывает вход — второе нажатие списало бы ещё раз. Content монтируется заново при каждом открытии.
+  const resumed = useRef(false);
+  const resume = () => {
+    if (resumed.current) return;
+    resumed.current = true;
+    onResume();
+  };
   // После покупки состояние в сторе уже обновлено — хватает на вход: продолжаем сразу, без лишнего нажатия.
   const bought = () => {
-    if (canAfford(readHearts(), need)) onResume();
+    if (canAfford(readHearts(), need)) resume();
   };
 
   return (
@@ -173,7 +183,7 @@ function Content({
       </div>
 
       {back ? (
-        <Button size="lg" block variant="success" onClick={onResume} autoFocus>
+        <Button size="lg" block variant="success" onClick={resume} autoFocus>
           {t("hearts.out.resume")}
         </Button>
       ) : (
@@ -193,7 +203,15 @@ function Content({
           <BuyRow id="heart-1" icon={<Heart size={22} fill="currentColor" aria-hidden />} nameKey="hearts.out.one" descKey="hearts.out.oneDesc" onBought={bought} />
           <BuyRow id="hearts-3" icon={<HeartPlus size={22} aria-hidden />} nameKey="hearts.out.three" descKey="hearts.out.threeDesc" onBought={bought} />
           <BuyRow id="hearts-full" icon={<HeartPulse size={22} aria-hidden />} nameKey="hearts.out.refill" descKey="hearts.out.refillDesc" onBought={bought} />
-          <LinkCard href="/practice" tone="primary" icon={<Dumbbell size={24} />} title={t("hearts.out.practice")} desc={t("hearts.out.practiceDesc", { n: PRACTICE_HEART_MIN_ANSWERS, p: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100) })} />
+          {practiceLeft > 0 && (
+            <LinkCard
+              href="/practice"
+              tone="primary"
+              icon={<Dumbbell size={24} />}
+              title={t("hearts.out.practice")}
+              desc={t("hearts.out.practiceDesc", { n: PRACTICE_HEART_MIN_ANSWERS, p: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100) })}
+            />
+          )}
           <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc", { n: AI_DAILY_CAP.unlimited })} />
           {theoryHref && (
             <ButtonLink href={theoryHref} variant="ghost" block icon={<BookOpen size={18} />}>

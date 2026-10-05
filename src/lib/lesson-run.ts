@@ -75,7 +75,8 @@ export function runPaid(run: Pick<LessonRun, "paidAt" | "updatedAt">, now: numbe
 
 /**
  * Сохранение, с которого можно продолжить урок, или null: не тот урок, другой отпечаток, просрочено,
- * шаг из очереди пропал, ещё ничего не пройдено (pos = 0 — продолжать нечего, просто начинаем).
+ * шаг из очереди пропал, ещё ничего не пройдено и вход не оплачен (pos = 0 без оплаты — продолжать нечего, просто начинаем).
+ * pos = 0 с оплатой — вход списан на первом задании, а ответ не засчитан (например, фото не прочиталось): продолжаем, чтобы не платить снова.
  */
 export function usableRun(
   run: LessonRun | undefined,
@@ -85,7 +86,7 @@ export function usableRun(
   if (!run || run.lessonId !== lesson.id) return null;
   if (run.sig !== lessonSig(lesson.steps)) return null;
   if (now - run.updatedAt > RUN_TTL_MS) return null;
-  if (run.pos <= 0 || run.pos > run.queue.length) return null;
+  if (run.pos < 0 || run.pos > run.queue.length || (run.pos === 0 && run.paidAt === null)) return null;
   const ids = new Set(lesson.steps.map((s) => s.id));
   if (!run.queue.every((q) => ids.has(q.id))) return null;
   return run;

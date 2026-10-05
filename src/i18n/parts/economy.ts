@@ -70,6 +70,8 @@ export const economyDict = {
   "shop.fail.chips": { ru: "Не хватает {n}", kk: "{n} жетпейді" },
   "shop.fail.overflow": { ru: "Столько не поместится — бери по одному", kk: "Мұншасы қорға сыймайды — бір-бірден ал" },
   "shop.fail.overflowRefill": { ru: "Выгоднее по одному или тройкой", kk: "Бір-бірден немесе үшеуін бірден алған тиімді" },
+  // Полный запас при 1–2 недостающих: тройка тоже не поместится
+  "shop.fail.overflowRefillOne": { ru: "Выгоднее по одному", kk: "Бір-бірден алған тиімді" },
   // n — PRACTICE_HEART_MIN_ANSWERS, p — PRACTICE_HEART_MIN_ACCURACY в процентах
   "shop.free.practice": {
     ru: "Бесплатно: тренировка вернёт сердечко (от {n} заданий, верно от {p}%)",

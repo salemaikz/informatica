@@ -84,7 +84,9 @@ describe("usableRun", () => {
     expect(usableRun(run(), lesson, T0 + RUN_TTL_MS + 1)).toBeNull();
   });
   it("ничего не пройдено (pos 0) или pos за очередью — не продолжаем", () => {
-    expect(usableRun(run({ pos: 0 }), lesson, T0)).toBeNull();
+    expect(usableRun(run({ pos: 0, paidAt: null }), lesson, T0)).toBeNull();
+    // вход оплачен на первом задании, а ответ не засчитан — продолжаем (иначе вход спишется второй раз)
+    expect(usableRun(run({ pos: 0 }), lesson, T0)).not.toBeNull();
     expect(usableRun(run({ pos: 5 }), lesson, T0)).toBeNull();
     // всё пройдено, остался только итог — продолжить можно (плеер сразу покажет итоги)
     expect(usableRun(run({ pos: 4 }), lesson, T0)).not.toBeNull();

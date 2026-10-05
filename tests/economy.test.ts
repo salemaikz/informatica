@@ -46,6 +46,7 @@ import {
   perMonthOfYear,
   planDaysLeft,
   practiceEarnsHeart,
+  practiceHeartsLeft,
   pushLedger,
   quoteAi,
   refillHearts,
@@ -869,5 +870,15 @@ describe("sanitize*: мусор на входе", () => {
     for (const g of garbage) expect(sanitizePaywall(g)).toEqual({ lastShownAt: 0, views: 0 });
     expect(sanitizePaywall({ lastShownAt: T0, views: 2.6 })).toEqual({ lastShownAt: T0, views: 2 });
     expect(sanitizePaywall({ lastShownAt: -1, views: -1 })).toEqual({ lastShownAt: 0, views: 0 });
+  });
+});
+
+describe("practiceHeartsLeft", () => {
+  it("до трёх возвратов в день, вчерашний счётчик не считается", () => {
+    expect(practiceHeartsLeft(undefined, "2027-01-15")).toBe(3);
+    expect(practiceHeartsLeft({ day: "2027-01-15", count: 2 }, "2027-01-15")).toBe(1);
+    expect(practiceHeartsLeft({ day: "2027-01-15", count: 3 }, "2027-01-15")).toBe(0);
+    expect(practiceHeartsLeft({ day: "2027-01-15", count: 9 }, "2027-01-15")).toBe(0);
+    expect(practiceHeartsLeft({ day: "2027-01-14", count: 3 }, "2027-01-15")).toBe(3);
   });
 });

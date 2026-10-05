@@ -50,7 +50,7 @@ import {
   FREE_PLAN,
   heartsView,
   practiceEarnsHeart,
-  PRACTICE_HEART_DAILY,
+  practiceHeartsLeft,
   spendHearts,
   pushLedger,
   quoteAi,
@@ -687,7 +687,7 @@ export const useApp = create<AppState & AppActions>()(
         if (result.kind === "drill" && result.mode !== "extern" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
           const ph = next.practiceHearts.day === today ? next.practiceHearts : { day: today, count: 0 };
           const view = heartsView(next.hearts, tier, now, today);
-          if (!view.unlimited && view.count < view.max && ph.count < PRACTICE_HEART_DAILY) {
+          if (!view.unlimited && view.count < view.max && practiceHeartsLeft(ph, today) > 0) {
             next = { ...next, hearts: addHearts(next.hearts, 1, tier, now, today), practiceHearts: { day: today, count: ph.count + 1 } };
             heart = true;
           }

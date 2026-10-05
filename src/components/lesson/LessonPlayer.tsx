@@ -183,7 +183,8 @@ export function LessonPlayer({
   const [init] = useState(() => (resume ? restoreRun(resume, steps, Date.now()) : null));
   // Сохраняем только урок в режиме «Учиться»; «Проверить себя» и тренировка собираются заново каждый раз.
   const persist = saveRun && kind === "lesson" && !!lessonId && (via ?? "learn") === "learn";
-  const exitHref = kind === "lesson" ? "/learn" : "/practice";
+  // Экстерн начинают с карты курса — туда и выход; остальные тренировки — в «Практику».
+  const exitHref = kind === "lesson" || mode === "extern" ? "/learn" : "/practice";
 
   const total = steps.length;
   const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));
@@ -231,6 +232,8 @@ export function LessonPlayer({
   const paidAtRef = useRef<number | null>(init?.paidAt ?? null);
   const skippedRef = useRef(init?.skipped ?? 0);
   const stepStartedAt = useRef(0);
+  // Плеер ещё на экране: долгая проверка фото может закончиться после выхода — тогда сохранение не трогаем.
+  const alive = useRef(true);
   // Высота нижней панели меняется (кнопка проверки → разбор с объяснением): отступ контента подстраиваем под неё,
   // чтобы последний вариант ответа можно было прокрутить над панелью даже на 360×640.
   const footerRef = useRef<HTMLElement>(null);
@@ -242,6 +245,13 @@ export function LessonPlayer({
     runStartedAt.current = init?.startedAt ?? Date.now();
     stepStartedAt.current = Date.now();
   }, [init]);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const el = footerRef.current;
@@ -288,7 +298,8 @@ export function LessonPlayer({
   // Снимок прохождения в стор (#41). Вызывается из обработчиков с уже посчитанными значениями: setState асинхронный.
   const persistRun = useCallback(
     (s: { queue: PlayerQueueItem[]; pos: number; done: number; records: AnswerRecord[]; xp: number; combo: number; maxCombo: number }) => {
-      if (!persist || !lessonId) return;
+      // После выхода из урока (ответ ИИ пришёл позже) не пишем: иначе вернётся сброшенное «Начать заново» или затрётся новый снимок.
+      if (!persist || !lessonId || !alive.current) return;
       const now = Date.now();
       useApp.getState().saveLessonRun(
         buildRun({
@@ -320,8 +331,11 @@ export function LessonPlayer({
     }
     paidAtRef.current = Date.now();
     setPaid(res.paid > 0);
+    // Оплату сохраняем сразу, на текущем шаге: если проверка фото не дойдёт до ответа (не читается, сбой ИИ) и ученик выйдет,
+    // возврат в течение RUN_GRACE_MS не спишет вход второй раз. Ответ потом перезапишет снимок шагом дальше.
+    persistRun({ queue, pos, done, records, xp, combo, maxCombo });
     return true;
-  }, [entryCost]);
+  }, [entryCost, persistRun, queue, pos, done, records, xp, combo, maxCombo]);
 
   // Переход к следующему шагу: doneNow — сколько шагов пройдено после него (теория засчитывается здесь, задание — при ответе).
   const advance = useCallback(

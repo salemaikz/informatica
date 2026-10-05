@@ -30,6 +30,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
+import { useHearts } from "@/components/economy/useEconomy";
 import { ICONS } from "@/components/scenes/icons";
 import { bestPercent, isDue, lessonTopics, pluralForm, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
@@ -102,6 +103,8 @@ function ModeCard({
 function SheetBody({ lessonId }: { lessonId: string }) {
   const { t, l } = useT();
   const now = useNow();
+  // При безлимите значки цены скрыты — и строка о плате тоже.
+  const unlimited = useHearts().unlimited;
   const stat = useApp((s) => s.lessons[lessonId]);
   const [gamesOpen, setGamesOpen] = useState(false);
   const place = findLessonRef(lessonId);
@@ -258,7 +261,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
         )}
         <ModeCard href={`/theory/${lessonId}`} icon={BookOpen} title={t("learn2.mode.theory")} hint={t("learn2.mode.theoryHint")} />
         <ModeCard href={`/notes/lesson/${lessonId}`} icon={NotebookPen} title={t("learn2.mode.notes")} hint={t("learn2.mode.notesHint")} />
-        <p className="px-1 text-xs font-bold text-muted">{t("learn2.sheet.costNote")}</p>
+        {!unlimited && <p className="px-1 text-xs font-bold text-muted">{t("learn2.sheet.costNote")}</p>}
       </div>
     </div>
   );

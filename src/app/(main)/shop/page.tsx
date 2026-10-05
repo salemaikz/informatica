@@ -23,7 +23,7 @@ import {
   MoneyRow,
   ShopSection,
 } from "@/components/economy/ShopParts";
-import { useHearts, usePlanTier } from "@/components/economy/useEconomy";
+import { useHearts, usePlanTier, usePracticeHeartsLeft } from "@/components/economy/useEconomy";
 import {
   formatNum,
   formatSpan,
@@ -40,7 +40,9 @@ export default function ShopPage() {
   });
   const hearts = useHearts();
   const tier = usePlanTier();
-  const showPractice = !hearts.unlimited && hearts.count < hearts.max;
+  // Тренировка вернёт сердечко, только пока не исчерпан дневной лимит возвратов.
+  const practiceLeft = usePracticeHeartsLeft();
+  const showPractice = !hearts.unlimited && hearts.count < hearts.max && practiceLeft > 0;
   const practice = practiceRule();
   const pick = (what: string) => setSoon({ open: true, what });
 

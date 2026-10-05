@@ -35,7 +35,8 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
   const saved = entry.run;
   // ask — экран выбора; continue — плеер с сохранения; fresh — плеер с первого шага.
   const [choice, setChoice] = useState<"ask" | "continue" | "fresh">(saved ? "ask" : "fresh");
-  const [restartShort, setRestartShort] = useState(false);
+  // Не хватает сердечек на выбранное действие — окно покупки; после покупки выполняем это действие.
+  const [short, setShort] = useState<null | "continue" | "restart">(null);
 
   const cost = asCheck ? ENTRY_COST.check : lessonCost(lesson);
   // Продолжение уже оплаченного входа (или без заданий впереди) бесплатно — на входе сердечки не нужны.
@@ -48,7 +49,13 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
   // «Начать заново» стоит всегда: не хватает сердечек — окно покупки, сохранение не трогаем.
   const askRestart = () => {
     if (canAfford(readHearts(), cost)) restart();
-    else setRestartShort(true);
+    else setShort("restart");
+  };
+  // «Продолжить»: оплачен ли вход, проверяем в момент нажатия — 20 минут могли истечь, пока открыт экран выбора.
+  const askContinue = () => {
+    const free = !entry.ahead || (!!saved && runPaid(saved, Date.now()));
+    if (free || canAfford(readHearts(), cost)) setChoice("continue");
+    else setShort("continue");
   };
 
   const theoryHref = `/theory/${lesson.id}`;
@@ -62,17 +69,19 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
           total={lesson.steps.length}
           ahead={entry.ahead}
           cost={cost}
-          onContinue={() => setChoice("continue")}
+          onContinue={askContinue}
           onRestart={askRestart}
           backHref="/learn"
         />
         <OutOfHearts
-          open={restartShort}
+          open={short !== null}
           need={cost}
-          onClose={() => setRestartShort(false)}
+          onClose={() => setShort(null)}
           onResume={() => {
-            setRestartShort(false);
-            restart();
+            const action = short;
+            setShort(null);
+            if (action === "restart") restart();
+            else if (action === "continue") setChoice("continue");
           }}
           onExit={() => router.push("/learn")}
           theoryHref={theoryHref}

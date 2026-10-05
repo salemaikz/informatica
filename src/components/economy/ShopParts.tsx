@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { feedback } from "@/lib/feedback";
-import type { ShopItem } from "@/lib/economy";
+import { shopItem, type ShopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
@@ -148,7 +148,13 @@ export function ChipItemRow({
         : av.reason === "unlimited"
           ? t("shop.fail.unlimited")
           : av.reason === "overflow"
-            ? t(item.kind === "refill" ? "shop.fail.overflowRefill" : "shop.fail.overflow")
+            ? t(
+                item.kind !== "refill"
+                  ? "shop.fail.overflow"
+                  : !hearts.unlimited && hearts.max - hearts.count >= (shopItem("hearts-3")?.amount ?? 3)
+                    ? "shop.fail.overflowRefill"
+                    : "shop.fail.overflowRefillOne",
+              )
             : t("shop.fail.chips", { n: av.missing ?? 0 });
 
   return (

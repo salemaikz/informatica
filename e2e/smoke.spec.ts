@@ -57,7 +57,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toBeVisible();
   await expect(page.locator("footer")).toContainText("2");
-  // Ошибка с первой попытки стоит сердечко: было 5, стало 4.
+  // Первый ответ в уроке оплачивает вход (#40): было 5, стало 4 — за вход, а не за ошибку.
   await expect(page.getByLabel("Сердечки: 4")).toBeVisible();
 
   expect(errors).toEqual([]);

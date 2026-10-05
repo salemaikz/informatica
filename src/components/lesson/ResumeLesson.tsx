@@ -46,7 +46,8 @@ export function ResumeLesson({
 }) {
   const { t, lang } = useT();
   const now = useNow();
-  const free = !ahead || (now > 0 && runPaid(run, now));
+  // Общие часы useNow тикают раз в 15 с и могут отставать от момента сохранения — не считаем их раньше updatedAt.
+  const free = !ahead || (now > 0 && runPaid(run, Math.max(now, run.updatedAt)));
   const { n, m: all } = resumeStep(run, total);
 
   return (

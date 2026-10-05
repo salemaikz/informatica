@@ -228,6 +228,12 @@ export function practiceEarnsHeart(answers: number, accuracy: number): boolean {
   return answers >= PRACTICE_HEART_MIN_ANSWERS && accuracy >= PRACTICE_HEART_MIN_ACCURACY;
 }
 
+/** Сколько раз сегодня тренировка ещё может вернуть сердечко (счётчик за другой день — сброшен). */
+export function practiceHeartsLeft(ph: { day: string; count: number } | undefined, today: string): number {
+  const used = ph && ph.day === today ? Math.max(0, ph.count) : 0;
+  return Math.max(0, PRACTICE_HEART_DAILY - used);
+}
+
 // ---------- Чипы ----------
 
 export interface Wallet {
