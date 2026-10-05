@@ -71,6 +71,11 @@ test("новый ученик: онбординг → сразу баннер в
   await page.reload();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
   expect(await savedHearts(page)).toBe(before - 1);
+  // Продолжение из хаба: в адресе нет ни варианта, ни вызова — вызов берётся только из сохранённой попытки (C23).
+  await page.goto("/exam/run");
+  await expect(page.getByText("Задание 1").first()).toBeVisible();
+  expect(page.url()).not.toContain("ch=");
+  expect(await savedHearts(page)).toBe(before - 1);
   await finishExam(page);
   const cmp = page.getByTestId("challenge-compare");
   await expect(cmp).toBeVisible();
