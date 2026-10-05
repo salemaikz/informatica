@@ -5,9 +5,9 @@ import { cacheableRequest, cacheKeyPayload, cacheStyle, cacheTask, leaksAnswer }
 import { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, stripStreamMark, withStreamEnd } from "@/lib/ai-stream";
 import { AI_UNITS } from "@/lib/economy";
 import { crisisLang, crisisReply, detectCrisis } from "@/lib/safety";
-import { callTimeoutMs, getOpenAI, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
+import { callTimeoutMs, getOpenAI, INPUT_BUDGET, jsonError, logUsage, MAX_TOKENS, MODELS, openAiRejected } from "@/server/openai";
 import { guardAi, preCheckAi, withGuardHeaders, type GuardOk } from "@/server/ai-guard";
-import { sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask } from "@/server/context";
+import { fitInput, messagesChars, sameOrigin, sanitizeContext, sanitizeHistory, sanitizeImage, sanitizeTask, type HistoryMsg } from "@/server/context";
 import { tutorSystemPrompt } from "@/server/prompts";
 import { cachedAnswer, logCache, SkipCache, sha256 } from "@/server/ai-cache";
 import { CHAT_MODES, type ChatMode } from "@/lib/chats";
@@ -20,6 +20,10 @@ import type { EntTopicId } from "@/lib/types";
 // обращение списывается до вызова модели; возвращается, только если модель точно не получила запрос).
 // Конец ответа: каждый текстовый ответ заканчивается маркером (lib/ai-stream.ts): OK — дошёл целиком, ERR — сбой потока,
 // CUT — обрезка по длине. Ответ без маркера OK клиент покажет как «оборвалось». Маркер ученику не виден.
+// Бюджет входа (INPUT_BUDGET.tutor, v0.9.1): fitInput укладывает системный промпт + данные ученика + историю в 16 000 символов —
+// сначала отбрасывает самые старые сообщения, потом ужимает заметки, память и ошибки; правила и последний вопрос целы.
+// Кэшируемый путь бюджет не превышает по построению (контекст нейтральный, вопрос — одна из быстрых кнопок, потолки полей
+// задания), его размер пишется в лог.
 
 export const maxDuration = 60;
 
@@ -80,10 +84,13 @@ export async function POST(req: Request) {
   const g = await guardAi(req, { route: "tutor", units: AI_UNITS[image ? "photo" : mode] });
   if (!g.ok) return g.response;
 
-  const userTurns = (): Msg[] => {
+  // Подсказка и разбор ошибки без сообщений ученика: модели уходит короткая реплика от его имени.
+  const emptyAsk = mode === "hint" ? (ctx.lang === "kk" ? "Кеңес берші" : "Дай подсказку") : ctx.lang === "kk" ? "Қатемді түсіндірші" : "Объясни мою ошибку";
+
+  const userTurns = (turns: HistoryMsg[]): Msg[] => {
     const out: Msg[] = [];
-    history.forEach((m, i) => {
-      const isLast = i === history.length - 1;
+    turns.forEach((m, i) => {
+      const isLast = i === turns.length - 1;
       if (isLast && image && m.role === "user") {
         out.push({
           role: "user",
@@ -96,13 +103,7 @@ export async function POST(req: Request) {
         out.push(m);
       }
     });
-    if (history.length === 0) {
-      const ask =
-        mode === "hint"
-          ? ctx.lang === "kk" ? "Кеңес берші" : "Дай подсказку"
-          : ctx.lang === "kk" ? "Қатемді түсіндірші" : "Объясни мою ошибку";
-      out.push({ role: "user", content: ask });
-    }
+    if (turns.length === 0) out.push({ role: "user", content: emptyAsk });
     return out;
   };
 
@@ -110,7 +111,7 @@ export async function POST(req: Request) {
   const cacheReq = cacheableRequest(mode, history, task, !!image);
   if (cacheReq && task) {
     return withGuardHeaders(
-      await cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns() }, g, req.signal),
+      await cachedTutor(client, { mode, ctx, task, question: cacheReq.question, turns: userTurns(history) }, g, req.signal),
       g,
     );
   }
@@ -130,7 +131,16 @@ export async function POST(req: Request) {
   let sent = false;
   try {
     const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
-    const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(ctx, mode, task, { chatMode, topic }) }, ...userTurns()];
+    const promptOpts = { chatMode, topic };
+    // Бюджет входа: укладываем историю и необязательные части контекста (подробности — в шапке файла и в fitInput).
+    const fit = fitInput({
+      budget: INPUT_BUDGET.tutor,
+      ctx,
+      history,
+      base: (c) => tutorSystemPrompt(c, mode, task, promptOpts).length + (history.length === 0 ? emptyAsk.length : 0),
+    });
+    const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(fit.ctx, mode, task, promptOpts) }, ...userTurns(fit.history)];
+    const input = { chars: messagesChars(messages), trimmed: fit.trimmed };
     // Тело потока SDK таймаутом не покрывает (только ожидание заголовков): общий срок — свой сигнал, чтобы сами
     // закрыть ответ маркером ERR до того, как платформа оборвёт функцию по maxDuration.
     const timeoutMs = callTimeoutMs(maxDuration);
@@ -160,7 +170,7 @@ export async function POST(req: Request) {
             const delta = choice?.delta?.content ? stripStreamMark(choice.delta.content) : "";
             if (delta) controller.enqueue(encoder.encode(delta));
             if (choice?.finish_reason) finish = choice.finish_reason;
-            if (chunk.usage) logUsage(route, model, chunk.usage);
+            if (chunk.usage) logUsage(route, model, chunk.usage, input);
           }
         } catch (e) {
           failed = !req.signal.aborted;
@@ -225,16 +235,18 @@ async function cachedTutor(
 
   const generate = async (noLeak: boolean): Promise<{ text: string; cut: boolean }> => {
     // Генерация общая для одинаковых запросов и кладётся в кэш — к сигналу одного запроса не привязана.
+    const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(neutralCtx, mode, task, { neutral: true, noLeak }) }, ...turns];
     const res = await client.chat.completions.create(
       {
         model,
-        messages: [{ role: "system", content: tutorSystemPrompt(neutralCtx, mode, task, { neutral: true, noLeak }) }, ...turns],
+        messages,
         reasoning_effort: "none",
         max_completion_tokens: mode === "hint" ? MAX_TOKENS.hint : MAX_TOKENS.cached,
       },
       { timeout: callTimeoutMs(maxDuration) },
     );
     logCache(route, "miss", model, res.usage);
+    console.info(`[ai] route=${route} chars=${messagesChars(messages)}`);
     const choice = res.choices[0];
     return { text: stripStreamMark(choice?.message?.content?.trim() ?? ""), cut: choice?.finish_reason === "length" };
   };

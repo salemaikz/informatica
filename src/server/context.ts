@@ -165,9 +165,137 @@ export function renderContext(c: StudentContext & Partial<WithTrack>): string {
   if (c.strong.length) lines.push(`Сильные темы: ${c.strong.join("; ")}.`);
   if (c.mistakes.length) {
     lines.push("Недавние ошибки:");
-    for (const m of c.mistakes) lines.push(`- «${m.q}» — ответил «${m.given}», верно «${m.expected}»`);
+    for (const m of c.mistakes) lines.push(`- «${m.q}» — ответ ученика «${m.given}», верно «${m.expected}»`);
   }
   if (c.memory) lines.push(`Заметки наставника об ученике (память):\n${c.memory}`);
   if (c.notes) lines.push(`Заметки ученика из конспекта:\n${c.notes}`);
   return lines.join("\n");
+}
+
+// ---------- Бюджет входа одного запроса (v0.9.1) ----------
+// Размер входа считаем в символах (токены без токенизатора не посчитать): системный промпт + данные ученика + задание +
+// история. Бюджеты — INPUT_BUDGET в server/openai.ts. Потолки полей выше заданы так, что обычный запрос укладывается без
+// обрезки; сюда попадают только тяжёлые: длинный чат с большим конспектом, памятью и списком ошибок.
+
+/** Сумма длин текстов сообщений истории. */
+export function historyChars(history: readonly HistoryMsg[]): number {
+  return history.reduce((sum, m) => sum + m.content.length, 0);
+}
+
+/** Размер текстового входа готового запроса к модели: строки и текстовые части (картинка не считается). */
+export function messagesChars(messages: ReadonlyArray<{ content?: unknown }>): number {
+  let n = 0;
+  for (const m of messages) {
+    if (typeof m.content === "string") n += m.content.length;
+    else if (Array.isArray(m.content)) {
+      for (const p of m.content as { type?: string; text?: unknown }[]) if (p?.type === "text" && typeof p.text === "string") n += p.text.length;
+    }
+  }
+  return n;
+}
+
+/** Убрать с конца текста `over` символов (не больше длины). */
+export function clipEnd(text: string, over: number): string {
+  return over <= 0 ? text : text.slice(0, Math.max(0, text.length - over)).trimEnd();
+}
+
+/** Остаток текста короче этого не оставляем: пустым он полезнее, чем обрывком в пару слов. */
+const MIN_KEEP_CHARS = 40;
+
+/** Один шаг ужатия контекста: вернуть укороченный контекст или null, если в этой части ужимать уже нечего. */
+type ShrinkStep = <C extends StudentContext>(ctx: C, over: number) => C | null;
+
+const cutText =
+  (key: "notes" | "memory"): ShrinkStep =>
+  (ctx, over) => {
+    const s = ctx[key];
+    if (!s) return null;
+    return { ...ctx, [key]: s.length - over < MIN_KEEP_CHARS ? "" : clipEnd(s, over) };
+  };
+
+/** Убирает по одному элементу с конца списка. */
+const dropLast =
+  (key: "mistakes" | "lessons" | "strong" | "weak"): ShrinkStep =>
+  (ctx) =>
+    ctx[key].length ? { ...ctx, [key]: ctx[key].slice(0, -1) } : null;
+
+/**
+ * Необязательные части контекста — с конца блока «ДАННЫЕ УЧЕНИКА» (renderContext): заметки ученика, память наставника,
+ * ошибки, пройденные уроки, сильные и слабые темы. Основа (имя, класс, режим, цель, стиль, уровень) не трогается.
+ */
+const SHRINK_STEPS: ShrinkStep[] = [cutText("notes"), cutText("memory"), dropLast("mistakes"), dropLast("lessons"), dropLast("strong"), dropLast("weak")];
+/** Память наставника обновляется по её же тексту (отзыв после урока) — ужимаем в последнюю очередь. */
+const SHRINK_STEPS_KEEP_MEMORY: ShrinkStep[] = [cutText("notes"), dropLast("mistakes"), dropLast("lessons"), dropLast("strong"), dropLast("weak"), cutText("memory")];
+
+export interface FitResult<C extends StudentContext> {
+  ctx: C;
+  history: HistoryMsg[];
+  /** Размер входа после ужатия (символы). Больше бюджета — только если не поддаётся ужатию (правила + задание + последний вопрос). */
+  chars: number;
+  /** Вход пришлось укоротить. */
+  trimmed: boolean;
+}
+
+/**
+ * Укладывает вход одного запроса в бюджет (символы). Чистая функция: ничего не мутирует, маленький запрос возвращает
+ * как есть (те же объекты). Порядок ужатия:
+ * 1) отбрасываем самые старые сообщения истории — последнее (вопрос ученика, до 2000 символов) остаётся целиком;
+ * 2) укорачиваем необязательные части контекста с конца: заметки, память, ошибки, уроки, сильные и слабые темы.
+ * Системные правила и задание не трогаем — они внутри `base`.
+ * base(ctx) — размер всего входа, КРОМЕ истории, для данного контекста (длина системного промпта и прочего текста).
+ */
+export function fitInput<C extends StudentContext>(a: {
+  budget: number;
+  ctx: C;
+  history: HistoryMsg[];
+  base: (ctx: C) => number;
+  /** Не трогать память наставника, пока есть что ужать ещё (отзыв после урока перезаписывает память). */
+  keepMemory?: boolean;
+}): FitResult<C> {
+  let { ctx, history } = a;
+  let chars = a.base(ctx) + historyChars(history);
+  if (chars <= a.budget) return { ctx, history, chars, trimmed: false };
+
+  let from = 0;
+  while (chars > a.budget && history.length - from > 1) chars -= history[from++].content.length;
+  history = history.slice(from);
+
+  for (const step of a.keepMemory ? SHRINK_STEPS_KEEP_MEMORY : SHRINK_STEPS) {
+    while (chars > a.budget) {
+      const next = step(ctx, chars - a.budget);
+      if (!next) break;
+      ctx = next;
+      chars = a.base(ctx) + historyChars(history);
+    }
+  }
+  return { ctx, history, chars, trimmed: true };
+}
+
+/** Сводка по уроку для отзыва ИИ не длиннее: ошибки отбрасываются с конца (остаётся хотя бы одна). */
+export const FEEDBACK_SUMMARY_MAX_CHARS = 2500;
+
+/**
+ * Сводка по только что пройденному уроку для /api/ai/lesson-feedback (недоверенные данные с клиента → текст).
+ * Не длиннее FEEDBACK_SUMMARY_MAX_CHARS: иначе длинные ошибки вытеснили бы память наставника из бюджета входа.
+ */
+export function feedbackSummary(body: Record<string, unknown>): string {
+  const mistakes = (Array.isArray(body.mistakes) ? body.mistakes : []).slice(0, 10).map((m) => {
+    const o = (m ?? {}) as Record<string, unknown>;
+    return `- «${str(o.q, 200)}» — ответ «${str(o.given, 60)}», верно «${str(o.expected, 60)}»`;
+  });
+  const skills = (Array.isArray(body.skills) ? body.skills : []).slice(0, 10).map((s) => {
+    const o = (s ?? {}) as Record<string, unknown>;
+    return `- ${str(o.title, 60)}: ${Math.round((Number(o.mastery) || 0) * 100)}%`;
+  });
+  const build = (list: string[]) =>
+    [
+      `Урок: ${str(body.lesson, 120)}`,
+      `Точность: ${Math.round((Number(body.accuracy) || 0) * 100)}%`,
+      `Время: ${Math.round((Number(body.durationSec) || 0) / 60)} мин`,
+      list.length ? `Ошибки:\n${list.join("\n")}` : "Ошибок не было.",
+      skills.length ? `Освоение тем после урока:\n${skills.join("\n")}` : "",
+    ].join("\n");
+  let list = mistakes;
+  while (list.length > 1 && build(list).length > FEEDBACK_SUMMARY_MAX_CHARS) list = list.slice(0, -1);
+  return build(list);
 }

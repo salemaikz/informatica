@@ -5,9 +5,9 @@ import { LEGAL_IDS, type LegalId } from "@/content/legal";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 
-const HREF: Record<LegalId, string> = { about: "/about", privacy: "/privacy", terms: "/terms" };
+const HREF: Record<LegalId, string> = { privacy: "/privacy", terms: "/terms" };
 
-/** Ссылки на три документа: внизу правовых страниц, в «Профиле» и в подвале меню. */
+/** Ссылки на документы (политика и условия): внизу правовых страниц, в «Профиле» и в подвале меню. */
 export function LegalLinks({ current, className }: { current?: LegalId; className?: string }) {
   const { t } = useT();
   return (

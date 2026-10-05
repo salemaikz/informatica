@@ -7,7 +7,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
-import { AI_DAILY_CAP, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
+import { PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -212,7 +212,7 @@ function Content({
               desc={t("hearts.out.practiceDesc", { n: PRACTICE_HEART_MIN_ANSWERS, p: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100) })}
             />
           )}
-          <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc", { n: AI_DAILY_CAP.unlimited })} />
+          <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc")} />
           {theoryHref && (
             <ButtonLink href={theoryHref} variant="ghost" block icon={<BookOpen size={18} />}>
               {t("hearts.out.theory")}

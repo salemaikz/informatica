@@ -2,7 +2,7 @@
 
 import { Check, Crown, Star } from "lucide-react";
 import { m } from "motion/react";
-import { AI_DAILY_CAP, PLAN_FEATURES, PRICES, formatTenge, perMonthOfYear, yearSaving, type BillingPeriod, type PaidTier } from "@/lib/economy";
+import { PLAN_FEATURES, PRICES, formatTenge, perMonthOfYear, yearSaving, type BillingPeriod, type PaidTier } from "@/lib/economy";
 import { cn } from "@/lib/cn";
 import { daysText } from "@/lib/goals";
 import { useT } from "@/i18n/useT";
@@ -16,7 +16,7 @@ export function usePlanPerks(tier: PaidTier): string[] {
   const { t, lang } = useT();
   const f = PLAN_FEATURES[tier];
   const chips = t("plans.perk.chips", { mult: formatNumber(f.chipMultiplier) });
-  if (tier === "unlimited") return [t("plans.perk.unl.hearts"), t("plans.perk.unl.ai", { n: AI_DAILY_CAP.unlimited }), chips];
+  if (tier === "unlimited") return [t("plans.perk.unl.hearts"), t("plans.perk.unl.ai"), chips];
   return [t("plans.perk.lite.hearts", { n: f.maxHearts, time: formatHours(f.regenMs, lang) }), t("plans.perk.lite.ai", { n: f.aiFree }), chips];
 }
 

@@ -472,12 +472,26 @@ describe("стор: ИИ за чипы", () => {
     expect(st().aiUsage.count).toBe(0);
   });
 
-  it("потолок бесплатного тарифа — 13 обращений: фото на 13-м уже не помещается, подсказка помещается; чипы при отказе целы", () => {
-    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 }, aiUsage: { day: todayKey(), count: 12, free: 3 } });
+  it("потолок бесплатного тарифа — 65 обращений: фото на 65-м уже не помещается, подсказка помещается; чипы при отказе целы", () => {
+    useApp.setState({ wallet: { chips: 999, earned: 999, spent: 0 }, aiUsage: { day: todayKey(), count: 64, free: 3 } });
     expect(st().spendAi("photo")).toMatchObject({ ok: false, reason: "cap" });
     expect(chips()).toBe(999);
-    expect(st().aiUsage.count).toBe(12);
+    expect(st().aiUsage.count).toBe(64);
     expect(st().spendAi("hint")).toMatchObject({ ok: true, pay: "chips", cost: 3 });
+    expect(st().aiUsage.count).toBe(65);
+    expect(st().spendAi("hint")).toMatchObject({ ok: false, reason: "cap" });
+    expect(chips()).toBe(996);
+  });
+
+  it("потолок 65 одинаков на «Лайте» и «Безлимите»: бесплатные обращения и чипы не двигают границу", () => {
+    useApp.setState({ plan: { tier: "lite", period: "month", until: Date.now() + 30 * 86_400_000 }, aiUsage: { day: todayKey(), count: 64, free: 30 } });
+    expect(st().spendAi("photo")).toMatchObject({ ok: false, reason: "cap" });
+    expect(st().spendAi("hint")).toMatchObject({ ok: true, pay: "chips" });
+    expect(st().spendAi("hint")).toMatchObject({ ok: false, reason: "cap" });
+
+    useApp.setState({ plan: { tier: "unlimited", period: "month", until: Date.now() + 30 * 86_400_000 }, aiUsage: { day: todayKey(), count: 63, free: 0 } });
+    expect(st().spendAi("photo")).toMatchObject({ ok: true, pay: "plan", cost: 0 });
+    expect(st().aiUsage.count).toBe(65);
     expect(st().spendAi("hint")).toMatchObject({ ok: false, reason: "cap" });
   });
 
@@ -665,13 +679,6 @@ describe("стор: сброс и загрузка сохранений", () => 
     expect(m.wallet).toEqual({ chips: 7, earned: 20, spent: 13 });
     expect(m.ledger).toHaveLength(1);
     expect(m.history.map((e) => e.id)).toEqual(["h"]);
-  });
-
-  it("importProgress тариф из файла не берёт", () => {
-    const ok = st().importProgress({ xp: 5, profile: {}, plan: { tier: "unlimited", until: Date.now() + 1e10 }, wallet: { chips: 555, earned: 555, spent: 0 } });
-    expect(ok).toBe(true);
-    expect(st().plan.tier).toBe("free");
-    expect(chips()).toBe(555);
   });
 });
 

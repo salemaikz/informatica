@@ -82,7 +82,6 @@ import {
 import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
 import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
 import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
-import { parseBackup } from "./backup";
 import { beginHydration, finishHydration, safeStorage, STORAGE_KEY } from "./safe-storage";
 
 export type { LessonStat } from "./review";
@@ -378,8 +377,6 @@ export interface AppActions {
    * XP за пробник не начисляется — это проверка, а не тренировка.
    */
   recordExam: (summary: ExamSummary, skillScores: Record<string, number[]>, wrong?: WrongItem[]) => void;
-  /** Заменить весь прогресс (импорт резервной копии). Данные проверяются как недоверенные. */
-  importProgress: (raw: unknown) => boolean;
   resetProgress: () => void;
 }
 
@@ -535,7 +532,7 @@ const NAME_MAX = 30;
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Профиль из хранилища или файла копии — недоверенный: у каждого поля проверяется тип, лишнего не остаётся. */
+/** Профиль из хранилища — недоверенный: у каждого поля проверяется тип, лишнего не остаётся. */
 function cleanProfile(raw: unknown): Profile {
   const p = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const d = defaultProfile;
@@ -1240,18 +1237,6 @@ export const useApp = create<AppState & AppActions>()(
           return settleChips(s, { ...next, ...evaluate(next) }, isNew && answered > 0 ? [{ base: CHIP_BONUS.exam, reason: "exam" }] : []);
         }),
 
-      importProgress: (raw) => {
-        // Файл — недоверенные данные: parseBackup оставляет только известные поля нужных типов (lib/backup.ts).
-        const parsed = parseBackup(raw);
-        if (!parsed) return false;
-        const { version: _version, ...fields } = parsed.state;
-        void _version;
-        const migrated = migrateState(fields, parsed.version);
-        // Тариф из файла не берём: он привязан к устройству (позже — к аккаунту).
-        set((s) => ({ ...mergeState({ ...initialState, ...migrated, onboarded: true }, s), plan: s.plan }));
-        return true;
-      },
-
       // Тариф и пробный период сброс прогресса не трогает.
       resetProgress: () => set((s) => ({ ...initialState, notebook: emptyNotebook(Date.now()), plan: s.plan })),
     }),
@@ -1259,7 +1244,7 @@ export const useApp = create<AppState & AppActions>()(
       name: STORAGE_KEY,
       version: 2,
       // Безопасное хранилище (lib/safe-storage.ts): не бросает при запрете localStorage и переполнении,
-      // а нечитаемое сохранение откладывает в копию вместо молчаливой потери. Поэтому useApp.persist есть всегда.
+      // а нечитаемое сохранение не затирает (запись блокируется до решения ученика). Поэтому useApp.persist есть всегда.
       storage: createJSONStorage(() => safeStorage),
       // Сбой чтения, миграции или слияния не «вешает» приложение: Providers покажет экран восстановления.
       onRehydrateStorage: () => {

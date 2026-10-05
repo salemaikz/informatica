@@ -155,13 +155,13 @@ export function filterHistory(list: HistoryEntry[], f: HistoryFilter): HistoryEn
   }
 }
 
-/** Пределы длины строк при проверке истории: файл копии и хранилище — недоверенные, свои значения короче. */
+/** Пределы длины строк при проверке истории: хранилище (localStorage) — недоверенное, свои значения короче. */
 const ID_LIMIT = 80;
 const STEP_ID_LIMIT = 120;
 const TITLE_LIMIT = 160;
 const MODE_LIMIT = 40;
 
-/** Проверка сохранённой истории (данные из localStorage и файла копии — недоверенные). */
+/** Проверка сохранённой истории (данные из localStorage — недоверенные). */
 export function sanitizeHistory(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) return [];
   const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");

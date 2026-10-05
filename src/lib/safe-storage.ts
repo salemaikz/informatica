@@ -4,12 +4,13 @@
 // Что умеет:
 //  - localStorage недоступен (приватный режим, запрет cookies, SecurityError) → работаем из памяти, статус «memory»;
 //  - запись не удалась (переполнение) → не падаем, держим свежую копию в памяти, статус «full»; удалась — снова «ok»;
-//  - сохранение не прочиталось (битый JSON, ошибка миграции/слияния, getItem бросил) → сырая строка копируется в BROKEN_KEY
-//    (одна последняя копия), запись в основной ключ блокируется, пока ученик не решит: скачать, начать заново, повторить;
-//  - «Начать заново» не стирает сохранение, пока копия не лежит в браузере (иначе — вернуть как было и предложить скачать).
+//  - сохранение не прочиталось (битый JSON, ошибка миграции/слияния, getItem бросил) → запись в основной ключ блокируется:
+//    сохранение лежит нетронутым, пока ученик не решит — «Попробовать ещё раз» или «Начать заново» (тогда оно удаляется).
+//    Копий и выгрузок нет: данные не уходят и не дублируются.
 
 export const STORAGE_KEY = "informatica-v1";
-export const BROKEN_KEY = "informatica-v1-broken";
+/** Ключ копии повреждённого сохранения из прежних версий (v0.9.0): копий больше нет, при запуске ключ удаляется. */
+export const LEGACY_BROKEN_KEY = "informatica-v1-broken";
 const PROBE_KEY = "informatica-probe";
 
 /** ok — пишется в браузер; memory — браузер не даёт сохранять; full — память браузера заполнена. */
@@ -25,7 +26,6 @@ export interface SafeStorageOptions {
   /** Откуда брать хранилище; null — недоступно. По умолчанию — window.localStorage. */
   backend?: () => RawStorage | null;
   key?: string;
-  brokenKey?: string;
 }
 
 /** Ошибка переполнения: у браузеров разные имена и коды. */
@@ -58,35 +58,25 @@ export interface SafeStorage {
   hydrationFailed(): boolean;
   /** Гидратация началась (в том числе повторная). */
   beginHydration(): void;
-  /** Гидратация закончилась: без ошибки — разблокировать запись; с ошибкой — копия в BROKEN_KEY и блокировка. */
+  /** Гидратация закончилась: без ошибки — разблокировать запись; с ошибкой — запись в основной ключ заблокирована. */
   finishHydration(error?: unknown): void;
-  /** Сырая строка сохранения для «Скачать копию данных»; null — нечего скачивать. */
-  rawForDownload(): string | null;
   /**
-   * «Начать заново»: копия остаётся в BROKEN_KEY, основной ключ очищается, запись разблокируется. true — сделано.
-   * false — копию в браузере сохранить не удалось (нет места): ничего не стёрто, предложите скачать копию.
-   * downloaded: ученик уже скачал файл — тогда стираем и без копии в браузере.
+   * Сырая строка сохранения, которое не открылось. Нужна только экрану восстановления, чтобы угадать язык;
+   * никуда не отправляется и не копируется. null — сохранение не прочиталось или его нет.
    */
-  discard(opts?: { downloaded?: boolean }): boolean;
-  /** В браузере лежит копия повреждённого сохранения (BROKEN_KEY). */
-  hasBrokenCopy(): boolean;
-  /** Текст копии повреждённого сохранения для скачивания; null — копии нет. */
-  brokenCopy(): string | null;
-  /** Удалить копию повреждённого сохранения. */
-  deleteBrokenCopy(): void;
+  peekSaved(): string | null;
+  /** «Начать заново»: основной ключ удаляется, запись разблокируется (подтверждение — на стороне экрана). */
+  discard(): void;
 }
 
 export function createSafeStorage(opts: SafeStorageOptions = {}): SafeStorage {
   const key = opts.key ?? STORAGE_KEY;
-  const brokenKey = opts.brokenKey ?? BROKEN_KEY;
 
   /** undefined — ещё не определяли. */
   let backend: RawStorage | null | undefined;
   let status: StorageStatus = "ok";
   let failed = false;
   let blocked = false;
-  /** Есть ли копия в BROKEN_KEY; undefined — ещё не смотрели (читать мегабайты на каждый рендер незачем). */
-  let brokenKnown: boolean | undefined;
   /** Последняя прочитанная строка основного ключа. */
   let lastRaw: string | null = null;
   /** Свежие записи, которые не удалось положить в браузер (и всё при недоступном хранилище). */
@@ -112,6 +102,12 @@ export function createSafeStorage(opts: SafeStorageOptions = {}): SafeStorage {
     if (!b) {
       status = "memory";
       return null;
+    }
+    // Копия повреждённого сохранения из прежней версии больше не нужна: освобождаем место до пробы записи.
+    try {
+      b.removeItem(LEGACY_BROKEN_KEY);
+    } catch {
+      // не критично
     }
     // Проба записи: приватные режимы и заполненная память видны сразу, а не после первого действия ученика.
     try {
@@ -174,40 +170,6 @@ export function createSafeStorage(opts: SafeStorageOptions = {}): SafeStorage {
     }
   }
 
-  /** Копия нечитаемого сохранения. Не получилось положить в браузер — остаётся в памяти (для скачивания). */
-  function saveBrokenCopy(): void {
-    const raw = lastRaw;
-    if (raw === null) return;
-    const b = resolve();
-    if (b && writeBrokenCopy(b, raw)) return;
-    // места нет — оставим в памяти
-    memory.set(brokenKey, raw);
-    brokenKnown = true;
-  }
-
-  /** Положить копию в BROKEN_KEY. true — лежит в браузере. */
-  function writeBrokenCopy(b: RawStorage, raw: string): boolean {
-    try {
-      b.setItem(brokenKey, raw);
-      memory.delete(brokenKey);
-      brokenKnown = true;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function brokenText(): string | null {
-    const mem = memory.get(brokenKey);
-    if (mem !== undefined) return mem;
-    const b = resolve();
-    try {
-      return b ? b.getItem(brokenKey) : null;
-    } catch {
-      return null;
-    }
-  }
-
   return {
     getItem,
     setItem,
@@ -230,7 +192,7 @@ export function createSafeStorage(opts: SafeStorageOptions = {}): SafeStorage {
     },
     finishHydration: (error) => {
       if (error === undefined || error === null) {
-        // Прочиталось — держать копию сырой строки в памяти незачем (она нужна только при сбое).
+        // Прочиталось — держать сырую строку в памяти незачем (она нужна только при сбое).
         lastRaw = null;
         if (!blocked && !failed) return;
         blocked = false;
@@ -240,52 +202,14 @@ export function createSafeStorage(opts: SafeStorageOptions = {}): SafeStorage {
       }
       blocked = true;
       failed = true;
-      saveBrokenCopy();
       notify();
     },
-    rawForDownload: () => {
-      if (lastRaw !== null) return lastRaw;
-      return brokenText();
-    },
-    discard: (opts) => {
-      // Если ученик нажал «Начать заново» до сбоя (гидратация не закончилась за 4 секунды), копию сохраняем сейчас.
-      // raw === null — копировать нечего (сохранение не прочиталось или его нет).
-      const raw = lastRaw;
-      const b = resolve();
-      if (raw !== null && b) {
-        let secured = writeBrokenCopy(b, raw);
-        if (!secured) {
-          // Сохранение больше половины памяти: пока лежит основной ключ, копия не помещается. Освобождаем место, повторяем.
-          removeItem(key);
-          secured = writeBrokenCopy(b, raw);
-          if (!secured && !opts?.downloaded) {
-            // И так не вышло: возвращаем сохранение на место, ничего не стираем, копия — только в памяти (скачать).
-            try {
-              b.setItem(key, raw);
-            } catch {
-              memory.set(key, raw);
-            }
-            memory.set(brokenKey, raw);
-            brokenKnown = true;
-            notify();
-            return false;
-          }
-        }
-      }
+    peekSaved: () => lastRaw,
+    discard: () => {
+      lastRaw = null;
       blocked = false;
       failed = false;
       removeItem(key);
-      notify();
-      return true;
-    },
-    hasBrokenCopy: () => {
-      if (brokenKnown === undefined) brokenKnown = brokenText() !== null;
-      return brokenKnown;
-    },
-    brokenCopy: brokenText,
-    deleteBrokenCopy: () => {
-      removeItem(brokenKey);
-      brokenKnown = false;
       notify();
     },
   };
@@ -300,11 +224,8 @@ export const subscribeStorage = (cb: () => void): (() => void) => safeStorage.su
 export const hydrationFailed = (): boolean => safeStorage.hydrationFailed();
 export const beginHydration = (): void => safeStorage.beginHydration();
 export const finishHydration = (error?: unknown): void => safeStorage.finishHydration(error);
-export const rawForDownload = (): string | null => safeStorage.rawForDownload();
-export const discardSaved = (opts?: { downloaded?: boolean }): boolean => safeStorage.discard(opts);
-export const hasBrokenCopy = (): boolean => safeStorage.hasBrokenCopy();
-export const brokenCopy = (): string | null => safeStorage.brokenCopy();
-export const deleteBrokenCopy = (): void => safeStorage.deleteBrokenCopy();
+export const peekSaved = (): string | null => safeStorage.peekSaved();
+export const discardSaved = (): void => safeStorage.discard();
 
 // ---------- Фаза загрузки ----------
 
@@ -349,7 +270,7 @@ export function createPersistRequest(getManager: () => StorageManagerLike | unde
 const persistOnce = createPersistRequest(() => (typeof navigator === "undefined" ? undefined : navigator.storage));
 
 /**
- * После онбординга и импорта копии. Только из обработчика нажатия: без жеста Firefox на компьютере
+ * В конце онбординга. Только из обработчика нажатия: без жеста Firefox на компьютере
  * показывает своё окно запроса посреди экрана.
  */
 export const requestPersistentStorage = (): void => {

@@ -2,7 +2,7 @@
 
 import { Cpu, Infinity as InfinityIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { AI_DAILY_CAP, type AiKind } from "@/lib/economy";
+import type { AiKind } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { useAiQuote } from "./useEconomy";
 
@@ -36,7 +36,7 @@ export function AiCost({
   }
 
   if (quote.pay === "plan") {
-    const label = t("aicost.aria.unlimited", { n: AI_DAILY_CAP.unlimited });
+    const label = t("aicost.aria.unlimited");
     return (
       <span role="img" aria-label={label} title={label} className={cn(base, tone("bg-gold-soft text-warning-strong"), className)}>
         <InfinityIcon size={14} strokeWidth={3} aria-hidden />

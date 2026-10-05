@@ -1,27 +1,29 @@
 import type { EntTopicId, Lesson, LessonRef, Skill, Unit } from "@/lib/types";
 import { DAY_MS, lessonXpFactor, REPLAY_XP, type LessonStat } from "@/lib/review";
 import { MASTERED_FROM, WEAK_BELOW, type SkillStat } from "@/lib/mastery";
+import { isPassedStat } from "@/lib/school";
 
 // Чистая логика карты курса (без React): состояния узлов, прогресс раздела, освоение тем ЕНТ,
 // раскладка дороги. Покрыто тестами в tests/learn-map.test.ts.
+// «Урок пройден» — везде `isPassedStat` из lib/school.ts: тот же прогресс видит и школьная карта (общий с ЕНТ).
 
 export type NodeState = "done" | "due" | "recommended" | "available" | "soon";
 
 /** Пора повторить: та же логика, что в lib/review.ts → dueLessons (старые сохранения — через день). */
 export function isDue(stat: LessonStat | undefined, now: number): boolean {
-  if (!stat || stat.completions <= 0) return false;
+  if (!stat || !isPassedStat(stat)) return false;
   return now >= (stat.dueAt ?? stat.lastAt + DAY_MS);
 }
 
 /** Рекомендуемый урок — первый непройденный готовый урок по порядку курса (свободный режим: остальные тоже открыты). */
 export function recommendedLesson(units: Unit[], stats: Record<string, LessonStat>): { unit: Unit; ref: LessonRef } | undefined {
-  for (const unit of units) for (const ref of unit.lessons) if (ref.status === "available" && (stats[ref.id]?.completions ?? 0) <= 0) return { unit, ref };
+  for (const unit of units) for (const ref of unit.lessons) if (ref.status === "available" && !isPassedStat(stats[ref.id])) return { unit, ref };
   return undefined;
 }
 
 export function nodeState(ref: LessonRef, stat: LessonStat | undefined, recommendedId: string | undefined, now: number): NodeState {
   if (ref.status === "soon") return "soon";
-  if (stat && stat.completions > 0) return isDue(stat, now) ? "due" : "done";
+  if (stat && isPassedStat(stat)) return isDue(stat, now) ? "due" : "done";
   return ref.id === recommendedId ? "recommended" : "available";
 }
 
@@ -64,14 +66,14 @@ export function unitProgress(unit: Unit, stats: Record<string, LessonStat>): Uni
   let ready = 0;
   for (const ref of unit.lessons) {
     if (ref.status === "available") ready++;
-    if (stats[ref.id]?.completions) done++;
+    if (isPassedStat(stats[ref.id])) done++;
   }
   return { done, ready, total: unit.lessons.length };
 }
 
 /** «Сдать экстерном» имеет смысл, если в разделе есть готовые непройденные уроки. */
 export function canExtern(unit: Unit, stats: Record<string, LessonStat>): boolean {
-  return unit.lessons.some((r) => r.status === "available" && !stats[r.id]?.completions);
+  return unit.lessons.some((r) => r.status === "available" && !isPassedStat(stats[r.id]));
 }
 
 /** Навыки раздела: навыки его готовых уроков + навыки тем ЕНТ раздела. */

@@ -1,6 +1,6 @@
 import type { DictKey } from "@/i18n/dict";
 import type { Lang } from "@/lib/types";
-import { AI_DAILY_CAP, HOUR, PAID_TIERS, PLAN_FEATURES, yearSaving, type PlanTier } from "@/lib/economy";
+import { AI_DAILY_CAP, AI_UNITS, HOUR, PAID_TIERS, PLAN_FEATURES, yearSaving, type PlanTier } from "@/lib/economy";
 
 // Чистые помощники окна тарифов (без React): разбор адреса, сравнение тарифов, форматирование.
 
@@ -23,6 +23,11 @@ export function subtitleKey(from: PlansFrom | undefined): DictKey {
   if (from === "hearts") return "plans.sub.hearts";
   if (from === "ai") return "plans.sub.ai";
   return "plans.sub.default";
+}
+
+/** Параметры текста «Ограничения ИИ»: суточный потолок (общий для тарифов) и вес фото, расшифровки голоса и «Разбора от Бита» — из economy.ts, не из словаря. */
+export function aiLimitParams(): { n: number; photo: number; voice: number; review: number } {
+  return { n: Math.max(...Object.values(AI_DAILY_CAP)), photo: AI_UNITS.photo, voice: AI_UNITS.voice, review: AI_UNITS.review };
 }
 
 /** Скидка за год для переключателя: гарантированная для обоих тарифов (меньший процент). */
@@ -86,8 +91,7 @@ export function compareRows(lang: Lang): CompareRow[] {
     {
       id: "ai",
       label: "plans.cmp.ai",
-      // Обращений в день по тарифу: у «Безлимита» их бесконечно много только по цене, а число ограничено потолком (решение #48).
-      cells: perTier((t) => ({ kind: "text", text: String(Number.isFinite(PLAN_FEATURES[t].aiFree) ? PLAN_FEATURES[t].aiFree : AI_DAILY_CAP[t]) })),
+      cells: perTier((t) => ({ kind: "text", text: Number.isFinite(PLAN_FEATURES[t].aiFree) ? String(PLAN_FEATURES[t].aiFree) : "∞" })),
     },
     { id: "chips", label: "plans.cmp.chips", cells: perTier((t) => ({ kind: "text", text: formatMult(PLAN_FEATURES[t].chipMultiplier) })) },
   ];

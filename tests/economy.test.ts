@@ -705,21 +705,35 @@ describe("ИИ: quoteAi", () => {
     expect(AI_UNITS).toEqual({ hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 });
   });
 
-  it("потолок дня (решение #48): бесплатно 13 (3 + 10 за чипы), Лайт 50, Безлимит 100", () => {
-    expect(AI_DAILY_CAP).toEqual({ free: 13, lite: 50, unlimited: 100 });
+  it("потолок дня (решение #48, правка v0.9.1): 65 обращений для всех трёх тарифов", () => {
+    expect(AI_DAILY_CAP).toEqual({ free: 65, lite: 65, unlimited: 65 });
   });
 
-  it("потолок дня: отказ, если count + вес обращения > потолка; для любого тарифа", () => {
-    expect(quoteAi("hint", "free", usage(0, AI_DAILY_CAP.free), 999, TODAY)).toMatchObject({ ok: false, reason: "cap", cost: 0 });
-    expect(quoteAi("hint", "unlimited", usage(0, AI_DAILY_CAP.unlimited), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
-    expect(quoteAi("hint", "free", usage(0, AI_DAILY_CAP.free - 1), 0, TODAY).ok).toBe(true);
-    // фото весит 2: на 12-м обращении ещё можно, на 13-м — уже нельзя
-    expect(quoteAi("photo", "free", usage(0, 11), 999, TODAY).ok).toBe(true);
-    expect(quoteAi("photo", "free", usage(0, 12), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
-    // голос весит 4
-    expect(quoteAi("voice", "lite", usage(0, 46), 999, TODAY).ok).toBe(true);
-    expect(quoteAi("voice", "lite", usage(0, 47), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
-    expect(quoteAi("voice", "unlimited", usage(0, 97), 0, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+  it("потолок дня: отказ, если count + вес обращения > 65; для любого тарифа", () => {
+    for (const tier of ["free", "lite", "unlimited"] as const) {
+      expect(quoteAi("hint", tier, usage(0, 65), 999, TODAY), tier).toMatchObject({ ok: false, reason: "cap", cost: 0 });
+      expect(quoteAi("hint", tier, usage(0, 64), 999, TODAY).ok, tier).toBe(true);
+      // фото весит 2: при 63 обращениях ещё можно (63 + 2 = 65), при 64 — уже нельзя (66 > 65)
+      expect(quoteAi("photo", tier, usage(0, 63), 999, TODAY).ok, tier).toBe(true);
+      expect(quoteAi("photo", tier, usage(0, 64), 999, TODAY), tier).toMatchObject({ ok: false, reason: "cap" });
+      // голос весит 4: при 61 можно (65), при 62 — нельзя (66)
+      expect(quoteAi("voice", tier, usage(0, 61), 999, TODAY).ok, tier).toBe(true);
+      expect(quoteAi("voice", tier, usage(0, 62), 999, TODAY), tier).toMatchObject({ ok: false, reason: "cap" });
+    }
+    // «Безлимит» без чипов упирается в тот же потолок
+    expect(quoteAi("hint", "unlimited", usage(0, 65), 0, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+  });
+
+  it("бесплатные по тарифу (3 / 30 / без счёта) и чипы — внутри потолка 65, потолок не зависит от них", () => {
+    // бесплатный: 3 бесплатных, дальше за чипы, но всего не больше 65
+    expect(quoteAi("hint", "free", usage(3, 40), 999, TODAY)).toMatchObject({ ok: true, pay: "chips", cost: AI_COST.hint });
+    expect(quoteAi("hint", "free", usage(3, 64), 999, TODAY)).toMatchObject({ ok: true, pay: "chips" });
+    expect(quoteAi("hint", "free", usage(3, 65), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+    // Лайт: 30 бесплатных, потом чипы, потолок тот же
+    expect(quoteAi("hint", "lite", usage(30, 64), 999, TODAY)).toMatchObject({ ok: true, pay: "chips" });
+    expect(quoteAi("hint", "lite", usage(30, 65), 999, TODAY)).toMatchObject({ ok: false, reason: "cap" });
+    // Безлимит: без чипов, пока не упрётся в потолок
+    expect(quoteAi("hint", "unlimited", usage(0, 64), 0, TODAY)).toMatchObject({ ok: true, pay: "plan", cost: 0 });
   });
 
   it("отзыв после урока весит 0: не упирается в потолок, пока он не превышен", () => {

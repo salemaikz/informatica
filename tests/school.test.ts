@@ -1,13 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { LESSONS } from "@/content/course";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LESSONS, UNITS } from "@/content/course";
 import { SCHOOL_PROGRAM, schoolPlan, type SchoolGradePlan } from "@/content/school-program";
+import { SKILLS } from "@/content/skills";
 import { dict } from "@/i18n/dict";
+import { isPassed, nodeState, recommendedLesson, topicLessons, topicMastery, topicSkillIds, unitProgress } from "@/components/learn/map";
+import type { LessonStat } from "@/lib/review";
 import {
   ENT_ONLY_PATHS,
   SCHOOL_GRADES,
   entVisible,
   gradeLessonIds,
   gradeProgress,
+  isLessonDone,
+  isPassedStat,
   missingGrades,
   nextSchoolLesson,
   sectionProgress,
@@ -15,6 +20,8 @@ import {
   topicProgress,
   validateSchoolProgram,
 } from "@/lib/school";
+import { useApp } from "@/lib/store";
+import type { AnswerRecord, SessionResult } from "@/lib/types";
 
 const known = new Set(Object.keys(LESSONS));
 const done = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { completions: 1 }]));
@@ -173,5 +180,144 @@ describe("entVisible — одна точка решения про ЕНТ-эле
     expect(dict["school.entOnly.title"].kk).toContain("ҰБТ");
     expect(dict["school.entOnly.switch"].ru).toBe("Переключиться на ЕНТ");
     expect(dict["school.entOnly.back"].ru).toBe("К школьной программе");
+  });
+});
+
+describe("общий прогресс школы и ЕНТ (v0.9.1)", () => {
+  const NOW = 1_800_000_000_000;
+  const DAY = 86_400_000;
+  const BITS = "ns-1-bits";
+  /** Статистика урока после одного прохождения. */
+  const stat = (over: Partial<LessonStat> = {}): LessonStat => ({ completions: 1, bestAccuracy: 1, lastAt: NOW, totalXp: 10, dueAt: NOW + DAY, ...over });
+  const mapRef = (id: string) => UNITS.flatMap((u) => u.lessons.map((ref) => ({ unit: u, ref }))).find((x) => x.ref.id === id);
+  const schoolTopics = SCHOOL_PROGRAM.flatMap((p) => p.sections.flatMap((s) => s.topics.map((t) => ({ grade: p.grade, topic: t }))));
+  const allSchoolLessons = [...new Set(SCHOOL_PROGRAM.flatMap(gradeLessonIds))];
+  const rec = (over: Partial<AnswerRecord> = {}): AnswerRecord => ({
+    stepId: "q1",
+    skill: "ns.base",
+    correct: true,
+    score: 1,
+    given: "1",
+    expected: "1",
+    prompt: "?",
+    retry: false,
+    timeMs: 1000,
+    ...over,
+  });
+  const session = (lessonId: string): SessionResult => ({ kind: "lesson", lessonId, title: "t", answers: [rec()], xp: 10, maxCombo: 1, durationSec: 60, accuracy: 1 });
+
+  beforeEach(() => useApp.getState().resetProgress());
+  afterEach(() => useApp.getState().resetProgress());
+
+  it("каждый урок школьной программы есть на карте курса ЕНТ как готовый — иначе пройденный в школе урок не отметился бы на «Пути»", () => {
+    expect(allSchoolLessons.length).toBeGreaterThan(0);
+    for (const id of allSchoolLessons) expect(mapRef(id)?.ref.status, id).toBe("available");
+  });
+
+  it("«пройден» — одно определение: школьные функции и карта курса согласны, мусор в сохранении не считается прохождением", () => {
+    for (const completions of [0, -1, Number.NaN]) {
+      const lessons = { [BITS]: stat({ completions }) };
+      const { unit, ref } = mapRef(BITS)!;
+      expect(isPassedStat(lessons[BITS]), String(completions)).toBe(false);
+      expect(isLessonDone(BITS, lessons), String(completions)).toBe(false);
+      expect(unitProgress(unit, lessons).done, String(completions)).toBe(0);
+      expect(isPassed(nodeState(ref, lessons[BITS], undefined, NOW)), String(completions)).toBe(false);
+    }
+    expect(isPassedStat(undefined)).toBe(false);
+    for (const completions of [1, 2, 7]) expect(isPassedStat(stat({ completions }))).toBe(true);
+  });
+
+  it("любой урок школьной программы, пройденный в одном режиме, пройден в обоих (школьные функции и карта ЕНТ)", () => {
+    for (const id of allSchoolLessons) {
+      const lessons = { [id]: stat() };
+      const { unit, ref } = mapRef(id)!;
+      // карта ЕНТ («Путь»): узел пройден, раздел насчитал один урок
+      expect(isPassed(nodeState(ref, lessons[id], undefined, NOW)), id).toBe(true);
+      expect(unitProgress(unit, lessons).done, id).toBe(1);
+      expect(recommendedLesson([unit], lessons)?.ref.id, id).not.toBe(id);
+      // школьная карта: каждая тема с этим уроком насчитала его, класс — тоже
+      for (const { grade, topic } of schoolTopics.filter((x) => x.topic.lessonIds.includes(id))) {
+        expect(topicProgress(topic, lessons).done, `${grade}/${topic.id}/${id}`).toBe(1);
+        expect(gradeProgress(schoolPlan(grade)!, lessons).lessonsDone, `${grade}/${id}`).toBe(1);
+      }
+    }
+  });
+
+  it("урок про биты есть и в школьной программе (6 и 10 классы), и в курсе ЕНТ (раздел «Информация и системы счисления», тема t04)", () => {
+    const grades = schoolTopics.filter((x) => x.topic.lessonIds.includes(BITS)).map((x) => `${x.grade}/${x.topic.id}`);
+    expect(grades).toEqual(expect.arrayContaining(["6/g6-3-3", "10/g10-2-1"]));
+    expect(mapRef(BITS)?.unit.id).toBe("u1");
+    expect(topicLessons("t04", UNITS, LESSONS, SKILLS).map((x) => x.ref.id)).toContain(BITS);
+  });
+
+  it("пройден в школьном режиме → пройден и на карте ЕНТ: стор → школьная карта и «Путь»", () => {
+    useApp.getState().updateProfile({ track: "school", grade: "6" });
+    const { unit, ref } = mapRef(BITS)!;
+    const topic = schoolTopics.find((x) => x.topic.id === "g6-3-3")!.topic;
+    const plan = schoolPlan("6")!;
+    const before = useApp.getState().lessons;
+    expect(isLessonDone(BITS, before)).toBe(false);
+    expect(isPassed(nodeState(ref, before[BITS], undefined, Date.now()))).toBe(false);
+
+    useApp.getState().finishSession(session(BITS));
+
+    const { lessons } = useApp.getState();
+    // школьная карта
+    expect(isLessonDone(BITS, lessons)).toBe(true);
+    expect(topicProgress(topic, lessons)).toMatchObject({ total: 4, done: 1, complete: false });
+    expect(gradeProgress(plan, lessons).lessonsDone).toBe(1);
+    expect(nextSchoolLesson(plan, lessons)?.lessonId).not.toBe(BITS);
+    // карта ЕНТ: «Путь» (узел и раздел) и «Рекомендуем»
+    expect(isPassed(nodeState(ref, lessons[BITS], undefined, Date.now()))).toBe(true);
+    expect(unitProgress(unit, lessons).done).toBe(1);
+    expect(recommendedLesson(UNITS, lessons)?.ref.id).not.toBe(BITS);
+  });
+
+  it("пройден в режиме ЕНТ → пройден и в школьной программе (6 и 10 классы); смена режима ничего не стирает", () => {
+    useApp.getState().updateProfile({ track: "ent" });
+    useApp.getState().finishSession(session(BITS));
+    const snapshot = useApp.getState().lessons;
+    useApp.getState().updateProfile({ track: "school", grade: "10" });
+    expect(useApp.getState().lessons).toBe(snapshot);
+    const lessons = useApp.getState().lessons;
+    expect(topicProgress(schoolTopics.find((x) => x.topic.id === "g10-2-1")!.topic, lessons)).toMatchObject({ total: 6, done: 1 });
+    expect(gradeProgress(schoolPlan("10")!, lessons).lessonsDone).toBe(1);
+    expect(gradeProgress(schoolPlan("6")!, lessons).lessonsDone).toBe(1);
+    useApp.getState().updateProfile({ track: "ent" });
+    expect(useApp.getState().lessons).toBe(snapshot);
+  });
+
+  it("тема школьной программы целиком пройдена → все её уроки пройдены на «Пути»", () => {
+    const topic = schoolTopics.find((x) => x.topic.id === "g6-3-3")!.topic;
+    useApp.getState().completeLessons(topic.lessonIds, "extern", 1);
+    const { lessons } = useApp.getState();
+    expect(topicProgress(topic, lessons)).toMatchObject({ total: 4, done: 4, complete: true, nextLessonId: null });
+    for (const id of topic.lessonIds) expect(isPassed(nodeState(mapRef(id)!.ref, lessons[id], undefined, Date.now())), id).toBe(true);
+  });
+
+  it("освоение навыков общее: ответы в школьном режиме видны на карте ЕНТ; смена режима не трогает навыки", () => {
+    const ent = SKILLS.find((s) => s.id === "ns.base")!.ent!;
+    expect(ent).toBe("t04");
+    const level = () => topicMastery(topicSkillIds(ent, SKILLS), useApp.getState().skills).level;
+    expect(level()).toBe("none");
+    useApp.getState().updateProfile({ track: "school" });
+    useApp.getState().recordAnswer(rec(), 5, BITS);
+    const skills = useApp.getState().skills;
+    expect(skills["ns.base"]?.attempts).toBe(1);
+    expect(level()).not.toBe("none");
+    for (const track of ["ent", "school", "ent"] as const) {
+      useApp.getState().updateProfile({ track });
+      expect(useApp.getState().skills).toBe(skills);
+      expect(level()).not.toBe("none");
+    }
+  });
+
+  it("строка про общий прогресс: оба языка, в казахском — ҰБТ, а не ЕНТ", () => {
+    const d = dict["school.progress.shared"];
+    expect(d.ru.trim()).toBeTruthy();
+    expect(d.kk.trim()).toBeTruthy();
+    expect(d.ru).toContain("обоих режимах");
+    expect(d.kk).toContain("ҰБТ");
+    expect(d.kk).not.toMatch(/ЕНТ/);
   });
 });
