@@ -22,11 +22,23 @@ import { PlansHero } from "./PlansHero";
 import { TrialCelebration } from "./TrialCelebration";
 import { closeAction, parseFrom, planWhat, subtitleKey, yearDiscountPercent } from "./plans-helpers";
 
+/**
+ * Куда идти после окна тарифов, если вызвавший его экран просит свой адрес (`?next=/lesson/…`): только путь внутри
+ * приложения — начинается с «/», но не с «//» и без «\» (иначе это чужой адрес). Недоверенный параметр: иначе — null (на карту).
+ */
+export function safeNext(raw: string | null | undefined): string | null {
+  if (!raw || raw.length > 300) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return null;
+  return raw;
+}
+
 /** Полноэкранное окно тарифов (/plans?from=…): без оболочки приложения, как онбординг. */
 export function PlansScreen() {
   const { t, lang } = useT();
   const router = useRouter();
-  const from = parseFrom(useSearchParams().get("from"));
+  const params = useSearchParams();
+  const from = parseFrom(params.get("from"));
+  const next = safeNext(params.get("next"));
   const plan = useApp((s) => s.plan);
   const startTrial = useApp((s) => s.startTrial);
   const { tier, daysLeft, trial } = usePlan();
@@ -52,7 +64,7 @@ export function PlansScreen() {
 
   const close = () => {
     if (closeAction(from, window.history.length) === "back") router.back();
-    else router.replace("/learn");
+    else router.replace(next ?? "/learn");
   };
 
   const choose = (paid: PaidTier) => {
@@ -151,7 +163,7 @@ export function PlansScreen() {
       )}
 
       <ComingSoonSheet open={sheet.open} what={sheet.what} from={from ?? "other"} onClose={() => setSheet((s) => ({ ...s, open: false }))} />
-      {won && <TrialCelebration onStart={() => router.replace("/learn")} />}
+      {won && <TrialCelebration onStart={() => router.replace(next ?? "/learn")} />}
     </div>
   );
 }

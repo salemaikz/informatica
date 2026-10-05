@@ -1,6 +1,6 @@
 import type { EntTopicId, Lesson, LessonRef, Skill, Unit } from "@/lib/types";
 import { DAY_MS, lessonXpFactor, REPLAY_XP, type LessonStat } from "@/lib/review";
-import { MASTERED_FROM, WEAK_BELOW, type SkillStat } from "@/lib/mastery";
+import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "@/lib/mastery";
 import { isPassedStat } from "@/lib/school";
 
 // Чистая логика карты курса (без React): состояния узлов, прогресс раздела, освоение тем ЕНТ,
@@ -108,7 +108,8 @@ export type TopicLevel = "none" | "weak" | "progress" | "mastered";
  * Освоение темы ЕНТ:
  * - value — среднее по всем навыкам темы (не тронутые — 0), это и показываем в процентах;
  * - level — цвет плитки: нет попыток — none; среднее по тронутым навыкам < 0.6 — weak (тема реально западает);
- *   value ≥ 0.8 — mastered (освоена вся тема, а не один навык); иначе — progress.
+ *   value ≥ 0.8 и все навыки темы «освоены» по правилу #67 (4 верных без подсказки в 2 днях) — mastered
+ *   (освоена вся тема, а не один навык; три ответа подряд за один присест тему не «осваивают»); иначе — progress.
  */
 export function topicMastery(skillIds: string[], stats: Record<string, SkillStat>): { value: number; level: TopicLevel } {
   const touched = skillIds.filter((id) => (stats[id]?.attempts ?? 0) > 0);
@@ -116,7 +117,8 @@ export function topicMastery(skillIds: string[], stats: Record<string, SkillStat
   if (!touched.length) return { value, level: "none" };
   const touchedAvg = touched.reduce((a, id) => a + stats[id].mastery, 0) / touched.length;
   if (touchedAvg < WEAK_BELOW) return { value, level: "weak" };
-  if (value >= MASTERED_FROM) return { value, level: "mastered" };
+  const allMastered = skillIds.every((id) => masteryLevel(stats[id]) === "mastered");
+  if (value >= MASTERED_FROM && allMastered) return { value, level: "mastered" };
   return { value, level: "progress" };
 }
 

@@ -40,7 +40,7 @@ export function CourseProgressCard({ className }: { className?: string }) {
           {t("progress.lessons", { done: v.done, total: v.total })}
           {v.soon > 0 && ` · ${t(v.kind === "class" ? "progress.class.soon" : "progress.soon", { n: v.soon })}`}
         </p>
-        {v.done === 0 && <p className="mt-1 text-sm font-semibold text-muted">{t("progress.course.empty")}</p>}
+        {!v.anyDone && <p className="mt-1 text-sm font-semibold text-muted">{t("progress.course.empty")}</p>}
         {v.kind === "course" && v.skipBasics && <p className="mt-1 text-xs font-semibold text-muted">{t("progress.skipBasics")}</p>}
       </div>
     </Card>

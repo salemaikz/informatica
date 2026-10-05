@@ -4,7 +4,7 @@ import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import { cn } from "@/lib/cn";
-import { topicStats, topicTrend } from "@/lib/progress";
+import { isPartialWindow, skillDaysSince, topicStats, topicTrend } from "@/lib/progress";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
@@ -33,6 +33,8 @@ export function TopicTable({ className }: { className?: string }) {
 
   const rows = useMemo(() => topicStats(skillDays, skills, period, now), [skillDays, skills, period, now]);
   const trends = useMemo(() => Object.fromEntries(ENT_TOPICS.map((tp) => [tp.id, topicTrend(skillDays, tp.id, now, period)])), [skillDays, now, period]);
+  // Подсказка «графики станут полнее» — только пока срез по дням короче периода (как «Данные с …»), иначе она вечная и лишняя.
+  const partial = useMemo(() => now > 0 && isPartialWindow(skillDaysSince(skillDays), now, period), [skillDays, now, period]);
 
   if (!ent) return null;
   return (
@@ -104,7 +106,7 @@ export function TopicTable({ className }: { className?: string }) {
       </ul>
       <div className="mt-3 flex flex-col gap-0.5">
         <DataSince period={period} />
-        <p className="text-xs font-semibold text-muted">{t("progress.topics.dataHint")}</p>
+        {partial && <p className="text-xs font-semibold text-muted">{t("progress.topics.dataHint")}</p>}
       </div>
     </Card>
   );

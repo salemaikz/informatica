@@ -9,7 +9,7 @@ import { dayTotals } from "@/lib/progress";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
-import { formatDuration, percent, toneOfRatio, TONE_TEXT } from "./format";
+import { formatDate, formatDuration, percent, toneOfRatio, TONE_TEXT } from "./format";
 
 function Tile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string | number; sub?: string }) {
   return (
@@ -39,6 +39,8 @@ export function StatsTiles({ className }: { className?: string }) {
 
   const acc = totals.accuracy;
   const accText = acc.value === null ? "—" : `${percent(acc.value)}%`;
+  // Есть и старые дни (до учёта по баллам), и новые: точность — только по новым, честно «с {дата}», а не «за всё время» (C20).
+  const accSpan = acc.partial && acc.since ? t("progress.acc.since", { date: formatDate(acc.since) }) : t("progress.acc.allTime");
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -52,7 +54,7 @@ export function StatsTiles({ className }: { className?: string }) {
       <Card className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-xs font-extrabold text-muted">
-            <Target size={14} className="text-success" aria-hidden /> {t("progress.acc.title")} · {t("progress.acc.allTime")}
+            <Target size={14} className="text-success" aria-hidden /> {t("progress.acc.title")} · {accSpan}
           </p>
           <p className={cn("mt-1 text-3xl font-extrabold tabular-nums", acc.value === null ? "text-muted" : TONE_TEXT[toneOfRatio(acc.value)])}>{accText}</p>
           {acc.value !== null &&

@@ -31,6 +31,8 @@ import { FeedbackLink } from "@/components/issue/FeedbackLink";
 
 const NAME_MAX = 30;
 const WEEKLY = [2, 3, 4, 5, 7];
+/** Клавиши, которыми двигают ползунок: только они подтверждают цель (Tab на ползунок — нет). */
+const CONFIRM_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 function OnOff({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   const { t } = useT();
@@ -62,6 +64,11 @@ export default function ProfilePage() {
   const [pickAvatar, setPickAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState("");
+
+  /** Цель «пока не выбрана»: любое касание ползунка подтверждает текущее значение. */
+  const confirmTarget = () => {
+    if (!useApp.getState().profile.targetScoreSet) update({ targetScoreSet: true });
+  };
 
   const startEditName = () => {
     setDraft(profile.name);
@@ -185,7 +192,12 @@ export default function ProfilePage() {
                 <label htmlFor="prof-target" className="font-extrabold">
                   {t("prof2.goals.target")}
                 </label>
-                <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
+                {profile.targetScoreSet ? (
+                  <span className="shrink-0 whitespace-nowrap text-xl font-extrabold text-primary">{t("prof2.goals.target.value", { n: profile.targetScore })}</span>
+                ) : (
+                  // Цель ещё не выбрана («Пока не знаю» в онбординге): число на ползунке — просто положение по умолчанию.
+                  <span className="min-w-0 text-right text-sm font-extrabold text-muted">{t("goals.target.unset")}</span>
+                )}
               </div>
               <input
                 id="prof-target"
@@ -195,7 +207,12 @@ export default function ProfilePage() {
                 step={5}
                 value={profile.targetScore}
                 onChange={(e) => update({ targetScore: Number(e.target.value), targetScoreSet: true })}
-                className="mt-2 h-8 w-full cursor-pointer accent-primary"
+                // Любое касание ползунка подтверждает цель, даже если значение не изменилось (onChange в этом случае не сработает).
+                onPointerUp={confirmTarget}
+                onKeyUp={(e) => {
+                  if (CONFIRM_KEYS.has(e.key)) confirmTarget();
+                }}
+                className={cn("mt-2 h-8 w-full cursor-pointer accent-primary", !profile.targetScoreSet && "opacity-60")}
               />
               <div className="flex justify-between text-xs font-bold text-muted" aria-hidden="true">
                 <span>5</span>

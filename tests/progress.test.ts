@@ -285,6 +285,21 @@ describe("topicStats", () => {
       expect(mine.level).toBe(ref.level);
     }
   });
+
+  it("тема «освоена» только по правилу #67: 3 верных подряд за один присест — «в процессе», 4 верных в 2 днях — «освоено» (C15)", () => {
+    const ids = topicSkillIds("t04", SKILLS);
+    const level = (extra: Partial<SkillStat>) => {
+      const skills = Object.fromEntries(ids.map((id) => [id, stat(0.9, extra)]));
+      const row = topicStats({}, skills, 30, NOW).find((r) => r.topic === "t04")!;
+      // Карта ЕНТ и «Прогресс» считают одинаково.
+      expect(row.level).toBe(topicMastery(ids, skills).level);
+      expect(row.mastery).toBeGreaterThanOrEqual(0.8);
+      return row.level;
+    };
+    expect(level({ clean: 3, okDays: 1 })).toBe("progress");
+    expect(level({ clean: 4, okDays: 1 })).toBe("progress");
+    expect(level({ clean: 4, okDays: 2 })).toBe("mastered");
+  });
 });
 
 describe("topicTrend", () => {

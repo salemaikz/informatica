@@ -16,8 +16,14 @@ const FOLDED = 12;
 
 type Translate = ReturnType<typeof useT>["t"];
 
-/** «До «освоено»: ещё 2 верных ответа без подсказки, в другой день» — чего не хватает по правилу #67. Пусто — всё есть. */
+/**
+ * «До «освоено»: ещё 2 верных ответа без подсказки, в другой день» — чего не хватает по правилу #67. Пусто — всё есть.
+ * Не хватает только дней — с действием: «ещё 1 верный ответ без подсказки в другой день» (один приход в другой день не считается).
+ */
 export function needsText(needs: { clean: number; days: number }, t: Translate): string {
+  if (needs.clean <= 0 && needs.days > 0) {
+    return t("progress.needs", { parts: needs.days === 1 ? t("progress.needs.dayOnly.one") : t("progress.needs.dayOnly.many", { n: needs.days }) });
+  }
   const parts: string[] = [];
   if (needs.clean > 0) parts.push(t(`progress.needs.clean.${pluralForm(needs.clean)}`, { n: needs.clean }));
   if (needs.days > 0) parts.push(needs.days === 1 ? t("progress.needs.day.one") : t("progress.needs.day.many", { n: needs.days }));

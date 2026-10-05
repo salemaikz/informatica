@@ -3,10 +3,10 @@
 import { CalendarDays, ClipboardCheck, ClipboardList, Dumbbell, ListChecks, Play, Target } from "lucide-react";
 import { useMemo } from "react";
 import { UNITS, getLesson } from "@/content/course";
-import { entTopicById } from "@/content/ent-topics";
+import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { cn } from "@/lib/cn";
 import { DIAGNOSTIC_MARGIN } from "@/lib/forecast";
-import { daysText, examTrend, formatDayMonth, formatExamDate, lessonsForTopic, weeklyPlan } from "@/lib/goals";
+import { PLAN_MASTERED, daysText, examTrend, formatDayMonth, formatExamDate, lessonsForTopic, weeklyPlan } from "@/lib/goals";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -106,7 +106,16 @@ export function GoalsPanel({ className }: { className?: string }) {
   const lessons = useApp((s) => s.lessons);
   const exams = useApp((s) => s.exams);
 
-  const plan = useMemo(() => weeklyPlan(forecast.byTopic, 3), [forecast.byTopic]);
+  /** Предварительный прогноз: по входной диагностике, а не по ответам и пробникам. */
+  const prelim = forecast.basis === "diagnostic";
+  // Пока прогноз предварительный, диагностика не делает тему «освоенной» (#70): план строим из значений не выше порога
+  // освоения — иначе темы, которых в диагностике не было, молча считались бы освоенными, а при 10/10 план был бы пуст.
+  const planBasis = useMemo(() => {
+    if (!prelim) return forecast.byTopic;
+    const cap = PLAN_MASTERED - 0.01;
+    return Object.fromEntries(ENT_TOPICS.map((tp) => [tp.id, Math.min(forecast.byTopic[tp.id] ?? 0, cap)]));
+  }, [prelim, forecast.byTopic]);
+  const plan = useMemo(() => weeklyPlan(planBasis, 3), [planBasis]);
   const ready = useMemo(
     // Только готовые уроки: черновики «скоро» могут уже лежать в реестре.
     () => UNITS.flatMap((u) => u.lessons).flatMap((r) => (r.status === "available" && getLesson(r.id) ? [getLesson(r.id)!] : [])),
@@ -116,8 +125,6 @@ export function GoalsPanel({ className }: { className?: string }) {
 
   const dateText = examDate ? formatExamDate(examDate, lang) : "";
   const noData = forecast.basis === "none";
-  /** Предварительный прогноз: по входной диагностике, а не по ответам и пробникам. */
-  const prelim = forecast.basis === "diagnostic";
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -202,7 +209,8 @@ export function GoalsPanel({ className }: { className?: string }) {
         <SectionHead icon={<ListChecks size={22} />} title={t("goals.plan.title")} />
         <p className="-mt-2 mb-3 text-sm font-semibold text-muted">{t(noData ? "goals.plan.hintStart" : "goals.plan.hint")}</p>
         {plan.length === 0 ? (
-          <p className="font-semibold text-success-strong">{t("goals.plan.empty")}</p>
+          // «Все темы освоены» — только по реальному освоению, не по предварительному прогнозу.
+          prelim ? null : <p className="font-semibold text-success-strong">{t("goals.plan.empty")}</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {plan.map((p) => {
@@ -210,6 +218,10 @@ export function GoalsPanel({ className }: { className?: string }) {
               const ids = lessonsForTopic(p.topic, ready);
               const lesson = ids.find((id) => !lessons[id]) ?? ids[0];
               const done = lesson ? !!lessons[lesson] : false;
+              // По диагностике — настоящая доля верных по теме (не обрезанная для плана); тема без вопросов — «не проверялось».
+              const diagTopic = prelim ? diagnostic?.byTopic?.[p.topic] : undefined;
+              const tested = !!diagTopic && diagTopic.max > 0;
+              const shown = prelim ? (tested ? Math.max(0, Math.min(1, diagTopic!.points / diagTopic!.max)) : null) : p.mastery;
               return (
                 <li key={p.topic} className="rounded-2xl border-2 border-border p-3">
                   <div className="flex items-start justify-between gap-2">
@@ -220,10 +232,12 @@ export function GoalsPanel({ className }: { className?: string }) {
                   </div>
                   {noData ? (
                     <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.notStarted")}</p>
+                  ) : shown === null ? (
+                    <p className="mt-1 text-xs font-bold text-muted">{t("goals.plan.notTested")}</p>
                   ) : (
                     <>
-                      <p className="mt-1 text-xs font-bold text-muted">{t(prelim ? "goals.plan.diagMastery" : "goals.plan.mastery", { n: Math.round(p.mastery * 100) })}</p>
-                      <ProgressBar value={p.mastery} color={p.mastery < 0.6 ? "var(--danger)" : "var(--warning)"} height={8} className="mt-1" label={l(topic.short)} />
+                      <p className="mt-1 text-xs font-bold text-muted">{t(prelim ? "goals.plan.diagMastery" : "goals.plan.mastery", { n: Math.round(shown * 100) })}</p>
+                      <ProgressBar value={shown} color={shown < 0.6 ? "var(--danger)" : shown < PLAN_MASTERED ? "var(--warning)" : "var(--primary)"} height={8} className="mt-1" label={l(topic.short)} />
                     </>
                   )}
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -258,8 +272,10 @@ export function GoalsPanel({ className }: { className?: string }) {
             <p className="text-sm font-bold text-muted">{t("goals.history.last", { score: trend[trend.length - 1].score })}</p>
             {/* Высоты в пикселях: столбик не сжимается, и линия цели стоит ровно на своём уровне. */}
             <div className="relative mt-3" style={{ height: CHART_H + LABEL_H * 2 + 8 }} role="img" aria-label={t("goals.history.chart")}>
-              {/* линия цели */}
-              <div className="absolute inset-x-0 border-t-2 border-dashed border-muted/60" style={{ bottom: LABEL_H + 4 + (Math.min(50, targetScore) / 50) * CHART_H }} />
+              {/* линия цели — только когда цель выбрана (иначе это число по умолчанию, которое ученик не ставил) */}
+              {targetScoreSet && (
+                <div className="absolute inset-x-0 border-t-2 border-dashed border-muted/60" style={{ bottom: LABEL_H + 4 + (Math.min(50, targetScore) / 50) * CHART_H }} />
+              )}
               <div className="relative flex h-full items-end justify-around gap-1.5">
                 {trend.map((p, i) => (
                   <div key={`${p.at}-${i}`} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
@@ -267,7 +283,7 @@ export function GoalsPanel({ className }: { className?: string }) {
                       {p.score}
                     </span>
                     <div
-                      className={cn("w-full max-w-9 shrink-0 rounded-t-lg", p.score >= targetScore ? "bg-success" : "bg-primary")}
+                      className={cn("w-full max-w-9 shrink-0 rounded-t-lg", targetScoreSet && p.score >= targetScore ? "bg-success" : "bg-primary")}
                       style={{ height: Math.max(4, (p.score / 50) * CHART_H) }}
                     />
                     <span className="text-[11px] font-bold leading-5 text-muted" style={{ height: LABEL_H }}>

@@ -6,7 +6,8 @@ import { setAnalyticsSink, type AnalyticsEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 import OnboardingPage from "@/app/onboarding/page";
-import { DiagnosticScreen } from "@/components/diagnostic/DiagnosticScreen";
+import { DiagnosticScreen, basicsPatch } from "@/components/diagnostic/DiagnosticScreen";
+import { safeNext } from "@/components/plans/PlansScreen";
 
 // Короткий онбординг и экран диагностики (#70) в DOM: роутер подменён, e2e эти же потоки проходит в браузере.
 
@@ -184,6 +185,20 @@ async function answerAll() {
   }
 }
 
+describe("окно тарифов: адрес «дальше» (C35)", () => {
+  it("safeNext: только путь внутри приложения", () => {
+    expect(safeNext("/lesson/ns-1-binary")).toBe("/lesson/ns-1-binary");
+    expect(safeNext("/drill?mode=topic&topic=t04")).toBe("/drill?mode=topic&topic=t04");
+    expect(safeNext(null)).toBeNull();
+    expect(safeNext("")).toBeNull();
+    expect(safeNext("lesson/x")).toBeNull();
+    expect(safeNext("//evil.example")).toBeNull();
+    expect(safeNext("/\\evil.example")).toBeNull();
+    expect(safeNext("https://evil.example")).toBeNull();
+    expect(safeNext("/" + "a".repeat(400))).toBeNull();
+  });
+});
+
 describe("экран диагностики", () => {
   it("10 заданий → итог с прогнозом диапазоном и слабыми темами → тарифы; не пробник", async () => {
     nav.search = "from=onboarding";
@@ -193,8 +208,15 @@ describe("экран диагностики", () => {
 
     expect(host.textContent).toContain("Предварительный прогноз");
     expect(host.textContent).toMatch(/примерно \d+–\d+ из 50/);
-    // минимум пять «Не знаю» — минимум три разные темы
-    expect(host.querySelectorAll('a[href^="/lesson/"], a[href^="/drill"]')).toHaveLength(3);
+    // минимум пять «Не знаю» — минимум три разные темы; после онбординга «Начать с неё» идёт через окно тарифов (C35)
+    expect(host.querySelectorAll('a[href^="/lesson/"], a[href^="/drill"]')).toHaveLength(0);
+    const links = [...host.querySelectorAll('a[href^="/plans?from=onboarding&next="]')];
+    expect(links).toHaveLength(3);
+    for (const a of links) {
+      const next = new URLSearchParams(a.getAttribute("href")!.split("?")[1]).get("next")!;
+      expect(next).toMatch(/^\/(lesson|drill)/);
+      expect(safeNext(next)).toBe(next);
+    }
 
     const s = useApp.getState();
     expect(s.profile.diagnostic).toMatchObject({ max: 10 });
@@ -208,6 +230,67 @@ describe("экран диагностики", () => {
     await click("Дальше");
     expect(nav.replace).toHaveBeenCalledWith("/plans?from=onboarding");
     expect(useApp.getState().paywall.views).toBe(1);
+  }, 60_000);
+
+  it("«Начать с неё» после онбординга: показ тарифов отмечается один раз (даже при двойном нажатии), ссылка хранит выбранную тему (C35)", async () => {
+    nav.search = "from=onboarding";
+    await render(createElement(DiagnosticScreen));
+    await answerAll();
+    const link = host.querySelector('a[href^="/plans?from=onboarding&next="]') as HTMLAnchorElement;
+    expect(link).toBeTruthy();
+    expect(useApp.getState().paywall.views).toBe(0);
+    // Переход по ссылке в тесте не нужен — отменяем его, обработчик показа тарифов всё равно срабатывает.
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        link.addEventListener("click", (e) => e.preventDefault(), { once: true });
+        link.click();
+      });
+    }
+    expect(useApp.getState().paywall.views).toBe(1);
+    expect(useApp.getState().paywall.lastShownAt).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("без from (повтор из «Цели») «Начать с неё» ведёт сразу на урок или тренировку", async () => {
+    await render(createElement(DiagnosticScreen));
+    await answerAll();
+    expect(host.querySelectorAll('a[href^="/plans"]')).toHaveLength(0);
+    expect(host.querySelectorAll('a[href^="/lesson/"], a[href^="/drill"]')).toHaveLength(3);
+  }, 60_000);
+
+  it("двойное нажатие «Дальше»: тарифы отмечаются и открываются один раз (C33)", async () => {
+    nav.search = "from=onboarding";
+    await render(createElement(DiagnosticScreen));
+    await answerAll();
+    const next = button("Дальше")!;
+    await act(async () => {
+      next.click();
+      next.click();
+    });
+    expect(nav.replace).toHaveBeenCalledTimes(1);
+    expect(nav.replace).toHaveBeenCalledWith("/plans?from=onboarding");
+    expect(useApp.getState().paywall.views).toBe(1);
+  }, 60_000);
+
+  it("basicsPatch: диагностика только включает пропуск «Старта», никогда не выключает (C32)", () => {
+    expect(basicsPatch({ basicsItems: 3, skipBasics: true })).toEqual({ skipBasics: true });
+    // Основы слабые — профиль не трогаем (раньше уходило { skipBasics: false } и перебивало выбор ученика).
+    expect(basicsPatch({ basicsItems: 3, skipBasics: false })).toBeUndefined();
+    // Заданий по основам мало — вывода нет.
+    expect(basicsPatch({ basicsItems: 2, skipBasics: true })).toBeUndefined();
+    expect(basicsPatch({ basicsItems: 2, skipBasics: false })).toBeUndefined();
+  });
+
+  it("повторная диагностика не выключает «Начинать с раздела «Старт»» (C32)", async () => {
+    // Ученик пропускает «Старт» в профиле; все ответы «Не знаю» → по основам нулевой результат.
+    useApp.getState().updateProfile({ skipBasics: true });
+    await render(createElement(DiagnosticScreen));
+    await waitFor(() => !!button("Начать") && !button("Начать")!.disabled);
+    await click("Начать");
+    for (let n = 1; n <= 10; n++) await click("Не знаю");
+    expect(host.textContent).toContain("Предварительный прогноз");
+    expect(useApp.getState().profile.diagnostic).toMatchObject({ max: 10 });
+    expect(useApp.getState().profile.skipBasics).toBe(true);
+    expect(host.textContent).not.toContain("можно пропустить");
   }, 60_000);
 
   it("без from (повтор из «Цели») итог ведёт на главную, окно тарифов не отмечается", async () => {

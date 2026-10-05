@@ -96,6 +96,8 @@ describe("рекомендуемый урок и состояния узлов",
 
 describe("освоение", () => {
   const s = (mastery: number, attempts = 3) => ({ attempts, correct: 1, mastery, lastSeen: 0 });
+  /** Навык, «освоенный» по правилу #67: 4 верных без подсказки в 2 разных днях. */
+  const solid = (mastery: number) => ({ ...s(mastery, 6), clean: 4, okDays: 2 });
 
   it("среднее по навыкам: не тронутые — 0", () => {
     expect(averageMastery(["x", "y"], { x: s(0.8) })).toBe(0.4);
@@ -108,7 +110,15 @@ describe("освоение", () => {
     expect(topicMastery(["x", "y"], { x: s(0.4) }).level).toBe("weak");
     // Один хорошо освоенный навык из двух — ещё «в процессе», а не «освоено».
     expect(topicMastery(["x", "y"], { x: s(0.9) })).toEqual({ value: 0.45, level: "progress" });
-    expect(topicMastery(["x", "y"], { x: s(0.9), y: s(0.85) }).level).toBe("mastered");
+    expect(topicMastery(["x", "y"], { x: solid(0.9), y: solid(0.85) }).level).toBe("mastered");
+  });
+
+  it("тема «освоена» только по правилу #67: высокая оценка за один присест — ещё «в процессе» (C15)", () => {
+    // Три верных ответа подряд дают оценку 0.85, но не 4 верных в 2 разных днях.
+    expect(topicMastery(["x", "y"], { x: { ...s(0.85, 3), clean: 3, okDays: 1 }, y: { ...s(0.85, 3), clean: 3, okDays: 1 } }).level).toBe("progress");
+    // Один навык темы не дотянул до правила — вся тема «в процессе».
+    expect(topicMastery(["x", "y"], { x: solid(0.9), y: { ...s(0.85, 3), clean: 3, okDays: 1 } }).level).toBe("progress");
+    expect(topicMastery(["x", "y"], { x: solid(0.9), y: solid(0.85) }).value).toBeGreaterThanOrEqual(0.8);
   });
 
   it("навыки раздела: навыки уроков + навыки тем ЕНТ раздела", () => {
