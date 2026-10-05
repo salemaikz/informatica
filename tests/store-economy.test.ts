@@ -196,7 +196,7 @@ describe("стор: finishSession", () => {
     expect(st().practiceHearts.count).toBe(0);
   });
 
-  it("слабая или короткая тренировка сердечко не возвращает (#60: от 6 ответов и 70%)", () => {
+  it("слабая или короткая тренировка сердечко не возвращает (#65: от 6 ответов и 70%)", () => {
     lose();
     expect(st().finishSession(drill(8, 0.69)).heart).toBe(false);
     expect(st().finishSession(drill(5, 1)).heart).toBe(false);

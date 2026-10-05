@@ -304,7 +304,7 @@ describe("сердечки: spendHearts / addHearts / refill", () => {
     expect(refillHearts("lite", T0, TODAY).count).toBe(10);
   });
 
-  it("practiceEarnsHeart: от 6 ответов и точности 70% (#60)", () => {
+  it("practiceEarnsHeart: от 6 ответов и точности 70% (#65)", () => {
     expect(practiceEarnsHeart(6, 0.7)).toBe(true);
     expect(practiceEarnsHeart(5, 1)).toBe(false);
     expect(practiceEarnsHeart(10, 0.69)).toBe(false);
