@@ -6,7 +6,8 @@ import { UNITS, getLesson } from "@/content/course";
 import { schoolPlan } from "@/content/school-program";
 import { forecastScore } from "@/lib/forecast";
 import { linkFits, packData, reportLink, unpackData } from "@/lib/hash-pack";
-import { buildParentReport, cleanName, parseParentReport, TOPIC_NO_DATA, type ParentReport, type ReportInput } from "@/lib/parent-report";
+import { cleanName, parseParentReport, TOPIC_NO_DATA, type ParentReport } from "@/lib/parent-report";
+import { buildParentReport, type ReportInput } from "@/lib/parent-report-build";
 import { defaultProfile, type DayStat, type ExamSummary } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 

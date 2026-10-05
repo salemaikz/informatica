@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import { translate, useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { linkFits, packData, reportLink, selfViewLink } from "@/lib/hash-pack";
-import { buildParentReport } from "@/lib/parent-report";
+import { buildParentReport } from "@/lib/parent-report-build";
 import { entVisible } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import type { Lang } from "@/lib/types";
