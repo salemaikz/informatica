@@ -103,7 +103,7 @@ export function expectedText(step: QuestionStep, lang: Lang): string {
       return `${step.answer}${step.answerMode === "binary" ? "₂" : ""}`;
     case "cloze":
       return step.lines
-        .map((line) => line.map((t) => (isBlank(t) ? t.blank[0] : tx(t, lang))).join(" "))
+        .map((line) => line.map((t) => (isBlank(t) ? (t.label ? tx(t.label, lang) : t.blank[0]) : tx(t, lang))).join(" "))
         .join("\n");
     case "entmatch":
       return step.items.map((_, i) => `${LETTERS[i]} — ${tx(step.choices[step.answer[i]] ?? "", lang)}`).join("; ");

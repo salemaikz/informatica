@@ -35,6 +35,8 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
   const bank = useMemo(() => clozeBank(step, lang), [step, lang]);
   const isPick = (i: number) => bank.length > 0 && blanks[i].mode === "text" && !!blanks[i].label;
   const pickIdx = blanks.map((_, i) => i).filter(isPick);
+  const pickLabels = pickIdx.map((i) => l(blanks[i].label!));
+  const repeated = new Set(pickLabels).size < pickLabels.length;
   const lastTyped = blanks.map((_, i) => i).filter((i) => !isPick(i)).pop();
   const currentPick = locked ? undefined : pickIdx.find((i) => !values[i].trim());
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
@@ -158,7 +160,7 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
                   {wrong && (
                     <span className="absolute left-1/2 top-full mt-0.5 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap font-mono text-sm font-bold text-success-strong">
                       <Check size={14} strokeWidth={3.5} aria-hidden />
-                      {blank.blank[0]}
+                      {blank.label ? l(blank.label) : blank.blank[0]}
                     </span>
                   )}
                 </span>
@@ -172,7 +174,8 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
           <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("resume.pick")}</p>
           <ul className="flex flex-wrap gap-2">
             {bank.map((word) => {
-              const used = values.some((v, i) => isPick(i) && v === word);
+              // Слово, нужное в двух пропусках (False / False), не гасим: его можно выбрать ещё раз.
+              const used = !repeated && values.some((v, i) => isPick(i) && v === word);
               return (
                 <li key={word}>
                   <button
