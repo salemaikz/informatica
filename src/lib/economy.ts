@@ -270,6 +270,8 @@ export type ChipReason =
   | "exam"
   /** Тест по разделу сдан. */
   | "unit"
+  /** Кейс за новый уровень (волна 1Б, R3). */
+  | "case"
   | "buy"
   | "ai"
   | "refund";
@@ -670,3 +672,25 @@ export function sanitizePaywall(raw: unknown): PaywallState {
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
   return { lastShownAt: n(p.lastShownAt), views: Math.floor(n(p.views)) };
 }
+
+// ---------- Кейс за новый уровень (волна 1Б, R3: lib/level-case.ts) ----------
+
+export type CasePrizeId = "xp50" | "xp100" | "hearts" | "chips10" | "chips20" | "chips30" | "boost";
+
+/** Веса призов кейса (сумма 100). Кейс не продаётся и не покупается — награда за обучение. */
+export const LEVEL_CASE_WEIGHTS: Record<CasePrizeId, number> = {
+  xp50: 24,
+  xp100: 8,
+  hearts: 18,
+  chips10: 22,
+  chips20: 14,
+  chips30: 6,
+  boost: 8,
+};
+/** Опыт и чипы в призах кейса (всё остальное — по id). */
+export const LEVEL_CASE_XP: Partial<Record<CasePrizeId, number>> = { xp50: 50, xp100: 100 };
+export const LEVEL_CASE_CHIPS: Partial<Record<CasePrizeId, number>> = { chips10: 10, chips20: 20, chips30: 30 };
+/** Сердечки уже полные (или безлимит) — вместо них столько чипов. */
+export const LEVEL_CASE_HEARTS_SUBSTITUTE_CHIPS = 15;
+/** Бустер из кейса: множитель и длительность, мин. */
+export const LEVEL_CASE_BOOST = { mult: 2, minutes: 15 } as const;
