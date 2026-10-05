@@ -7,7 +7,9 @@ import { ENT_POOL } from "@/content/ent";
 import { entTopicById } from "@/content/ent-topics";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
+import { compareWithChallenge, encodeChallenge, type Challenge } from "@/lib/challenge";
 import { buildExam, EXAM_TIME_LIMIT_SEC, type ExamKind, type ExamPaper } from "@/lib/exam";
+import { currentPoolTag } from "@/lib/exam-pool";
 import {
   buildSummary,
   createAttempt,
@@ -37,6 +39,7 @@ import { HeartCost } from "@/components/economy/HeartCost";
 import { readHearts } from "@/components/economy/HeartsBar";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
+import { ChallengeBanner } from "./ChallengeBanner";
 import { checkpointById, examTitle } from "./checkpoint";
 import { ExamNotes } from "./ExamNotes";
 import { formatClock, randomSeed, remainingSec } from "./logic";
@@ -49,6 +52,8 @@ export interface ExamRunProps {
   topics: EntTopicId[];
   /** Для kind = "unit": id раздела. */
   unit?: string;
+  /** Вызов друга из адреса (#73): `ch=14-19-a9zq`; у контрольной раздела вызова нет. */
+  challenge?: Challenge | null;
 }
 
 /** Параметры варианта, который собрали для экрана условий. */
@@ -87,18 +92,37 @@ function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], u
 }
 
 /** Экран прохождения: загрузка → (продолжить?) → условия → сами задания. Спокойная оболочка без маскота, XP, звуков и ИИ. */
-export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) {
+export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: challengeProp = null }: ExamRunProps) {
   const { t } = useT();
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
   // Массив из пропсов может прийти новым при той же строке — эффект зависит от строки, а не от ссылки.
   const topicsKey = topicsProp.join(",");
   const topics = useMemo(() => (topicsKey ? (topicsKey.split(",") as EntTopicId[]) : []), [topicsKey]);
 
+  // Вызов — по строке (как темы): объект из пропсов не должен перезапускать эффект. У контрольной вызова нет.
+  const challengeKey = kind !== "unit" && challengeProp ? encodeChallenge(challengeProp) : null;
+  const challenge = useMemo(() => {
+    const [s, m, pool] = challengeKey?.split("-") ?? [];
+    return challengeKey ? ({ s: Number(s), m: Number(m), pool } satisfies Challenge) : null;
+  }, [challengeKey]);
+
   useEffect(() => {
     let off = false;
-    loadActiveAttempt().then((active) => {
+    loadActiveAttempt().then(async (active) => {
       if (off) return;
-      if (active && (!kind || sameVariant(active, kind, seed, topics, unit))) return setPhase({ name: "run", attempt: active });
+      if (active && (!kind || sameVariant(active, kind, seed, topics, unit))) {
+        // Начатый вариант открыли по ссылке с вызовом (например, после онбординга): вызов дописываем в попытку,
+        // чтобы он пережил перезагрузку и попал в сравнение после итогов.
+        if (kind && challenge && active.kind !== "unit" && !active.challenge) {
+          const next: ExamAttempt = { ...active, challenge };
+          const { paper: _paper, ...state } = next;
+          void _paper;
+          await saveAttemptState(state).catch(() => {});
+          if (off) return;
+          return setPhase({ name: "run", attempt: next });
+        }
+        return setPhase({ name: "run", attempt: active });
+      }
       if (!kind) return setPhase({ name: "none" });
       if (active) return setPhase({ name: "resume", active, fresh: null });
       setPhase({ name: "intro", ...buildFresh(kind, seed, topics, unit), replaces: null });
@@ -106,7 +130,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
     return () => {
       off = true;
     };
-  }, [kind, seed, topics, unit]);
+  }, [kind, seed, topics, unit, challenge]);
 
   if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} />;
 
@@ -131,6 +155,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
           paper={phase.paper}
           topics={phase.topics}
           unit={phase.unit}
+          challenge={phase.paper.kind === "unit" ? null : challenge}
           cost={examCost(phase.paper.kind)}
           onStart={async () => {
             // Порядок важен: сначала проверка сердечек, потом запись попытки, и только потом списание —
@@ -150,6 +175,9 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
               current: 0,
               startedAt: now,
               elapsedMs: 0,
+              // Тег банка (#73): по нему сравнение поймёт, тот же ли вариант; вызов друга переживает перезагрузку.
+              pool: currentPoolTag(),
+              challenge: phase.paper.kind === "unit" || !challenge ? undefined : challenge,
             };
             await createAttempt(attempt);
             await setActiveAttempt(attempt.id);
@@ -161,6 +189,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
             }
             // Статистика (#69): попытка создана и оплачена. Продолжение начатой — не старт.
             track({ e: "exam_start", kind: attempt.kind });
+            if (attempt.challenge) track({ e: "challenge", step: "start" });
             setPhase({ name: "run", attempt });
             return "started";
           }}
@@ -204,12 +233,15 @@ function Intro({
   paper,
   topics,
   unit,
+  challenge,
   cost,
   onStart,
 }: {
   paper: ExamPaper;
   topics: EntTopicId[];
   unit?: string;
+  /** Вызов друга (#73): баннер перед стартом. */
+  challenge: Challenge | null;
   /** Цена входа в сердечках (#40). */
   cost: number;
   /** "short" — сердечек не хватило, попытка не создана и ничего не списано. */
@@ -235,6 +267,7 @@ function Intro({
           </p>
         )}
       </div>
+      {challenge && !empty && <ChallengeBanner challenge={challenge} maxPoints={paper.maxPoints} />}
       {empty ? (
         <p className="rounded-2xl border-2 border-warning/40 bg-warning-soft p-3.5 font-semibold">{t("exam.run.emptyPaper")}</p>
       ) : (
@@ -428,6 +461,11 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     app.recordExam(summary, skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
     // Статистика (#69): конец попытки — ровно здесь (doneRef не пускает второй раз), а не на экране итога, который открывают из истории снова.
     track(examFinishEvent(attempt.kind, summary.points, summary.maxPoints));
+    // Вызов друга (#73): итог против друга — тем же единственным разом.
+    if (attempt.challenge) {
+      const cmp = compareWithChallenge(summary.points, summary.maxPoints, attempt.challenge, attempt.pool ?? currentPoolTag());
+      track({ e: "challenge", step: cmp.outcome });
+    }
     const { paper: _paper, ...state } = attempt;
     void _paper;
     try {

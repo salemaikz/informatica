@@ -11,6 +11,7 @@ import { useT } from "@/i18n/useT";
 import { aiErrorKey, lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
 import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from "@/lib/exam";
+import { currentPoolTag } from "@/lib/exam-pool";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { useApp } from "@/lib/store";
@@ -23,6 +24,8 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
+import { ExamShareActions } from "@/components/share/ExamShareActions";
+import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
@@ -268,6 +271,22 @@ export function ExamResult({ id }: { id: string }) {
           </Pill>
         )}
       </Card>
+
+      {/* Вызов друга (#73): больше / столько же / меньше. Меньше — не ошибка, поэтому не красным. */}
+      {attempt?.challenge && kind !== "unit" && (
+        <ChallengeCompare challenge={attempt.challenge} points={points} max={maxPoints} pool={attempt.pool ?? summary?.pool ?? currentPoolTag()} />
+      )}
+
+      {/* Поделиться результатом и вызвать друга (#72, #73); у контрольной раздела компонент сам ничего не рисует. */}
+      <ExamShareActions
+        kind={kind}
+        seed={attempt?.seed ?? summary?.seed ?? 0}
+        topics={attempt?.topics ?? summary?.topics ?? []}
+        points={points}
+        max={maxPoints}
+        pool={attempt?.pool ?? summary?.pool}
+        topicRows={topicRows}
+      />
 
       {attempt && <ExamNotes paper={attempt.paper} />}
 

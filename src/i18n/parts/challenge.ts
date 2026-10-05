@@ -2,4 +2,27 @@ import type { L } from "@/lib/types";
 
 // Вызов другу (#73): баннер перед вариантом, сравнение после итогов (ru + kk). Ключи — `challenge.*`.
 // Без имён: «У друга: 14 из 19». Казахский — литературный, порядок «19 ішінен 14».
-export const challengeDict = {} satisfies Record<string, L>;
+export const challengeDict = {
+  "challenge.banner": {
+    ru: "У друга: {points} из {max}. Сможешь больше?",
+    kk: "Досыңда: {max} ішінен {points}. Көбірек жинай аласың ба?",
+  },
+  "challenge.bannerOther": {
+    ru: "Задания обновились — вариант может отличаться, сравним по доле.",
+    kk: "Тапсырмалар жаңарды — нұсқа басқаша болуы мүмкін, үлес бойынша салыстырамыз.",
+  },
+  "challenge.title": { ru: "Сравнение с другом", kk: "Достың нәтижесімен салыстыру" },
+  "challenge.score": { ru: "{points} из {max}", kk: "{max} ішінен {points}" },
+  "challenge.more": { ru: "Больше, чем у друга: +{diff}", kk: "Достан көп: +{diff}" },
+  "challenge.same": { ru: "Столько же, сколько у друга", kk: "Достың нәтижесімен тең" },
+  "challenge.less": { ru: "Меньше на {diff} — попробуй ещё раз", kk: "Достан {diff} аз — қайта байқап көр" },
+  "challenge.detail": {
+    ru: "У друга: {theirs} · у тебя: {mine}",
+    kk: "Досыңда: {theirs} · сенде: {mine}",
+  },
+  "challenge.byShare": { ru: "по доле", kk: "үлес бойынша" },
+  "challenge.otherPaper": {
+    ru: "Вариант другой, поэтому сравниваем по доле верных баллов.",
+    kk: "Нұсқа басқа, сондықтан дұрыс балл үлесімен салыстырамыз.",
+  },
+} satisfies Record<string, L>;
