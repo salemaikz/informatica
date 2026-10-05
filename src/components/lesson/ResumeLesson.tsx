@@ -12,6 +12,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Mascot } from "@/components/mascot/Mascot";
 import { springBouncy } from "@/components/motion/presets";
 import { HeartCost } from "@/components/economy/HeartCost";
+import { HeartsBar } from "@/components/economy/HeartsBar";
 import { useNow } from "@/components/economy/useEconomy";
 import { graceText, resumeStep } from "./run-snapshot";
 
@@ -51,6 +52,8 @@ export function ResumeLesson({
   return (
     <main className="mx-auto flex min-h-dvh w-full items-center justify-center px-4 py-8">
       <div className="flex w-full max-w-md flex-col gap-4">
+        {/* Запас сердечек — чтобы решить, продолжать или начинать заново (вход стоит сердечко). */}
+        <HeartsBar className="self-end" />
         <div className="flex flex-col items-center gap-2 text-center">
           <m.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={springBouncy}>
             <Mascot mood="thinking" size={96} />
