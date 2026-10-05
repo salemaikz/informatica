@@ -2,12 +2,16 @@
 
 import type { Scene } from "@/lib/types";
 import { ColumnRow, DigitTile, SumLine, WeightChip } from "./primitives";
+import { DecimalExtScene } from "./DecimalExtScene";
+import { isDecimalExt } from "./numbers";
 import { decimalParts, decimalTotal, tileMetrics } from "./logic";
 
 type DecimalScene = Extract<Scene, { kind: "decimal" }>;
 
 /** Обычное число с весами разрядов: ×100 ×10 ×1 (справа налево) и сумма «300 + 40 + 5 = 345». */
 export function DecimalScene({ scene }: { scene: DecimalScene }) {
+  // base и peel — отдельный рисунок; обычное число рисуется как раньше.
+  if (isDecimalExt(scene)) return <DecimalExtScene scene={scene} />;
   const parts = decimalParts(scene.number);
   const n = parts.length;
   const mt = tileMetrics(n);
