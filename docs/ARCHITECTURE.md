@@ -394,3 +394,18 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Шаг `CodeStep` (`type: "code"`, `task` — id задачи `lib/ide/python/tasks.ts`): `steps/CodeStepView.tsx` (ленивая загрузка) → `CodeStepInner.tsx`: «Проверить код» (`checkPython` с `PY_FORBID`), повторные проверки, «Показать решение»; итог — `onAnswer({type:"code", ok, tries, code}, {submit:true})`; оценка 1 / 0,5 / 0; кнопка «Проверить» плеера у шага скрыта, «Пропустить» — есть; в конце урока не повторяется.
 - Сцена `code` с `run: true` (только Python) — `components/ide/python/RunPanel.tsx`: «Запустить», поле ввода (если программа читает `input()`), вывод, «Стоп».
 - Контекстные задания: `lib/context-drill.ts` (`contextItems`, `buildContextDrill` — 5 шагов `ent:<id>:<n>` со сценой `run`), страница `/code/context` (`components/ide/ContextHub.tsx`), режим `/drill?mode=context&item=<id>`.
+
+## v0.14: этап 15 — «чтение кода» как на ЕНТ, школьная программа 2.0, правки по отзыву
+
+### «Чтение кода» (`lib/code-read.ts`, решения #87–#88)
+- У задания ЕНТ и вопроса контекстного задания — поле `read?: ReadKind` (`output` · `bug` · `fix` · `fill` · `purpose` · `schema`). Нет поля — вид выводится по тексту условия (ru) и сцене: `readKindOf` (кэш в `WeakMap`), материал для чтения — сцена `code`/`web`/`flow`, таблица в t09/t10/t12 или `код` в условии практической темы. `isReadItem` — обычное задание «на чтение».
+- Квота в варианте (`lib/exam.ts`): `READ_SHARE` по темам (t06 — все, t07/t10/t13 — 2/3, t09/t12 — 1/2), `readTarget(тема, слотов)` с округлением вверх; слоты single идут первыми. Контрольная практического раздела (≥ 20% заданий «на чтение») — ≥ половины single. Выбор вида — `pickRead`: вес `min(заданий вида, 6) / (1 + взято)`, затем случайное задание вида — разнообразие без «прибитых» редких заданий. `EXAM_BUILD_VERSION = 3`, вид чтения — в подписи задания для тега «вызова другу».
+- «Босс урока» (`lib/ent-boss.ts`): уроки `REVIEW_LESSON_RE` (`py|algo|db|data|web`) получают одно single bug/fix/fill/purpose из своего банка; `lessonStepCount` (`lib/lesson-size.ts`) учитывает его без загрузки банка.
+- Тренировка `/drill?mode=codeview&area=py|db|sql|sheet|web|mix` (`lib/code-review-drill.ts`, области — лёгкий `lib/code-review-areas.ts`): 10 заданий, уровни 5/3/2, `pickRead` («что выведет» стартует с одного «взятого»). Страница `/code/review` — счётчики считает сервер (`page.tsx`), в клиент банк ЕНТ не уходит.
+
+### Школьная программа 2.0 (`content/school-program.ts`, `docs/SCHOOL.md`)
+- Данные — по долгосрочным планам приложений 55 (5–9), 108 (10–11 ЕМН), 109 (10–11 ОГН) к приказу № 399: разделы с `quarter`, у 10–11 — два плана с `direction: "emn" | "ogn"`. `schoolPlan(grade, direction)`; `profile.direction` (по умолчанию `emn`) — выбор на школьной карте (`DirectionPicker`) и в настройках; учитывают прогресс класса (`course-view`, `UnitProgressList`, отчёт родителю).
+- Школьный урок — `Lesson.school: true`, `unitId: "school"`: не на карте ЕНТ (нет в `UNITS`), без заданий ЕНТ и «босса», навыки `school.*` без темы ЕНТ (`isSchoolSkill`) — их нет в разделах «Практики» и в прогнозе ЕНТ; «следующий урок» после него — нет (выход на карту). `scripts/check-content.ts` проверяет школьный урок по своим правилам.
+
+### Напоминания: окно с первого входа (`lib/push-ask.ts`, решение #92)
+- `pushAsk {lastAt, count}` в сторе, `notePushAsked()`; `shouldAskPush(permission, state, createdAt, now, pushOn)` → `ask` · `blocked-help` · `install-help` · null: первый раз — сразу, потом 3 дня в первую неделю и 7 дней дальше. `PushAskAgent` (в `Providers`) — нижняя шторка на главных экранах, запрос разрешения — только по нажатию.
