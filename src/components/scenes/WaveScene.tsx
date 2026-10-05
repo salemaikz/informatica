@@ -5,7 +5,7 @@ import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
-import { hasGrid, levelsFormula, waveLayout, wavePanels, type WavePanel } from "./wave";
+import { levelsFormula, waveLayout, wavePanels, type WavePanel } from "./wave";
 
 type WaveSceneData = Extract<Scene, { kind: "wave" }>;
 
