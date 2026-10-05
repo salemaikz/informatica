@@ -275,16 +275,15 @@ describe("цены и «Полный запас» в магазине (#60)", ()
 });
 
 describe("«Как работают сердечки»: числа из констант", () => {
-  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, контрольная 2, экстерн 2, игра 1, теория 0,5", () => {
+  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 2, игра 1, теория 0,5 (экстерна в правилах больше нет)", () => {
     const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
-    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 });
+    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, game: 1, theory: 0.5 });
     expect(rules.theory).toBe(ENTRY_COST.theory);
     // теория платная: в бесплатных её больше нет, зато есть шпаргалка
     expect(FREE_ENTRIES).not.toContain("theory");
     expect(FREE_ENTRIES).toContain("cheatsheet");
     expect(rules.lesson).toBe(ENTRY_COST.lesson);
     expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
-    expect(rules.extern).toBe(ENTRY_COST.extern);
   });
   it("восстановление: бесплатный 5 за 6 ч, «Лайт» 10 за 3 ч, «Безлимит» не тратится", () => {
     const [free, lite, unl] = regenRules();

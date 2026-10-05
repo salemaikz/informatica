@@ -8,7 +8,7 @@ import type { LessonStat } from "@/lib/review";
 import { LESSON_META } from "@/content/catalog";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
-import { bestUnitResult, type Stars } from "@/lib/exam";
+import { bestUnitResult, unitTimeLimitSec, type Stars } from "@/lib/exam";
 import { ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +20,7 @@ import { StarRow } from "@/components/exam/StarRow";
 import { EXAM_FORMAT, examLink, randomSeed } from "@/components/exam/logic";
 import { unitVars } from "./useLearn";
 
-// «Контрольная» — узел в конце раздела на карте: трофей цвета раздела, под ним звёзды лучшего результата.
+// «Тест по разделу» — узел в конце раздела на карте: трофей цвета раздела, под ним звёзды лучшего результата.
 // Нажатие открывает шторку: что внутри и «Начать». Доступна всегда (рекомендуется после уроков раздела).
 
 export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<string, LessonStat> }) {
@@ -41,6 +41,8 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
   const done = ready.filter((r) => (lessons[r.id]?.completions ?? 0) > 0).length;
   const allDone = done >= total;
   const f = EXAM_FORMAT.unit;
+  // Время — по числу заданий (90 секунд на задание).
+  const minutes = Math.round(unitTimeLimitSec(cp.size) / 60);
 
   const start = () => {
     setOpen(false);
@@ -74,12 +76,12 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
             </span>
             <div className="min-w-0">
               <h2 className="text-lg font-extrabold leading-tight">{t("exam.unit.title", { unit: title })}</h2>
-              <p className="mt-0.5 text-sm font-semibold text-muted">{t("exam.unit.sheet.desc", { n: typeof cp === "object" ? cp.size : f.questions })}</p>
+              <p className="mt-0.5 text-sm font-semibold text-muted">{t("exam.unit.sheet.desc", { n: cp.size })}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Pill tone="muted">{t("exam.fmt.questions", { n: typeof cp === "object" ? cp.size : f.questions })}</Pill>
-            <Pill tone="muted">{t("common.minutes", { n: f.minutes })}</Pill>
+            <Pill tone="muted">{t("exam.fmt.questions", { n: cp.size })}</Pill>
+            <Pill tone="muted">{t("common.minutes", { n: minutes })}</Pill>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-3.5 py-2.5">
             <span className="min-w-0 text-sm font-extrabold">{status}</span>
@@ -91,11 +93,11 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
             <li className={allDone ? "text-success-strong" : undefined}>
               {allDone ? t("exam.unit.sheet.ready") : t("exam.unit.sheet.recommend", { done, total })}
             </li>
-            {typeof cp === "object" && cp.size < f.questions && <li>{t("exam.unit.sheet.shorter", { n: cp.size })}</li>}
+            {cp.size < f.questions && <li>{t("exam.unit.sheet.shorter", { n: cp.size })}</li>}
           </ul>
           <Button size="lg" block icon={<Play size={20} aria-hidden />} onClick={start}>
             {t("common.start")}
-            {/* Контрольная стоит 2 сердечка (#40); списывается на экране условий по «Начать». */}
+            {/* Тест по разделу стоит 2 сердечка (#40); списывается на экране условий по «Начать». */}
             <HeartCost n={ENTRY_COST.checkpoint} variant="solid" />
           </Button>
         </div>

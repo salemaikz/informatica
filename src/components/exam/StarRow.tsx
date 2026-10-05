@@ -5,7 +5,7 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import type { Stars } from "@/lib/exam";
 
-/** Три звезды контрольной: золотые — заработанные. Для скринридера — одна подпись, значки скрыты. */
+/** Три звезды теста по разделу: золотые — заработанные. Для скринридера — одна подпись, значки скрыты. */
 export function StarRow({ stars, size = 20, className }: { stars: Stars; size?: number; className?: string }) {
   const { t } = useT();
   return (

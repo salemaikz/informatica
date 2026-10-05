@@ -14,13 +14,19 @@ export type EntKind = EntItem["kind"];
 export const FULL_COUNTS = { single: 25, multi: 5, match: 5 } as const;
 export const MINI_COUNTS = { single: 11, multi: 2, match: 2 } as const; // 9 + 2 «без контекста»
 export const TOPIC_COUNTS = { single: 6, multi: 2, match: 2 } as const;
-/** Контрольная по разделу: 10 + 2 + 2 + 1 вопрос контекстного задания (нет контекстных — 11 single). */
-export const UNIT_COUNTS = { single: 10, multi: 2, match: 2, context: 1 } as const;
-/** Меньше заданий в разделе — контрольной нет. */
+/** Тест по разделу (#95): 14 + 3 + 2 + 1 вопрос контекстного задания (нет контекстных — 15 single). */
+export const UNIT_COUNTS = { single: 14, multi: 3, match: 2, context: 1 } as const;
+/** Меньше заданий в разделе — теста по разделу нет. */
 export const UNIT_MIN_ITEMS = 10;
+/** Доля баллов, с которой тест по разделу сдан: непройденные уроки раздела засчитываются. */
+export const UNIT_PASS_RATIO = 0.8;
+/** Время теста по разделу — пропорционально числу заданий: 90 секунд на задание. */
+export const UNIT_SEC_PER_QUESTION = 90;
+/** Секунд на тест по разделу из n заданий (до целой минуты вверх). */
+export const unitTimeLimitSec = (n: number): number => Math.ceil((Math.max(0, n) * UNIT_SEC_PER_QUESTION) / 60) * 60;
 /** Время: 2 минуты на задание (как в спецификации ЕНТ). */
 export const SEC_PER_QUESTION = 120;
-export const EXAM_TIME_LIMIT_SEC: Record<ExamKind, number> = { full: 80 * 60, mini: 30 * 60, topic: 20 * 60, unit: 25 * 60 };
+export const EXAM_TIME_LIMIT_SEC: Record<ExamKind, number> = { full: 80 * 60, mini: 30 * 60, topic: 20 * 60, unit: unitTimeLimitSec(UNIT_COUNTS.single + UNIT_COUNTS.multi + UNIT_COUNTS.match + UNIT_COUNTS.context) };
 /** Доли уровней A/B/C в варианте: 50/30/20. */
 const LEVEL_SHARE: readonly [number, number, number] = [0.5, 0.3, 0.2];
 /** Вопросов в контекстном задании. */
@@ -302,7 +308,7 @@ function expand(item: EntItem): ExamQuestion[] {
 // Только экспорт — поведение buildExam не меняется.
 export { neighbors as neighborTopics, expand as expandEntItem };
 
-// ---------- Контрольная по разделу ----------
+// ---------- Тест по разделу ----------
 
 type UnitPlain = Exclude<EntItem, EntContext>;
 const byItemId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -317,7 +323,7 @@ function unitItems(pool: readonly EntItem[], skillIds: readonly string[] | undef
   };
 }
 
-/** Сколько заданий войдёт в контрольную раздела (до 15): контекстное даёт один вопрос. */
+/** Сколько заданий войдёт в тест по разделу (до 20): контекстное даёт один вопрос. */
 export function unitPaperSize(pool: readonly EntItem[], skillIds: readonly string[] | undefined): number {
   const { plain, contexts } = unitItems(pool, skillIds);
   return unitPaperSizeOf(plain.length, contexts.length > 0);
@@ -329,14 +335,14 @@ export function unitPaperSizeOf(plain: number, hasContext: boolean): number {
   return Math.min(total, plain + (hasContext ? 1 : 0));
 }
 
-/** Есть ли у раздела контрольная: хватает заданий его навыков. */
+/** Есть ли у раздела тест: хватает заданий его навыков. */
 export const hasUnitExam = (pool: readonly EntItem[], skillIds: readonly string[] | undefined) =>
   unitPaperSize(pool, skillIds) >= UNIT_MIN_ITEMS;
 
 /**
- * Контрольная по разделу: 10 single, 2 multi, 2 match и 1 вопрос контекстного задания (нет контекстных — 11 single),
+ * Тест по разделу: 14 single, 3 multi, 2 match и 1 вопрос контекстного задания (нет контекстных — 15 single),
  * уровни ≈ 50/30/20, без повторов. Вид, которого не хватило, добирается другими видами (с записью в notes).
- * Навыки раздела по возможности представлены равномерно.
+ * Навыки раздела представлены равномерно: пока какой-то навык не взят ни разу, берём задания его, а не повторяем другие.
  */
 function buildUnitExam(opts: BuildExamOpts): ExamPaper {
   const { seed } = opts;
@@ -410,10 +416,31 @@ function buildUnitExam(opts: BuildExamOpts): ExamPaper {
     ...shuffle(chosen.multi, rand).flatMap((it) => expand(shuffleEntItem(it, seed))),
     ...shuffle(chosen.match, rand).flatMap((it) => expand(shuffleEntItem(it, seed))),
   ];
-  return { kind: "unit", seed, items, maxPoints: items.reduce((s, q) => s + q.maxPoints, 0), timeLimitSec: EXAM_TIME_LIMIT_SEC.unit, notes };
+  return { kind: "unit", seed, items, maxPoints: items.reduce((s, q) => s + q.maxPoints, 0), timeLimitSec: unitTimeLimitSec(items.length), notes };
 }
 
-// ---------- Звёзды контрольной ----------
+/** Навыки заданий варианта (у контекстного задания — навык задания). */
+export function paperSkillIds(paper: Pick<ExamPaper, "items">): Set<string> {
+  return new Set(paper.items.map((q) => q.item.skill));
+}
+
+/**
+ * Какие уроки засчитать за сданный тест по разделу: готовые, ещё не пройденные, все навыки которых были в варианте.
+ * `ready` — готовые уроки раздела в порядке курса, `isDone` — урок уже пройден. Порядок курса сохраняется.
+ */
+export function lessonsToCredit(
+  paper: Pick<ExamPaper, "items">,
+  ready: readonly { id: string; skills: readonly string[] }[],
+  isDone: (lessonId: string) => boolean,
+): string[] {
+  const skills = paperSkillIds(paper);
+  return ready.filter((x) => x.skills.length > 0 && !isDone(x.id) && x.skills.every((sk) => skills.has(sk))).map((x) => x.id);
+}
+
+/** Тест по разделу сдан: доля баллов не меньше UNIT_PASS_RATIO. */
+export const unitPassed = (points: number, max: number): boolean => max > 0 && Number.isFinite(points) && points / max >= UNIT_PASS_RATIO;
+
+// ---------- Звёзды теста по разделу ----------
 
 export type Stars = 0 | 1 | 2 | 3;
 
@@ -431,7 +458,7 @@ export interface UnitBest {
 }
 
 /**
- * Лучший результат контрольной раздела по сохранённым итогам (данные из localStorage — недоверенные).
+ * Лучший результат теста по разделу по сохранённым итогам (данные из localStorage — недоверенные).
  * Лучший — по доле баллов; при равенстве — тот, где заданий больше.
  */
 export function bestUnitResult(

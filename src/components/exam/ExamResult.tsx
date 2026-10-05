@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, Clock, Dumbbell, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Clock, Dumbbell, Flag, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LESSON_META } from "@/content/catalog";
@@ -11,7 +11,7 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { aiErrorKey, lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
-import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, type ExamKind } from "@/lib/exam";
+import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, UNIT_PASS_RATIO, unitPassed, type ExamKind } from "@/lib/exam";
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { decaySkills } from "@/lib/mastery";
@@ -31,7 +31,7 @@ import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
-import { examTitle } from "./checkpoint";
+import { examTitle, unitStartLesson } from "./checkpoint";
 import { StarRow } from "./StarRow";
 
 const TONE_COLOR: Record<Tone, string> = {
@@ -59,6 +59,55 @@ function Bar({ label, points, max, hint }: { label: string; points: number; max:
         </span>
       </div>
       <ProgressBar value={ratio} color={TONE_COLOR[tone]} height={10} label={label} />
+    </div>
+  );
+}
+
+/** Итог теста по разделу: какие уроки засчитаны, а если не сдан — с какого урока начать. */
+function UnitCredit({ unitId, points, max, credited }: { unitId: string; points: number; max: number; credited: string[] }) {
+  const { t, l } = useT();
+  const lessons = useApp((s) => s.lessons);
+  const passed = unitPassed(points, max);
+  const pct = Math.round(ratioOf(points, max) * 100);
+  if (passed && credited.length) {
+    return (
+      <div className="flex flex-col gap-3 rounded-3xl border-2 border-success/40 bg-success-soft p-4">
+        <p className="flex items-center gap-2 text-lg font-extrabold text-success-strong">
+          <Check size={22} strokeWidth={3} aria-hidden /> {t("unittest.result.credited", { n: credited.length })}
+        </p>
+        <p className="text-sm font-semibold">{t("unittest.result.creditedText", { n: pct })}</p>
+        <ul className="flex flex-col gap-1 text-sm font-bold">
+          {credited.map((lid) => (
+            <li key={lid} className="flex items-start gap-2">
+              <Check size={16} strokeWidth={3} className="mt-0.5 shrink-0 text-success" aria-hidden />
+              <span>{LESSON_META[lid] ? l(LESSON_META[lid].title) : lid}</span>
+            </li>
+          ))}
+        </ul>
+        <ButtonLink href="/learn" variant="success" icon={<Flag size={18} aria-hidden />}>
+          {t("unittest.result.toMap")}
+        </ButtonLink>
+      </div>
+    );
+  }
+  if (passed) {
+    return <p className="rounded-2xl border-2 border-success/40 bg-success-soft p-3.5 text-sm font-semibold">{t("unittest.result.nothing", { n: pct })}</p>;
+  }
+  const lessonId = unitStartLesson(unitId, lessons);
+  const lesson = lessonId ? LESSON_META[lessonId] : undefined;
+  return (
+    <div className="flex flex-col gap-3 rounded-3xl border-2 border-warning/40 bg-warning-soft p-4">
+      <p className="text-lg font-extrabold text-warning-strong">{t("unittest.result.failed")}</p>
+      <p className="text-sm font-semibold">
+        {lesson
+          ? t("unittest.result.failedText", { need: Math.round(UNIT_PASS_RATIO * 100), n: pct, lesson: l(lesson.title) })
+          : t("unittest.result.failedNoLesson", { need: Math.round(UNIT_PASS_RATIO * 100), n: pct })}
+      </p>
+      {lesson && (
+        <ButtonLink href={`/lesson/${lesson.id}`} icon={<Flag size={18} aria-hidden />}>
+          {t("unittest.result.toLesson")}
+        </ButtonLink>
+      )}
     </div>
   );
 }
@@ -282,7 +331,7 @@ export function ExamResult({ id }: { id: string }) {
         <ChallengeCompare challenge={attempt.challenge} points={points} max={maxPoints} pool={attempt.pool ?? summary?.pool} />
       )}
 
-      {/* Поделиться результатом и вызвать друга (#72, #73); у контрольной раздела компонент сам ничего не рисует. */}
+      {/* Поделиться результатом и вызвать друга (#72, #73); у теста по разделу компонент сам ничего не рисует. */}
       <ExamShareActions
         kind={kind}
         seed={attempt?.seed ?? summary?.seed ?? 0}
@@ -292,6 +341,9 @@ export function ExamResult({ id }: { id: string }) {
         pool={attempt?.pool ?? summary?.pool}
         topicRows={topicRows}
       />
+
+      {/* Тест по разделу: зачёт уроков (старые попытки без поля credited — без списка). */}
+      {kind === "unit" && unitId && <UnitCredit unitId={unitId} points={points} max={maxPoints} credited={attempt?.credited ?? []} />}
 
       {attempt && <ExamNotes paper={attempt.paper} />}
 

@@ -74,11 +74,6 @@ export function unitProgress(unit: Unit, stats: Record<string, LessonStat>): Uni
   return { done, ready, total: unit.lessons.length };
 }
 
-/** «Сдать экстерном» имеет смысл, если в разделе есть готовые непройденные уроки. */
-export function canExtern(unit: Unit, stats: Record<string, LessonStat>): boolean {
-  return unit.lessons.some((r) => r.status === "available" && !isPassedStat(stats[r.id]));
-}
-
 /** Навыки раздела: навыки его готовых уроков + навыки тем ЕНТ раздела. */
 export function unitSkillIds(unit: Unit, lessons: Record<string, LessonInfo>, skills: Skill[]): string[] {
   const set = new Set<string>();
@@ -88,12 +83,12 @@ export function unitSkillIds(unit: Unit, lessons: Record<string, LessonInfo>, sk
   return [...set];
 }
 
-/** Готовые уроки раздела (есть на карте как «доступен» и найдены в курсе): без них контрольной раздела нет. */
+/** Готовые уроки раздела (есть на карте как «доступен» и найдены в курсе): без них теста по разделу нет. */
 export function readyLessonCount(unit: Unit, lessons: Record<string, LessonInfo>): number {
   return unit.lessons.filter((r) => r.status === "available" && !!lessons[r.id]).length;
 }
 
-/** Навыки контрольной раздела: как `unitSkillIds`; раздел без готовых уроков — пусто (контрольной нет). */
+/** Навыки теста по разделу: как `unitSkillIds`; раздел без готовых уроков — пусто (теста нет). */
 export function checkpointSkillIds(unit: Unit, lessons: Record<string, LessonInfo>, skills: Skill[]): string[] {
   return readyLessonCount(unit, lessons) > 0 ? unitSkillIds(unit, lessons, skills) : [];
 }
@@ -268,7 +263,7 @@ export type PathItem =
   | { kind: "lesson"; ref: LessonRef }
   /** «Практика» после группы (не последней в разделе). */
   | { kind: "practice"; group: CourseGroup }
-  /** «Повторение» в конце раздела — перед контрольной. */
+  /** «Повторение» в конце раздела — перед тестом по разделу. */
   | { kind: "recap"; unitId: string };
 
 /** Узел курса 3.0 (не урок). */

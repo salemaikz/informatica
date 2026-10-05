@@ -9,6 +9,7 @@ import { formatHearts } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { CountUp } from "@/components/motion/CountUp";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
+import { HeartLossPop, useHeartDelta } from "./HeartLoss";
 import { useChips, useHearts } from "./useEconomy";
 import { formatCompact } from "./shop-helpers";
 import { ChipBurst } from "./ChipBurst";
@@ -25,6 +26,8 @@ export function HeartsChip({ className }: { className?: string }) {
   const { t } = useT();
   const v = useHearts();
   const reduce = useReduceMotion();
+  const delta = useHeartDelta(v.count);
+  const lost = delta.id > 0 && delta.dir === "down" && !reduce;
   const empty = !v.unlimited && v.count <= 0;
   const label = v.unlimited ? t("shop.chip.heartsUnlimited") : t("shop.chip.hearts", { n: formatHearts(v.count) });
 
@@ -35,19 +38,21 @@ export function HeartsChip({ className }: { className?: string }) {
       aria-label={label}
       title={label}
       className={cn(
-        "flex h-10 shrink-0 items-center gap-1 rounded-xl px-1 font-extrabold hover:bg-surface-2",
+        "relative flex h-10 shrink-0 items-center gap-1 rounded-xl px-1 font-extrabold hover:bg-surface-2",
         "text-heart",
         className,
       )}
     >
       <m.span
+        key={delta.id}
         className="flex"
-        animate={empty && !reduce ? { scale: [1, 1.22, 1] } : { scale: 1 }}
-        transition={empty && !reduce ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
+        animate={lost ? { rotate: [0, -16, 14, -9, 6, 0], scale: [1, 1.3, 0.88, 1.06, 1] } : empty && !reduce ? { scale: [1, 1.22, 1] } : { scale: 1 }}
+        transition={lost ? { duration: 0.55, ease: "easeInOut" } : empty && !reduce ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
       >
         <Heart size={20} fill={empty ? "none" : "currentColor"} />
       </m.span>
       {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="tabular-nums">{formatHearts(v.count)}</span>}
+      <HeartLossPop delta={delta} reduce={reduce} />
     </Link>
   );
 }

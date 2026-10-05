@@ -9,7 +9,6 @@ import { fillGrid, tileSpan, type TileSpan } from "@/components/learn/ent-grid";
 import {
   averageMastery,
   bestPercent,
-  canExtern,
   completionsBadge,
   isDarkColor,
   isDue,
@@ -91,16 +90,11 @@ describe("рекомендуемый урок и состояния узлов",
       expect(nodeState(units[0].lessons[0], stats.a1, "a1", NOW), String(completions)).toBe("recommended");
       expect(isDue(stats.a1, NOW), String(completions)).toBe(false);
       expect(unitProgress(units[0], stats).done, String(completions)).toBe(0);
-      // a1 не пройден, a2 пройден: экстерн по a1 всё ещё имеет смысл
-      expect(canExtern(units[0], { a1: stats.a1, a2: stat() }), String(completions)).toBe(true);
     }
   });
 
-  it("прогресс раздела и экстерн", () => {
+  it("прогресс раздела", () => {
     expect(unitProgress(units[0], { a1: stat() })).toEqual({ done: 1, ready: 2, total: 3 });
-    expect(canExtern(units[0], { a1: stat() })).toBe(true);
-    expect(canExtern(units[0], { a1: stat(), a2: stat() })).toBe(false);
-    expect(canExtern(unit("c", [["c1", "soon"]]), {})).toBe(false);
   });
 });
 

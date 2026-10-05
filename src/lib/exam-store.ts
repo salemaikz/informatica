@@ -31,7 +31,7 @@ export interface ExamAttempt {
   kind: ExamKind;
   seed: number;
   topics?: EntTopicId[];
-  /** Контрольная по разделу: id раздела. */
+  /** Тест по разделу: id раздела. */
   unit?: string;
   paper: ExamPaper;
   answers: ExamAnswers;
@@ -42,6 +42,8 @@ export interface ExamAttempt {
   elapsedMs: number;
   finishedAt?: number;
   review?: ExamAiReview;
+  /** Тест по разделу сдан: уроки, засчитанные за него (id по порядку курса). Нет поля — уроки не засчитывались. */
+  credited?: string[];
   /** Тег банка заданий, на котором собран вариант (`currentPoolTag`, #73): им делятся в вызове другу. */
   pool?: string;
   /** Вызов друга, с которым начата попытка (#73): баннер и сравнение переживают перезагрузку. */
@@ -183,6 +185,13 @@ export function sanitizeReview(raw: unknown): ExamAiReview | undefined {
   };
 }
 
+/** id засчитанных уроков: короткие строки без лишних знаков, не больше 40 штук. */
+export function sanitizeCredited(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [...new Set(raw.filter((x): x is string => typeof x === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(x)))].slice(0, 40);
+  return out.length ? out : undefined;
+}
+
 /** Состояние попытки (без бумаги). null — запись повреждена. */
 export function sanitizeState(raw: unknown, paper: ExamPaper): ExamAttemptState | null {
   if (!raw || typeof raw !== "object") return null;
@@ -201,8 +210,9 @@ export function sanitizeState(raw: unknown, paper: ExamPaper): ExamAttemptState 
     elapsedMs: fin(s.elapsedMs) ? Math.max(0, s.elapsedMs) : 0,
     finishedAt: fin(s.finishedAt) ? s.finishedAt : undefined,
     review: sanitizeReview(s.review),
+    credited: paper.kind === "unit" ? sanitizeCredited(s.credited) : undefined,
     pool: isPoolTag(s.pool) ? s.pool : undefined,
-    // Вызов — только для полного, мини и теста по теме (контрольной не делятся, #73).
+    // Вызов — только для полного, мини и теста по теме (тестом по разделу не делятся, #73).
     challenge: paper.kind !== "unit" ? (sanitizeChallenge(s.challenge) ?? undefined) : undefined,
   };
 }

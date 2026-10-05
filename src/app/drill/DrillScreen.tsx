@@ -1,26 +1,22 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
-import { Check, Flag, Target } from "lucide-react";
+import { Play, Target } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { EntTopicId, QuestionStep, SessionResult } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
-import { getLesson } from "@/content/course";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import {
-  buildExternSession,
   buildHistoryRedo,
   buildMistakes,
   buildReview,
   buildSkill,
   buildSmart,
   buildTopic,
-  EXTERN_PASS,
-  externPassed,
-  externStartLesson,
   hasBank,
   lessonAccuracies,
   unitById,
@@ -35,15 +31,16 @@ import { groupOfPracticeNode, recapNodeId } from "@/content/groups";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
-import { ButtonLink } from "@/components/ui/Button";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Pill } from "@/components/ui/Pill";
 
 interface Built {
   steps: QuestionStep[];
   mistakeMap?: Record<string, string>;
   /** Разминка: уроки, чьё расписание повторения сдвигаем по итогам. */
   reviewLessons?: string[];
-  /** Экстерн: уроки, которые засчитаем при зачёте. */
-  externLessons?: string[];
   /** Разминка без повторов превратилась в умную тренировку. */
   fallback?: boolean;
   /** Режим history: записи нет в истории (вытеснена, удалена, опечатка в ссылке). */
@@ -102,11 +99,6 @@ function buildSession(mode: DrillMode, p: Params): Built {
       const topic = ENT_TOPICS.find((x) => x.id === p.topic)?.id;
       return { steps: topic ? buildTopic(topic, s.skills, seed) : [] };
     }
-    case "extern": {
-      const ex = buildExternSession(p.unit, s.lessons, seed);
-      // Засчитать нечего — экран «нечего сдавать», а не тренировка без итога.
-      return ex.lessons.length ? { steps: ex.steps, externLessons: ex.lessons } : { steps: [] };
-    }
     case "review": {
       const r = buildReview(s.lessons, s.skills, Date.now(), seed);
       return { steps: r.steps, reviewLessons: r.lessons, fallback: r.fallback };
@@ -116,20 +108,48 @@ function buildSession(mode: DrillMode, p: Params): Built {
   }
 }
 
-type ExternOutcome = { passed: true; accuracy: number; credited: number } | { passed: false; accuracy: number; lessonId?: string };
+/** Экран старта мини-теста (#95): сердечко списывается по «Начать», а не при первом ответе. */
+function MiniStart({ title, count, onStart }: { title: string; count: number; onStart: () => boolean }) {
+  const { t } = useT();
+  const router = useRouter();
+  const [noHearts, setNoHearts] = useState(false);
+  return (
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center gap-4 px-4 py-8">
+      <h1 className="text-2xl font-extrabold">{title}</h1>
+      <p className="flex flex-wrap items-center gap-1.5">
+        <Pill tone="muted">{t("exam.fmt.questions", { n: count })}</Pill>
+        <HeartCost n={ENTRY_COST.check} />
+      </p>
+      <p className="rounded-2xl border-2 border-border bg-surface p-4 text-[15px] font-semibold">{t("unittest.mini.desc")}</p>
+      <Button
+        size="lg"
+        block
+        icon={<Play size={20} aria-hidden />}
+        onClick={() => {
+          if (!onStart()) setNoHearts(true);
+        }}
+      >
+        {t("common.start")}
+        <HeartCost n={ENTRY_COST.check} variant="solid" />
+      </Button>
+      <ButtonLink href="/learn" variant="ghost">
+        {t("common.cancel")}
+      </ButtonLink>
+      <OutOfHearts open={noHearts} need={ENTRY_COST.check} onClose={() => setNoHearts(false)} onResume={() => setNoHearts(false)} onExit={() => router.push("/learn")} />
+    </div>
+  );
+}
 
 export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area }: { mode: DrillMode } & Params) {
   const { t, l } = useT();
   const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item, area }));
   const recordCourseNode = useApp((s) => s.recordCourseNode);
-  const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
+  // Мини-тест: вход оплачен кнопкой «Начать» (плеер дальше не списывает).
+  const [started, setStarted] = useState(false);
   // Итог мини-теста: баллы «как на ЕНТ» и слабое место (этап 14).
   const [mini, setMini] = useState<{ points: number; max: number; weak?: string } | null>(null);
-  const completeLessons = useApp((s) => s.completeLessons);
   const markReviewed = useApp((s) => s.markReviewed);
-  // Экстерн стоит 2 сердечка (#40): не хватает на входе — «сердечки закончились» (#69). Пустой набор экран не открывает — события нет.
-  useHeartsOutOnEntry(mode === "extern" && session.steps.length ? ENTRY_COST.extern : 0, "extern");
-  // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14). Практика и повторение — бесплатно (#40).
+  // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14), списывается по «Начать» (#95). Практика и повторение — бесплатно (#40).
   useHeartsOutOnEntry(mode === "minitest" && session.steps.length ? ENTRY_COST.check : 0, "check");
 
   const onSessionFinish = useCallback(
@@ -146,20 +166,11 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
         // Точность считаем по заданиям навыков каждого урока: стор сдвинет расписание повторения.
         for (const [id, acc] of Object.entries(lessonAccuracies(result.answers, session.reviewLessons))) markReviewed([id], acc);
       }
-      if (mode === "extern" && session.externLessons?.length) {
-        if (externPassed(result.accuracy)) {
-          completeLessons(session.externLessons, "extern", result.accuracy);
-          setOutcome({ passed: true, accuracy: result.accuracy, credited: session.externLessons.length });
-        } else {
-          // Начинать — с первого непройденного урока раздела (даже если экстерн его не проверял).
-          setOutcome({ passed: false, accuracy: result.accuracy, lessonId: externStartLesson(unit, useApp.getState().lessons) ?? session.externLessons[0] });
-        }
-      }
     },
-    [mode, unit, node, session, completeLessons, markReviewed, recordCourseNode],
+    [mode, unit, node, session, markReviewed, recordCourseNode],
   );
 
-  const externUnit = unitById(unit);
+  const recapUnit = unitById(unit);
   const nodeGroup = node ? groupOfPracticeNode(node) : undefined;
   const topicShort = mode === "topic" && topic && ENT_TOPICS.some((x) => x.id === topic) ? l(entTopicById(topic as EntTopicId).short) : "";
   const title =
@@ -169,23 +180,21 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
         ? l(skillById(skill)!.title)
         : mode === "review" && !session.fallback
           ? t("modes.review.title")
-          : mode === "extern" && externUnit
-            ? t("modes.extern.title", { unit: l(externUnit.title) })
-            : mode === "practice" && nodeGroup
-              ? t("course3.practice.title", { group: l(nodeGroup.title) })
-              : mode === "minitest" && nodeGroup
-                ? t("course3.minitest.title", { group: l(nodeGroup.title) })
-                : mode === "recap" && externUnit
-                  ? t("course3.recap.title", { unit: l(externUnit.title) })
-                  : mode === "context"
-                    ? t("iderun.context.title")
-                    : mode === "codeview"
-                      ? parseReviewArea(area)
-                        ? t("codeview.session", { area: t(`codeview.area.${parseReviewArea(area)!}`) })
-                        : t("codeview.title")
-            : mode === "topic"
-              ? t("modes.topic.title", { topic: topicShort })
-              : t("prac.smart");
+          : mode === "practice" && nodeGroup
+            ? t("course3.practice.title", { group: l(nodeGroup.title) })
+            : mode === "minitest" && nodeGroup
+              ? t("course3.minitest.title", { group: l(nodeGroup.title) })
+              : mode === "recap" && recapUnit
+                ? t("course3.recap.title", { unit: l(recapUnit.title) })
+                : mode === "context"
+                  ? t("iderun.context.title")
+                  : mode === "codeview"
+                    ? parseReviewArea(area)
+                      ? t("codeview.session", { area: t(`codeview.area.${parseReviewArea(area)!}`) })
+                      : t("codeview.title")
+                    : mode === "topic"
+                      ? t("modes.topic.title", { topic: topicShort })
+                      : t("prac.smart");
 
   if (!session.steps.length) {
     return (
@@ -197,16 +206,14 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
               ? session.missing
                 ? t("history.detail.notFound")
                 : t("history.redo.none")
-              : mode === "extern"
-                ? t("modes.extern.none")
-                : mode === "minitest"
-                  ? t("course3.minitest.empty")
-                  : mode === "practice" || mode === "recap"
-                    ? t("course3.empty")
-                    : t("modes.empty")}
+              : mode === "minitest"
+                ? t("course3.minitest.empty")
+                : mode === "practice" || mode === "recap"
+                  ? t("course3.empty")
+                  : t("modes.empty")}
         </p>
         <ButtonLink
-          href={mode === "extern" || mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : mode === "codeview" ? "/code/review" : "/practice"}
+          href={mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : mode === "codeview" ? "/code/review" : "/practice"}
           variant="secondary"
         >
           {t("common.back")}
@@ -216,19 +223,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   }
 
   let extra: ReactNode = null;
-  if (outcome?.passed) {
-    extra = (
-      <div className="flex flex-col gap-3 rounded-3xl border-2 border-success/40 bg-success-soft p-4 text-center">
-        <p className="flex items-center justify-center gap-2 text-xl font-extrabold text-success-strong">
-          <Check size={22} strokeWidth={3} /> {t("modes.extern.passed")}
-        </p>
-        <p className="font-semibold">{t("modes.extern.passedText", { n: Math.round(outcome.accuracy * 100), k: outcome.credited })}</p>
-        <ButtonLink href="/learn" variant="success" icon={<Flag size={18} />}>
-          {t("modes.extern.toMap")}
-        </ButtonLink>
-      </div>
-    );
-  } else if (mini) {
+  if (mini) {
     // Баллы как на ЕНТ: от 80% — «освоено» (success), иначе — «в процессе» (warning).
     const good = mini.max > 0 && mini.points / mini.max >= 0.8;
     const weak = mini.weak ? skillById(mini.weak) : undefined;
@@ -243,32 +238,26 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
         )}
       </div>
     );
-  } else if (outcome) {
-    const lesson = outcome.lessonId ? getLesson(outcome.lessonId) : undefined;
-    extra = (
-      <div className="flex flex-col gap-3 rounded-3xl border-2 border-warning/40 bg-warning-soft p-4 text-center">
-        <p className="text-xl font-extrabold text-warning-strong">{t("modes.extern.failed")}</p>
-        <p className="font-semibold">
-          {t("modes.extern.failedText", {
-            need: Math.round(EXTERN_PASS * 100),
-            n: Math.round(outcome.accuracy * 100),
-            lesson: lesson ? l(lesson.title) : "",
-          })}
-        </p>
-        {lesson && (
-          <ButtonLink href={`/lesson/${lesson.id}`} icon={<Flag size={18} />}>
-            {t("modes.extern.toLesson")}
-          </ButtonLink>
-        )}
-      </div>
-    );
   }
 
-  // Экстерн стоит 2 сердечка (#40), мини-тест — 1 (этап 14): плеер спишет при первом ответе, на входе проверяем, что хватает.
-  // Остальные режимы — бесплатно.
-  const cost = mode === "extern" ? ENTRY_COST.extern : mode === "minitest" ? ENTRY_COST.check : 0;
-  const paid = cost > 0;
-  const player = (
+  // Мини-тест (#95): до «Начать» — экран старта; вход (1 сердечко) списывается кнопкой, плеер дальше не списывает (entryCost 0).
+  // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — бесплатно.
+  if (mode === "minitest" && !started) {
+    return (
+      <EntryGate need={ENTRY_COST.check} exitHref="/learn">
+        <MiniStart
+          title={title}
+          count={session.steps.length}
+          onStart={() => {
+            if (!useApp.getState().payEntry(ENTRY_COST.check).ok) return false;
+            setStarted(true);
+            return true;
+          }}
+        />
+      </EntryGate>
+    );
+  }
+  return (
     <LessonPlayer
       kind="drill"
       title={title}
@@ -277,15 +266,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       mistakeMap={session.mistakeMap}
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
-      entryCost={paid ? cost : undefined}
       testMode={mode === "minitest"}
     />
-  );
-  return paid ? (
-    <EntryGate need={cost} exitHref="/learn">
-      {player}
-    </EntryGate>
-  ) : (
-    player
   );
 }

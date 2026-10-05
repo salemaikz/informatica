@@ -51,7 +51,6 @@ export const learnDict = {
   "learn2.unit.soon": { ru: "скоро ещё {n}", kk: "жақында тағы {n}" },
   "learn2.unit.mastery": { ru: "Освоение раздела: {n}%", kk: "Бөлімді меңгеру: {n}%" },
   "learn2.unit.theory": { ru: "Теория раздела", kk: "Бөлім теориясы" },
-  "learn2.unit.extern": { ru: "Сдать экстерном", kk: "Экстерн тапсыру" },
 
   // ---------- Узлы дороги ----------
   "learn2.node.aria": { ru: "Урок {n}: {title}, {state}", kk: "{n}-сабақ: {title}, {state}" },
