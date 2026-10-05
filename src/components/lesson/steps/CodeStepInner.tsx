@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, Eye, Lightbulb, Loader2, Square, SquareCheckBig, WifiOff } from "lucide-react";
+import { Code2, Eye, Loader2, Square, SquareCheckBig, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Markdown } from "@/components/Markdown";
 import { CodeEditor } from "@/components/ide/CodeEditor";
@@ -34,7 +34,6 @@ export default function CodeStepInner({ step, answer, onAnswer, locked }: StepPr
   const [phase, setPhase] = useState<Phase>("idle");
   const [stopped, setStopped] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [hintOpen, setHintOpen] = useState(false);
   const [sure, setSure] = useState(false);
   const busy = phase !== "idle";
 
@@ -173,11 +172,7 @@ export default function CodeStepInner({ step, answer, onAnswer, locked }: StepPr
           )}
 
           <div className="flex flex-wrap gap-2">
-            {task.hint && (
-              <Button variant="secondary" icon={<Lightbulb size={16} aria-hidden />} onClick={() => setHintOpen((v) => !v)} aria-expanded={hintOpen}>
-                {t(hintOpen ? "ide.task.hintHide" : "ide.task.hint")}
-              </Button>
-            )}
+            {/* Подсказка — кнопкой плеера «Подсказка» (подсказка шага; ответ помечается «с подсказкой», #66). */}
             {tries > 0 && !busy && (
               <Button variant={sure ? "secondary" : "ghost"} icon={<Eye size={16} aria-hidden />} onClick={giveUp} onBlur={() => setSure(false)}>
                 {t(sure ? "iderun.code.solutionYes" : "ide.task.solution")}
@@ -187,14 +182,6 @@ export default function CodeStepInner({ step, answer, onAnswer, locked }: StepPr
           {sure && <p className="text-sm font-bold text-muted">{t("iderun.code.solutionSure")}</p>}
           {tries === 0 && !busy && <p className="text-xs font-semibold text-muted">{t("iderun.code.rule")}</p>}
 
-          {hintOpen && task.hint && (
-            <div className="rounded-2xl border-2 border-primary/25 bg-primary-soft px-4 py-3">
-              <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-primary">
-                <Lightbulb size={14} aria-hidden /> {t("ide.task.hint")}
-              </p>
-              <Markdown>{l(task.hint)}</Markdown>
-            </div>
-          )}
         </div>
       )}
 

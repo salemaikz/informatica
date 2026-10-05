@@ -292,7 +292,7 @@ describe("withEntBoss: все уроки карты (реальный банк �
 });
 
 describe("lessonStepCount — подпись «N шагов» на карте без банка ЕНТ", () => {
-  it("совпадает с числом шагов после withEntBoss у всех уроков карты, кроме стратегии ЕНТ", async () => {
+  it("совпадает с числом шагов после withEntBoss у всех уроков карты", async () => {
     const { lessonStepCount } = await import("@/lib/lesson-size");
     const { LESSONS, UNITS } = await import("@/content/course");
     const { withEntBoss } = await import("@/lib/ent-boss");
@@ -300,7 +300,7 @@ describe("lessonStepCount — подпись «N шагов» на карте б
       .map((r) => LESSONS[r.id])
       .filter((l) => !!l && lessonStepCount(l) !== withEntBoss(l).steps.length)
       .map((l) => l.id);
-    expect(off).toEqual(["ent-1-strategy"]);
+    expect(off).toEqual([]);
   });
 });
 

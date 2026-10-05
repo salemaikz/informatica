@@ -324,9 +324,40 @@ export function nodeLessonRefs(item: PathItem, unit: Pick<Unit, "lessons">): Les
   return unit.lessons.filter((r) => ids.has(r.id));
 }
 
-/** Пройденность каждого элемента дороги: урок — по своему состоянию, узел — `nodeDone` (для отрезков дороги). */
+/**
+ * Пройденность каждого элемента дороги (для отрезков): урок — по своему состоянию, узел — `nodeDone`.
+ * «Практика» необязательна (#81): дорога через неё не рвётся, если пройдены все готовые уроки её группы, — сам узел
+ * при этом остаётся «рекомендуется». «Повторение» в конце раздела — только по `nodeDone` (выход дороги зажигается им).
+ */
 export function pathPassed(items: PathItem[], lessonPassed: (ref: LessonRef) => boolean, nodes: Record<string, CourseNodeStat | undefined>): boolean[] {
-  return items.map((it) => (it.kind === "lesson" ? lessonPassed(it.ref) : nodeDone(nodes[pathItemNodeId(it)!])));
+  const refs = new Map(items.flatMap((it) => (it.kind === "lesson" ? [[it.ref.id, it.ref] as const] : [])));
+  return items.map((it) => {
+    if (it.kind === "lesson") return lessonPassed(it.ref);
+    if (nodeDone(nodes[pathItemNodeId(it)!])) return true;
+    if (it.kind !== "practice") return false;
+    const ready = it.group.lessons.map((id) => refs.get(id)).filter((r): r is LessonRef => !!r && r.status === "available");
+    return ready.length > 0 && ready.every(lessonPassed);
+  });
+}
+
+/**
+ * «Рекомендуется» — только у одного узла раздела: последнего из тех, чьи уроки пройдены, а узел — нет
+ * (у ученика, прошедшего весь раздел, иначе пульсировали бы все узлы сразу). Остальные такие — «доступен».
+ */
+export function unitNodeStates(items: PathItem[], unit: Pick<Unit, "lessons">, lessons: Record<string, LessonStat>, nodes: Record<string, CourseNodeStat | undefined>): Map<string, NodeKindState> {
+  const out = new Map<string, NodeKindState>();
+  let lastRecommended: string | undefined;
+  for (const it of items) {
+    if (it.kind === "lesson") continue;
+    const id = pathItemNodeId(it)!;
+    const st = practiceNodeState(nodeLessonRefs(it, unit), lessons, nodes[id]);
+    out.set(id, st);
+    if (st === "recommended") {
+      if (lastRecommended) out.set(lastRecommended, "available");
+      lastRecommended = id;
+    }
+  }
+  return out;
 }
 
 export type NodeKindState = "done" | "recommended" | "available";

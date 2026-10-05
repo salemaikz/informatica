@@ -987,7 +987,7 @@ export function LessonPlayer({
               >
                 {t("common.continue")}
               </Button>
-            ) : question ? (
+            ) : question?.type === "code" ? null /* у задачи с кодом своя кнопка «Проверить код» внутри шага */ : question ? (
               <Button
                 size="lg"
                 className="w-full sm:w-auto sm:min-w-56"

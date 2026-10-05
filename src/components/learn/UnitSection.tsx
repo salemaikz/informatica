@@ -18,12 +18,11 @@ import {
   averageMastery,
   canExtern,
   isPassed,
-  nodeLessonRefs,
   nodeState,
   pathItemNodeId,
   pathLayout,
   pathPassed,
-  practiceNodeState,
+  unitNodeStates,
   pluralForm,
   segmentDone,
   unitPathItems,
@@ -118,6 +117,7 @@ function UnitSectionImpl({
   const layout = useMemo(() => pathLayout(items.length, index % 2 ? 3 : 0), [items.length, index]);
   const lessonStates = new Map(unit.lessons.map((ref) => [ref.id, nodeState(ref, lessons[ref.id], recommendedId, now)]));
   const passed = pathPassed(items, (ref) => isPassed(lessonStates.get(ref.id)!), courseNodes);
+  const nodeStates = unitNodeStates(items, unit, lessons, courseNodes);
   const rest = layout.segments.filter((s) => !segmentDone(s, passed)).map((s) => s.d).join("");
   const done = layout.segments.filter((s) => segmentDone(s, passed)).map((s) => s.d).join("");
   // Широкая «обочина» — только между уроками (вход и выход к мостику — тонким пунктиром).
@@ -160,7 +160,7 @@ function UnitSectionImpl({
               index={i}
               item={it}
               title={l(it.kind === "practice" ? it.group.title : unit.title)}
-              state={practiceNodeState(nodeLessonRefs(it, unit), lessons, courseNodes[pathItemNodeId(it)!])}
+              state={nodeStates.get(pathItemNodeId(it)!) ?? "available"}
               onOpen={() => setSheet(it)}
             />
           ),
