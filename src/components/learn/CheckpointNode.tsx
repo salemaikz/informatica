@@ -9,10 +9,12 @@ import { LESSONS } from "@/content/course";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { bestUnitResult, type Stars } from "@/lib/exam";
+import { ENTRY_COST } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { useCheckpoint } from "@/components/exam/checkpoint";
 import { StarRow } from "@/components/exam/StarRow";
 import { EXAM_FORMAT, examLink, randomSeed } from "@/components/exam/logic";
@@ -96,6 +98,8 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
           </ul>
           <Button size="lg" block icon={<Play size={20} aria-hidden />} onClick={start}>
             {t("common.start")}
+            {/* Контрольная стоит 2 сердечка (#40); списывается на экране условий по «Начать». */}
+            <HeartCost n={ENTRY_COST.checkpoint} variant="solid" />
           </Button>
         </div>
       </Modal>

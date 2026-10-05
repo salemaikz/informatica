@@ -12,6 +12,7 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { loadActiveAttempt, type ExamAttempt } from "@/lib/exam-store";
+import { ENTRY_COST } from "@/lib/economy";
 import type { ExamKind } from "@/lib/exam";
 import { bestUnitResult, isAnswered } from "@/lib/exam";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
@@ -20,6 +21,7 @@ import type { EntTopicId } from "@/lib/types";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { ICONS } from "@/components/scenes/icons";
 import { unitVars } from "@/components/learn/useLearn";
 import { checkpointOf, examTitle } from "./checkpoint";
@@ -73,6 +75,8 @@ function ModeCard({
       {children}
       <Button block icon={<Play size={18} aria-hidden />} disabled={disabled} onClick={onStart}>
         {t("common.start")}
+        {/* Вход стоит сердечко (#40): списывается на экране условий по «Начать». */}
+        <HeartCost n={ENTRY_COST.exam} variant={disabled ? "soft" : "solid"} />
       </Button>
     </Card>
   );
@@ -214,7 +218,9 @@ export function ExamHub() {
                     </span>
                     <span className="flex items-center gap-2 text-xs font-bold text-muted">
                       <StarRow stars={stars} size={15} />
-                      <span className="truncate">{best ? t("exam.unit.best", { a: best.points, b: best.max }) : t("exam.unit.new")}</span>
+                      <span className="min-w-0 flex-1 truncate">{best ? t("exam.unit.best", { a: best.points, b: best.max }) : t("exam.unit.new")}</span>
+                      {/* Контрольная стоит 2 сердечка (#40). Значок — в строке под названием: у кнопки «Начать» узко на 360 px. */}
+                      <HeartCost n={ENTRY_COST.checkpoint} />
                     </span>
                   </span>
                   <Button

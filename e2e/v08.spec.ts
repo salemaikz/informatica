@@ -195,6 +195,8 @@ test("контрольная раздела на карте: шторка и з�
   const sheet = page.getByRole("dialog");
   await expect(sheet.getByRole("heading", { name: /^Контрольная: / })).toBeVisible();
   await expect(sheet.getByText(/Заданий: \d+/)).toBeVisible();
+  // Контрольная стоит 2 сердечка (#40): значок цены в шторке.
+  await expect(sheet.getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
   await sheet.getByRole("button", { name: "Начать" }).click();
 
   await page.waitForURL(/\/exam\/run\?.*kind=unit/);
@@ -205,7 +207,12 @@ test("контрольная раздела на карте: шторка и з�
   const n = Number((await pill.textContent())!.match(/\d+/)![0]);
   expect(n).toBeGreaterThan(0);
   expect(n).toBeLessThanOrEqual(15);
+  await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
   await page.getByRole("button", { name: "Начать" }).click();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
+  // Списано ровно две цены входа: было 5, стало 3.
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1") ?? "{}").state?.hearts?.count))
+    .toBe(3);
   expect(errors).toEqual([]);
 });

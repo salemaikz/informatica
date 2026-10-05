@@ -22,12 +22,14 @@ import { LESSONS, UNITS, getLesson, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
 import { gameSkillsFor } from "@/lib/drill";
+import { ENTRY_COST, entryCost, lessonCost } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { Modal } from "@/components/ui/Modal";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { ICONS } from "@/components/scenes/icons";
 import { bestPercent, isDue, lessonTopics, pluralForm, topicLessons, xpKind } from "./map";
 import { findLessonRef, unitVars, useNow } from "./useLearn";
@@ -36,6 +38,7 @@ import { StepMarks } from "./MasteryLegend";
 
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
 // игрой, только теория, конспект). Её открывают карта курса и другие экраны.
+// Платные режимы (#40) показывают цену входа значком HeartCost; теория и конспект бесплатны.
 
 function ModeCard({
   href,
@@ -45,6 +48,7 @@ function ModeCard({
   main,
   onClick,
   expanded,
+  cost,
 }: {
   href?: string;
   icon: LucideIcon;
@@ -53,6 +57,8 @@ function ModeCard({
   main?: boolean;
   onClick?: () => void;
   expanded?: boolean;
+  /** Цена входа в сердечках; нет — режим бесплатный. */
+  cost?: number;
 }) {
   const cls = cn(
     "flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-[translate,box-shadow] duration-75 active:translate-y-[3px] active:shadow-none",
@@ -66,7 +72,11 @@ function ModeCard({
         <Icon size={22} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-extrabold leading-tight">{title}</span>
+        {/* Значок — рядом с названием; на узком экране переносится на следующую строку целиком. */}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-extrabold leading-tight">{title}</span>
+          {cost ? <HeartCost n={cost} variant={main ? "solid" : "soft"} /> : null}
+        </span>
         <span className={cn("block text-sm font-semibold leading-snug", main ? "text-white/85" : "text-muted")}>{hint}</span>
       </span>
       {onClick ? (
@@ -143,6 +153,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
           {topic && (
             <ButtonLink href={`/exam/run?kind=topic&topics=${topic}`} variant="primary" block icon={<ClipboardCheck size={18} />}>
               {t("learn2.topic.test")}
+              <HeartCost n={ENTRY_COST.exam} variant="solid" />
             </ButtonLink>
           )}
         </div>
@@ -155,6 +166,8 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const steps = lesson.steps.length;
   const step = lessonStep(stat, now);
   const stepDays = stepReviewDays(stat, now);
+  // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
+  const gameCost = entryCost("game", lesson);
 
   return (
     <div className="flex flex-col gap-4" style={unitVars(unit.color)}>
@@ -196,8 +209,14 @@ function SheetBody({ lessonId }: { lessonId: string }) {
 
       <div className="flex flex-col gap-2.5">
         <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("learn2.sheet.modes")}</p>
-        <ModeCard main href={`/lesson/${lessonId}`} icon={Play} title={t("learn2.mode.learn")} hint={t("learn2.mode.learnHint")} />
-        <ModeCard href={`/lesson/${lessonId}?mode=check`} icon={ClipboardCheck} title={t("learn2.mode.check")} hint={t("learn2.mode.checkHint")} />
+        <ModeCard main href={`/lesson/${lessonId}`} icon={Play} title={t("learn2.mode.learn")} hint={t("learn2.mode.learnHint")} cost={lessonCost(lesson)} />
+        <ModeCard
+          href={`/lesson/${lessonId}?mode=check`}
+          icon={ClipboardCheck}
+          title={t("learn2.mode.check")}
+          hint={t("learn2.mode.checkHint")}
+          cost={ENTRY_COST.check}
+        />
         {games.length > 0 && (
           <div className="flex flex-col gap-2">
             <ModeCard
@@ -206,6 +225,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
               hint={t("learn2.mode.gameHint")}
               onClick={() => setGamesOpen((v) => !v)}
               expanded={gamesOpen}
+              cost={gameCost}
             />
             <AnimatePresence initial={false}>
               {gamesOpen && (
@@ -226,6 +246,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
                           <g.icon size={18} />
                         </span>
                         <span className="min-w-0 flex-1 truncate">{l(g.title)}</span>
+                        <HeartCost n={gameCost} />
                         <ChevronRight size={18} className="text-muted" />
                       </Link>
                     </li>
@@ -237,6 +258,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
         )}
         <ModeCard href={`/theory/${lessonId}`} icon={BookOpen} title={t("learn2.mode.theory")} hint={t("learn2.mode.theoryHint")} />
         <ModeCard href={`/notes/lesson/${lessonId}`} icon={NotebookPen} title={t("learn2.mode.notes")} hint={t("learn2.mode.notesHint")} />
+        <p className="px-1 text-xs font-bold text-muted">{t("learn2.sheet.costNote")}</p>
       </div>
     </div>
   );

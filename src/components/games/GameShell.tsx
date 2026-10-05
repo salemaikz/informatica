@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, Feather, Info, Map as MapIcon, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, Check, Feather, Heart, Info, Map as MapIcon, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
 import type { SkillId } from "@/lib/types";
@@ -10,6 +10,7 @@ import { GAME_COMPONENTS } from "@/games/components";
 import { gameStatKey, type GameReward } from "@/lib/games";
 import { useApp } from "@/lib/store";
 import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
+import { entryCost } from "@/lib/economy";
 import { getLesson } from "@/content/course";
 import { playSound } from "@/lib/sound";
 import { useT } from "@/i18n/useT";
@@ -19,6 +20,10 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { useHearts } from "@/components/economy/useEconomy";
+import { pluralKey } from "@/components/learn/useLearn";
 
 type Phase =
   | { name: "intro" }
@@ -31,9 +36,23 @@ const MODES: { id: GameMode; icon: LucideIcon; title: DictKey; desc: DictKey }[]
   { id: "blitz", icon: Zap, title: "game.mode.blitz", desc: "game.mode.blitz.desc" },
 ];
 
+/** Строка про цену запуска во вступлении (#40). Отдельный компонент: часы сердечек не должны перерисовывать оболочку во время игры. */
+function CostNote({ cost, forLesson }: { cost: number; forLesson: boolean }) {
+  const { t } = useT();
+  const hearts = useHearts();
+  if (hearts.unlimited || cost <= 0) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-2xl bg-heart-soft px-3 py-2 text-sm font-bold text-heart-strong">
+      <Heart size={16} fill="currentColor" className="mt-0.5 shrink-0" aria-hidden />
+      {t(pluralKey(forLesson ? "game.cost.lesson" : "game.cost", cost), { n: cost })}
+    </p>
+  );
+}
+
 /**
  * Оболочка мини-игры: вступление с правилами → игра → итоги (очки, рекорд, XP).
  * lessonId — «урок игрой»: при ≥ 70% верных урок засчитывается. skills — навыки урока/темы для игры.
+ * Каждый запуск стоит сердечко (#40; «урок игрой» — как урок): списываем по «Играть» и «Ещё раз», не хватает — окно «Сердечки закончились».
  */
 export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: string; skills?: SkillId[] }) {
   const router = useRouter();
@@ -54,12 +73,20 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const playSkills = hasContext && skills?.length ? gameSkillsFor(meta, skills) : undefined;
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [round, setRound] = useState(0);
+  // Не хватило сердечек на запуск: шторка «Сердечки закончились» (купить, вернуть тренировкой, выйти).
+  const [noHearts, setNoHearts] = useState(false);
+  const cost = entryCost("game", lesson);
   const Game = GAME_COMPONENTS[id];
   const Icon = meta.icon;
   // Инструменты во время игры: «Спокойно» — все, «Обычный» — как на ЕНТ, «Блиц» — никаких.
   useToolboxLevel(phase.name !== "playing" ? "full" : mode === "calm" ? "full" : mode === "normal" ? "ent" : "off");
 
+  // Запуск — только из обработчика: плата списывается один раз за каждый запуск (в том числе «Ещё раз»).
   const start = () => {
+    if (!useApp.getState().payEntry(cost).ok) {
+      setNoHearts(true);
+      return;
+    }
     const next = round + 1;
     setRound(next);
     setPhase({ name: "playing", round: next });
@@ -180,11 +207,13 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
                 <span>{t("game.calmNoRecord")}</span>
               )}
             </div>
+            {supported && <CostNote cost={cost} forLesson={!!lesson} />}
             <div className="flex-1" />
             {/* Кнопка всегда видна внизу экрана, даже если правила и выбор темпа не помещаются. */}
             <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-bg from-70% to-transparent px-4 pb-4 pt-6">
               <Button size="lg" block onClick={start} disabled={!supported} icon={<Play size={20} fill="currentColor" />} autoFocus>
                 {t("game.play")}
+                {supported && <HeartCost n={cost} variant="solid" />}
               </Button>
             </div>
           </div>
@@ -248,6 +277,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
             <div className="flex flex-col gap-3">
               <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>
                 {t("game.again")}
+                <HeartCost n={cost} variant="solid" />
               </Button>
               {lesson ? (
                 <ButtonLink href="/learn" variant="secondary" block icon={<MapIcon size={18} />}>
@@ -262,6 +292,18 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
           </div>
         )}
       </main>
+
+      <OutOfHearts
+        open={noHearts}
+        need={cost}
+        onClose={() => setNoHearts(false)}
+        onResume={() => {
+          // Сердечек хватает (куплены, вернулись или вернула тренировка) — сразу запускаем игру.
+          setNoHearts(false);
+          start();
+        }}
+        onExit={() => router.push(exitHref)}
+      />
     </div>
   );
 }

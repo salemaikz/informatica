@@ -7,8 +7,10 @@ import type { LessonStat } from "@/lib/review";
 import type { SkillStat } from "@/lib/mastery";
 import { LESSONS, lessonNumber } from "@/content/course";
 import { SKILLS } from "@/content/skills";
+import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 import { ICONS } from "@/components/scenes/icons";
 import { averageMastery, canExtern, isPassed, nodeState, pathLayout, pluralForm, segmentDone, unitProgress, unitSkillIds } from "./map";
@@ -62,6 +64,7 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
           {canExtern(unit, lessons) && (
             <ButtonLink href={`/drill?mode=extern&unit=${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<GraduationCap size={16} />}>
               {t("learn2.unit.extern")}
+              <HeartCost n={ENTRY_COST.extern} />
             </ButtonLink>
           )}
         </div>
