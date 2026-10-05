@@ -10,16 +10,16 @@ export const sceneWebDict = {
   },
   "scene.box.ariaCollapse": {
     ru: ". Второй блок ниже: между блоками остаётся больший из отступов, {gap} px",
-    kk: ". Төменде екінші блок: блоктар арасында үлкен шегініс қалады, {gap} px",
+    kk: ". Төменде екінші блок: екі шегіністің үлкені қалады, {gap} px",
   },
 
   // ---- url: роли частей адреса ----
   "scene.url.aria": { ru: "Адресная строка браузера: {url}.", kk: "Браузердің мекенжай жолағы: {url}." },
   "scene.url.ariaPart": { ru: "{role}: {text}", kk: "{role}: {text}" },
-  "scene.url.role.protocol": { ru: "протокол", kk: "протокол" },
-  "scene.url.role.subdomain": { ru: "поддомен", kk: "қосалқы домен" },
+  "scene.url.role.protocol": { ru: "протокол", kk: "хаттама" },
+  "scene.url.role.subdomain": { ru: "поддомен", kk: "субдомен" },
   "scene.url.role.domain": { ru: "домен", kk: "домен" },
-  "scene.url.role.zone": { ru: "зона", kk: "домен аймағы" },
+  "scene.url.role.zone": { ru: "зона", kk: "аймақ" },
   "scene.url.role.port": { ru: "порт", kk: "порт" },
   "scene.url.role.path": { ru: "путь", kk: "жол" },
   "scene.url.role.query": { ru: "параметры", kk: "параметрлер" },
@@ -28,6 +28,7 @@ export const sceneWebDict = {
   // ---- message: SMS, письмо, чат ----
   "scene.message.from": { ru: "От", kk: "Кімнен" },
   "scene.message.subject": { ru: "Тема", kk: "Тақырып" },
+  "scene.message.ariaMark": { ru: "Признак {n}: «{text}»", kk: "{n}-белгі: «{text}»" },
   "scene.message.aria.sms": { ru: "SMS от {from}: {text}", kk: "{from} жіберген SMS: {text}" },
   "scene.message.aria.chat": { ru: "Чат, {from}: {text}", kk: "Чат, {from}: {text}" },
   "scene.message.aria.email": { ru: "Письмо от {from}: {text}", kk: "{from} жіберген хат: {text}" },

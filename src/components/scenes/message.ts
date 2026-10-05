@@ -13,12 +13,14 @@ export interface MessageSegment {
 }
 
 /**
- * Куски текста: обычные и подсвеченные. Каждый признак — первое вхождение, не пересекающееся с уже занятыми;
+ * Куски текста: обычные и подсвеченные. Каждый признак (от длинных к коротким) — первое вхождение, не пересекающееся с уже занятыми;
  * не найденный (или пустой) признак пропускается, номера остальных не меняются.
  */
 export function splitMarks(text: string, marks: readonly string[]): MessageSegment[] {
   const taken: { from: number; to: number; mark: number }[] = [];
-  marks.forEach((m, i) => {
+  // Длинные признаки размещаем первыми, чтобы короткий, вложенный в длинный, его не вытеснил; номера — по исходному порядку.
+  const order = marks.map((m, i) => ({ m, i })).sort((a, b) => b.m.length - a.m.length);
+  order.forEach(({ m, i }) => {
     if (m === "") return;
     let at = text.indexOf(m);
     while (at >= 0) {

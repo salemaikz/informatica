@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SAMPLES } from "@/components/scenes/samples/web";
-import { URL_COLS, labelCols, layoutUrl, roleTone, urlLock, urlText, wrapUrl, URL_ROLES } from "@/components/scenes/url";
+import { URL_COLS, URL_COLS_MIN, colsForWidth, labelCols, layoutUrl, partTones, urlLock, urlText, wrapUrl, URL_ROLES } from "@/components/scenes/url";
 import { markNotes, messageSegments, senderInitial, splitMarks } from "@/components/scenes/message";
 import { buildWebDoc, webHtml } from "@/components/scenes/web";
 import { dict } from "@/i18n/dict";
@@ -40,11 +40,31 @@ describe("url: перенос по частям", () => {
   });
   it("часть длиннее строки режется по колонкам", () => {
     const lines = wrapUrl([{ text: "a".repeat(40), role: "path" }]);
-    expect(lines.map((l) => l.map((x) => x.text).join("").length)).toEqual([URL_COLS, 10]);
+    expect(lines.map((l) => l.map((x) => x.text).join("").length)).toEqual([URL_COLS, 40 - URL_COLS]);
   });
-  it("предельный адрес (48 символов) — не больше 3 строк", () => {
-    const max = urls.reduce((a, s) => Math.max(a, wrapUrl(s.parts).length), 0);
-    expect(max).toBeLessThanOrEqual(3);
+  it("предельный адрес (48 символов) с худшим разбиением на части (16+15+16+1) — не больше 3 строк", () => {
+    const parts = [
+      { text: "https://aaaaaaaa", role: "protocol" as const },
+      { text: "bbbbbbbbbbbbbbb", role: "domain" as const },
+      { text: "cccccccccccccccc", role: "path" as const },
+      { text: "?", role: "query" as const },
+    ];
+    expect(urlText(parts)).toHaveLength(48);
+    const lines = wrapUrl(parts);
+    expect(lines.length).toBeLessThanOrEqual(3);
+    expect(lines.flat().map((x) => x.text).join("")).toBe(urlText(parts));
+  });
+  it("колонки по ширине контейнера: узкая сцена — меньше колонок, но не меньше предела", () => {
+    expect(colsForWidth(220)).toBeLessThan(colsForWidth(400));
+    expect(colsForWidth(10)).toBe(URL_COLS_MIN);
+    expect(colsForWidth(URL_COLS * 8.4)).toBeLessThanOrEqual(URL_COLS);
+  });
+  it("полный адрес на узкой строке переносится без потерь, все подписи внутри строки", () => {
+    const full = urls.find((s) => s.parts.length === 8)!;
+    const cols = colsForWidth(200);
+    const lines = layoutUrl(full.parts, full.highlight, name, cols);
+    expect(lines.flatMap((l) => l.segments).map((x) => x.text).join("")).toBe(urlText(full.parts));
+    for (const l of lines) for (const lb of l.labels) expect(lb.center + lb.width / 2).toBeLessThanOrEqual(cols + 0.001);
   });
 });
 
@@ -70,11 +90,20 @@ describe("url: подписи ролей", () => {
         }
       }
   });
-  it("тесные подписи (.top, kaspi-bonus) уходят на разные ярусы только при нехватке места", () => {
-    const s = urls.find((x) => x.parts.some((p) => p.text === ".top"))!;
-    const lines = layoutUrl(s.parts, s.highlight, name);
-    expect(lines[0].labels).toHaveLength(3);
-    expect(lines[0].levels).toBeGreaterThanOrEqual(1);
+  it("подписи, которым хватает места, стоят на одном ярусе; тесные — на разных", () => {
+    const roomy = [
+      { text: "https://", role: "protocol" as const },
+      { text: "kaspi-bonus-example", role: "domain" as const },
+    ];
+    expect(layoutUrl(roomy, ["protocol", "domain"], name)[0].levels).toBe(1);
+    const tight = [
+      { text: "a", role: "domain" as const },
+      { text: ".kz", role: "zone" as const },
+      { text: ":80", role: "port" as const },
+    ];
+    const l = layoutUrl(tight, ["domain", "zone", "port"], name)[0];
+    expect(l.levels).toBeGreaterThanOrEqual(2);
+    expect(l.labels.some((x) => x.level === 1)).toBe(true);
   });
   it("kk: самые длинные подписи тоже помещаются в строку", () => {
     const kk = (r: UrlRole) => dict[`scene.url.role.${r}` as keyof typeof dict].kk;
@@ -86,10 +115,17 @@ describe("url: подписи ролей", () => {
           expect(lb.center + lb.width / 2).toBeLessThanOrEqual(URL_COLS + 0.001);
         }
   });
-  it("тон роли задан у каждой роли; соседние части образца с полным адресом — разного тона", () => {
-    for (const r of URL_ROLES) expect(roleTone(r)).toBeTruthy();
+  it("тона: только primary и muted (без ai, gold, success, warning), соседние подсвеченные части — разные", () => {
     const full = urls.find((s) => s.parts.length === 8)!;
-    for (let i = 1; i < full.parts.length; i++) expect(roleTone(full.parts[i].role)).not.toBe(roleTone(full.parts[i - 1].role));
+    const tones = partTones(full.parts, full.highlight);
+    for (const t of tones) expect(["primary", "muted"]).toContain(t);
+    for (let i = 1; i < tones.length; i++) expect(tones[i]).not.toBe(tones[i - 1]);
+    expect(partTones(full.parts, ["zone"]).filter((t) => t !== null)).toEqual(["primary"]);
+    expect(partTones(full.parts)).toEqual(full.parts.map(() => null));
+  });
+  it("роли на kk совпадают с глоссарием: хаттама, субдомен", () => {
+    expect(dict["scene.url.role.protocol"].kk).toBe("хаттама");
+    expect(dict["scene.url.role.subdomain"].kk).toBe("субдомен");
   });
   it("замок: https закрыт, http открыт, без протокола — нет", () => {
     expect(urlLock([{ text: "https://", role: "protocol" }])).toBe("secure");
@@ -112,6 +148,11 @@ describe("message: подсветка подстрок", () => {
     const segs = splitMarks("abcdef", ["abcd", "cdef"]);
     expect(segs.map((s) => s.text).join("")).toBe("abcdef");
     expect(segs.filter((s) => s.mark)).toHaveLength(1);
+  });
+  it("короткий признак внутри длинного не вытесняет длинный; номера — по исходному порядку", () => {
+    const segs = splitMarks("Перейдите на kaspi-bonus.top", ["kaspi", "kaspi-bonus.top"]);
+    expect(segs.filter((s) => s.mark).map((s) => [s.text, s.mark])).toEqual([["kaspi-bonus.top", 2]]);
+    expect(segs.map((s) => s.text).join("")).toBe("Перейдите на kaspi-bonus.top");
   });
   it("повторяющийся фрагмент — следующие вхождения", () => {
     const segs = splitMarks("a b a b", ["a", "a"]);

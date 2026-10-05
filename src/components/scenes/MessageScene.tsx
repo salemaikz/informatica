@@ -53,14 +53,22 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
   const segments = messageSegments(scene, lang);
   const notes = markNotes(scene.marks, lang);
 
+  const markAria = segments
+    .filter((s) => s.mark !== undefined)
+    .map((s) => {
+      const note = notes.find((n) => n.n === s.mark)?.note;
+      return " " + t("scene.message.ariaMark", { n: s.mark ?? 0, text: s.text }) + (note !== undefined ? ` — ${note}` : "") + ".";
+    })
+    .join("");
+
   const aria =
-    scene.channel === "sms"
+    (scene.channel === "sms"
       ? t("scene.message.aria.sms", { from, text })
       : scene.channel === "chat"
         ? t("scene.message.aria.chat", { from, text })
         : subject !== undefined
           ? t("scene.message.aria.emailSubject", { from, subject, text })
-          : t("scene.message.aria.email", { from, text });
+          : t("scene.message.aria.email", { from, text })) + markAria;
 
   const bubble = (
     <m.div
@@ -97,12 +105,12 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
           {scene.channel === "sms" ? (
             <div aria-hidden className="flex flex-col items-center gap-1 px-4 pb-2 pt-2">
               <Avatar name={from} />
-              <span className="max-w-full truncate text-[13px] font-extrabold text-text">{from}</span>
+              <span className="max-w-full text-center text-[13px] font-extrabold text-text [overflow-wrap:anywhere]">{from}</span>
             </div>
           ) : (
             <div aria-hidden className="flex items-center gap-2.5 border-b border-border px-3.5 pb-2.5 pt-2">
               <Avatar name={from} />
-              <span className="min-w-0 truncate text-[14px] font-extrabold text-text">{from}</span>
+              <span className="min-w-0 text-[14px] font-extrabold text-text [overflow-wrap:anywhere]">{from}</span>
             </div>
           )}
           <div className="flex min-h-24 flex-col items-start gap-2 bg-surface px-3 pb-5 pt-2">{bubble}</div>
@@ -115,6 +123,7 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
             <li key={n.n} className="flex items-start gap-2 text-[14px] font-semibold leading-snug text-text">
               <MarkBadge n={n.n} />
               <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="sr-only">{n.n}: </span>
                 <span className="text-muted">— </span>
                 {n.note}
               </span>

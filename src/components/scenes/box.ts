@@ -56,7 +56,12 @@ export function layerBands(layer: Exclude<BoxLayer, "content">, s: Sides4): Side
   return [bandThickness(layer, s[0], false), bandThickness(layer, s[1], true), bandThickness(layer, s[2], false), bandThickness(layer, s[3], true)];
 }
 
-export const CONTENT_W = 120;
+/** Ширина content на экране. Подобрана так, чтобы худший случай (все стороны 200) с рамками слоёв был не шире 304 px. */
+export const CONTENT_W = 104;
+/** Толщина рамки слоя (px): рамка занимает место (border-box), поэтому входит в размеры блока. */
+export const LAYER_STROKE = { margin: 1.5, border: 2, padding: 1.5 } as const;
+/** Предельная ширина блока без масштабирования (px): сцена в уроке на 360 px — 304. */
+export const BOX_MAX_W = 304;
 export const CONTENT_H = 44;
 export const CONTENT_H_FIXED = 56;
 /** Высота второго блока в режиме collapse. */
@@ -76,6 +81,8 @@ export interface BoxCollapse {
   dA: number;
   dB: number;
   gapH: number;
+  /** Рамка margin-слоя первого блока снизу и по бокам (0, если слой не виден). */
+  mStroke: number;
   /** Отступ сверху второго блока (может быть отрицательным: его margin-полоса заходит на margin первого) и сверху подписи. */
   block2Top: number;
   labelTop: number;
@@ -93,6 +100,8 @@ export interface BoxGeometry {
   /** Размеры внешнего прямоугольника (с margin). */
   outerW: number;
   outerH: number;
+  /** Полная высота сцены, включая второй блок при collapse. */
+  totalH: number;
   /** Слой виден (есть хотя бы одна ненулевая сторона); content — всегда. */
   visible: Record<BoxLayer, boolean>;
   /** Сторона слоя с подписью числа: у нижнего margin в режиме collapse подписи нет (числа — в формуле max). */
@@ -114,9 +123,11 @@ export function boxGeometry(scene: BoxData): BoxGeometry {
   // Длинная подпись («2000 × 123456789») сжимается, чтобы остаться внутри content.
   const w = estimateTextWidth(label, 12);
   const contentFont = w <= CONTENT_W - 8 ? 12 : Math.max(8, Math.floor((12 * (CONTENT_W - 8)) / w));
-  const outerW = CONTENT_W + margin[1] + margin[3] + border[1] + border[3] + padding[1] + padding[3];
-  const outerH = contentH + margin[0] + margin[2] + border[0] + border[2] + padding[0] + padding[2];
   const visible = { margin: sum(margin) > 0, border: sum(border) > 0, padding: sum(padding) > 0, content: true };
+  // рамки видимых слоёв (с двух сторон) занимают место; рамка content уже входит в CONTENT_W / contentH
+  const strokes = 2 * ((visible.margin ? LAYER_STROKE.margin : 0) + (visible.border ? LAYER_STROKE.border : 0) + (visible.padding ? LAYER_STROKE.padding : 0));
+  const outerW = CONTENT_W + margin[1] + margin[3] + border[1] + border[3] + padding[1] + padding[3] + strokes;
+  const outerH = contentH + margin[0] + margin[2] + border[0] + border[2] + padding[0] + padding[2] + strokes;
   const labelled = {
     margin: rawM.map((v) => v > 0) as [boolean, boolean, boolean, boolean],
     border: rawB.map((v) => v > 0) as [boolean, boolean, boolean, boolean],
@@ -132,6 +143,7 @@ export function boxGeometry(scene: BoxData): BoxGeometry {
     const dB = bandThickness("margin", b, false);
     const gapH = Math.max(GAP_MIN, bandThickness("margin", max, false));
     labelled.margin[2] = false;
+    const mStroke = visible.margin ? LAYER_STROKE.margin : 0;
     collapse = {
       a,
       b,
@@ -140,11 +152,14 @@ export function boxGeometry(scene: BoxData): BoxGeometry {
       dA,
       dB,
       gapH,
-      block2Top: gapH - dA - dB,
-      labelTop: outerH - dA + gapH / 2,
+      mStroke,
+      // верх второго блока = нижняя граница рамки border-слоя первого + gapH
+      block2Top: gapH - dA - dB - mStroke,
+      labelTop: outerH - dA - mStroke + gapH / 2,
     };
   }
-  return { margin, border, padding, contentW: CONTENT_W, contentH, contentLabel: label, contentFont, outerW, outerH, visible, labelled, collapse };
+  const totalH = collapse ? outerH + collapse.block2Top + collapse.dB + BLOCK2_H : outerH;
+  return { margin, border, padding, contentW: CONTENT_W, contentH, contentLabel: label, contentFont, outerW, outerH, totalH, visible, labelled, collapse };
 }
 
 /** Слой приглушён: задан highlight, и это другой слой. */
@@ -156,7 +171,8 @@ export function layerDim(layer: BoxLayer, highlight: BoxData["highlight"]): bool
 
 export interface RulerTerm {
   text: string;
-  layer: BoxLayer;
+  /** Слой, чьим цветом рисуется число; "total" — нейтральная пилюля (итоговая ширина, не слой). */
+  layer: BoxLayer | "total";
 }
 /** Строка линейки: [head] терм + терм + … [= total]. */
 export interface RulerLine {
@@ -182,7 +198,7 @@ export function boxRuler(scene: BoxData): RulerLine[] {
   const inner = [...t(b[3], "border"), ...t(p[3], "padding"), content, ...t(p[1], "padding"), ...t(b[1], "border")];
   const lines: RulerLine[] = [{ head: `width ${scene.width} =`, terms: inner }];
   if (m[1] + m[3] > 0) {
-    lines.push({ terms: [...t(m[3], "margin"), { text: String(scene.width), layer: "content" }, ...t(m[1], "margin")], total: `${m[3] + scene.width + m[1]} px` });
+    lines.push({ terms: [...t(m[3], "margin"), { text: String(scene.width), layer: "total" }, ...t(m[1], "margin")], total: `${m[3] + scene.width + m[1]} px` });
   }
   return lines;
 }

@@ -6,8 +6,13 @@ import { estimateTextWidth } from "./text-width";
 
 export type UrlData = Extract<Scene, { kind: "url" }>;
 
-/** Колонок в строке: при кегле 14 px (1ch ≈ 8,4 px) это ≈ 252 px — влезает на экран 360 px вместе с замком и полями. */
-export const URL_COLS = 30;
+/**
+ * Колонок в строке по умолчанию (до измерения): при кегле 14 px (1ch ≈ 8,4 px) это ≈ 218 px — с замком и полями ≈ 270 px,
+ * влезает в самую узкую сцену (контекстное задание ЕНТ на 360 px). Сцена сама пересчитывает число колонок по ширине контейнера.
+ */
+export const URL_COLS = 26;
+/** Меньше колонок не берём: подписи ролей должны помещаться в строку. */
+export const URL_COLS_MIN = 18;
 /** Кегль адреса и подписей (px). */
 export const URL_FONT = 14;
 export const URL_LABEL_FONT = 11;
@@ -16,23 +21,19 @@ export const URL_CH_PX = URL_FONT * 0.6;
 
 export const URL_ROLES: readonly UrlRole[] = ["protocol", "subdomain", "domain", "zone", "port", "path", "query", "fragment"];
 
-/** Тон роли: соседние части адреса получают разные тона (протокол, поддомен, домен, зона, порт, путь, параметры, якорь). */
-export function roleTone(role: UrlRole): SceneTone {
-  switch (role) {
-    case "protocol":
-    case "path":
-      return "primary";
-    case "subdomain":
-    case "fragment":
-      return "ai";
-    case "domain":
-      return "success";
-    case "zone":
-    case "query":
-      return "warning";
-    case "port":
-      return "gold";
-  }
+/** Число колонок моно-шрифта, помещающихся в ширину контейнера (px), с запасом 2 % и нижним пределом. */
+export function colsForWidth(widthPx: number): number {
+  return Math.max(URL_COLS_MIN, Math.floor(widthPx / (URL_CH_PX * 1.02)));
+}
+
+/**
+ * Тон подсвеченной части. Роли различаются подписями, а не цветом (цвета ai/gold/success/warning заняты смыслом):
+ * подсвеченные части идут по очереди в primary и muted, чтобы соседние не слипались. Неподсвеченные — без тона.
+ */
+export function partTones(parts: UrlData["parts"], highlight: readonly UrlRole[] = []): (SceneTone | null)[] {
+  const hl = new Set(highlight);
+  let n = 0;
+  return parts.map((p) => (hl.has(p.role) ? (n++ % 2 === 0 ? "primary" : "muted") : null));
 }
 
 export interface UrlSegment {
@@ -49,6 +50,8 @@ export interface UrlLabel {
   part: number;
   /** Центр подписи, колонки (с учётом границ строки). */
   center: number;
+  /** Центр самой части, колонки: к нему идёт выносная линия подписей нижних ярусов. */
+  anchor: number;
   /** Ширина подписи, колонки. */
   width: number;
   /** Ярус подписи (0 — сразу под адресом; если подписи рядом не помещаются — ниже). */
@@ -112,7 +115,7 @@ export function layoutUrl(parts: UrlData["parts"], highlight: readonly UrlRole[]
       const half = width / 2;
       const raw = s.col + [...s.text].length / 2;
       const center = Math.min(Math.max(raw, half), Math.max(half, cols - half));
-      labels.push({ role: s.role, part: s.part, center, width, level: 0 });
+      labels.push({ role: s.role, part: s.part, center, anchor: raw, width, level: 0 });
     }
     // Ярусы: жадно, слева направо; подпись идёт на первый ярус, где левее неё есть место (зазор в колонку).
     const ends: number[] = [];

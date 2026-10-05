@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Globe, Lock, LockOpen } from "lucide-react";
 import { m } from "motion/react";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
@@ -7,7 +8,7 @@ import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import type { Scene, SceneTone, UrlRole } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { URL_FONT, URL_LABEL_FONT, layoutUrl, roleTone, urlLock, urlText } from "./url";
+import { URL_COLS, URL_FONT, URL_LABEL_FONT, colsForWidth, layoutUrl, partTones, urlLock, urlText } from "./url";
 
 type UrlSceneData = Extract<Scene, { kind: "url" }>;
 
@@ -19,7 +20,7 @@ const PART_TONE: Record<SceneTone, string> = {
   warning: "bg-warning-soft text-warning-strong decoration-warning",
   ai: "bg-ai-soft text-ai-strong decoration-ai",
   gold: "bg-gold-soft text-warning-strong decoration-gold",
-  muted: "bg-surface-2 text-muted decoration-muted",
+  muted: "bg-surface-2 text-text decoration-muted",
 };
 const LABEL_TONE: Record<SceneTone, string> = {
   primary: "text-primary-strong",
@@ -28,7 +29,7 @@ const LABEL_TONE: Record<SceneTone, string> = {
   warning: "text-warning-strong",
   ai: "text-ai-strong",
   gold: "text-warning-strong",
-  muted: "text-muted",
+  muted: "text-text",
 };
 
 const ROLE_KEY: Record<UrlRole, DictKey> = {
@@ -49,7 +50,18 @@ const LEVEL_H = 20;
 export function UrlScene({ scene }: { scene: UrlSceneData }) {
   const { t } = useT();
   const reduce = useReduceMotion();
-  const lines = layoutUrl(scene.parts, scene.highlight, (r) => t(ROLE_KEY[r]));
+  // Число колонок — по ширине контейнера: адрес не вылезает из строки в узких сценах (теория, контекст задания).
+  const ref = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(URL_COLS);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setCols(colsForWidth(entry.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const lines = layoutUrl(scene.parts, scene.highlight, (r) => t(ROLE_KEY[r]), cols);
+  const tones = partTones(scene.parts, scene.highlight);
   const lock = urlLock(scene.parts);
   const hlSet = new Set(scene.highlight ?? []);
   const aria =
@@ -64,29 +76,42 @@ export function UrlScene({ scene }: { scene: UrlSceneData }) {
       <div role="img" aria-label={aria} className="flex items-start gap-2.5 rounded-2xl border border-border bg-surface-2 px-3 py-2.5">
         <span aria-hidden className="mt-[3px] shrink-0">
           {lock === "secure" ? (
-            <Lock size={16} strokeWidth={2.5} className="text-success" />
+            <Lock size={16} strokeWidth={2.5} className="text-muted" />
           ) : lock === "open" ? (
             <LockOpen size={16} strokeWidth={2.5} className="text-warning" />
           ) : (
             <Globe size={16} strokeWidth={2.5} className="text-muted" />
           )}
         </span>
-        <div className="min-w-0 flex-1 font-mono font-medium text-text" style={{ fontSize: URL_FONT }}>
+        <div ref={ref} className="min-w-0 flex-1 font-mono font-medium text-text" style={{ fontSize: URL_FONT }}>
           {lines.map((line, li) => (
             <div key={li} className="relative" style={{ height: LINE_H + line.levels * LEVEL_H }}>
               <div className="whitespace-pre leading-6" style={{ height: LINE_H }}>
-                {line.segments.map((s, si) => (
+                {line.segments.map((s, si) => {
+                  const tone = tones[s.part];
+                  return (
                   <span
                     key={`${s.part}-${si}`}
                     className={cn(
                       "rounded-sm underline-offset-4 transition-colors motion-reduce:transition-none",
-                      s.highlighted && cn("font-bold underline decoration-2", PART_TONE[roleTone(s.role)]),
+                      s.highlighted && tone && cn("font-bold underline decoration-2", PART_TONE[tone]),
                     )}
                   >
                     {s.text}
                   </span>
-                ))}
+                  );
+                })}
               </div>
+              {line.labels
+                .filter((lb) => lb.level > 0)
+                .map((lb) => (
+                  <span
+                    key={`leader-${lb.part}`}
+                    aria-hidden
+                    className="pointer-events-none absolute w-px bg-border"
+                    style={{ left: `${lb.anchor}ch`, top: LINE_H - 2, height: lb.level * LEVEL_H + 4 }}
+                  />
+                ))}
               {line.labels.map((lb) => (
                 <m.div
                   key={`${lb.part}-${lb.role}`}
@@ -97,7 +122,7 @@ export function UrlScene({ scene }: { scene: UrlSceneData }) {
                   style={{ left: `${lb.center}ch`, top: LINE_H + lb.level * LEVEL_H, x: "-50%" }}
                 >
                   <span
-                    className={cn("font-sans font-extrabold leading-none", LABEL_TONE[roleTone(lb.role)])}
+                    className={cn("rounded-sm bg-surface-2 px-1 font-sans font-extrabold leading-none", LABEL_TONE[tones[lb.part] ?? "muted"])}
                     style={{ fontSize: URL_LABEL_FONT }}
                   >
                     {t(ROLE_KEY[lb.role])}

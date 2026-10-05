@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SAMPLES } from "@/components/scenes/samples/box";
-import { BLOCK2_H, bandThickness, boxGeometry, boxRuler, contentWidth, formatSides, layerDim, rulerText, sides4 } from "@/components/scenes/box";
+import { BLOCK2_H, BOX_MAX_W, CONTENT_H, CONTENT_W, LAYER_STROKE, bandThickness, boxGeometry, boxRuler, contentWidth, formatSides, layerDim, rulerText, sides4 } from "@/components/scenes/box";
 
 const maxSide = { kind: "box" as const, width: 2000, padding: 200, border: 200, margin: 200, total: true };
 
@@ -32,13 +32,26 @@ describe("box: толщины", () => {
     expect(bandThickness("border", 200, true)).toBeGreaterThanOrEqual(24);
     expect(bandThickness("margin", 1, false)).toBeGreaterThanOrEqual(19);
   });
-  it("худший случай (все стороны 200, три цифры) влезает в 360 px", () => {
+  it("худший случай (все стороны 200, три цифры, с рамками слоёв) не шире сцены на 360 px (304)", () => {
     const g = boxGeometry(maxSide);
-    expect(g.outerW).toBeLessThanOrEqual(328);
+    expect(g.outerW).toBeLessThanOrEqual(BOX_MAX_W);
     expect(g.outerW).toBeGreaterThan(g.contentW);
   });
-  it("все образцы влезают в 328 px (360 минус поля)", () => {
-    for (const s of SAMPLES) expect(boxGeometry(s).outerW).toBeLessThanOrEqual(328);
+  it("все образцы не шире 304 px", () => {
+    for (const s of SAMPLES) expect(boxGeometry(s).outerW).toBeLessThanOrEqual(BOX_MAX_W);
+  });
+  it("ширина = content + полосы + рамки видимых слоёв; полосы слева и справа симметричны", () => {
+    const s = { kind: "box" as const, width: 200, padding: 20, border: 5, margin: 10 };
+    const g = boxGeometry(s);
+    const bands = [g.margin, g.border, g.padding].reduce((a, b) => a + b[1] + b[3], 0);
+    const strokes = 2 * (LAYER_STROKE.margin + LAYER_STROKE.border + LAYER_STROKE.padding);
+    expect(g.outerW).toBe(CONTENT_W + bands + strokes);
+    expect(g.outerH).toBe(CONTENT_H + [g.margin, g.border, g.padding].reduce((a, b) => a + b[0] + b[2], 0) + strokes);
+    for (const b of [g.margin, g.border, g.padding]) expect(b[1]).toBe(b[3]);
+  });
+  it("невидимый слой рамок не добавляет", () => {
+    const g = boxGeometry({ kind: "box", width: 200, padding: 20 });
+    expect(g.outerW).toBe(CONTENT_W + g.padding[1] + g.padding[3] + 2 * LAYER_STROKE.padding);
   });
   it("слой без сторон не виден, подписей у нулевых сторон нет", () => {
     const g = boxGeometry({ kind: "box", width: 240, border: 4, margin: [0, 24, 0, 24] });
@@ -100,7 +113,11 @@ describe("box: схлопывание margin", () => {
       expect(c.gapH).toBeGreaterThanOrEqual(c.dA);
       expect(c.gapH).toBeGreaterThanOrEqual(c.dB);
       // верх второго блока на экране = нижняя граница рамки первого + gapH
-      expect(c.block2Top + c.dB + c.dA).toBe(c.gapH);
+      expect(c.block2Top + c.dB + c.dA + c.mStroke).toBe(c.gapH);
+      // подпись — посередине зазора между нижней рамкой border-слоя первого блока и верхом второго
+      const g = boxGeometry(s);
+      expect(c.labelTop).toBe(g.outerH - c.dA - c.mStroke + c.gapH / 2);
+      expect(g.totalH).toBe(g.outerH + c.block2Top + c.dB + BLOCK2_H);
     }
     expect(BLOCK2_H).toBeGreaterThan(0);
   });

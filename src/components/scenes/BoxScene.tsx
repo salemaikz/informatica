@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
@@ -32,26 +32,31 @@ const LAYER: Record<BoxLayer, { fill: string; stroke: string; on: number; off: n
 };
 
 /** Пилюли чисел в линейке — цвета слоёв (классы целиком, чтобы Tailwind их увидел). */
-const PILL: Record<BoxLayer, string> = {
+const PILL: Record<BoxLayer | "total", string> = {
   margin: "bg-warning-soft text-warning-strong",
   border: "bg-surface-2 text-text",
   padding: "bg-success-soft text-success-strong",
   content: "bg-primary-soft text-primary-strong",
+  total: "bg-surface text-text ring-1 ring-border",
 };
+
+/** Заливка слоя: color-mix поверх фона сцены (анимируется как background-color). */
+function tint(layer: BoxLayer, dim: boolean): string {
+  const s = LAYER[layer];
+  return `color-mix(in srgb, var(${s.fill}) ${dim ? s.off : s.on}%, var(--surface))`;
+}
 
 function layerStyle(layer: BoxLayer, dim: boolean, th: Sides4 | null, visible: boolean, reduce: boolean): CSSProperties {
   const s = LAYER[layer];
   // Слой «пустой» (все стороны 0): рамку не рисуем, чтобы не вводить в заблуждение.
   const show = visible || layer === "content";
-  const tint = `color-mix(in srgb, var(${s.fill}) ${dim ? s.off : s.on}%, transparent)`;
   return {
     padding: th ? `${th[0]}px ${th[1]}px ${th[2]}px ${th[3]}px` : undefined,
-    backgroundColor: "var(--surface)",
-    backgroundImage: `linear-gradient(${tint}, ${tint})`,
+    backgroundColor: tint(layer, dim),
     borderWidth: show ? s.width : 0,
     borderStyle: s.dashed ? "dashed" : "solid",
     borderColor: dim ? "var(--border)" : `var(${s.stroke})`,
-    transition: reduce ? undefined : "padding 300ms ease, border-color 250ms ease, background-image 250ms ease",
+    transition: reduce ? undefined : "padding 300ms ease, border-color 250ms ease, background-color 250ms ease",
   };
 }
 
@@ -94,6 +99,17 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const g = boxGeometry(scene);
+  // Блок не сжимается сам (это HTML, не SVG): если контейнер уже блока — масштабируем целиком.
+  const ref = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setAvail(Math.floor(entry.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const scale = avail !== null && avail > 0 ? Math.min(1, avail / g.outerW) : 1;
   const hl = scene.highlight;
   const dim = (layer: BoxLayer) => layerDim(layer, hl);
 
@@ -125,7 +141,9 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
     <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-3">
       <Legend highlight={hl} />
 
-      <div role="img" aria-label={aria} className="relative max-w-full" style={{ width: g.outerW }}>
+      <div ref={ref} className="w-full">
+        <div className="mx-auto" style={{ width: g.outerW * scale, height: g.totalH * scale }}>
+          <div role="img" aria-label={aria} className="relative" style={{ width: g.outerW, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "top left" }}>
         {wrap(
           "margin",
           wrap(
@@ -150,17 +168,18 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
                 <div
                   style={{
                     height: c.dB,
-                    backgroundColor: "color-mix(in srgb, var(--warning-soft) 70%, transparent)",
-                    border: "1.5px dashed var(--warning)",
+                    backgroundColor: tint("margin", dim("margin")),
+                    border: `${LAYER.margin.width}px dashed ${dim("margin") ? "var(--border)" : "var(--warning)"}`,
                     borderBottom: 0,
+                    transition: reduce ? undefined : "background-color 250ms ease, border-color 250ms ease",
                   }}
                 />
               )}
               <div
                 className="flex items-center justify-center rounded-sm font-bold text-muted"
                 style={{
-                  marginLeft: g.margin[3],
-                  width: g.outerW - g.margin[1] - g.margin[3],
+                  marginLeft: g.margin[3] + c.mStroke,
+                  width: g.outerW - g.margin[1] - g.margin[3] - 2 * c.mStroke,
                   height: BLOCK2_H,
                   border: "2px solid var(--muted)",
                   backgroundColor: "var(--surface-2)",
@@ -180,6 +199,8 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
             </div>
           </>
         )}
+          </div>
+        </div>
       </div>
 
       {ruler.length > 0 && (
