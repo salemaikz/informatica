@@ -8,8 +8,10 @@ import {
   HINT_ONES,
   HINT_PARITY,
   HINT_WEIGHTS,
+  edgeCase,
   generateLeveled,
   rangeForLevel,
+  sup,
   weightsSum,
 } from "../generators";
 import { kkSuffix } from "../kk";
@@ -25,8 +27,7 @@ const int = (rand: Rand, min: number, max: number) => min + Math.floor(rand() * 
 const pick = <T,>(rand: Rand, arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
 const same = (s: string): L => ({ ru: s, kk: s });
 
-const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
-export const sup = (n: number) => String(n).replace(/\d/g, (d) => SUP[d]);
+export { sup };
 
 const HINT_POW_CHECK: L = {
   ru: "Умножение на 2 в двоичной системе дописывает справа один ноль. Сравни число нулей в записи с показателем степени.",
@@ -41,6 +42,16 @@ function nearMiss(rand: Rand, n: number, bin: string): number {
   return pick(rand, cands);
 }
 
+/** Два слагаемых с общим битом (в сумме будет перенос): иначе ошибка «без переноса» совпала бы с верным ответом. */
+function sumPair(rand: Rand, aLo: number, aHi: number, bLo: number, bHi: number): { a: number; b: number } {
+  for (let g = 0; g < 50; g++) {
+    const a = int(rand, aLo, aHi);
+    const b = int(rand, bLo, bHi);
+    if ((a & b) !== 0) return { a, b };
+  }
+  return { a: 13, b: 7 };
+}
+
 // ---------- 2 → 10 ----------
 
 const bin2dec: SkillBank = {
@@ -48,6 +59,43 @@ const bin2dec: SkillBank = {
   question: (level, seed) => generateLeveled("ns.bin2dec", level, seed),
   statement(level, seed) {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null) {
+      // 0 и 1 (аудит C8): ноль и единица в двоичной записи
+      const claim = rand() < 0.5 ? edge : edge === 0 ? 1 : pick(rand, [0, 2] as const);
+      return {
+        id: `s:ns.bin2dec:${edge}:${claim}`,
+        skill: "ns.bin2dec",
+        level,
+        text: same(`${edge}₂ = ${claim}₁₀`),
+        value: claim === edge,
+        explanation:
+          edge === 0
+            ? { ru: "В записи 0₂ нет единиц, сумма весов пустая и равна 0.", kk: "0₂ жазбасында бірлік жоқ, салмақтар қосындысы бос және 0-ге тең." }
+            : { ru: "Единица стоит в разряде с весом 1: 1₂ = 1₁₀.", kk: "Бірлік салмағы 1 болатын разрядта тұр: 1₂ = 1₁₀." },
+        hint: HINT_WEIGHTS,
+      };
+    }
+    if (level === 3 && rand() < 0.5) {
+      // C: сумма двух двоичных чисел в десятичной записи (ловушки: сложение «как десятичных», без переноса)
+      const { a, b } = sumPair(rand, 5, 31, 3, 15);
+      const binA = toBinary(a);
+      const binB = toBinary(b);
+      const s = a + b;
+      const claim = rand() < 0.5 ? s : pick(rand, [Number(binA) + Number(binB), a ^ b, Math.max(a, b)]);
+      return {
+        id: `s:ns.bin2dec:sum:${binA}+${binB}:${claim}`,
+        skill: "ns.bin2dec",
+        level,
+        text: same(`${binA}₂ + ${binB}₂ = ${claim}₁₀`),
+        value: claim === s,
+        explanation: same(`${binA}₂ + ${binB}₂ = ${a} + ${b} = ${s}₁₀`),
+        hint: {
+          ru: "Переведи оба слагаемых в десятичную систему и сложи, затем сравни с числом справа.",
+          kk: "Екі қосылғышты да ондық жүйеге аударып қос, сосын оң жақтағы санмен салыстыр.",
+        },
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
     const n = int(rand, lo, hi);
     const bin = toBinary(n);
@@ -71,6 +119,19 @@ const bin2dec: SkillBank = {
   },
   short(level, seed) {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null) {
+      return {
+        id: `q:ns.bin2dec:${edge}`,
+        skill: "ns.bin2dec",
+        level,
+        prompt: same(`${edge}₂ = ?₁₀`),
+        answer: String(edge),
+        mode: "number",
+        explanation: same(`${edge}₂ = ${edge}`),
+        hint: HINT_WEIGHTS,
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
     const n = int(rand, lo, hi);
     const bin = toBinary(n);
@@ -94,6 +155,54 @@ const dec2bin: SkillBank = {
   question: (level, seed) => generateLeveled("ns.dec2bin", level, seed),
   statement(level, seed) {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null) {
+      // 0 и 1 (аудит C8): ноль записывается одной цифрой, единица — одной цифрой 1
+      const claim = rand() < 0.5 ? String(edge) : edge === 0 ? "1" : pick(rand, ["0", "10"] as const);
+      return {
+        id: `s:ns.dec2bin:${edge}:${claim}`,
+        skill: "ns.dec2bin",
+        level,
+        text: same(`${edge}₁₀ = ${claim}₂`),
+        value: claim === String(edge),
+        explanation:
+          edge === 0
+            ? { ru: "Ноль записывается одной цифрой: 0₁₀ = 0₂.", kk: "Нөл бір цифрмен жазылады: 0₁₀ = 0₂." }
+            : { ru: "Это один вес 1: 1₁₀ = 1₂.", kk: "Бұл бір ғана 1 салмағы: 1₁₀ = 1₂." },
+        hint: HINT_DIV,
+      };
+    }
+    if (level === 3 && rand() < 0.5) {
+      // C: умножение на 2ᵏ дописывает k нулей — число из записи известного
+      const k = int(rand, 1, 3);
+      const n = int(rand, 5, 30);
+      const bin = toBinary(n);
+      const correct = `${bin}${"0".repeat(k)}`;
+      // ловушки: нулей на один больше или меньше, единицы вместо нулей (при k = 1 «нулей меньше» — это сама запись числа: так не берём)
+      const wrongs = [`${bin}${"0".repeat(k + 1)}`, `${bin}${"0".repeat(k - 1)}`, `${bin}${"1".repeat(k)}`].filter((w) => w !== bin);
+      const claim = rand() < 0.5 ? correct : pick(rand, wrongs);
+      const m = n * 2 ** k;
+      const zerosWord = [
+        { ru: "дописывается один ноль", kk: "бір нөл жазылады" },
+        { ru: "дописываются два нуля", kk: "екі нөл жазылады" },
+        { ru: "дописываются три нуля", kk: "үш нөл жазылады" },
+      ][k - 1];
+      return {
+        id: `s:ns.dec2bin:shift:${n}-${k}:${claim}`,
+        skill: "ns.dec2bin",
+        level,
+        text: { ru: `Если ${n}₁₀ = ${bin}₂, то ${m}₁₀ = ${claim}₂`, kk: `${n}₁₀ = ${bin}₂ болса, онда ${m}₁₀ = ${claim}₂` },
+        value: claim === correct,
+        explanation: {
+          ru: `${m} = ${n} · ${2 ** k}: при умножении на ${2 ** k} справа ${zerosWord.ru}: ${bin}₂ → ${correct}₂.`,
+          kk: `${m} = ${n} · ${2 ** k}: ${kkSuffix(2 ** k, "dat")} көбейткенде оң жаққа ${zerosWord.kk}: ${bin}₂ → ${correct}₂.`,
+        },
+        hint: {
+          ru: "Умножение на 2 дописывает справа один ноль. Во сколько раз второе число больше первого?",
+          kk: `${kkSuffix(2, "dat")} көбейту оң жаққа бір нөл жазады. Екінші сан біріншіден неше есе үлкен?`,
+        },
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
     const n = int(rand, lo, hi);
     const bin = toBinary(n);
@@ -122,6 +231,19 @@ const dec2bin: SkillBank = {
   },
   short(level, seed) {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null) {
+      return {
+        id: `q:ns.dec2bin:${edge}`,
+        skill: "ns.dec2bin",
+        level,
+        prompt: same(`${edge}₁₀ = ?₂`),
+        answer: String(edge),
+        mode: "binary",
+        explanation: same(`${edge}₁₀ = ${edge}₂`),
+        hint: HINT_DIV,
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
     const n = int(rand, lo, hi);
     const bin = toBinary(n);
@@ -160,6 +282,25 @@ const base: SkillBank = {
   question: (level, seed) => generateLeveled("ns.base", level, seed),
   statement(level, seed): Statement {
     const rand = seeded(seed);
+    if (level === 1 && edgeCase(seed) !== null) {
+      // 0 и 1 (аудит C8): цифры любой системы начинаются с нуля
+      const claim = rand() < 0.5 ? 0 : 1;
+      return {
+        id: `s:ns.base:min:2:${claim}`,
+        skill: "ns.base",
+        level,
+        text: { ru: `Наименьшая цифра в двоичной системе — ${claim}`, kk: `Екілік жүйедегі ең кіші цифр — ${claim}` },
+        value: claim === 0,
+        explanation: {
+          ru: "Цифры любой системы начинаются с нуля: в двоичной системе наименьшая цифра — 0, а наибольшая — 1.",
+          kk: "Кез келген жүйенің цифрлары нөлден басталады: екілік жүйеде ең кіші цифр — 0, ал ең үлкені — 1.",
+        },
+        hint: {
+          ru: "С какой цифры начинается счёт в любой системе счисления: с нуля или с единицы?",
+          kk: "Кез келген санау жүйесінде есеп қай цифрдан басталады: нөлден бе, әлде бірден бе?",
+        },
+      };
+    }
     if (level === 1) {
       const b = pick(rand, BASE_DIGIT_BASES);
       const value = rand() < 0.5;
@@ -311,10 +452,64 @@ const props: SkillBank = {
   question: (level, seed) => generateLeveled("ns.props", level, seed),
   statement(level, seed): Statement {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null && rand() < 0.5) {
+      // 0 и 1 (аудит C8): ноль записывается одной цифрой, а не «пустой записью»
+      const claim = rand() < 0.5 ? 1 : pick(rand, [0, 2] as const);
+      return {
+        id: `s:ns.props:length:${edge}:${claim}`,
+        skill: "ns.props",
+        level,
+        text: {
+          ru: `Количество цифр в двоичной записи числа ${edge}: ${claim}`,
+          kk: `${edge} санының екілік жазбасындағы цифрлар саны: ${claim}`,
+        },
+        value: claim === 1,
+        explanation:
+          edge === 0
+            ? {
+                ru: "Ноль записывают одной цифрой: 0₂. Правило «степень двойки, не больше числа» работает для чисел от 1.",
+                kk: "Нөл бір цифрмен жазылады: 0₂. «Саннан аспайтын екінің дәрежесі» ережесі 1-ден бастап сандар үшін жұмыс істейді.",
+              }
+            : { ru: "1 = 2⁰ ≤ 1 < 2¹, поэтому цифра одна: 1₂.", kk: "1 = 2⁰ ≤ 1 < 2¹, сондықтан цифр біреу: 1₂." },
+        hint: HINT_LENGTH,
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
-    const n = int(rand, lo, hi);
+    const n = edge !== null ? edge : int(rand, lo, hi);
     const bin = toBinary(n);
-    const kind = level === 1 ? pick(rand, ["parity", "pow"] as const) : level === 2 ? pick(rand, ["length", "pow", "parity"] as const) : pick(rand, ["ones", "length"] as const);
+    const kind =
+      edge !== null
+        ? "parity"
+        : level === 1
+          ? pick(rand, ["parity", "pow"] as const)
+          : level === 2
+            ? pick(rand, ["length", "pow", "parity"] as const)
+            : pick(rand, ["ones", "length", "maxk"] as const);
+    if (kind === "maxk") {
+      // C: наибольшее число из k двоичных цифр — 2ᵏ − 1
+      const k = int(rand, 5, 10);
+      const v = 2 ** k - 1;
+      const claim = rand() < 0.5 ? v : pick(rand, [2 ** k, 2 ** (k - 1), 2 ** k - 2]);
+      return {
+        id: `s:ns.props:maxk:${k}:${claim}`,
+        skill: "ns.props",
+        level,
+        text: {
+          ru: `Наибольшее число из ${k} двоичных цифр равно ${claim}`,
+          kk: `${k} екілік цифрдан тұратын ең үлкен сан ${kkSuffix(claim, "dat")} тең`,
+        },
+        value: claim === v,
+        explanation: {
+          ru: `Наибольшее число состоит из одних единиц: ${"1".repeat(k)}₂ = 2${sup(k)} − 1 = ${v}.`,
+          kk: `Ең үлкен сан тек бірліктерден тұрады: ${"1".repeat(k)}₂ = 2${sup(k)} − 1 = ${v}.`,
+        },
+        hint: {
+          ru: "Какая двоичная запись из k цифр самая большая? Найди её значение по весам разрядов.",
+          kk: "k цифрдан тұратын қай екілік жазба ең үлкен? Оның мәнін разряд салмақтары бойынша тап.",
+        },
+      };
+    }
     if (kind === "parity") {
       const claimEven = rand() < 0.5;
       const even = n % 2 === 0;
@@ -391,6 +586,19 @@ const props: SkillBank = {
   },
   short(level, seed): ShortQuestion {
     const rand = seeded(seed);
+    const edge = level === 1 ? edgeCase(seed) : null;
+    if (edge !== null) {
+      return {
+        id: `q:ns.props:length:${edge}`,
+        skill: "ns.props",
+        level,
+        prompt: { ru: `Сколько цифр в двоичной записи числа ${edge}?`, kk: `${edge} санының екілік жазбасында неше цифр бар?` },
+        answer: "1",
+        mode: "number",
+        explanation: same(`${edge} = ${edge}₂ → 1`),
+        hint: HINT_LENGTH,
+      };
+    }
     const [lo, hi] = rangeForLevel(level);
     const n = int(rand, lo, hi);
     const bin = toBinary(n);
