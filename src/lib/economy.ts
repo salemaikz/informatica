@@ -439,10 +439,12 @@ export const AI_COST: Record<AiKind, number> = { hint: 3, explain: 5, ask: 5, ch
 export const AI_UNITS: Record<AiKind, number> = { hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 };
 
 /**
- * Потолок в обращениях в день по тарифу — защита от перерасхода (в том числе при безлимите; решение #48).
- * Бесплатно: 3 бесплатных + до 10 за чипы. Серверный потолок устройства (100) совпадает с «Безлимитом».
+ * Потолок в обращениях в день — защита от перерасхода; одинаковый для всех тарифов (решение #48, правка v0.9.1): «Бесплатный» и «Лайт»
+ * покупают или зарабатывают ответы ИИ, «Безлимит» — нет, но потолок нужен и ему. Бесплатные обращения по тарифу
+ * (3 / 30 / без счёта) идут внутри потолка, сверх них — за чипы, но не больше потолка в сумме.
+ * Серверный потолок устройства (AI_LIMIT_DEFAULTS.deviceDaily в server/ai-guard.ts) — то же число.
  */
-export const AI_DAILY_CAP: Record<PlanTier, number> = { free: 13, lite: 50, unlimited: 100 };
+export const AI_DAILY_CAP: Record<PlanTier, number> = { free: 65, lite: 65, unlimited: 65 };
 
 export interface AiUsage {
   day: string;

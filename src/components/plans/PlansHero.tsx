@@ -3,7 +3,6 @@
 import { Cpu, Heart, Sparkles, type LucideIcon } from "lucide-react";
 import { m } from "motion/react";
 import { cn } from "@/lib/cn";
-import { AI_DAILY_CAP } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -38,7 +37,7 @@ export function PlansHero({ subtitle }: { subtitle: DictKey }) {
         ))}
       </div>
       <h1 className="mt-1 text-balance text-[1.75rem] font-extrabold leading-tight sm:text-3xl">{t("plans.title")}</h1>
-      <p className="mt-2 max-w-sm text-balance font-semibold leading-snug text-muted">{t(subtitle, { n: AI_DAILY_CAP.unlimited })}</p>
+      <p className="mt-2 max-w-sm text-balance font-semibold leading-snug text-muted">{t(subtitle)}</p>
     </header>
   );
 }

@@ -12,6 +12,7 @@ import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { springSoft } from "@/components/motion/presets";
 import { useNow, usePlan } from "@/components/economy/useEconomy";
+import { AiLimitNote } from "./AiLimitNote";
 import { ComingSoonSheet } from "./ComingSoonSheet";
 import { BillingToggle } from "./BillingToggle";
 import { CompareTable } from "./CompareTable";
@@ -114,6 +115,7 @@ export function PlansScreen() {
           <Button variant="ghost" size="lg" block className="max-w-sm" onClick={close}>
             {t("plans.foot.free")}
           </Button>
+          <AiLimitNote />
         </footer>
       </div>
 

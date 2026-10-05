@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Crown, Minus } from "lucide-react";
-import { AI_DAILY_CAP, AI_UNITS, type PlanTier } from "@/lib/economy";
+import type { PlanTier } from "@/lib/economy";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { compareRows, type CellValue } from "./plans-helpers";
@@ -90,7 +90,7 @@ export function CompareTable() {
           </tbody>
         </table>
       </div>
-      <p className="px-1 text-sm font-semibold text-muted">{t("plans.cmp.note", { free: AI_DAILY_CAP.free, lite: AI_DAILY_CAP.lite, photo: AI_UNITS.photo, voice: AI_UNITS.voice })}</p>
+      <p className="px-1 text-sm font-semibold text-muted">{t("plans.cmp.note")}</p>
     </section>
   );
 }
