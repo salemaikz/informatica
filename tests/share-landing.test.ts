@@ -152,7 +152,7 @@ describe("карточка по результату", () => {
     expect(m.ofFirst).toBe(true);
     expect(m.ofLabel).toBe("19 ішінен");
     expect(m.siteHost).not.toMatch(/^https?:/);
-    expect(m.footer).toBe("Дәл осы нұсқаны өтіп көр");
+    expect(m.footer).toBe("Дәл осы нұсқаны шешіп көр");
   });
   it("курс и серия: готовые строки", () => {
     const c = cardModelOf({ t: "course", done: 37, total: 96, lang: "ru", grade: null });
