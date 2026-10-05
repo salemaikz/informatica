@@ -34,6 +34,9 @@ export function StreakReminder({ className }: { className?: string }) {
   const reminder = useApp((s) => s.profile.reminder);
   const streak = useApp((s) => s.streak);
   const lessons = useApp((s) => s.lessons);
+  // Подписки на поля, из которых строится текст: смена имени/цели/XP перерисует баннер.
+  useApp((s) => s.profile);
+  useApp((s) => s.days);
   const now = useMinuteClock();
   // Скрытие запоминаем на день (localStorage в try/catch): иначе баннер возвращается при каждом переходе на главную.
   const [hiddenDay, setHiddenDay] = useState<string | null>(readHidden);

@@ -39,13 +39,13 @@ export function ReminderAgent() {
   const freezes = useApp((s) => s.streak.freezes ?? 0);
   const name = useApp((s) => s.profile.name);
   const goalXp = useApp((s) => s.profile.dailyGoalXp);
-  const dayXp = useApp((s) => s.days[todayKey(new Date())]?.xp ?? 0);
+  const days = useApp((s) => s.days);
   const lessons = useApp((s) => s.lessons);
 
   // Зеркало для воркера: настройки, серия и всё для дружеских текстов (имя, повторения, следующий урок, цель дня).
   useEffect(() => {
     void writeMirror(mirrorFrom(useApp.getState(), new Date()));
-  }, [enabled, push, time, lang, streak, lastDay, freezes, name, goalXp, dayXp, lessons]);
+  }, [enabled, push, time, lang, streak, lastDay, freezes, name, goalXp, days, lessons]);
 
   // Значок на иконке установленного приложения: уроки «пора повторить» + серия под угрозой.
   const streakState = useApp((s) => s.streak);

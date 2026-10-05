@@ -212,6 +212,11 @@ describe("выбор по ситуации", () => {
   it("приоритет: серия > повторение > возвращение > следующий урок/мотивация", () => {
     expect(pickSituation(ctx({ streak: 5, due: 3, idle: 1 }))).toBe("streakRisk");
     expect(pickSituation(ctx({ streak: 5, freezes: 1, due: 3, idle: 1 }))).toBe("streakFreeze");
+    // Заморозка ушла на вчерашний пропуск — на сегодня её нет.
+    expect(pickSituation(ctx({ streak: 5, freezes: 1, idle: 2 }))).toBe("streakRisk");
+    expect(pickSituation(ctx({ streak: 5, freezes: 2, idle: 2 }))).toBe("streakFreeze");
+    // День уже засчитан (тестовое уведомление): серия не «под угрозой».
+    expect(pickSituation(ctx({ streak: 6, idle: 0, goalXp: 50, xpToday: 20 }))).toBe("goal");
     expect(pickSituation(ctx({ due: 3, idle: 9 }))).toBe("review");
     expect(pickSituation(ctx({ idle: 2 }))).toBe("away2");
     expect(pickSituation(ctx({ idle: 5 }))).toBe("forgetting");
@@ -223,7 +228,7 @@ describe("выбор по ситуации", () => {
     expect(set.size).toBe(3);
   });
   it("подстановки: серия, повторение, урок, имя", () => {
-    expect(pickReminder(ctx({ streak: 5 })).title).toMatch(/5 дней/);
+    expect(pickReminder(ctx({ streak: 5, idle: 1 })).title).toMatch(/5 дней/);
     const r = pickReminder(ctx({ due: 3 }));
     expect(`${r.title} ${r.body}`).toMatch(/3 урока/);
     expect(`${r.title} ${r.body}`).not.toMatch(/[{}]/);

@@ -41,7 +41,8 @@ export interface ReminderMirror {
 /** Контекст выбора текста из состояния ученика: для баннера, тестового уведомления, зеркала. */
 export function reminderCtxFrom(s: AppState, now: Date): ReminderCtx {
   const today = todayKey(now);
-  const next = nextLessonId(UNITS, s.lessons);
+  // Школьный трек идёт по своему плану, а не по ЕНТ-дорожке: названия следующего урока для него нет.
+  const next = s.profile.track === "school" ? null : nextLessonId(UNITS, s.lessons);
   const meta = next ? lessonMeta(next) : undefined;
   return {
     lang: s.profile.lang,

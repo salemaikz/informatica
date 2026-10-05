@@ -257,7 +257,12 @@ function pluralRu(n, forms) {
 }
 
 function pickSituation(c) {
-  if (c.streak > 0) return c.freezes > 0 ? "streakFreeze" : "streakRisk";
+  var hasNext = !!c.nextTitle && !!c.nextTitle[c.lang];
+  if (c.streak > 0) {
+    if (c.idle === 0) return c.goalXp > 0 && c.xpToday < c.goalXp ? "goal" : hasNext ? "nextLesson" : "goal";
+    var spare = Math.max(0, c.freezes - Math.max(0, (c.idle || 0) - 1));
+    return spare > 0 ? "streakFreeze" : "streakRisk";
+  }
   if (c.due > 0) return "review";
   if (c.idle !== null) {
     if (c.idle >= 7) return "away7";
@@ -265,7 +270,6 @@ function pickSituation(c) {
     if (c.idle >= 2) return "away2";
   }
   var d = dayNumber(c.today) % 3;
-  var hasNext = !!c.nextTitle && !!c.nextTitle[c.lang];
   if (d === 0 && hasNext) return "nextLesson";
   if (d === 2 && c.goalXp > 0 && c.xpToday < c.goalXp) return "goal";
   return "newStreak";
@@ -295,6 +299,7 @@ function fillTemplate(s, vars) {
 function pickReminder(c, pool) {
   var vars = reminderVars(c);
   var all = pool[pickSituation(c)][c.lang];
+  if (!Array.isArray(all) || !all.length) throw new Error("empty pool");
   var usable = all.filter(function (v) {
     return vars.name || !/\{name\}/.test(v.title + v.body);
   });
@@ -309,7 +314,8 @@ function textFromMirror(m, now) {
   var streak = liveStreak(m, today);
   var pool = m.pool;
   if (!pool || !pool.streakRisk || !pool.goal) return reminderText(m.lang, streak, m.freezes || 0);
-  return pickReminder(
+  try {
+    return pickReminder(
     {
       lang: m.lang === "kk" ? "kk" : "ru",
       streak: streak,
@@ -323,7 +329,10 @@ function textFromMirror(m, now) {
       today: today,
     },
     pool,
-  );
+    );
+  } catch (e) {
+    return reminderText(m.lang, streak, m.freezes || 0);
+  }
 }
 
 // ---------- IndexedDB (та же база, что у idb-keyval: keyval-store / keyval) ----------
