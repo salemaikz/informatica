@@ -92,7 +92,7 @@ export const SW_GEO = {
   half: 24,
   openAngle: 28,
   /** Расстояние между ветками параллельной схемы. */
-  branch: 56,
+  branch: 72,
   /** Отступ сверху до первой линии (место под поднятый рычажок). */
   top: 40,
   /** Края обратного провода. */
@@ -155,17 +155,24 @@ export function layoutSwitches(scene: SwitchesScene): SwitchesLayout {
     wire([[prev, mid], [xl, mid]]);
   } else if (scene.mode === "or") {
     mid = G.top + ((k - 1) * G.branch) / 2;
+    labelDy = 22;
     bottom = mid + ((k - 1) * G.branch) / 2 + labelDy + 14;
     const xa = 96;
     const xz = 208;
     const cx = (xa + xz) / 2;
     const first = mid - ((k - 1) * G.branch) / 2;
-    const last = first + (k - 1) * G.branch;
     wire([[xb, mid], [xa, mid]]);
     wire([[xz, mid], [xl, mid]]);
     // Шины слева и справа.
-    wire([[xa, first], [xa, last]]);
-    wire([[xz, first], [xz, last]]);
+    // Шина режется на отрезки между ветками и узлом: ток идёт лишь там, где за отрезком (дальше от узла) есть замкнутая ветка.
+    const ysAll = [...new Set([mid, ...values.map((_, i) => first + i * G.branch)])].sort((p, q) => p - q);
+    const closedY = values.map((v, i) => (v === 1 ? first + i * G.branch : null)).filter((y): y is number => y !== null);
+    for (let j = 0; j + 1 < ysAll.length; j++) {
+      const [y1, y2] = [ysAll[j], ysAll[j + 1]];
+      const live = on && (y2 <= mid ? closedY.some((y) => y <= y1) : closedY.some((y) => y >= y2));
+      wire([[xa, y1], [xa, y2]], live);
+      wire([[xz, y1], [xz, y2]], live);
+    }
     junctions.push([xa, mid], [xz, mid]);
     for (let i = 0; i < k; i++) {
       const y = first + i * G.branch;

@@ -125,8 +125,8 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
       ))}
 
       {/* Ответвления проводов одного источника (схемы с несколькими выходами). */}
-      {layout.junctions.map(([x, y]) => (
-        <circle key={`j:${x},${y}`} cx={x} cy={y} r={3.2} className={cn("transition-colors duration-200", "fill-muted")} />
+      {layout.junctions.map(([x, y], i) => (
+        <circle key={`j:${x},${y}`} cx={x} cy={y} r={3.2} className={cn("transition-colors duration-200", valueOf(layout.junctionFrom[i]) === 1 ? "fill-success" : "fill-muted")} />
       ))}
 
       {layout.nodes.map((n) => {

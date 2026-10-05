@@ -200,7 +200,6 @@ describe("switches: лампа и раскладка", () => {
     expect([[0, 0], [0, 1], [1, 0], [1, 1]].map(([a, b]) => lampOn("xor", [a as 0 | 1, b as 0 | 1]))).toEqual([false, true, true, false]);
   });
 
-  const sw = (mode: SwitchesScene["mode"], values?: (0 | 1)[], names?: string[]): SwitchesScene => ({ kind: "switches", mode, values, names });
 
   it("значения и имена по умолчанию: нули и A, B, C", () => {
     expect(switchValues(sw("and"))).toEqual([0, 0]);
@@ -278,5 +277,72 @@ describe("switches: лампа и раскладка", () => {
       expect(sceneLogicDict[k].ru).toBeTruthy();
       expect(sceneLogicDict[k].kk).toBeTruthy();
     }
+  });
+});
+
+const sw = (mode: SwitchesScene["mode"], values?: (0 | 1)[], names?: string[]): SwitchesScene => ({ kind: "switches", mode, values, names });
+
+describe("исправления ревью S9", () => {
+  const g = (id: string, op: GateOp, i: string[]) => ({ id, op, in: i });
+  const synth: CircuitScene[] = [
+    { kind: "circuit", inputs: ["A", "B"], gates: [g("x", "xor", ["A", "B"]), g("n", "not", ["x"])], output: "n", outputs: [{ gate: "n", name: "F" }, { gate: "x", name: "X" }] },
+    { kind: "circuit", inputs: ["A", "B"], gates: [g("x", "xor", ["A", "B"]), g("n", "not", ["x"])], output: "x", outputs: [{ gate: "x", name: "X" }, { gate: "n", name: "F" }] },
+    {
+      kind: "circuit",
+      inputs: ["A", "B", "Ci"],
+      gates: [g("x1", "xor", ["A", "B"]), g("s", "xor", ["x1", "Ci"]), g("a1", "and", ["A", "B"]), g("a2", "and", ["x1", "Ci"]), g("c", "or", ["a1", "a2"])],
+      output: "s",
+      outputs: [{ gate: "s", name: "S" }, { gate: "c", name: "Co" }],
+    },
+  ];
+
+  it("ни один провод не проходит сквозь рамку чужого вентиля и не сливается с другим", () => {
+    for (const sc of [...synth, ...EXTENDED.filter((s): s is CircuitScene => s.kind === "circuit" && !!s.outputs)]) {
+      const lay = layoutCircuit(sc);
+      expect(wireStats(lay.wires).bad).toBe(0);
+      for (const w of lay.wires) {
+        for (const n of lay.nodes) {
+          if (n.kind !== "gate" || n.id === w.from || n.id === w.to) continue;
+          for (let i = 0; i + 1 < w.points.length; i++) {
+            const [a, b] = [w.points[i], w.points[i + 1]];
+            const hit = Math.max(a[0], b[0]) > n.x - n.w / 2 && Math.min(a[0], b[0]) < n.x + n.w / 2 && Math.max(a[1], b[1]) > n.y - n.h / 2 && Math.min(a[1], b[1]) < n.y + n.h / 2;
+            expect(hit, `${w.from}->${w.to} через ${n.id}`).toBe(false);
+          }
+        }
+      }
+      expect(lay.height).toBeGreaterThanOrEqual(Math.max(...lay.wires.flatMap((w) => w.points.map((p) => p[1]))));
+    }
+  });
+
+  it("подпись ключа в параллельной схеме не задевает рычажок соседней ветки", () => {
+    for (const vals of [[0, 0, 0], [0, 0], [1, 0, 1]] as (0 | 1)[][]) {
+      const lay = layoutSwitches(sw("or", vals, ["Car", "Bus", "Cin"].slice(0, vals.length)));
+      for (const p of lay.parts) {
+        const w = estimateTextWidth(`${p.name} = ${p.value}`, 14) + 2;
+        const r = { x0: p.label[0] - w / 2, x1: p.label[0] + w / 2, y0: p.label[1] - 12, y1: p.label[1] + 3 };
+        for (const q of lay.parts) {
+          if (q === p) continue;
+          // отрезок рычажка с запасом на толщину (2 px), проверка по ограничивающему прямоугольнику
+          const bx0 = Math.min(q.pivot[0], q.lever[0]) - 2;
+          const bx1 = Math.max(q.pivot[0], q.lever[0]) + 2;
+          const by0 = Math.min(q.pivot[1], q.lever[1]) - 2;
+          const by1 = Math.max(q.pivot[1], q.lever[1]) + 2;
+          expect(r.x1 <= bx0 || bx1 <= r.x0 || r.y1 <= by0 || by1 <= r.y0).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("значок вентиля: единый размер viewBox у всех вентилей", () => {
+    const ops: GateOp[] = ["and", "or", "not", "nand", "nor", "xor"];
+    expect(new Set(ops.map((o) => gateGlyph(o).w)).size).toBe(1);
+    expect(new Set(ops.map((o) => gateGlyph(o).h)).size).toBe(1);
+  });
+
+  it("шина параллельной схемы: тупиковый кусок до разомкнутой ветки не под током", () => {
+    const lay = layoutSwitches(sw("or", [0, 1]));
+    const bus = lay.wires.filter((w) => w.points[0][0] === w.points[1][0] && w.points[0][1] !== w.points[1][1]);
+    expect(bus.some((w) => w.live)).toBe(true);
+    expect(bus.some((w) => !w.live)).toBe(true);
   });
 });

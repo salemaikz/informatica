@@ -47,10 +47,12 @@ export function GatesScene({ scene }: { scene: GatesSceneData }) {
   const names = scene.ops.map((op) => translate(lang, NAME_KEY[op]));
   const cols = gatesColumns(scene.ops.length, names);
   const hl = new Set(scene.highlight ?? []);
+  const marked = scene.ops.filter((op) => hl.has(op)).map((op) => translate(lang, NAME_KEY[op]));
+  const ariaLabel = `${t("scene.gates.aria")}: ${names.join(", ")}${marked.length ? `. ${t("scene.gates.ariaHl")}: ${marked.join(", ")}` : ""}`;
 
   return (
     <div className="mx-auto w-full max-w-xl">
-      <div role="img" aria-label={t("scene.gates.aria")} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      <div role="img" aria-label={ariaLabel} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {scene.ops.map((op, i) => {
           const on = hl.has(op);
           return (

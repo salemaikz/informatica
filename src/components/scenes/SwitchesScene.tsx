@@ -40,7 +40,7 @@ function Part({ part, live, reduce }: { part: SwitchPart; live: boolean; reduce:
         <m.g initial={false} animate={{ y: pressed ? SW_GEO.press : 0 }} transition={tr}>
           <line x1={part.contacts[0][0]} y1={cy} x2={part.contacts[1][0]} y2={cy} strokeWidth={3.5} strokeLinecap="round" className={lever} />
           <line x1={cx} y1={cy - 24} x2={cx} y2={cy} strokeWidth={2.5} strokeLinecap="round" className="stroke-muted" />
-          <line x1={cx - 10} y1={cy - 26} x2={cx + 10} y2={cy - 26} strokeWidth={5} strokeLinecap="round" className={pressed ? "stroke-danger" : "stroke-primary"} />
+          <line x1={cx - 10} y1={cy - 26} x2={cx + 10} y2={cy - 26} strokeWidth={5} strokeLinecap="round" className="stroke-primary" />
         </m.g>
       </g>
     );

@@ -37,7 +37,8 @@ const PAD_Y = 3;
 export function gateGlyph(op: GateOp): GateGlyph {
   const G = CIRCUIT_GEO;
   const style = GATE_STYLE[op];
-  const bubble = style.inverted ? G.bubble * 2 : 0;
+  // Место под кружок инверсии резервируется у всех вентилей: единый viewBox — одинаковый масштаб в галерее.
+  const bubble = G.bubble * 2;
   const h = G.gateH + PAD_Y * 2;
   const cy = h / 2;
   const x = LEAD;

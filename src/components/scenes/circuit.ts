@@ -115,6 +115,8 @@ export interface CircuitLayout {
   outputs: { id: string; gate: string; name: string }[];
   /** Волна 3 (только при `outputs` в сцене): точки ответвления проводов одного источника — рисуется точка-узел. */
   junctions: Pt[];
+  /** Источник (id узла) провода, к которому относится точка-узел: для окраски по значению; параллельно `junctions`. */
+  junctionFrom: string[];
   /** Волна 3: число пересечений проводов разных источников (при `outputs` — минимизируется перебором изломов). */
   crossings: number;
 }
@@ -278,7 +280,47 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
   };
   let bends = defs.map(defaultBend);
   if (multi) bends = bestBends(defs.map((d) => ({ route: (b: number) => routeWire(d, b), choices: d.count === 2 ? [inPort(d.to, d.port, 2)[0] - 16, inPort(d.to, d.port, 2)[0] - 8] : [defaultBend(d)] })));
-  const wires: CircuitWire[] = defs.map((d, i) => routeWire(d, bends[i]));
+  let wires: CircuitWire[] = defs.map((d, i) => routeWire(d, bends[i]));
+  // Только при `outputs`: провод, идущий сквозь рамку чужого вентиля (источник в раннем столбце, а на его строке стоит вентиль
+  // позже), уводим в свободный горизонтальный канал между рядами. Старые схемы без `outputs` не меняются.
+  if (multi) {
+    const gateBoxes = [...nodes.values()].filter((n) => n.kind === "gate").map((n) => ({ n, r: { x0: n.x - n.w / 2 - 2, x1: n.x + n.w / 2 + 2, y0: n.y - n.h / 2 - 2, y1: n.y + n.h / 2 + 2 } as Rect }));
+    const hitsGate = (pts: Pt[], d: WireDef) => gateBoxes.filter((b) => b.n !== d.from && b.n !== d.to && wireHits(pts, b.r)).length;
+    const chan = rowStep / 2;
+    defs.forEach((d, i) => {
+      if (hitsGate(wires[i].points, d) === 0) return;
+      const [sx, sy] = outPort(d.from);
+      const [tx, ty] = inPort(d.to, d.port, d.count);
+      const bxs = d.to.kind === "output" ? [tx - 6, tx - 18] : d.count === 2 ? [tx - 16, tx - 8] : [tx - 12];
+      let best: CircuitWire | null = null;
+      let bestCost = Infinity;
+      // Кандидаты канала: середины зазоров между рамками вентилей в полосе провода, а также над самым верхним и под самым нижним.
+      const span = gateBoxes.filter((b) => b.n !== d.from && b.n !== d.to && b.r.x1 > sx && b.r.x0 < tx).sort((a, b) => a.r.y0 - b.r.y0);
+      const ys: number[] = [];
+      let edge = span.length ? span[0].r.y0 : sy;
+      if (edge - chan >= 6) ys.push(edge - chan);
+      for (const b of span) {
+        if (b.r.y0 > edge) ys.push((edge + b.r.y0) / 2);
+        edge = Math.max(edge, b.r.y1);
+      }
+      ys.push(Math.max(sy, ty, edge) + chan);
+      ys.sort((a, b) => Math.abs(a - sy) - Math.abs(b - sy));
+      for (const cy of ys) {
+        for (const bx of bxs) {
+          const w: CircuitWire = { ...wires[i], points: [[sx, sy], [sx + 10, sy], [sx + 10, cy], [bx, cy], [bx, ty], [tx, ty]] };
+          const others = wires.filter((_, j) => j !== i);
+          const { cross, bad } = wireStats([w, ...others]);
+          const cost = 1000 * hitsGate(w.points, d) + 100 * bad + cross + (cy < sy ? 0.5 : 0) + Math.abs(cy - sy) / 1000;
+          if (cost < bestCost) {
+            bestCost = cost;
+            best = w;
+          }
+        }
+      }
+      if (best) wires[i] = best;
+    });
+    wires = wires.slice();
+  }
 
   // Подписи вентилей: по умолчанию под рамкой. Если там провод, рамка соседа или чужая подпись — часть подписей переносим над рамкой.
   // Вентилей не больше шести — перебираем все варианты и берём с наименьшим числом наложений (при нуле наложений снизу ничего не меняется).
@@ -311,17 +353,19 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
     }
   }
 
+  const junctions = multi ? findJunctions(wires) : [];
   const all = [...nodes.values()];
   const maxY = Math.max(...all.map((n) => n.y));
   return {
     // При нескольких выходах справа остаётся место под плашку со значением выхода.
     width: outNode.x + G.r + G.right + (multi ? OUT_CHIP_W : 0),
-    height: maxY + G.bottom + extra,
+    height: Math.max(maxY + G.bottom + extra, ...wires.flatMap((w) => w.points.map((p) => p[1] + 8))),
     nodes: all,
     wires,
     outId: OUT_ID,
     outputs: outNodes.map((n, i) => ({ id: n.id, gate: outDefs[i].gate, name: n.label })),
-    junctions: multi ? findJunctions(wires) : [],
+    junctions: multi ? junctions : [],
+    junctionFrom: multi ? junctions.map((p) => wires.find((w) => w.points.some((q) => q[0] === p[0] && q[1] === p[1]))?.from ?? "") : [],
     crossings: countCrossings(wires),
   };
 }
