@@ -11,6 +11,7 @@ import { SkillsMasteryCard, needsText } from "@/components/progress/SkillsMaster
 import { TopicTable } from "@/components/progress/TopicTable";
 import { UnitProgressList } from "@/components/progress/UnitProgressList";
 import { WeakSpotsCard } from "@/components/progress/WeakSpotsCard";
+import { WeakTopicsRail } from "@/components/progress/WeakTopicsRail";
 import { formatDate, formatDuration, percent, sparkGeometry, toneOfRatio } from "@/components/progress/format";
 import type { SkillStat } from "@/lib/mastery";
 import { useApp, type AppState, type DayStat } from "@/lib/store";
@@ -125,7 +126,18 @@ describe("CourseProgressCard и CourseProgressBadge", () => {
     await render(createElement(CourseProgressCard));
     const readyNoBasics = allReady().length - UNITS.find((u) => u.id === "u0")!.lessons.filter((r) => r.status === "available").length;
     expect(text()).toContain(`0 из ${readyNoBasics} уроков`);
-    expect(text()).toContain("Раздел «Старт» скрыт");
+    expect(text()).toContain("Раздел «Старт» можно пропустить — основы знакомы. Он не входит в процент.");
+    expect(text()).not.toContain("скрыт");
+  });
+
+  it("skipBasics: уроки «Старта» пройдены, в процент не входят — «Пройди первый урок» не показываем (C19)", async () => {
+    await setProfile({ skipBasics: true });
+    const u0 = UNITS.find((u) => u.id === "u0")!.lessons.filter((r) => r.status === "available" && getLesson(r.id));
+    await patch({ lessons: Object.fromEntries(u0.slice(0, 3).map((r) => [r.id, { completions: 1, lastAt: 1, best: 1, dueAt: 1 }])) as never });
+    await render(createElement(CourseProgressCard));
+    expect(text()).toContain("Пройдено 0% курса");
+    expect(text()).not.toContain("Пройди первый урок");
+    expect(text()).toContain("Он не входит в процент");
   });
 
   it("школьный трек: процент класса, а не курса", async () => {
@@ -207,6 +219,17 @@ describe("TopicTable", () => {
     expect(text()).toContain(`Данные с ${formatDate(dayKey(1))}`);
   });
 
+  it("подсказка «графики станут полнее» — только пока срез короче периода; без «этого обновления» (C42)", async () => {
+    await patch({ skillDays: { [dayKey(1)]: { "ns.bin2dec": { n: 4, s: 3 } } } });
+    await render(createElement(TopicTable));
+    expect(text()).toContain("Графики строятся по дням с заданиями");
+    expect(text()).not.toContain("этого обновления");
+    // Срез покрывает все 30 дней — подпись не нужна.
+    await patch({ skillDays: { [dayKey(35)]: { "ns.bin2dec": { n: 4, s: 3 } }, [dayKey(1)]: { "ns.bin2dec": { n: 4, s: 3 } } } });
+    expect(text()).not.toContain("Графики строятся по дням с заданиями");
+    expect(text()).not.toContain("Данные с");
+  });
+
   it("переключатель 7 / 30 дней: старые дни выпадают из 7-дневного окна", async () => {
     await patch({ skillDays: { [dayKey(10)]: { "ns.bin2dec": { n: 5, s: 5 } } } });
     await render(createElement(TopicTable));
@@ -237,15 +260,33 @@ describe("TopicTable", () => {
 describe("WeakSpotsCard", () => {
   it("данных нет — спокойная подсказка, не «слабых мест нет»", async () => {
     await render(createElement(WeakSpotsCard));
-    expect(text()).toContain("Мало данных — реши хотя бы 3 задания по теме");
+    // Порог — по одному навыку, а не по теме (C25, C41).
+    expect(text()).toContain("Мало данных — реши хотя бы 3 задания на один навык");
+    expect(text()).not.toContain("по теме");
     expect(text()).not.toContain("Слабых мест пока нет");
     expect(host.querySelector(".text-danger")).toBeNull();
   });
 
-  it("ответов мало (2) — всё ещё «мало данных»", async () => {
-    await patch({ skills: { "ns.bin2dec": stat(0.1, { attempts: 2 }) } });
+  it("ответов мало (2), навык не слабый — всё ещё «мало данных»", async () => {
+    await patch({ skills: { "ns.bin2dec": stat(0.9, { attempts: 2 }) } });
     await render(createElement(WeakSpotsCard));
     expect(text()).toContain("Мало данных");
+  });
+
+  it("слабый навык с 2 ответами (диагностика, пара ошибок): нейтральная строка, а не «Мало данных» и не похвала (C21)", async () => {
+    await patch({ skills: { "ns.bin2dec": stat(0.1, { attempts: 2 }) } });
+    await render(createElement(WeakSpotsCard));
+    expect(text()).toContain("Есть темы, где мало ответов — реши ещё пару заданий, и они появятся здесь");
+    expect(text()).not.toContain("Слабых мест пока нет");
+    expect(host.querySelector(".text-danger")).toBeNull();
+  });
+
+  it("есть навык с 5 ответами на 90% и слабый с 2 ответами — не «Слабых мест пока нет, так держать» (C21)", async () => {
+    await patch({ skills: { "ns.base": stat(0.9), "ns.bin2dec": stat(0.14, { attempts: 2 }) } });
+    await render(createElement(WeakSpotsCard));
+    expect(text()).not.toContain("Слабых мест пока нет");
+    expect(text()).not.toContain("Так держать");
+    expect(text()).toContain("мало ответов");
   });
 
   it("данные есть, всё хорошо — «Слабых мест пока нет»", async () => {
@@ -276,6 +317,42 @@ describe("WeakSpotsCard", () => {
   });
 });
 
+describe("WeakTopicsRail (боковая карточка «Слабые места»)", () => {
+  const rows = () => [...host.querySelectorAll("a")].filter((a) => a.getAttribute("href")?.startsWith("/drill"));
+
+  it("цвет строки — по причине: слабая — красная, давно не было практики — нейтральная; рамка карточки не красная (C26)", async () => {
+    await patch({
+      skills: {
+        "ns.bin2dec": stat(0.3),
+        "ns.dec2bin": stat(0.75, { lastSeen: Date.now() - 20 * DAY }),
+      },
+    });
+    await render(createElement(WeakTopicsRail));
+    expect(rows()).toHaveLength(2);
+    const low = rows().find((a) => a.getAttribute("href")!.includes("ns.bin2dec"))!;
+    const stale = rows().find((a) => a.getAttribute("href")!.includes("ns.dec2bin"))!;
+    expect(low.className).toContain("bg-danger-soft");
+    expect(low.className).toContain("text-danger");
+    expect(stale.className).not.toContain("bg-danger-soft");
+    expect(stale.className).not.toContain("text-danger");
+    expect(stale.className).toContain("bg-surface-2");
+    // Под названием — причина, чтобы было понятно, почему навык в списке.
+    expect(low.textContent).toContain("Низкая оценка");
+    expect(stale.textContent).toContain("Давно не было практики");
+    expect(host.querySelector('[class*="border-danger"]')).toBeNull();
+  });
+
+  it("точность упала за неделю — янтарная строка", async () => {
+    await patch({
+      skills: { "ns.bin2dec": stat(0.7) },
+      skillDays: { [dayKey(2)]: { "ns.bin2dec": { n: 4, s: 1 } }, [dayKey(9)]: { "ns.bin2dec": { n: 4, s: 4 } } },
+    });
+    await render(createElement(WeakTopicsRail));
+    expect(rows()[0].className).toContain("bg-warning-soft");
+    expect(rows()[0].className).not.toContain("bg-danger-soft");
+  });
+});
+
 describe("SkillsMasteryCard (правило «освоено», #67)", () => {
   it("высокая оценка без самостоятельных ответов в разные дни — «в процессе» и чего не хватает", async () => {
     await patch({ skills: { "ns.bin2dec": stat(0.9, { clean: 2, okDays: 1 }) } });
@@ -303,7 +380,9 @@ describe("SkillsMasteryCard (правило «освоено», #67)", () => {
     expect(needsText({ clean: 3, days: 0 }, tRu)).toBe("До «освоено»: ещё 3 верных ответа без подсказки");
     expect(needsText({ clean: 4, days: 2 }, tRu)).toBe("До «освоено»: ещё 4 верных ответа без подсказки, в 2 разных днях");
     expect(needsText({ clean: 11, days: 0 }, tRu)).toBe("До «освоено»: ещё 11 верных ответов без подсказки");
-    expect(needsText({ clean: 0, days: 1 }, tRu)).toBe("До «освоено»: в другой день");
+    // Не хватает только дня — с действием, а не просто «в другой день» (C24).
+    expect(needsText({ clean: 0, days: 1 }, tRu)).toBe("До «освоено»: ещё 1 верный ответ без подсказки в другой день");
+    expect(needsText({ clean: 0, days: 2 }, tRu)).toBe("До «освоено»: ещё по 1 верному ответу без подсказки в 2 разных днях");
     expect(needsText({ clean: 0, days: 0 }, tRu)).toBe("");
   });
 });
@@ -338,12 +417,28 @@ describe("страница «Прогресс»", () => {
     });
     await render(createElement(StatsPage));
     expect(text()).toContain("70%");
-    expect(text()).toContain("сам: 7 · с подсказкой: 2 · пропущено: 1");
+    expect(text()).toContain("без подсказки: 7 · с подсказкой: 2 · пропущено: 1");
+    expect(text()).not.toContain("сам:");
+    expect(text()).toContain("за всё время");
     expect(text()).not.toContain("приблизительно");
     expect(text()).toContain("25 мин");
     expect(text()).toContain("активное время");
     expect(text()).toContain("из них игры: 10 мин");
     expect(text()).toContain("действий: 20 · верных: 15");
+  });
+
+  it("старые и новые дни вместе: точность только по новым — «с {дата}», а не «за всё время» (C20)", async () => {
+    await patch({
+      days: {
+        [dayKey(40)]: dayStat({ answers: 800, correct: 480, seconds: 600 }),
+        [dayKey(0)]: dayStat({ asked: 6, score: 6, seconds: 300 }),
+      },
+    });
+    await render(createElement(StatsPage));
+    expect(text()).toContain("100%");
+    expect(text()).toContain(`Точность · с ${formatDate(dayKey(0))}`);
+    expect(text()).not.toContain("за всё время");
+    expect(text()).toContain("без подсказки: 6 · с подсказкой: 0 · пропущено: 0");
   });
 
   it("только старые дни — «приблизительно: старые дни», без разбивки", async () => {

@@ -3,20 +3,18 @@
 import { Crosshair } from "lucide-react";
 import { useMemo } from "react";
 import { skillById } from "@/content/skills";
-import { hasEnoughData, weakSpots, type WeakReason } from "@/lib/progress";
+import { MIN_ANSWERS, hasEnoughData, pendingWeakCount, weakSpots } from "@/lib/progress";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
-import type { DictKey } from "@/i18n/dict";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { useNow } from "@/components/economy/useEconomy";
 import { DataSince } from "./DataSince";
 import { percent } from "./format";
+import { REASON_KEY, REASON_TONE } from "./weak-tone";
 
-/** Причина → тон по смыслу: слабая тема — danger, точность упала — warning, давность — нейтрально. */
-export const REASON_TONE: Record<WeakReason, "danger" | "warning" | "muted"> = { low: "danger", fell: "warning", stale: "muted" };
-const REASON_KEY: Record<WeakReason, DictKey> = { low: "progress.weak.low", fell: "progress.weak.fell", stale: "progress.weak.stale" };
+export { REASON_TONE };
 
 /**
  * «Слабые места» (#71): до 5 навыков с низкой оценкой, упавшей точностью или давней практикой.
@@ -29,6 +27,8 @@ export function WeakSpotsCard({ limit = 5, className }: { limit?: number; classN
   const now = useNow();
   const spots = useMemo(() => weakSpots({ skills, skillDays, now }, limit), [skills, skillDays, now, limit]);
   const enough = hasEnoughData(skills);
+  // Слабые навыки, по которым ответов ещё меньше порога: говорить «слабых мест нет» нельзя (C21).
+  const pending = useMemo(() => pendingWeakCount(skills), [skills]);
 
   return (
     <Card className={className}>
@@ -44,8 +44,14 @@ export function WeakSpotsCard({ limit = 5, className }: { limit?: number; classN
 
       {spots.length === 0 ? (
         <div>
-          <p className="font-extrabold">{t(enough ? "progress.weak.empty" : "progress.weak.fewData")}</p>
-          {enough && <p className="text-sm font-semibold text-muted">{t("progress.weak.emptyHint")}</p>}
+          {pending > 0 ? (
+            <p className="font-bold text-muted">{t("progress.weak.pending")}</p>
+          ) : (
+            <>
+              <p className="font-extrabold">{enough ? t("progress.weak.empty") : t("progress.weak.fewData", { n: MIN_ANSWERS })}</p>
+              {enough && <p className="text-sm font-semibold text-muted">{t("progress.weak.emptyHint")}</p>}
+            </>
+          )}
         </div>
       ) : (
         <ul className="flex flex-col gap-3">

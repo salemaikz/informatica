@@ -25,6 +25,14 @@ function BottomBar({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * Что диагностика меняет в профиле про раздел «Старт»: только включает пропуск (по основам было достаточно заданий
+ * и они знакомы) и никогда не выключает — выбор ученика в профиле повторное прохождение не отменяет (C32).
+ */
+export function basicsPatch(res: Pick<DiagnosticResult, "basicsItems" | "skipBasics">): { skipBasics: true } | undefined {
+  return res.basicsItems >= BASICS_MIN_ITEMS && res.skipBasics ? { skipBasics: true } : undefined;
+}
+
+/**
  * Входная диагностика (#70), полноэкранный маршрут /diagnostic (вне оболочки приложения, как /plans и /onboarding).
  * 10 заданий ЕНТ «один верный», ответ не раскрывается, без сердечек, XP и подсказок. Итог — предварительный прогноз
  * диапазоном и слабые темы. Не пробник: `recordDiagnostic`, а не `recordExam` — ни истории, ни серии, ни XP.
@@ -44,9 +52,13 @@ export function DiagnosticScreen() {
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   /** Защита от двойного нажатия на последнем вопросе: итог записываем один раз. */
   const finished = useRef(false);
+  /** Защита от двойного нажатия «Дальше»: уход (и показ тарифов) — один раз. Отдельно от `finished`: на экране итога он уже true. */
+  const left = useRef(false);
 
   /** Дальше по маршруту: после онбординга — окно тарифов, иначе — на «Учиться». */
   const leave = () => {
+    if (left.current) return;
+    left.current = true;
     if (fromOnboarding) {
       useApp.getState().notePaywallShown();
       router.replace("/plans?from=onboarding");
@@ -84,8 +96,7 @@ export function DiagnosticScreen() {
     }
     finished.current = true;
     const res = scoreDiagnostic(paper, next, Date.now());
-    // «Старт» скрываем только когда по основам было достаточно заданий; иначе профиль не трогаем.
-    recordDiagnostic(res.summary, res.skillAnswers, res.basicsItems >= BASICS_MIN_ITEMS ? { skipBasics: res.skipBasics } : undefined);
+    recordDiagnostic(res.summary, res.skillAnswers, basicsPatch(res));
     track({ e: "diag", done: 1, pct: pct(res.summary.max > 0 ? res.summary.points / res.summary.max : 0) });
     setResult(res);
     setPhase("result");
@@ -147,7 +158,7 @@ export function DiagnosticScreen() {
       {phase === "result" && result && data && (
         <div className="flex flex-1 flex-col pt-4">
           <h1 className="sr-only">{t("diag.result.title")}</h1>
-          <DiagnosticResultView result={result} ready={data.ready} />
+          <DiagnosticResultView result={result} ready={data.ready} fromOnboarding={fromOnboarding} />
         </div>
       )}
 

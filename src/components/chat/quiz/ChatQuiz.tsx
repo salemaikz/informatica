@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnswerRecord, EntTopicId, QuestionStep } from "@/lib/types";
 import type { QuizSummary } from "@/lib/chats";
 import { evaluate, isReady, type Answer, type StepResult } from "@/lib/evaluate";
+import { activeMs } from "@/lib/active-clock";
 import { xpForAnswer } from "@/lib/gamification";
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { useApp } from "@/lib/store";
@@ -81,10 +82,10 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const stepStartedAt = useRef(0);
   const finished = useRef(false);
 
-  // Отсчёт времени первого задания — с момента, когда набор заданий готов.
+  // Отсчёт времени первого задания — с момента, когда набор заданий готов. Время активное (#68), как в уроке: вкладка в фоне не считается.
   const ready0 = !!steps;
   useEffect(() => {
-    stepStartedAt.current = Date.now();
+    stepStartedAt.current = activeMs();
   }, [ready0]);
 
   const step = steps?.[idx];
@@ -99,7 +100,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       const res = evaluate(step, a, lang);
       const newCombo = nextCombo(combo, res.correct);
       const gained = xpForAnswer(res.correct, false, newCombo);
-      const rec = answerRecord(step, res, lang, Date.now() - stepStartedAt.current);
+      const rec = answerRecord(step, res, lang, Math.max(0, activeMs() - stepStartedAt.current));
       recordAnswer(rec, gained);
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);
@@ -131,7 +132,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       setAnswer(null);
       setResult(null);
       setPhase("answering");
-      stepStartedAt.current = Date.now();
+      stepStartedAt.current = activeMs();
       return;
     }
     if (finished.current) return;

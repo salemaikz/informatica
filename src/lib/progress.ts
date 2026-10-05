@@ -11,7 +11,7 @@ import { SKILLS } from "@/content/skills";
 import type { SchoolGradePlan } from "@/content/school-program";
 import { daysAccuracy, type DaysAccuracy } from "./accuracy";
 import { hasBank as bankExists } from "./drill";
-import { MASTERED_FROM, WEAK_BELOW, type SkillStat } from "./mastery";
+import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "./mastery";
 import type { LessonsDone } from "./school";
 import type { SkillDays } from "./skill-days";
 import type { DayStat } from "./store";
@@ -51,7 +51,7 @@ export interface CourseProgress {
 }
 
 export interface ProgressOptions {
-  /** Основы знакомы: раздел «Старт» скрыт — из счёта исключается целиком (иначе 100% недостижимо). */
+  /** Основы знакомы: раздел «Старт» можно пропустить — из счёта исключается целиком (иначе 100% недостижимо); на карте он остаётся. */
   skipBasics?: boolean;
   /** Карта курса (для тестов). По умолчанию UNITS. */
   units?: readonly Unit[];
@@ -237,7 +237,9 @@ export type TopicLevel = "none" | "weak" | "progress" | "mastered";
 
 /**
  * Освоение темы — как на «Карте ЕНТ» (components/learn/map.ts → topicMastery): value — среднее по всем навыкам темы
- * (не тронутые — 0); none — попыток нет; weak — среднее по тронутым < WEAK_BELOW; mastered — value ≥ MASTERED_FROM.
+ * (не тронутые — 0); none — попыток нет; weak — среднее по тронутым < WEAK_BELOW; mastered — value ≥ MASTERED_FROM
+ * И каждый навык темы «освоен» по правилу #67 (4 верных без подсказки в 2 разных днях): три ответа подряд за один присест
+ * тему не «осваивают».
  */
 function topicMasteryOf(topic: EntTopicId, skills: Record<string, SkillStat>): { value: number; level: TopicLevel } {
   const ids = SKILLS.filter((s) => s.ent === topic).map((s) => s.id);
@@ -246,7 +248,8 @@ function topicMasteryOf(topic: EntTopicId, skills: Record<string, SkillStat>): {
   if (!touched.length) return { value, level: "none" };
   const touchedAvg = touched.reduce((a, id) => a + num(skills[id].mastery), 0) / touched.length;
   if (touchedAvg < WEAK_BELOW) return { value, level: "weak" };
-  return { value, level: value >= MASTERED_FROM ? "mastered" : "progress" };
+  const allMastered = ids.every((id) => masteryLevel(skills[id]) === "mastered");
+  return { value, level: value >= MASTERED_FROM && allMastered ? "mastered" : "progress" };
 }
 
 function avgMastery(ids: string[], skills: Record<string, SkillStat>): number {
@@ -418,6 +421,16 @@ export function drillHref(skill: string, hasBank: (skill: string) => boolean = b
 /** Хватает ли данных, чтобы говорить о слабых местах: хотя бы по одному навыку — MIN_ANSWERS ответов. */
 export function hasEnoughData(skills: Record<string, SkillStat>): boolean {
   return Object.entries(skills ?? {}).some(([id, s]) => TOPIC_OF.has(id) && num(s?.attempts) >= MIN_ANSWERS);
+}
+
+/**
+ * Слабые навыки (оценка < WEAK_BELOW), по которым ответов меньше MIN_ANSWERS: в «Слабые места» они ещё не попадают,
+ * но сказать «слабых мест нет» нельзя (диагностика, пара ошибок подряд). Для нейтральной подсказки на карточке.
+ */
+export function pendingWeakCount(skills: Record<string, SkillStat>): number {
+  return Object.entries(skills ?? {}).filter(
+    ([id, s]) => TOPIC_OF.has(id) && num(s?.attempts) > 0 && num(s.attempts) < MIN_ANSWERS && masteryLevel(s) === "weak",
+  ).length;
 }
 
 /**
