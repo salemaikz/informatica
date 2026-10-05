@@ -2,6 +2,7 @@
 
 import { ImagePlus, Send, Square, X } from "lucide-react";
 import type { DictKey } from "@/i18n/dict";
+import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import { AiCost } from "@/components/economy/AiCost";
 import { VoiceButton } from "./voice/VoiceButton";
@@ -19,6 +20,7 @@ export function Composer({
   onAttach,
   onVoiceText,
   onVoiceError,
+  className,
 }: {
   draft: string;
   onDraft: (v: string) => void;
@@ -31,11 +33,16 @@ export function Composer({
   onAttach: () => void;
   onVoiceText: (text: string) => void;
   onVoiceError: (key: DictKey) => void;
+  /** Переопределения классов формы (в панели Бита поле не «прилипает» к низу страницы). */
+  className?: string;
 }) {
   const { t } = useT();
   return (
     <form
-      className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-2 rounded-3xl border-2 border-border bg-surface p-2 shadow-lg focus-within:border-ai/40 lg:bottom-4"
+      className={cn(
+        "sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-2 rounded-3xl border-2 border-border bg-surface p-2 shadow-lg focus-within:border-ai/40 lg:bottom-4",
+        className,
+      )}
       onSubmit={(e) => {
         e.preventDefault();
         onSend();

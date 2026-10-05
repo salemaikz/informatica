@@ -3,15 +3,17 @@
 import dynamic from "next/dynamic";
 import { ArrowLeft, Ellipsis, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { deleteMessages, loadMessages, saveMessages } from "@/lib/chat-store";
 import { autoTitle, MAX_MESSAGES, type ChatMsg, type QuizSummary } from "@/lib/chats";
 import { canRetryAiError } from "@/lib/ai-errors";
+import { cn } from "@/lib/cn";
 import { compressImage } from "@/lib/image";
 import { useApp } from "@/lib/store";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { useTutor } from "@/components/ai/useTutor";
+import { Mascot } from "@/components/mascot/Mascot";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { ChatEmpty } from "./ChatEmpty";
@@ -37,8 +39,22 @@ const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toStrin
 /** Состояние «Дай задачи» в ленте: off — скрыто, объект — запущено (key меняется при новом запуске). */
 type QuizState = "off" | { key: number };
 
-/** Экран одного чата: шапка, лента, поле ввода. Монтировать с key={id}. */
-export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: string }) {
+/**
+ * Экран одного чата: шапка, лента, поле ввода. Монтировать с key={id}.
+ * embedded — внутри панели Бита (components/guide/BitChatPanel): высота задаёт панель, лента прокручивается сама,
+ * поле ввода внизу, без кнопки «назад» и меню «⋯»; actions — кнопки панели справа в шапке.
+ */
+export function ChatScreen({
+  id,
+  initialDraft,
+  embedded,
+  actions,
+}: {
+  id: string;
+  initialDraft?: string;
+  embedded?: boolean;
+  actions?: ReactNode;
+}) {
   const { t, lang } = useT();
   const router = useRouter();
   const chat = useApp((s) => s.chats.find((c) => c.id === id));
@@ -92,6 +108,8 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
   }, [chat?.mode]);
 
   if (!chat) {
+    // В панели Бита исчезнувший чат (удалили) подменяет сама панель — здесь пусто.
+    if (embedded) return null;
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <p className="text-xl font-extrabold">{t("chat2.notFound")}</p>
@@ -200,16 +218,23 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
   const empty = messages !== null && list.length === 0 && pending === null && !quizShown;
 
   return (
-    <div className="flex min-h-[calc(100dvh-12rem)] min-w-0 flex-col gap-4 lg:min-h-[calc(100dvh-5rem)]">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2 lg:hidden"
-          aria-label={t("chat2.back")}
-        >
-          <ArrowLeft size={22} />
-        </button>
+    <div className={cn("flex min-w-0 flex-col gap-4", embedded ? "h-full min-h-0" : "min-h-[calc(100dvh-12rem)] lg:min-h-[calc(100dvh-5rem)]")}>
+      <div className="flex shrink-0 items-center gap-2">
+        {!embedded && (
+          <button
+            type="button"
+            onClick={goBack}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2 lg:hidden"
+            aria-label={t("chat2.back")}
+          >
+            <ArrowLeft size={22} />
+          </button>
+        )}
+        {embedded && (
+          <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ai-soft">
+            <Mascot size={32} className="pointer-events-none" />
+          </span>
+        )}
         <button
           type="button"
           onClick={() => openManage("rename")}
@@ -226,17 +251,20 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
             </span>
           </span>
         </button>
-        <button
-          type="button"
-          onClick={() => openManage("actions")}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-ai"
-          aria-label={t("chat2.menu.open")}
-        >
-          <Ellipsis size={22} />
-        </button>
+        {!embedded && (
+          <button
+            type="button"
+            onClick={() => openManage("actions")}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-ai"
+            aria-label={t("chat2.menu.open")}
+          >
+            <Ellipsis size={22} />
+          </button>
+        )}
+        {actions}
       </div>
 
-      <div className="flex flex-1 flex-col gap-3">
+      <div className={cn("flex flex-1 flex-col gap-3", embedded && "min-h-0 overflow-y-auto overscroll-contain")}>
         {messages === null && <p className="py-10 text-center font-bold text-muted">{t("common.loading")}</p>}
         {empty && (
           <ChatEmpty
@@ -309,6 +337,7 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
           setDraft((d) => (d.trim() ? `${d.trim()} ${text}` : text));
         }}
         onVoiceError={setVoiceError}
+        className={embedded ? "static shrink-0 shadow-none" : undefined}
       />
       <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />

@@ -17,8 +17,9 @@ describe("groupOf", () => {
     ["/history", "practice"],
     ["/history/xyz", "practice"],
     ["/game/bet", "practice"],
-    ["/tutor", "tutor"],
-    ["/tutor/chat/1", "tutor"],
+    // ИИ-чат — плавающий Бит, не вкладка: /tutor работает, но вне групп навигации (ни одна вкладка не подсвечена).
+    ["/tutor", null],
+    ["/tutor/chat/1", null],
     ["/materials", "materials"],
     ["/notes", "materials"],
     ["/notes/abc", "materials"],
@@ -76,8 +77,15 @@ describe("hubGroup (где показывать SectionTabs)", () => {
 });
 
 describe("конфигурация", () => {
-  it("пять групп в нужном порядке", () => {
-    expect(NAV_GROUPS.map((g) => g.id)).toEqual(["learn", "practice", "tutor", "materials", "progress"]);
+  it("четыре группы в нужном порядке (без «ИИ-чата»)", () => {
+    expect(NAV_GROUPS.map((g) => g.id)).toEqual(["learn", "practice", "materials", "progress"]);
+  });
+  it("в навигации нет ссылки на /tutor и фиолетовых групп", () => {
+    for (const g of NAV_GROUPS) {
+      expect(g.href).not.toMatch(/^\/tutor/);
+      expect(g.match.some((m) => m.startsWith("/tutor"))).toBe(false);
+      expect(g.ai).toBeFalsy();
+    }
   });
   it("подразделы в нужном порядке", () => {
     const ids = (g: string) => NAV_GROUPS.find((x) => x.id === g)!.subs.map((s) => s.id);

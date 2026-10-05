@@ -123,6 +123,8 @@ export interface Profile {
   vibration: boolean;
   /** Меньше анимаций (плюс системная настройка prefers-reduced-motion). */
   reduceMotion: boolean;
+  /** Плавающая кнопка Бита спрятана за край (остался язычок) — этап 16В. */
+  bitHidden: boolean;
   /** Последний выбранный темп мини-игр. */
   gameMode: GameMode;
   createdAt: number;
@@ -446,6 +448,7 @@ export const defaultProfile: Profile = {
   sound: true,
   vibration: true,
   reduceMotion: false,
+  bitHidden: false,
   gameMode: "calm",
   createdAt: 0,
   avatar: { kind: "initial", color: "primary" },
@@ -643,6 +646,7 @@ function cleanProfile(raw: unknown): Profile {
     sound: bool(p.sound, d.sound),
     vibration: bool(p.vibration, d.vibration),
     reduceMotion: bool(p.reduceMotion, d.reduceMotion),
+    bitHidden: bool(p.bitHidden, d.bitHidden),
     gameMode: pick(p.gameMode, GAME_MODES, d.gameMode),
     createdAt: isNum(p.createdAt) && p.createdAt >= 0 ? p.createdAt : d.createdAt,
     avatar: sanitizeAvatar(p.avatar),

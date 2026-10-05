@@ -22,6 +22,8 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 import { SectionTabs, SubLink } from "./SectionTabs";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { BreakReasonCard } from "@/components/issue/BreakReasonCard";
+import { BitDock } from "@/components/guide/BitDock";
+import { dockVisible } from "@/lib/dock";
 
 /** Аватар ученика из профиля (буква, рисованный или фото). */
 function ProfileAvatar({ size = 36 }: { size?: number }) {
@@ -139,7 +141,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+        <div className={clsx("mx-auto flex max-w-6xl gap-8 px-4 pt-5 sm:px-6 lg:pb-12 lg:pt-8", dockVisible(pathname) ? "pb-40" : "pb-28")}>
           <main className={clsx("mx-auto w-full min-w-0 flex-1", wide ? "max-w-5xl" : "max-w-2xl")}>
             <SectionTabs />
             {/* «Что помешало?» после перерыва от 3 дней — только на «Учиться» и только при включённом сборе статистики (#69). */}
@@ -165,10 +167,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Телефон: нижняя навигация. Подсветка активной вкладки — одна «таблетка», которая скользит между вкладками. */}
         <nav aria-label={t("nav2.mainNav")} className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
-          <div className="relative mx-auto grid max-w-2xl grid-cols-5">
+          <div className="relative mx-auto grid max-w-2xl grid-cols-4">
             <m.span
               aria-hidden
-              className="pointer-events-none absolute left-0 top-[7px] flex w-1/5 justify-center"
+              className="pointer-events-none absolute left-0 top-[7px] flex w-1/4 justify-center"
               initial={false}
               animate={{ x: `${Math.max(activeIndex, 0) * 100}%`, opacity: activeIndex >= 0 ? 1 : 0 }}
               transition={{ type: "spring", stiffness: 520, damping: 34 }}
@@ -199,6 +201,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
           </div>
         </nav>
+
+        {/* Плавающая кнопка Бита (ИИ-чат): только на главных страницах, сама решает, когда спрятаться. */}
+        <BitDock />
       </div>
     </div>
   );

@@ -58,9 +58,9 @@ test("навигация: группы, подразделы, шпаргалка
   await page.setViewportSize({ width: 360, height: 740 });
   await seed(page);
   await page.goto("/practice");
-  // Нижняя панель — пять групп; строка подразделов видна на главной странице подраздела.
+  // Нижняя панель — четыре группы (ИИ-чат — плавающий Бит); строка подразделов видна на главной странице подраздела.
   const bottom = page.getByRole("navigation", { name: "Главное меню" });
-  await expect(bottom.getByRole("link")).toHaveCount(5);
+  await expect(bottom.getByRole("link")).toHaveCount(4);
   const tabs = page.getByRole("navigation", { name: "Подразделы" });
   await expect(tabs.getByRole("link", { name: "Пробный ЕНТ" })).toBeVisible();
   await tabs.getByRole("link", { name: "Пробный ЕНТ" }).click();
