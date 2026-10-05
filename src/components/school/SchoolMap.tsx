@@ -1,6 +1,6 @@
 "use client";
 
-import { Target } from "lucide-react";
+import { Link2, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { UNITS } from "@/content/course";
 import { schoolPlan } from "@/content/school-program";
@@ -14,6 +14,7 @@ import { GradeProgressCard } from "./GradeProgressCard";
 import { SchoolSectionCard } from "./SchoolSectionCard";
 
 // Карта школьного трека: выбор класса 5–11, прогресс класса, разделы программы с темами.
+// Прогресс общий с картой ЕНТ (те же `lessons` стора, см. lib/school.ts) — под картой об этом одна строка.
 
 export function SchoolMap() {
   const { t } = useT();
@@ -58,6 +59,10 @@ export function SchoolMap() {
               />
             ))}
           </div>
+          <p className="flex items-start justify-center gap-1.5 text-center text-xs font-bold text-muted">
+            <Link2 size={14} aria-hidden className="mt-px shrink-0" />
+            <span>{t("school.progress.shared")}</span>
+          </p>
           <p className="text-center text-xs font-semibold text-muted">{t("school.source")}</p>
         </>
       )}

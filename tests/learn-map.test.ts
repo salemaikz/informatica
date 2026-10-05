@@ -74,6 +74,18 @@ describe("рекомендуемый урок и состояния узлов",
     expect(isDue(stat({ completions: 0, dueAt: NOW - 1 }), NOW)).toBe(false);
   });
 
+  it("мусорные completions (0, −1, NaN) нигде на карте не считаются прохождением — то же определение, что у школьной карты", () => {
+    for (const completions of [0, -1, Number.NaN]) {
+      const stats = { a1: stat({ completions, dueAt: NOW - 1 }) };
+      expect(recommendedLesson(units, stats)?.ref.id, String(completions)).toBe("a1");
+      expect(nodeState(units[0].lessons[0], stats.a1, "a1", NOW), String(completions)).toBe("recommended");
+      expect(isDue(stats.a1, NOW), String(completions)).toBe(false);
+      expect(unitProgress(units[0], stats).done, String(completions)).toBe(0);
+      // a1 не пройден, a2 пройден: экстерн по a1 всё ещё имеет смысл
+      expect(canExtern(units[0], { a1: stats.a1, a2: stat() }), String(completions)).toBe(true);
+    }
+  });
+
   it("прогресс раздела и экстерн", () => {
     expect(unitProgress(units[0], { a1: stat() })).toEqual({ done: 1, ready: 2, total: 3 });
     expect(canExtern(units[0], { a1: stat() })).toBe(true);
