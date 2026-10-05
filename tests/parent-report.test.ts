@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import { SKILLS } from "@/content/skills";
 import { dayTotals, lastDays } from "@/lib/progress";
-import { courseViewOf } from "@/lib/course-view";
+import { UNITS, getLesson } from "@/content/course";
+import { schoolPlan } from "@/content/school-program";
 import { forecastScore } from "@/lib/forecast";
 import { linkFits, packData, reportLink, unpackData } from "@/lib/hash-pack";
-import { buildParentReport, cleanName, parseParentReport, type ParentReport, type ReportInput } from "@/lib/parent-report";
+import { cleanName, parseParentReport, TOPIC_NO_DATA, type ParentReport } from "@/lib/parent-report";
+import { buildParentReport, type ReportInput } from "@/lib/parent-report-build";
 import { defaultProfile, type DayStat, type ExamSummary } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 
@@ -65,7 +67,7 @@ describe("buildParentReport", () => {
       [key(7)]: day({ lessons: 4 }),
       [key(29)]: day({ lessons: 1 }),
       [key(30)]: day({ lessons: 9 }),
-      [key(3)]: { xp: 0, answers: 0, correct: 0, seconds: 30 }, // не активный: ни XP, ни ответов
+      [key(3)]: { xp: 0, answers: 0, correct: 0, seconds: 30 }, // не активный: ни XP, ни ответов, меньше минуты
     };
     const r = buildParentReport({ ...empty, days }, NOW);
     expect(r.d7.active).toBe(2);
@@ -75,6 +77,22 @@ describe("buildParentReport", () => {
     expect(r.d7.min).toBe(Math.round(totals.seconds / 60));
     expect(r.d7.acc).toBe(Math.round((totals.accuracy.value ?? 0) * 100));
     expect(r.d7.acc).toBe(80);
+  });
+
+  it("день с заметным временем (теория, наставник) или играми — день с занятиями; минуты и дни согласованы", () => {
+    const days = {
+      [key(1)]: { xp: 0, answers: 0, correct: 0, seconds: 1800 }, // теория / наставник: только секунды
+      [key(2)]: { xp: 0, answers: 0, correct: 0, seconds: 0, games: 5 }, // только игра
+      [key(3)]: { xp: 0, answers: 0, correct: 0, seconds: 59 }, // случайные секунды — не день
+      [key(4)]: { xp: 0, answers: 0, correct: 0, seconds: 60 }, // ровно минута — день
+    };
+    const r = buildParentReport({ ...empty, days }, NOW);
+    expect(r.d7.active).toBe(3);
+    expect(r.d30.active).toBe(3);
+    expect(r.d7.min).toBeGreaterThan(0);
+    // «0 дней при ненулевом времени» невозможно: время ≥ 60 с в одном дне всегда делает его активным
+    const only = buildParentReport({ ...empty, days: { [key(1)]: { xp: 0, answers: 0, correct: 0, seconds: 2400 } } }, NOW);
+    expect(only.d7).toMatchObject({ active: 1, min: 40 });
   });
 
   it("недельная точность: нет ответов за неделю — null, даже если они были раньше", () => {
@@ -89,15 +107,67 @@ describe("buildParentReport", () => {
     expect(buildParentReport({ ...empty, streak: dead }, NOW).streak).toEqual({ cur: 0, best: 12 });
   });
 
-  it("курс: процент как courseViewOf", () => {
-    const lessons = { "base.computer": { completions: 1 } } as never;
-    const state = { ...empty, lessons };
-    const v = courseViewOf({ lessons, track: "ent", grade: empty.profile.grade, skipBasics: false });
-    const r = buildParentReport(state, NOW);
-    expect(r.course.done).toBe(v.done);
-    expect(r.course.total).toBe(v.total);
-    expect(r.course.pct).toBe(Math.round(v.ratio * 100));
-    expect(r.course.grade).toBeUndefined();
+  describe("курс — по настоящим урокам карты", () => {
+    const refs = UNITS.flatMap((u) => u.lessons.map((ref) => ({ unit: u.id, ref }))).filter((x) => x.ref.status === "available" && !!getLesson(x.ref.id));
+    const done = (ids: string[]) => Object.fromEntries(ids.map((id) => [id, { completions: 1 }])) as never;
+
+    it("ЕНТ: пройдено 3 урока → done/total/pct считаются от готовых уроков", () => {
+      const three = refs.slice(0, 3).map((x) => x.ref.id);
+      expect(three).toHaveLength(3);
+      const r = buildParentReport({ ...empty, lessons: done(three) }, NOW);
+      expect(r.course.done).toBe(3);
+      expect(r.course.total).toBe(refs.length);
+      expect(r.course.pct).toBe(Math.round((3 / refs.length) * 100));
+      expect(r.course.grade).toBeUndefined();
+    });
+
+    it("ЕНТ с «основы знакомы»: раздел «Старт» не входит в total, его уроки не засчитываются", () => {
+      const start = refs.filter((x) => x.unit === "u0").map((x) => x.ref.id);
+      expect(start.length).toBeGreaterThan(0);
+      const profile = { ...empty.profile, skipBasics: true };
+      const r = buildParentReport({ ...empty, profile, lessons: done(start) }, NOW);
+      expect(r.course.done).toBe(0);
+      expect(r.course.total).toBe(refs.length - start.length);
+      expect(r.course.pct).toBe(0);
+    });
+
+    it("несуществующий id (id навыка вместо урока) не засчитывается", () => {
+      const r = buildParentReport({ ...empty, lessons: done(["base.computer"]) }, NOW);
+      expect(r.course.done).toBe(0);
+    });
+
+    it("школьник: уроки программы класса, total — уникальные уроки плана", () => {
+      const plan = schoolPlan("8")!;
+      const ids = [...new Set(plan.sections.flatMap((s) => s.topics.flatMap((t) => t.lessonIds)))];
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+      const profile = { ...empty.profile, track: "school" as const, grade: "8" as const };
+      const r = buildParentReport({ ...empty, profile, lessons: done(ids.slice(0, 2)) }, NOW);
+      expect(r.course).toEqual({ pct: Math.round((2 / ids.length) * 100), done: 2, total: ids.length, grade: "8" });
+    });
+
+    it("класс «другое» у школьника — как курс ЕНТ, без поля grade", () => {
+      const profile = { ...empty.profile, track: "school" as const, grade: "other" as never };
+      const r = buildParentReport({ ...empty, profile }, NOW);
+      expect(r.course.grade).toBeUndefined();
+      expect(r.course.total).toBe(refs.length);
+    });
+  });
+
+  it("диагностика 10/10 только по t03–t07: остальные темы — «нет данных», ни одна не «освоена»", () => {
+    const some = ["t03", "t04", "t05", "t06", "t07"];
+    const byTopic = Object.fromEntries(some.map((t) => [t, { points: 2, max: 2 }]));
+    const diagnostic = { at: NOW, points: 10, max: 10, byTopic };
+    const r = buildParentReport({ ...empty, profile: { ...empty.profile, diagnostic } }, NOW);
+    const topics = r.ent!.topics;
+    ENT_TOPICS.forEach((tp, i) => {
+      if (some.includes(tp.id)) {
+        expect(topics[i]).toBeGreaterThan(0);
+        expect(topics[i]).toBeLessThan(80); // диагностика не делает тему освоенной (#70)
+      } else expect(topics[i]).toBe(TOPIC_NO_DATA);
+    });
+    expect(topics.every((x) => x < 80)).toBe(true);
+    // и ссылка принимает «нет данных»
+    expect(parseParentReport(JSON.parse(JSON.stringify(r)))?.ent?.topics).toEqual(topics);
   });
 
   it("диагностика без пробников и ответов → basis diagnostic, у тем есть значения", () => {

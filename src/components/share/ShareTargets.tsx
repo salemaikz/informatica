@@ -94,6 +94,7 @@ export function ShareTargets({
         {status.kind === "copied" ? t("share.targets.copied") : t("share.targets.copy")}
       </Button>
       <div role="status" className="min-h-5 text-center text-sm font-bold">
+        {status.kind === "copied" && <span className="sr-only">{t("share.targets.copied")}</span>}
         {status.kind === "shared" && <span className="text-success-strong">{t("share.targets.shared")}</span>}
         {status.kind === "failed" && <span className="text-danger">{t("share.targets.failed")}</span>}
       </div>

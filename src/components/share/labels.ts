@@ -52,7 +52,8 @@ export function metaTexts(r: ShareResult): PageTexts {
     case "exam":
       return {
         title: tr(lang, "share.og.exam.title", { kind: examKindLabel(lang, r.kind), score: scoreText(lang, r.points, r.max) }),
-        description: tr(lang, "share.og.exam.desc"),
+        // Максимум — «Сможешь так же?»: больше не бывает.
+        description: tr(lang, r.points >= r.max ? "share.og.exam.descMax" : "share.og.exam.desc"),
       };
     case "course": {
       const p = sharePercent(r.done, r.total);
@@ -78,7 +79,8 @@ export function messageText(r: ShareResult, mode: MessageMode = "result"): strin
   switch (r.t) {
     case "exam": {
       const params = { kind: examKindLabel(lang, r.kind), score: scoreText(lang, r.points, r.max) };
-      return tr(lang, mode === "challenge" ? "share.msg.challenge" : "share.msg.exam", params);
+      if (mode === "result") return tr(lang, "share.msg.exam", params);
+      return tr(lang, r.points >= r.max ? "share.msg.challengeMax" : "share.msg.challenge", params);
     }
     case "course": {
       const p = sharePercent(r.done, r.total);

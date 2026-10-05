@@ -60,6 +60,10 @@ export const shareDict = {
     ru: "У меня {score} в «{kind}». Пройди этот же вариант — сможешь больше?",
     kk: "Менде «{kind}» бойынша {score}. Дәл осы нұсқаны шешіп көр — көбірек жинай аласың ба?",
   },
+  "share.msg.challengeMax": {
+    ru: "У меня {score} в «{kind}» — максимум. Пройди этот же вариант — сможешь так же?",
+    kk: "Менде «{kind}» бойынша {score} — ең жоғары балл. Дәл осы нұсқаны шешіп көр — сен де сонша жинай аласың ба?",
+  },
   "share.msg.course": { ru: "{p}% курса подготовки к ЕНТ в Informatica уже позади.", kk: "Informatica-да ҰБТ-ға дайындық курсының {p}%-ы өтілді." },
   "share.msg.class": { ru: "{p}% программы {g} класса в Informatica уже позади.", kk: "Informatica-да {g}-сынып бағдарламасының {p}%-ы өтілді." },
   "share.msg.streak": { ru: "Серия в Informatica — {n} {days}!", kk: "Informatica-дағы серия — {n} {days}!" },
@@ -67,6 +71,7 @@ export const shareDict = {
   // Страница результата /r/<код>
   "share.land.exam.eyebrow": { ru: "Результат друга в пробном ЕНТ", kk: "Достың сынақ ҰБТ-дағы нәтижесі" },
   "share.land.exam.text": { ru: "Сможешь больше? Пройди этот же вариант.", kk: "Көбірек жинай аласың ба? Дәл осы нұсқаны шешіп көр." },
+  "share.land.exam.textMax": { ru: "Сможешь так же? Пройди этот же вариант.", kk: "Сен де сонша жинай аласың ба? Дәл осы нұсқаны шешіп көр." },
   "share.land.course.eyebrow": { ru: "Прогресс друга", kk: "Достың прогресі" },
   "share.land.streak.eyebrow": { ru: "Серия друга", kk: "Достың сериясы" },
   "share.land.cta.accept": { ru: "Пройти этот же вариант", kk: "Дәл осы нұсқаны шешу" },
@@ -79,6 +84,7 @@ export const shareDict = {
   // Превью ссылки (читает сервер по языку из кода): заголовок и описание
   "share.og.exam.title": { ru: "{kind}: {score}", kk: "{kind}: {score}" },
   "share.og.exam.desc": { ru: "Сможешь больше? Пройди этот же вариант в Informatica.", kk: "Көбірек жинай аласың ба? Informatica-да дәл осы нұсқаны шешіп көр." },
+  "share.og.exam.descMax": { ru: "Сможешь так же? Пройди этот же вариант в Informatica.", kk: "Сен де сонша жинай аласың ба? Informatica-да дәл осы нұсқаны шешіп көр." },
   "share.og.course.title": { ru: "Пройдено {p}% курса подготовки к ЕНТ", kk: "ҰБТ-ға дайындық курсының {p}%-ы өтілді" },
   "share.og.class.title": { ru: "Пройдено {p}% программы {g} класса", kk: "{g}-сынып бағдарламасының {p}%-ы өтілді" },
   "share.og.course.desc": { ru: "{done} из {total} уроков в Informatica. Занимайся вместе!", kk: "Informatica-дағы сабақтар: {done} / {total}. Бірге дайындалайық!" },

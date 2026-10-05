@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ENT_POOL } from "@/content/ent";
-import { compareWithChallenge, decodeChallenge, encodeChallenge, poolTag, sanitizeChallenge, withChallenge } from "@/lib/challenge";
+import { compareWithChallenge, decodeChallenge, encodeChallenge, poolTag, samePool, sanitizeChallenge, UNKNOWN_POOL, withChallenge } from "@/lib/challenge";
 import { buildExam, type ExamKind } from "@/lib/exam";
-import { currentPoolTag, EXAM_BUILD_VERSION } from "@/lib/exam-pool";
+import { currentPoolTag, EXAM_BUILD_VERSION, itemSignature } from "@/lib/exam-pool";
 import type { EntTopicId } from "@/lib/types";
 
 describe("вызов: параметр ch", () => {
@@ -53,14 +53,31 @@ describe("тег банка", () => {
 
   it("текущий тег стабилен", () => {
     expect(currentPoolTag()).toMatch(/^[a-z0-9]{4}$/);
-    expect(currentPoolTag()).toBe(poolTag(ENT_POOL.map((i) => i.id), EXAM_BUILD_VERSION));
+    expect(currentPoolTag()).toBe(poolTag(ENT_POOL.map(itemSignature), EXAM_BUILD_VERSION));
+    expect(currentPoolTag()).not.toBe(UNKNOWN_POOL);
+  });
+
+  it("подпись задания меняется от темы, уровня, вида и числа вариантов (C6)", () => {
+    const item = ENT_POOL.find((i) => i.kind === "single")!;
+    const base = itemSignature(item);
+    expect(itemSignature({ ...item, level: item.level === 1 ? 2 : 1 } as never)).not.toBe(base);
+    expect(itemSignature({ ...item, topic: item.topic === "t01" ? "t02" : "t01" } as never)).not.toBe(base);
+    expect(itemSignature({ ...item, options: [...(item as { options: unknown[] }).options, "x"] } as never)).not.toBe(base);
+  });
+
+  it("неизвестный тег (старая попытка) — никогда не «тот же вариант»", () => {
+    expect(samePool(UNKNOWN_POOL, UNKNOWN_POOL)).toBe(false);
+    expect(samePool(undefined, "a9zq")).toBe(false);
+    expect(samePool("a9zq", "a9zq")).toBe(true);
+    expect(compareWithChallenge(14, 19, { s: 14, m: 19, pool: UNKNOWN_POOL }, UNKNOWN_POOL)).toMatchObject({ samePaper: false, outcome: "same" });
+    expect(compareWithChallenge(14, 19, { s: 13, m: 19, pool: "a9zq" }, undefined)).toMatchObject({ samePaper: false, outcome: "more" });
   });
 });
 
 // Сторож EXAM_BUILD_VERSION: тот же seed должен давать тот же вариант, пока тег не поменялся.
 // Банк поменялся (новые задания) — тег другой: обновите RECORDED (тег и отпечаток). Тег прежний, а отпечаток другой —
 // поменялся алгоритм сборки (lib/exam.ts): увеличьте EXAM_BUILD_VERSION в lib/exam-pool.ts и тоже обновите RECORDED.
-const RECORDED = { tag: "mm95", fingerprint: "c8rq" };
+const RECORDED = { tag: "dfy4", fingerprint: "c8rq" };
 
 function fingerprint(): string {
   const cases: [ExamKind, number, EntTopicId[]][] = [

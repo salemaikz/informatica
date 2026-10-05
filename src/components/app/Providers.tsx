@@ -86,17 +86,18 @@ export function Providers({ children }: { children: ReactNode }) {
 
   // Страницы получателя (/r, /report): стор нужен только для языка, поэтому сбой чтения сохранения
   // не прячет страницу за экраном восстановления — он нужен ученику в самом приложении.
-  const recipientFallback = phase === "failed" && isRecipientPath(pathname);
-  if (phase === "failed" && !recipientFallback) {
-    return (
-      <MotionProvider>
-        <RecoveryScreen onRetry={retry} />
-      </MotionProvider>
-    );
+  // Агенты приложения (напоминания, время, статистика, окно тарифов) при этом не монтируются: стор не прочитан,
+  // значения по умолчанию перезаписали бы зеркало напоминаний и включили бы статистику, которую ученик мог выключить.
+  if (phase === "failed") {
+    return <MotionProvider>{isRecipientPath(pathname) ? children : <RecoveryScreen onRetry={retry} />}</MotionProvider>;
   }
-  if ((!hydrated && !recipientFallback) || needsOnboarding) {
+  // Обезличенная статистика (#69): приёмник событий — первым ребёнком в обеих ветках ниже (тот же тип и ключ на том же месте),
+  // чтобы он не размонтировался на время редиректа в онбординг и не выбросил накопленное (вызов друга со страницы /r, #73).
+  const analytics = hydrated ? <AnalyticsAgent key="analytics" /> : null;
+  if (!hydrated || needsOnboarding) {
     return (
       <MotionProvider>
+        {analytics}
         <div className="flex min-h-dvh items-center justify-center">
           <Mascot size={88} className="animate-pulse" />
         </div>
@@ -105,13 +106,13 @@ export function Providers({ children }: { children: ReactNode }) {
   }
   return (
     <MotionProvider>
+      {/* Приёмник статистики — до экранов, чтобы их первые события не терялись. */}
+      {analytics}
       {/* Офлайн: кэш сервис-воркера (только production) и полоса «Нет интернета». */}
       <SwRegister />
       <OfflineBanner />
       {/* Браузер не сохраняет прогресс (приватный режим, память заполнена) — полоса с крестиком. */}
       <StorageBanner />
-      {/* Обезличенная статистика (#69): приёмник событий — до экранов, чтобы их первые события не терялись. */}
-      <AnalyticsAgent />
       {children}
       {/* Инструменты (калькулятор, черновик) — одна панель на всё приложение. */}
       <Toolbox />

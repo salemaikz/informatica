@@ -67,16 +67,26 @@ test("отчёт: ссылка с профиля открывается на ч�
   const nameSwitch = dialog.getByRole("switch", { name: "Показать имя" });
   await expect(nameSwitch).toHaveAttribute("aria-checked", "false");
   const href = await dialog.getByRole("link", { name: "Посмотреть отчёт" }).getAttribute("href");
-  expect(href).toMatch(/\/report#d=[A-Za-z0-9_-]+$/);
+  // «Посмотреть отчёт» — своя ссылка с меткой «me=1» (свой просмотр не считается открытием получателем);
+  // получателю уходит чистая ссылка без метки (её проверяем ниже на чистом устройстве).
+  expect(href).toMatch(/\/report#d=[A-Za-z0-9_-]+&me=1$/);
   expect(href!.length).toBeLessThan(1500);
+  const clean = href!.replace(/&me=1$/, "");
+
+  // Свой просмотр: метка после чтения убирается из адреса, чтобы скопированный адрес был чистым
+  const [preview] = await Promise.all([page.context().waitForEvent("page"), dialog.getByRole("link", { name: "Посмотреть отчёт" }).click()]);
+  await expect(preview.locator("main").getByRole("heading", { name: "Отчёт об успехах" })).toBeVisible();
+  await expect(preview).toHaveURL(/\/report#d=[A-Za-z0-9_-]+$/);
+  await preview.close();
 
   const fresh = await cleanDevice(browser);
   const rp = fresh.page;
   const rErrors: string[] = [];
   rp.on("pageerror", (e) => rErrors.push(e.message));
-  await rp.goto(href!);
+  await rp.goto(clean);
   await expect(rp).toHaveURL(/\/report#d=/); // не ушло на онбординг
   const main = rp.locator("main");
+  await expect(main).toHaveAttribute("lang", "ru"); // язык отчёта — на корне страницы
   await expect(main.getByRole("heading", { name: "Отчёт об успехах" })).toBeVisible();
   await expect(main.getByText("Ученик", { exact: true })).toBeVisible();
   await expect(main.getByText("Айдана")).toHaveCount(0);
@@ -86,6 +96,7 @@ test("отчёт: ссылка с профиля открывается на ч�
   await expect(main.getByText("Точность ответов: 81%")).toBeVisible(); // (7 + 6) / 16
   await expect(main.getByRole("heading", { name: "Прогноз балла по информатике" })).toBeVisible();
   await expect(main.getByRole("heading", { name: "Освоение тем ЕНТ" })).toBeVisible();
+  await expect(main.getByText("нет данных").first()).toBeVisible(); // темы без собственных данных не выглядят освоенными
   await expect(main.getByText("9 из 19")).toBeVisible(); // пробник
   await expect(main.getByText("Данные — только в этой ссылке, у нас они не хранятся.")).toBeVisible();
   expect(await overflow(rp)).toBeLessThanOrEqual(0);
@@ -93,8 +104,10 @@ test("отчёт: ссылка с профиля открывается на ч�
   // Переключатель языка на странице
   await main.getByRole("button", { name: "Қазақша" }).click();
   await expect(main.getByRole("heading", { name: "Үлгерім туралы есеп" })).toBeVisible();
+  await expect(main).toHaveAttribute("lang", "kk");
   await main.getByRole("button", { name: "Русский" }).click();
   await expect(main.getByRole("heading", { name: "Отчёт об успехах" })).toBeVisible();
+  await expect(main).toHaveAttribute("lang", "ru");
 
   // Кнопка «Узнать об Informatica» → главная (у нового устройства — онбординг), но сама ссылка не ушла на сервер
   await expect(main.getByRole("link", { name: "Узнать об Informatica" })).toHaveAttribute("href", "/");
@@ -122,7 +135,7 @@ test("отчёт: «Показать имя» добавляет имя; язы�
   const hrefName = await dialog.getByRole("link", { name: "Есепті қарау" }).getAttribute("href");
 
   const fresh = await cleanDevice(browser);
-  await fresh.page.goto(hrefName!);
+  await fresh.page.goto(hrefName!.replace(/&me=1$/, ""));
   const main = fresh.page.locator("main");
   await expect(main.getByRole("heading", { name: "Үлгерім туралы есеп" })).toBeVisible(); // язык ученика — казахский
   await expect(main.getByText("Айдана")).toBeVisible();
@@ -132,7 +145,7 @@ test("отчёт: «Показать имя» добавляет имя; язы�
   await dialog.getByRole("button", { name: "Русский" }).click();
   await expect.poll(async () => dialog.getByRole("link").first().getAttribute("href")).not.toBe(hrefName);
   const hrefRu = await dialog.getByRole("link").first().getAttribute("href");
-  await fresh.page.goto(hrefRu!);
+  await fresh.page.goto(hrefRu!.replace(/&me=1$/, ""));
   await expect(fresh.page.locator("main").getByRole("heading", { name: "Отчёт об успехах" })).toBeVisible();
   await expect(fresh.page.locator("main").getByText("Айдана")).toBeVisible();
   await fresh.context.close();
@@ -156,6 +169,7 @@ test("отчёт: без имени в профиле переключателя
   await expect(rp.getByRole("link", { name: "Узнать об Informatica" })).toBeVisible();
   await rp.goto("/report");
   await expect(rp.getByText(/нет данных отчёта/)).toBeVisible();
+  await expect(rp.getByText(/Откройте ссылку целиком/)).toBeVisible(); // к родителю — на «вы»
   expect(await overflow(rp)).toBeLessThanOrEqual(0);
 
   // Метаданные: не индексируется, адрес дальше не передаётся

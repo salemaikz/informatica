@@ -3,7 +3,7 @@ import { SKILLS, skillById } from "@/content/skills";
 import { liveMastery, liveSkills } from "@/games/live-mastery";
 import { forecastScore } from "@/lib/forecast";
 import { DECAY_BASE, decaySkills, decayedMastery, masteryLevel, type SkillStat } from "@/lib/mastery";
-import { buildParentReport, type ReportInput } from "@/lib/parent-report";
+import { buildParentReport, type ReportInput } from "@/lib/parent-report-build";
 import { buildStudentContext } from "@/lib/student-context";
 import { tx } from "@/lib/text";
 import { useApp } from "@/lib/store";

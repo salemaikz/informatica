@@ -65,8 +65,13 @@ export function ShareSheet({
     urlRef.current = null;
   }, []);
 
-  // Закрытие страницы: освободить картинку.
-  useEffect(() => release, [release]);
+  // Отмена рисования: поздний ответ выбрасываем (номер запуска) и освобождаем картинку. Нужна и при закрытии окна,
+  // и при уходе со страницы: без этого картинка дорисуется уже после размонтирования и её object URL останется навсегда.
+  const cancel = useCallback(() => {
+    run.current++;
+    release();
+  }, [release]);
+  useEffect(() => cancel, [cancel]);
 
   const onOpen = () => {
     const id = ++run.current;
@@ -106,8 +111,7 @@ export function ShareSheet({
   };
 
   const onClose = () => {
-    run.current++;
-    release();
+    cancel();
     setOpen(false);
     setCard({ status: "none" });
   };
@@ -133,7 +137,7 @@ export function ShareSheet({
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="min-w-0 text-xl font-extrabold">{title}</h2>
-            <Button variant="ghost" size="sm" aria-label={t("common.close")} onClick={onClose} className="shrink-0 px-2">
+            <Button variant="ghost" size="sm" aria-label={t("common.close")} onClick={onClose} className="h-11 w-11 shrink-0 px-0">
               <X size={20} aria-hidden />
             </Button>
           </div>
@@ -146,8 +150,15 @@ export function ShareSheet({
                 // eslint-disable-next-line @next/next/no-img-element -- object URL из canvas, оптимизировать нечего
                 <img src={card.url} alt={t("share.sheet.previewAlt")} className="max-h-[46dvh] w-auto max-w-full rounded-2xl border-2 border-border" />
               ) : (
-                <div className="flex aspect-[9/16] max-h-[46dvh] w-auto items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface-2 px-8 text-center text-sm font-bold text-muted">
-                  {card.status === "failed" ? t("share.sheet.renderFailed") : <Loader2 size={28} className="animate-spin text-primary" aria-label={t("share.sheet.preparing")} />}
+                <div role="status" className="flex aspect-[9/16] max-h-[46dvh] w-auto items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface-2 px-8 text-center text-sm font-bold text-muted">
+                  {card.status === "failed" ? (
+                    t("share.sheet.renderFailed")
+                  ) : (
+                    <>
+                      <Loader2 size={28} className="animate-spin text-primary" aria-hidden />
+                      <span className="sr-only">{t("share.sheet.preparing")}</span>
+                    </>
+                  )}
                 </div>
               )}
               {card.status === "ready" && <p className="text-center text-xs font-bold text-muted">{t("share.sheet.hint")}</p>}

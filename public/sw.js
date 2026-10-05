@@ -14,7 +14,7 @@ var PAGE_TIMEOUT_MS = 4000;
 // Версия воркера в режиме разработки (?mode=notify) только показывает уведомления: кэш dev-чанков (без хэшей) устарел бы сразу.
 var NOTIFY_ONLY = typeof self.location !== "undefined" && /[?&]mode=notify\b/.test(String(self.location.search || ""));
 
-/** Какая стратегия для запроса: "ignore" | "static" (cache-first) | "page" (network-first → кэш → /offline) | "swr" (stale-while-revalidate). */
+/** Какая стратегия для запроса: "ignore" | "static" (cache-first) | "page" (network-first → кэш → /offline) | "swr" (stale-while-revalidate) | "net" (только сеть, при ошибке — /offline, в кэш не пишем). */
 function routeFor(req, origin) {
   if (!req || req.method !== "GET") return "ignore";
   var url;
@@ -30,7 +30,8 @@ function routeFor(req, origin) {
   // Страница владельца (#69) — не кэшируем.
   if (path === "/owner" || path.indexOf("/owner/") === 0) return "ignore";
   // Результат, которым поделились (#72): каждая ссылка /r/<код> уникальна — кэшировать нечего.
-  if (path === "/r" || path.indexOf("/r/") === 0) return "ignore";
+  // Переход на страницу — только сеть, а без сети — «Нет интернета», как на остальных страницах; картинки превью и RSC — мимо.
+  if (path === "/r" || path.indexOf("/r/") === 0) return req.mode === "navigate" ? "net" : "ignore";
   var headers = req.headers && typeof req.headers.get === "function" ? req.headers : null;
   // Запросы с Range (аудио/видео) — мимо: частичные ответы (206) не кэшируются, а полный ответ из кэша ломает перемотку.
   if (headers && headers.get("Range")) return "ignore";
@@ -119,6 +120,15 @@ function pageStrategy(event) {
           });
         });
       });
+    });
+  });
+}
+
+/** Только сеть: ничего не кэшируем, без сети — страница «Нет интернета». */
+function networkOnly(event) {
+  return fetch(event.request).catch(function () {
+    return caches.match(OFFLINE_URL).then(function (off) {
+      return off || Response.error();
     });
   });
 }
@@ -326,7 +336,9 @@ self.addEventListener("fetch", function (event) {
   if (NOTIFY_ONLY) return;
   var route = routeFor(event.request, self.location.origin);
   if (route === "ignore") return;
-  event.respondWith(route === "static" ? cacheFirst(event) : route === "page" ? pageStrategy(event) : staleWhileRevalidate(event));
+  event.respondWith(
+    route === "static" ? cacheFirst(event) : route === "page" ? pageStrategy(event) : route === "net" ? networkOnly(event) : staleWhileRevalidate(event),
+  );
 });
 
 self.addEventListener("periodicsync", function (event) {
