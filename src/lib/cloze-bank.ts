@@ -1,6 +1,7 @@
 // Банк плашек для пропусков со словами (этап 16Б, P5): верные слова текстовых пропусков + отвлекатели шага.
 // Чистая функция без React; порядок детерминирован (одинаковый при каждом рендере и в тестах).
 
+import { normalizeAnswer } from "./check";
 import type { ClozeStep, L } from "./types";
 
 /** Детерминированный хеш строки (FNV-1a). */
@@ -29,7 +30,7 @@ export function clozeBank(step: ClozeStep, lang: "ru" | "kk"): string[] {
   const out: string[] = [];
   for (const item of [...labels, ...(step.bank ?? [])]) {
     const text = item[lang];
-    const key = text.trim().toLowerCase();
+    const key = normalizeAnswer(text, "text");
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(text);

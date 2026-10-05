@@ -45,6 +45,11 @@ describe("resumeTarget", () => {
     expect(resumeTarget(runs, NOW, (id) => id === "y")?.lessonId).toBe("y");
     expect(resumeTarget(runs, NOW, () => false)).toBeNull();
   });
+  it("урок, засчитанный после сохранения, не предлагается", () => {
+    const runs = { x: run("x", { updatedAt: NOW - 500 }) };
+    expect(resumeTarget(runs, NOW, undefined, { x: { firstAt: NOW - 100 } })).toBeNull();
+    expect(resumeTarget(runs, NOW, undefined, { x: { firstAt: NOW - 9000 } })?.lessonId).toBe("x");
+  });
 });
 
 describe("clozeBank", () => {
@@ -70,6 +75,10 @@ describe("clozeBank", () => {
   it("без повторов: верные слова и отвлекатели", () => {
     expect([...clozeBank(step, "ru")].sort()).toEqual(["ввода", "вывода", "памяти"]);
     expect([...clozeBank(step, "kk")].sort()).toEqual(["енгізу", "жады", "шығару"]);
+  });
+  it("повторы с лишними пробелами и точкой — одна плашка", () => {
+    const dup = { ...step, bank: [{ ru: "ввода.", kk: "енгізу" }, { ru: "в вода", kk: "жады" }] } as unknown as ClozeStep;
+    expect(clozeBank(dup, "ru").filter((w) => w.replace(/[\s.]/g, "") === "ввода")).toHaveLength(1);
   });
   it("детерминирован", () => {
     expect(clozeBank(step, "kk")).toEqual(clozeBank(step, "kk"));

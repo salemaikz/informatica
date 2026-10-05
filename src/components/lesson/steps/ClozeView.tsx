@@ -35,6 +35,7 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
   const bank = useMemo(() => clozeBank(step, lang), [step, lang]);
   const isPick = (i: number) => bank.length > 0 && blanks[i].mode === "text" && !!blanks[i].label;
   const pickIdx = blanks.map((_, i) => i).filter(isPick);
+  const lastTyped = blanks.map((_, i) => i).filter((i) => !isPick(i)).pop();
   const currentPick = locked ? undefined : pickIdx.find((i) => !values[i].trim());
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   // Верно ли заполнен пропуск — считаем один раз (после проверки подсвечиваем и подписываем верный ответ).
@@ -105,8 +106,9 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
                   <span key={c} className="relative mx-1 inline-flex">
                     <button
                       type="button"
-                      disabled={locked || !value}
-                      onClick={() => clearPick(index)}
+                      aria-disabled={locked || !value}
+                      aria-current={index === currentPick ? "step" : undefined}
+                      onClick={() => value && clearPick(index)}
                       aria-label={`${t("resume.blankN", { n: index + 1 })}${value ? `: ${value}` : ""}`}
                       className={cn(
                         "min-h-12 min-w-16 rounded-xl border-2 px-3 text-center font-mono font-bold transition-colors",
@@ -140,7 +142,7 @@ export function ClozeView({ step, answer, onAnswer, locked }: StepProps<ClozeSte
                     onChange={(e) => setValue(index, e.target.value)}
                     onKeyDown={(e) => onKeyDown(e, index)}
                     inputMode={blank.mode === "text" ? "text" : "numeric"}
-                    enterKeyHint={index === blanks.length - 1 ? "done" : "next"}
+                    enterKeyHint={index === lastTyped ? "done" : "next"}
                     autoComplete="off"
                     autoCapitalize="off"
                     spellCheck={false}

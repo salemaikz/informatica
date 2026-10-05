@@ -36,12 +36,13 @@ export function SchoolMap() {
   const resume = useMemo(() => {
     if (!plan) return null;
     const ids = new Set(gradeLessonIds(plan));
-    return resumeTarget(lessonRuns, now, (id) => ids.has(id));
-  }, [plan, lessonRuns, now]);
+    return resumeTarget(lessonRuns, now, (id) => ids.has(id), lessons);
+  }, [plan, lessonRuns, now, lessons]);
 
   // Раскрытые разделы: пока ученик ничего не трогал — открыт тот, где следующий урок (иначе первый).
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const defaultOpen = next?.sectionId ?? plan?.sections[0]?.id;
+  const resumeSection = resume ? plan?.sections.find((s) => s.topics.some((tp) => tp.lessonIds.includes(resume.lessonId)))?.id : undefined;
+  const defaultOpen = resumeSection ?? next?.sectionId ?? plan?.sections[0]?.id;
 
   return (
     <div className="flex flex-col gap-4">

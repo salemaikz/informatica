@@ -92,6 +92,7 @@ export function ContinueCard({
           data-tour="continue"
           size="lg"
           block
+          className="h-auto min-h-13 py-2 text-balance leading-tight"
           icon={kind === "due" && !resume ? <RotateCcw size={20} /> : <Play size={20} fill="currentColor" />}
         >
           {cta}

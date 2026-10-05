@@ -59,7 +59,7 @@ export default function LearnPage() {
   const dueTarget = !recommended && due[0] ? findLessonRef(due[0].id) : undefined;
   // Незаконченный урок карты ЕНТ — главнее рекомендации (этап 16Б).
   const lessonRuns = useApp((s) => s.lessonRuns);
-  const resume = useMemo(() => resumeTarget(lessonRuns, now, (id) => !!findLessonRef(id)), [lessonRuns, now]);
+  const resume = useMemo(() => resumeTarget(lessonRuns, now, (id) => !!findLessonRef(id), lessons), [lessonRuns, now, lessons]);
   const resumeRef = resume ? findLessonRef(resume.lessonId) : undefined;
   const hero = resumeRef ?? recommended ?? dueTarget;
   const heroIndex = hero ? (findLessonRef(hero.ref.id)?.unitIndex ?? 0) : 0;

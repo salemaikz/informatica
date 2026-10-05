@@ -43,7 +43,7 @@ export function GradeProgressCard({ grade, progress, nextLessonId, resume }: { g
           <p className="text-xs font-extrabold uppercase tracking-wide text-primary">{resume ? t("resume.label") : t("school.next.label")}</p>
           <p className="font-extrabold leading-snug">{l(next.title)}</p>
           {resume && <p className="text-sm font-bold text-muted">{t("resume.step", { x: resume.step, y: resume.total })}</p>}
-          <ButtonLink href={`/lesson/${goId}`} data-tour="continue" size="lg" block icon={<ArrowRight size={20} />} className="flex-row-reverse">
+          <ButtonLink href={`/lesson/${goId}`} data-tour="continue" size="lg" block icon={<ArrowRight size={20} />} className="h-auto min-h-13 flex-row-reverse py-2 text-balance leading-tight">
             {resume ? t("resume.cta", { title: l(next.title) }) : t("school.next.cta")}
           </ButtonLink>
         </div>
