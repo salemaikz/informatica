@@ -363,3 +363,34 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - `lib/pending-link.ts`: `Providers` перед редиректом на онбординг сохраняет адрес варианта с вызовом (только `/exam/run` с верными `kind`, `seed`, `ch`; адрес пересобирается из разобранных полей; час), онбординг после «Поехали» открывает его вместо диагностики.
 - `lib/public-paths.ts`: `/report` и `/r/*` — без онбординга; `isRecipientPath` — на этих страницах `AnalyticsAgent` не шлёт `active`, а сбой чтения сохранения не показывает экран восстановления. Сервис-воркер не кэширует `/r/`.
 - Статистика (#69): `share {what, how}`, `share_open {what}`, `challenge {step}` → поля `sh:`, `so:`, `chl:`; раздел «Поделиться» на `/owner`.
+
+## v0.13: этап 14 — курс 3.0
+
+### Освоение с затуханием (`lib/mastery.ts`, решение #80)
+- В сторе `skills[id].mastery` — оценка «на момент `lastSeen`». `decayedMastery(stat, now)` = `0,5 + (m − 0,5) · 2^(−дни/30)` для m > 0,5; `decaySkills(stats, now)` — весь набор (тот же объект, если ничего не затухло; `now = 0` — без затухания).
+- Читатели: компоненты — хук `components/progress/useSkillStats.ts` (минутные часы `useMinuteClock`, на сервере 0 → гидратация не расходится); игры — `games/live-mastery.ts` (в обработчиках); `DrillScreen.buildSession`, `lib/student-context.ts`, `lib/parent-report.ts`, `ChatQuiz` — `decaySkills(…, Date.now())` в момент действия.
+- `updateSkill` сдвигает затухшую оценку; `recordGame` в темпе «Спокойно» — вес 0,5. Достижения, запись и миграции — по сохранённой оценке.
+
+### Группы и узлы курса 3.0 (`content/groups.ts`, `lib/course-mix.ts`, `lib/course-nodes.ts`, решение #81)
+- `GROUPS_BY_UNIT` — группы уроков каждого раздела (с названиями ru/kk), `COURSE_GROUPS` — все группы в порядке карты (тест сверяет с `UNITS`). id узлов: `practice:<первый урок группы>` (после не последней группы), `recap:<раздел>`.
+- Сборка (чистые функции): `buildPractice(group)` 12 / `buildRecap(unit)` 15 — доли текущая / 3 предыдущие группы / всё раньше = 50/30/20 (`round(0,3n)`, `round(0,2n)`), из прошлого — только «тронутые» навыки, пустая доля уходит дальше; каждая доля — `buildFromBank` (веса `(1,1 − освоение)²` по затухшему освоению), итог A → C. `buildMiniTest(group)` — 4 single + 1 multi + 1 match из `ENT_POOL` навыков группы, варианты перемешаны (`shuffleEntItem`), без `hint`; `miniTestPoints` — баллы как на ЕНТ.
+- Маршруты: `/drill?mode=practice|minitest&node=practice:<урок>`, `/drill?mode=recap&unit=<раздел>`. Мини-тест — `ENTRY_COST.check` (1 сердечко), `LessonPlayer testMode` (нет подсказки и «Спросить Бита» до ответа, ошибки не повторяются).
+- Прогресс узла — `store.courseNodes` (`runs/best/at`, у практики ещё `testRuns/testBest/testAt` — доля баллов мини-теста); `recordCourseNode` в `DrillScreen.onSessionFinish`. В «% курса» не входит.
+- Карта: `map.ts` — `unitPathItems(unit)` (уроки + узлы), `pathPassed` (практика не рвёт дорогу, если её уроки пройдены), `unitNodeStates` (один «рекомендуется» на раздел); `PracticeNode`, `PracticeSheet` (лист с «Начать практику» / «Мини-тест» / «Начать повторение»).
+
+### Награда по длине (`lib/gamification.ts`, решение #83)
+- `SessionResult.planned` (шагов-вопросов в сессии) и `micro` ставит `LessonPlayer`; `rewardFactor(result)`: урок — 0,6 у микроурока, иначе 1; тренировка — `lengthFactor(planned)` (≤ 5 → 0,6, ≥ 10 → 1,5), но 1,5 только у `practice`/`recap`. Множитель — к бонусу XP за прохождение и к чипам урока.
+
+### Микроуроки (решение #82)
+- `Lesson.micro: true`: 9–12 шагов, 4–6 заданий (≥ 1 с `ent`), 3–5 минут, навык — общий с родительским уроком (своего банка и файла ЕНТ нет). Нормы — `scripts/check-content.ts` и `tests/micro-lessons.test.ts`.
+
+### Формат ЕНТ в уроках (`lib/ent-boss.ts`, решение #84)
+- Шаг `EntMatchStep` (`type: "entmatch"`, 2 пункта × 4 описания, `answer` — 2 индекса), ответ `{type:"entmatch", picks}`, оценка `matchPoints` → 1 / 0,5 / 0; вид — `steps/EntMatchView.tsx`.
+- `withEntBoss(lesson)` (в `LessonScreen` для «Учиться», «Проверить себя» и «Продолжить»): нет `entmatch` → одно «соответствие» из банка урока, нет multi на 6 с `ent` → одно «несколько верных»; выбор — минимум `hash(урок|задание)` (устойчив к пополнению банка), варианты — `shuffleEntItem(item, hash(урок))`; вставка — после последнего задания ЕНТ; микроурок — без изменений. `lib/lesson-size.ts` — «N шагов» на карте без загрузки банка.
+- `ent:<id>` на «соответствие» без номера пункта → `entmatch` (`entMatchStep`); `shuffleOptions` (работа над ошибками) перемешивает и `entmatch`. Реестр шагов статистики (`server/analytics-ids.ts`) строится по `withEntBoss(lesson).steps`.
+
+### Практикум (решение #85)
+- «Стоп»: `stopPython()` / `stopJs()` завершают текущий запуск с `stopped: true` и выводом до остановки, отменяют очередь; следующий запуск пересоздаёт воркер.
+- Шаг `CodeStep` (`type: "code"`, `task` — id задачи `lib/ide/python/tasks.ts`): `steps/CodeStepView.tsx` (ленивая загрузка) → `CodeStepInner.tsx`: «Проверить код» (`checkPython` с `PY_FORBID`), повторные проверки, «Показать решение»; итог — `onAnswer({type:"code", ok, tries, code}, {submit:true})`; оценка 1 / 0,5 / 0; кнопка «Проверить» плеера у шага скрыта, «Пропустить» — есть; в конце урока не повторяется.
+- Сцена `code` с `run: true` (только Python) — `components/ide/python/RunPanel.tsx`: «Запустить», поле ввода (если программа читает `input()`), вывод, «Стоп».
+- Контекстные задания: `lib/context-drill.ts` (`contextItems`, `buildContextDrill` — 5 шагов `ent:<id>:<n>` со сценой `run`), страница `/code/context` (`components/ide/ContextHub.tsx`), режим `/drill?mode=context&item=<id>`.
