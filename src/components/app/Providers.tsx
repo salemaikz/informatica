@@ -3,7 +3,8 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
-import { isPublicPath } from "@/lib/public-paths";
+import { isPublicPath, isRecipientPath } from "@/lib/public-paths";
+import { savePendingLink } from "@/lib/pending-link";
 import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
@@ -77,17 +78,23 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [reduceMotion]);
 
   useEffect(() => {
-    if (needsOnboarding) router.replace("/onboarding");
-  }, [needsOnboarding, router]);
+    if (!needsOnboarding) return;
+    // Вызов друга (#73): ссылку запоминаем до онбординга — после него откроем сразу её (только /exam/run с валидным ch).
+    savePendingLink(pathname + window.location.search, Date.now());
+    router.replace("/onboarding");
+  }, [needsOnboarding, router, pathname]);
 
-  if (phase === "failed") {
+  // Страницы получателя (/r, /report): стор нужен только для языка, поэтому сбой чтения сохранения
+  // не прячет страницу за экраном восстановления — он нужен ученику в самом приложении.
+  const recipientFallback = phase === "failed" && isRecipientPath(pathname);
+  if (phase === "failed" && !recipientFallback) {
     return (
       <MotionProvider>
         <RecoveryScreen onRetry={retry} />
       </MotionProvider>
     );
   }
-  if (!hydrated || needsOnboarding) {
+  if ((!hydrated && !recipientFallback) || needsOnboarding) {
     return (
       <MotionProvider>
         <div className="flex min-h-dvh items-center justify-center">

@@ -20,6 +20,7 @@ import {
   type ExamQuestion,
 } from "@/lib/exam";
 import { ENT_TOPICS } from "@/content/ent-topics";
+import { decodeChallenge, withChallenge, type Challenge } from "@/lib/challenge";
 import type { ExamSummary } from "@/lib/store";
 import { plain, tx } from "@/lib/text";
 import type { EntTopicId, Lang, Lesson, Text } from "@/lib/types";
@@ -55,6 +56,8 @@ export interface RunParams {
   topics: EntTopicId[];
   /** Для kind = "unit": id раздела. */
   unit?: string;
+  /** Вызов друга из `ch` (#73); нет (или kind = "unit") — поля нет, чтобы старые сравнения результата не менялись. */
+  challenge?: Challenge;
 }
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -81,15 +84,17 @@ export function parseRunParams(sp: Record<string, string | string[] | undefined>
   const unit = kind === "unit" && rawUnit && UNIT_ID.test(rawUnit) ? rawUnit : undefined;
   // Контрольная без раздела — не вариант: экран продолжит начатую попытку или уведёт в хаб.
   if (kind === "unit" && !unit) return null;
-  return { kind: kind as ExamKind, seed: Number.isInteger(n) && n < 2 ** 32 ? n : null, topics, unit };
+  const challenge = kind === "unit" ? null : decodeChallenge(first(sp.ch));
+  return { kind: kind as ExamKind, seed: Number.isInteger(n) && n < 2 ** 32 ? n : null, topics, unit, ...(challenge ? { challenge } : {}) };
 }
 
-/** Относительная ссылка на вариант. */
-export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = [], unit?: string): string {
+/** Относительная ссылка на вариант; с `challenge` — вызов другу (#73), у контрольной раздела вызова нет. */
+export function examLink(kind: ExamKind, seed: number, topics: EntTopicId[] = [], unit?: string, challenge?: Challenge): string {
   const q = new URLSearchParams({ kind, seed: String(seed >>> 0) });
   if (kind === "topic" && topics.length) q.set("topics", topics.join(","));
   if (kind === "unit" && unit) q.set("unit", unit);
-  return `/exam/run?${q.toString()}`;
+  const link = `/exam/run?${q.toString()}`;
+  return challenge && kind !== "unit" ? withChallenge(link, challenge) : link;
 }
 
 /** Выбор тем чипами: включить/выключить, не больше MAX_TOPIC_PICK (лишний выбор игнорируется). */

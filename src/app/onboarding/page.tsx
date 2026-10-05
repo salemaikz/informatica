@@ -10,6 +10,7 @@ import { toSchoolGrade } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import { markLangChosen } from "@/lib/guest-lang";
 import { requestPersistentStorage } from "@/lib/safe-storage";
+import { takePendingLink } from "@/lib/pending-link";
 import { cn } from "@/lib/cn";
 import { todayKey } from "@/lib/text";
 import { useT } from "@/i18n/useT";
@@ -130,6 +131,13 @@ export default function OnboardingPage() {
     track({ e: "onb_done", track: trackNow });
     // Просим браузер не стирать данные сайта — из нажатия кнопки, иначе Firefox на компьютере покажет окно «из ниоткуда».
     requestPersistentStorage();
+    // Пришли по вызову друга (#73): сразу на его вариант — диагностику и тарифы можно пройти позже.
+    // Для школьного трека тоже: /exam/run сам покажет карточку «для ЕНТ» с переключением.
+    const pending = takePendingLink(new Date().getTime());
+    if (pending) {
+      router.replace(pending);
+      return;
+    }
     if (ent) {
       // ЕНТ: сначала входная диагностика (окно тарифов — после неё или её пропуска).
       router.replace("/diagnostic?from=onboarding");
