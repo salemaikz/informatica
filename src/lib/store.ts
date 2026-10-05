@@ -15,7 +15,8 @@ import type {
   Theme,
   Track,
 } from "./types";
-import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
+import { bumpStreak, lengthFactor, levelInfo, XP, type Streak } from "./gamification";
+import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
@@ -270,6 +271,8 @@ export interface AppState {
   chats: ChatMeta[];
   /** Практикум кода: решённые задачи (lib/ide/types.ts). */
   codeTasks: Record<string, CodeTaskStat>;
+  /** Узлы курса 3.0 (этап 14): «practice:<урок>» / «recap:<раздел>» → прохождения и мини-тест (lib/course-nodes.ts). */
+  courseNodes: Record<string, CourseNodeStat>;
 }
 
 /** Итог урока/тренировки для экрана результатов. */
@@ -340,6 +343,8 @@ export interface AppActions {
   payEntry: (cost: number) => { ok: boolean; paid: number; view: HeartsView };
   /** Сохранить незаконченный урок (плеер — после каждого шага). */
   saveLessonRun: (run: LessonRun) => void;
+  /** Узел курса 3.0 пройден (практика, повторение) или сдан мини-тест группы — точность 0..1. */
+  recordCourseNode: (nodeId: string, run: CourseNodeRun, accuracy: number) => void;
   /** Забыть незаконченный урок («Начать заново»; пройденный урок забывается сам в finishSession). */
   clearLessonRun: (lessonId: string) => void;
   /**
@@ -441,6 +446,7 @@ const initialState: AppState = {
   history: [],
   chats: [],
   codeTasks: {},
+  courseNodes: {},
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -648,6 +654,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     // #67: у старых навыков нет clean и дней — migrateSkillStat переводит их на новое правило (и проверяет данные).
     skills: cleanSkills(p.skills),
     paywall: sanitizePaywall(p.paywall),
+    courseNodes: sanitizeCourseNodes(p.courseNodes),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
     codeTasks:
@@ -756,7 +763,9 @@ export const useApp = create<AppState & AppActions>()(
         const prev = isLesson ? s.lessons[result.lessonId!] : undefined;
         // Повтор урока даёт меньше XP (плановое повторение — почти полный). Бонус «без ошибок» — за первый раз.
         const factor = isLesson ? lessonXpFactor(prev, now) : 1;
-        let bonusXp = result.kind === "lesson" ? scaleXp(XP.lessonComplete, factor) : XP.drillComplete;
+        // Награда за прохождение — по длине (этап 14, #46): микроурок меньше, практика и повторение больше.
+        const size = result.planned ? lengthFactor(result.planned) : 1;
+        let bonusXp = result.kind === "lesson" ? scaleXp(Math.round(XP.lessonComplete * size), factor) : Math.round(XP.drillComplete * size);
         if (result.kind === "lesson" && perfect && !prev) bonusXp += XP.perfectLesson;
         // «Проверить себя» — короче урока: бонус за прохождение вдвое меньше.
         if (result.kind === "lesson" && result.via === "check") bonusXp = Math.round(bonusXp / 2);
@@ -797,7 +806,7 @@ export const useApp = create<AppState & AppActions>()(
         // Тренировка возвращает сердечко (не больше PRACTICE_HEART_DAILY раз в день). Экстерн — платный тест (#40), не тренировка.
         let heart = false;
         const tier = tierOf(next, now);
-        if (result.kind === "drill" && result.mode !== "extern" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
+        if (result.kind === "drill" && result.mode !== "extern" && result.mode !== "minitest" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
           const ph = next.practiceHearts.day === today ? next.practiceHearts : { day: today, count: 0 };
           const view = heartsView(next.hearts, tier, now, today);
           if (!view.unlimited && view.count < view.max && practiceHeartsLeft(ph, today) > 0) {
@@ -808,7 +817,7 @@ export const useApp = create<AppState & AppActions>()(
 
         const extra: { base: number; reason: ChipReason }[] = [];
         if (isLesson) {
-          extra.push({ base: CHIP_BONUS.lesson, reason: "lesson" });
+          extra.push({ base: Math.round(CHIP_BONUS.lesson * size), reason: "lesson" });
           if (perfect && !prev) extra.push({ base: CHIP_BONUS.perfect, reason: "perfect" });
         }
         next = settleChips(s, next, extra, now);
@@ -1007,6 +1016,12 @@ export const useApp = create<AppState & AppActions>()(
 
       saveLessonRun: (run) => set((s) => ({ lessonRuns: putRun(s.lessonRuns, run, Date.now()) })),
 
+      recordCourseNode: (nodeId, run, accuracy) =>
+        set((s) => {
+          const cleaned = sanitizeCourseNodes({ [nodeId]: nextNodeStat(s.courseNodes[nodeId], run, accuracy, Date.now()) });
+          return cleaned[nodeId] ? { courseNodes: { ...s.courseNodes, ...cleaned } } : {};
+        }),
+
       clearLessonRun: (lessonId) =>
         set((s) => {
           const lessonRuns = dropRun(s.lessonRuns, lessonId);
@@ -1147,8 +1162,9 @@ export const useApp = create<AppState & AppActions>()(
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
         let skills = s.skills;
-        // Игра — один «ответ» на навык; самостоятельным успехом не считается (#67). «Спокойно» — половина веса: этап 14.
-        for (const [skill, score] of Object.entries(reward.skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score, Date.now(), { day: today }) };
+        // Игра — один «ответ» на навык; самостоятельным успехом не считается (#67). «Спокойно» — половина веса (#45).
+        const weight = mode === "calm" ? 0.5 : 1;
+        for (const [skill, score] of Object.entries(reward.skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score, Date.now(), { day: today, weight }) };
         let next: AppState = {
           ...s,
           xp: s.xp + reward.xp,

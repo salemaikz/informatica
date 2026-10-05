@@ -3,6 +3,7 @@ import { checkInput } from "@/lib/check";
 import { clozeBlanks } from "@/lib/evaluate";
 import { isKnownKey } from "@/components/scenes/keyboard";
 import { VENN_NAME_MAX, isVennRegion } from "@/components/scenes/venn";
+import { TASKS as PY_TASKS } from "@/lib/ide/python/tasks";
 
 const filledL = (l: L) => !!l.ru?.trim() && !!l.kk?.trim();
 const filledText = (t: Text) => (typeof t === "string" ? !!t.trim() : filledL(t));
@@ -51,6 +52,7 @@ export function validateScene(scene: Scene): string[] {
       need((scene.marks ?? []).every((i) => i >= 0 && i < scene.lines.length), "marks вне диапазона");
       need(scene.lines.every((l) => l.length <= 60), "строка длиннее 60 символов (экран телефона)");
       need(scene.lines.every((l) => !l.includes("\t")), "табуляция в коде — используй 4 пробела");
+      need(!scene.run || scene.lang === "python", "кнопка «Запустить» (run) — только у кода на Python");
       break;
     case "circuit": {
       const ids = new Set<string>(scene.inputs);
@@ -272,6 +274,26 @@ export function validateStep(step: Step): string[] {
       need(step.lines.flat().every((t) => (typeof t === "object" && !("blank" in t) ? filledL(t) : true)), "текст ru/kk");
       need(blanks.every((b) => b.width === undefined || b.width > 0), "width > 0");
       need(blanks.every((b) => b.mode !== "binary" || b.blank.every((v) => /^[01]+$/.test(v))), "двоичный пропуск: ответ из 0 и 1");
+      break;
+    }
+    case "entmatch":
+      // «Соответствие» как на ЕНТ (этап 14) — те же правила, что у EntMatch в validateEnt.
+      need(step.items.length === 2, "ровно 2 пункта (A, B)");
+      need(step.choices.length === 4, "ровно 4 описания");
+      need(step.items.every(filledText) && step.choices.every(filledText), "тексты непустые");
+      need(new Set(step.choices.map((o) => JSON.stringify(o))).size === 4, "описания разные");
+      need(step.answer.length === 2 && step.answer.every((a) => Number.isInteger(a) && a >= 0 && a < 4) && step.answer[0] !== step.answer[1], "answer: 2 разных индекса 0..3");
+      need(
+        [...step.items, ...step.choices].every((t) => !/^\s*([A-DА-Г]|\d)[.)]\s/.test(typeof t === "string" ? t : `${t.ru}\n${t.kk}`)),
+        "не пиши «A. »/«1) » в начале пунктов и описаний — буквы и номера ставит экран",
+      );
+      break;
+    case "code": {
+      // Задача практикума на Python с тем же навыком, что у шага (этап 14).
+      const task = PY_TASKS.find((x) => x.id === step.task);
+      need(!!task, `нет задачи практикума ${step.task}`);
+      need(!task || task.lang === "python", "задача с кодом в уроке — только Python");
+      need(!!step.skill, "у задачи с кодом нужен skill");
       break;
     }
   }

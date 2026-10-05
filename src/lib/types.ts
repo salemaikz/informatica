@@ -98,6 +98,11 @@ export type Scene =
       vars?: { name: string; value: string }[];
       output?: string[];
       caption?: Text;
+      /**
+       * Кнопка «Запустить» под кодом (только lang "python", этап 14): ученик может выполнить программу в браузере
+       * со своим вводом. Ставит сборщик сессии (контекстные задания практикума), не автор урока.
+       */
+      run?: boolean;
     }
   /**
    * Логическая схема: входы, вентили (вход вентиля — имя входа или id другого вентиля), выход.
@@ -358,6 +363,38 @@ export interface ClozeStep extends StepBase {
   explanation: L;
 }
 
+/**
+ * «Соответствие» как на ЕНТ (этап 14): два пункта (A, B), четыре описания, у каждого пункта ровно одно верное.
+ * Баллы 2/1/0 (matchPoints в lib/ent.ts) → оценка 1 / 0,5 (частично) / 0.
+ * answer — два разных индекса 0..3 (как в EntMatch). Без «A. », «1) » в начале текстов.
+ */
+export interface EntMatchStep extends StepBase {
+  type: "entmatch";
+  prompt: L;
+  /** Ровно 2 пункта (A, B). */
+  items: Text[];
+  /** Ровно 4 описания. */
+  choices: Text[];
+  /** answer[i] — индекс верного описания для пункта i; два разных индекса 0..3. */
+  answer: number[];
+  explanation: L;
+}
+
+/**
+ * Задача практикума внутри урока (этап 14): ученик пишет программу на Python, код проверяет тестами в браузере.
+ * Условие, начальный код, подсказка и эталон — из задачи практикума (`lib/ide/python/tasks.ts`) по id.
+ * Прошло с первой проверки — 1; со второй и дальше — 0,5 (частично); «Показать решение» — 0.
+ */
+export interface CodeStep extends StepBase {
+  type: "code";
+  /** id задачи практикума на Python («py-3-parity»). Навык шага = навык урока; у задачи — тот же или близкий. */
+  task: string;
+  /** Короткая вводная к задаче в контексте урока (условие покажется из задачи). */
+  prompt: L;
+  /** Разбор после ответа (что важно в эталоне). */
+  explanation: L;
+}
+
 export type QuestionStep =
   | ChoiceStep
   | MultiStep
@@ -367,7 +404,9 @@ export type QuestionStep =
   | MatchStep
   | OrderStep
   | SolutionStep
-  | ClozeStep;
+  | ClozeStep
+  | EntMatchStep
+  | CodeStep;
 
 export type Step = VideoStep | TheoryStep | StoryStep | WorkedStep | ExploreStep | QuestionStep;
 
@@ -392,6 +431,11 @@ export interface Lesson {
   entTopics?: EntTopicId[];
   /** Большой урок: вход стоит 2 сердечка (#40). Нет поля — 1. */
   hearts?: 2;
+  /**
+   * Микроурок (этап 14, #46): одна маленькая часть сложного навыка (if → if-else → elif). 9–12 шагов, 4–6 заданий,
+   * 3–5 минут. Навык — общий с «родительским» уроком цепочки: свой банк и задания ЕНТ не нужны.
+   */
+  micro?: true;
 }
 
 export interface LessonRef {
@@ -532,6 +576,8 @@ export interface SessionResult {
   hinted?: number;
   /** Режим тренировки (DrillMode) — для истории тестов. */
   mode?: string;
+  /** Сколько заданий в сессии по плану (шаги-вопросы, этап 14): награда за прохождение — по длине. Нет — обычная. */
+  planned?: number;
 }
 
 /** Класс ученика. 5–7 — для школьной программы (решение #33). */

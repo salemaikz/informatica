@@ -15,6 +15,7 @@ import { activeMs } from "@/lib/active-clock";
 import { track } from "@/lib/analytics";
 import { finishEvent, playerHeartsWhere, quitEvent, sessionTotals, skipRecord, startEvent, taskEvent } from "@/lib/player-events";
 import { getLesson } from "@/content/course";
+import { isEntRef } from "@/lib/ent-steps";
 import { scaleXp } from "@/lib/review";
 import { formatFactor } from "@/lib/drill";
 // В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
@@ -53,6 +54,8 @@ import { MatchView } from "./steps/MatchView";
 import { OrderView } from "./steps/OrderView";
 import { SolutionView } from "./steps/SolutionView";
 import { ClozeView } from "./steps/ClozeView";
+import { EntMatchView } from "./steps/EntMatchView";
+import { CodeStepView } from "./steps/CodeStepView";
 import { ExploreView } from "./steps/ExploreView";
 import { StoryView } from "./steps/StoryView";
 import { WorkedView } from "./steps/WorkedView";
@@ -116,6 +119,10 @@ function QuestionView(props: StepProps<QuestionStep>) {
       return <SolutionView {...props} step={step} />;
     case "cloze":
       return <ClozeView {...props} step={step} />;
+    case "entmatch":
+      return <EntMatchView {...props} step={step} />;
+    case "code":
+      return <CodeStepView {...props} step={step} />;
   }
 }
 
@@ -288,10 +295,11 @@ export function LessonPlayer({
   // Активное время на текущее задание, мс.
   const stepMs = useCallback(() => Math.max(0, activeMs() - stepClockAt.current), []);
   // Шаги самого урока: события `task` ставим только по ним (у заданий банка id разные при каждом запуске).
+  // Задания ЕНТ, вставленные в урок кодом (ссылки ent:…, этап 14), тоже стабильны — их считаем вместе с шагами урока.
   const stableSteps = useMemo(() => {
     const lesson = kind === "lesson" && lessonId ? getLesson(lessonId) : undefined;
-    return lesson ? new Set(lesson.steps.map((x) => x.id)) : null;
-  }, [kind, lessonId]);
+    return lesson ? new Set([...lesson.steps.map((x) => x.id), ...steps.filter((x) => isEntRef(x.id)).map((x) => x.id)]) : null;
+  }, [kind, lessonId, steps]);
 
   const finish = useCallback(
     (finalRecords: AnswerRecord[], finalXp: number, finalMaxCombo: number) => {
@@ -308,6 +316,8 @@ export function LessonPlayer({
         durationSec: Math.round(lessonMs() / 1000),
         ...totals,
         mode,
+        // Плановая длина (заданий в сессии) — награда за прохождение по длине (этап 14).
+        planned: steps.filter(isQuestion).length,
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp, heart } = finishSession(result);
@@ -320,7 +330,7 @@ export function LessonPlayer({
       setSession({ result, bonusXp, achievements, chips, heart });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, via, mode, title, onSessionFinish, earnedAtStart, lessonMs],
+    [finishSession, kind, lessonId, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
   );
 
   // Снимок прохождения в стор (#41). Вызывается из обработчиков с уже посчитанными значениями: setState асинхронный.
@@ -947,7 +957,8 @@ export function LessonPlayer({
                 {/* Открыть разбор бесплатно (whyWrong / объяснение задания); цена — на кнопке «Подробнее от Бита» в шторке. */}
               </Button>
             )}
-            {phase === "answering" && question?.type === "solution" && (
+            {/* Решение по фото и задачу с кодом можно пропустить (нет камеры, Python не загрузился) — счёт 0 (#66). */}
+            {phase === "answering" && (question?.type === "solution" || question?.type === "code") && (
               <Button variant="ghost" onClick={skip}>
                 {t("common.skip")}
               </Button>

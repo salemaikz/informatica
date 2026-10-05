@@ -84,10 +84,13 @@ describe("entStepFromRef", () => {
     expect(step.explanation.ru).toBe("e2 ru");
   });
 
+  it("match без n → entmatch целиком: 2 пункта, 4 описания, ключ ответа (этап 14)", () => {
+    expect(entStepFromRef("ent:demo:match", POOL)).toMatchObject({ id: "ent:demo:match", type: "entmatch", items: match.items, choices: match.choices, answer: match.answer, ent: true, skill: match.skill });
+  });
+
   it("неизвестная ссылка, чужой префикс, нет n, n вне диапазона → undefined", () => {
     expect(entStepFromRef("ent:nope", POOL)).toBeUndefined();
     expect(entStepFromRef("demo:single", POOL)).toBeUndefined();
-    expect(entStepFromRef("ent:demo:match", POOL)).toBeUndefined();
     expect(entStepFromRef("ent:demo:ctx", POOL)).toBeUndefined();
     expect(entStepFromRef("ent:demo:match:2", POOL)).toBeUndefined();
     expect(entStepFromRef("ent:demo:ctx:3", POOL)).toBeUndefined();

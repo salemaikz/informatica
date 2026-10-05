@@ -95,3 +95,29 @@ describe("cloze: expectedText / promptText", () => {
     expect(promptText(step, "kk")).toBe("13-ті екілік жүйеге көшір");
   });
 });
+
+describe("entmatch и code (этап 14)", () => {
+  const em = {
+    id: "e1",
+    type: "entmatch" as const,
+    prompt: { ru: "Сопоставь", kk: "Сәйкестендір" },
+    items: ["A1", "B1"],
+    choices: ["c0", "c1", "c2", "c3"],
+    answer: [2, 0],
+    explanation: { ru: "x", kk: "x" },
+  };
+  it("2 пункта — верно, 1 — частично 0,5, 0 — неверно; готовность — оба выбраны", () => {
+    expect(isReady(em, { type: "entmatch", picks: [2, null] })).toBe(false);
+    expect(isReady(em, { type: "entmatch", picks: [2, 1] })).toBe(true);
+    expect(evaluate(em, { type: "entmatch", picks: [2, 0] }, "ru")).toMatchObject({ correct: true, score: 1 });
+    expect(evaluate(em, { type: "entmatch", picks: [2, 3] }, "ru")).toMatchObject({ correct: false, score: 0.5, partial: true });
+    expect(evaluate(em, { type: "entmatch", picks: [1, 3] }, "ru")).toMatchObject({ correct: false, score: 0 });
+    expect(expectedText(em, "ru")).toBe("A — c2; B — c0");
+  });
+  const code = { id: "c1", type: "code" as const, task: "py-3-parity", prompt: { ru: "Реши", kk: "Шеш" }, explanation: { ru: "x", kk: "x" } };
+  it("код: с первой проверки — 1, позже — 0,5, решение не найдено — 0", () => {
+    expect(evaluate(code, { type: "code", ok: true, tries: 1, code: "" }, "ru")).toMatchObject({ correct: true, score: 1 });
+    expect(evaluate(code, { type: "code", ok: true, tries: 3, code: "" }, "ru")).toMatchObject({ correct: false, score: 0.5, partial: true });
+    expect(evaluate(code, { type: "code", ok: false, tries: 2, code: "" }, "kk")).toMatchObject({ correct: false, score: 0 });
+  });
+});

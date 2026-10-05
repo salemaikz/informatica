@@ -25,6 +25,10 @@ import {
   unitById,
   type DrillMode,
 } from "@/lib/drill";
+import { decaySkills } from "@/lib/mastery";
+import { buildMiniTest, buildPractice, buildRecap } from "@/lib/course-mix";
+import { buildContextDrill } from "@/lib/context-drill";
+import { groupOfPracticeNode, recapNodeId } from "@/content/groups";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
@@ -43,11 +47,36 @@ interface Built {
   missing?: boolean;
 }
 
+interface Params {
+  skill?: string;
+  unit?: string;
+  topic?: string;
+  entry?: string;
+  /** Узел «Практика» (practice:<урок>) — режимы practice и minitest. */
+  node?: string;
+  /** Контекстное задание практикума — режим context. */
+  item?: string;
+}
+
 /** Собирает набор заданий для тренировки один раз при открытии экрана. */
-function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic?: string; entry?: string }): Built {
-  const s = useApp.getState();
+function buildSession(mode: DrillMode, p: Params): Built {
+  const st = useApp.getState();
   const seed = Date.now();
+  // Освоение с затуханием (#45): слабые и давно не тренированные навыки выпадают чаще.
+  const s = { ...st, skills: decaySkills(st.skills, seed) };
   switch (mode) {
+    case "practice": {
+      const group = p.node ? groupOfPracticeNode(p.node) : undefined;
+      return { steps: group ? buildPractice(group, s.lessons, s.skills, seed) : [] };
+    }
+    case "minitest": {
+      const group = p.node ? groupOfPracticeNode(p.node) : undefined;
+      return { steps: group ? buildMiniTest(group, seed) : [] };
+    }
+    case "recap":
+      return { steps: unitById(p.unit) ? buildRecap(p.unit!, s.lessons, s.skills, seed) : [] };
+    case "context":
+      return { steps: p.item ? buildContextDrill(p.item) : [] };
     case "mistakes": {
       const { steps, map } = buildMistakes(s.mistakes, s.skills, seed);
       return { steps, mistakeMap: map };
@@ -80,17 +109,23 @@ function buildSession(mode: DrillMode, p: { skill?: string; unit?: string; topic
 
 type ExternOutcome = { passed: true; accuracy: number; credited: number } | { passed: false; accuracy: number; lessonId?: string };
 
-export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMode; skill?: string; unit?: string; topic?: string; entry?: string }) {
+export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { mode: DrillMode } & Params) {
   const { t, l } = useT();
-  const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry }));
+  const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item }));
+  const recordCourseNode = useApp((s) => s.recordCourseNode);
   const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
   const completeLessons = useApp((s) => s.completeLessons);
   const markReviewed = useApp((s) => s.markReviewed);
   // Экстерн стоит 2 сердечка (#40): не хватает на входе — «сердечки закончились» (#69). Пустой набор экран не открывает — события нет.
   useHeartsOutOnEntry(mode === "extern" && session.steps.length ? ENTRY_COST.extern : 0, "extern");
+  // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14). Практика и повторение — бесплатно (#40).
+  useHeartsOutOnEntry(mode === "minitest" && session.steps.length ? ENTRY_COST.check : 0, "check");
 
   const onSessionFinish = useCallback(
     (result: SessionResult) => {
+      // Узлы курса 3.0 (этап 14): прохождение практики, повторения и мини-теста — на карту.
+      if ((mode === "practice" || mode === "minitest") && node && groupOfPracticeNode(node)) recordCourseNode(node, mode, result.accuracy);
+      if (mode === "recap" && unitById(unit)) recordCourseNode(recapNodeId(unit!), "recap", result.accuracy);
       if (mode === "review" && session.reviewLessons?.length) {
         // Точность считаем по заданиям навыков каждого урока: стор сдвинет расписание повторения.
         for (const [id, acc] of Object.entries(lessonAccuracies(result.answers, session.reviewLessons))) markReviewed([id], acc);
@@ -105,10 +140,11 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
         }
       }
     },
-    [mode, unit, session, completeLessons, markReviewed],
+    [mode, unit, node, session, completeLessons, markReviewed, recordCourseNode],
   );
 
   const externUnit = unitById(unit);
+  const nodeGroup = node ? groupOfPracticeNode(node) : undefined;
   const topicShort = mode === "topic" && topic && ENT_TOPICS.some((x) => x.id === topic) ? l(entTopicById(topic as EntTopicId).short) : "";
   const title =
     mode === "mistakes" || mode === "history"
@@ -119,6 +155,14 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
           ? t("modes.review.title")
           : mode === "extern" && externUnit
             ? t("modes.extern.title", { unit: l(externUnit.title) })
+            : mode === "practice" && nodeGroup
+              ? t("course3.practice.title", { group: l(nodeGroup.title) })
+              : mode === "minitest" && nodeGroup
+                ? t("course3.minitest.title", { group: l(nodeGroup.title) })
+                : mode === "recap" && externUnit
+                  ? t("course3.recap.title", { unit: l(externUnit.title) })
+                  : mode === "context"
+                    ? t("iderun.context.title")
             : mode === "topic"
               ? t("modes.topic.title", { topic: topicShort })
               : t("prac.smart");
@@ -135,9 +179,14 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
                 : t("history.redo.none")
               : mode === "extern"
                 ? t("modes.extern.none")
-                : t("modes.empty")}
+                : mode === "practice" || mode === "minitest" || mode === "recap"
+                  ? t("course3.empty")
+                  : t("modes.empty")}
         </p>
-        <ButtonLink href={mode === "extern" ? "/learn" : mode === "history" ? "/history" : "/practice"} variant="secondary">
+        <ButtonLink
+          href={mode === "extern" || mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : "/practice"}
+          variant="secondary"
+        >
           {t("common.back")}
         </ButtonLink>
       </div>
@@ -178,8 +227,10 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
     );
   }
 
-  // Экстерн стоит 2 сердечка (#40): плеер спишет при первом ответе, на входе проверяем, что хватает. Остальные режимы — бесплатно.
-  const paid = mode === "extern";
+  // Экстерн стоит 2 сердечка (#40), мини-тест — 1 (этап 14): плеер спишет при первом ответе, на входе проверяем, что хватает.
+  // Остальные режимы — бесплатно.
+  const cost = mode === "extern" ? ENTRY_COST.extern : mode === "minitest" ? ENTRY_COST.check : 0;
+  const paid = cost > 0;
   const player = (
     <LessonPlayer
       kind="drill"
@@ -189,11 +240,11 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
       mistakeMap={session.mistakeMap}
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
-      entryCost={paid ? ENTRY_COST.extern : undefined}
+      entryCost={paid ? cost : undefined}
     />
   );
   return paid ? (
-    <EntryGate need={ENTRY_COST.extern} exitHref="/learn">
+    <EntryGate need={cost} exitHref="/learn">
       {player}
     </EntryGate>
   ) : (

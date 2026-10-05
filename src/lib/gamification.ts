@@ -12,6 +12,18 @@ export const XP = {
   drillComplete: 10,
 } as const;
 
+/**
+ * Награда за прохождение — по длине (этап 14, #46): короткий (до 5 заданий, микроурок) — 0,6, обычный (6–9) — 1,
+ * длинный (10 и больше: практика, повторение) — 1,5. Обычные уроки (6–9 заданий) получают ровно как раньше.
+ */
+export const LENGTH_SHORT_MAX = 5;
+export const LENGTH_LONG_MIN = 10;
+export function lengthFactor(questions: number): number {
+  if (questions <= LENGTH_SHORT_MAX) return 0.6;
+  if (questions >= LENGTH_LONG_MIN) return 1.5;
+  return 1;
+}
+
 export function xpForAnswer(correct: boolean, retry: boolean, combo: number): number {
   if (!correct) return 0;
   if (retry) return XP.retryCorrect;

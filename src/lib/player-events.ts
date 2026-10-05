@@ -127,7 +127,8 @@ export function taskEvent(rec: AnswerRecord, stable: ReadonlySet<string> | null,
 /** Где закончились сердечки у плеера: урок, «Проверить себя» или экстерн. */
 export function playerHeartsWhere(p: { via?: LessonVia; mode?: string }): HeartOutWhere {
   if (p.mode === "extern") return "extern";
-  return p.via === "check" ? "check" : "lesson";
+  // Мини-тест группы (этап 14) стоит как «Проверить себя».
+  return p.via === "check" || p.mode === "minitest" ? "check" : "lesson";
 }
 
 /** Игра: доля верных в %. Раундов не было — 0. */

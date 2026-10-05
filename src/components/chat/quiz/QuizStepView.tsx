@@ -4,6 +4,7 @@ import type { QuestionStep } from "@/lib/types";
 import { BitsView } from "@/components/lesson/steps/BitsView";
 import { ChoiceView, MultiView } from "@/components/lesson/steps/ChoiceView";
 import { ClozeView } from "@/components/lesson/steps/ClozeView";
+import { EntMatchView } from "@/components/lesson/steps/EntMatchView";
 import { InputView } from "@/components/lesson/steps/InputView";
 import { LadderView } from "@/components/lesson/steps/LadderView";
 import { MatchView } from "@/components/lesson/steps/MatchView";
@@ -33,5 +34,10 @@ export function QuizStepView(props: StepProps<QuestionStep>) {
       return <SolutionView {...props} step={step} />;
     case "cloze":
       return <ClozeView {...props} step={step} />;
+    case "entmatch":
+      return <EntMatchView {...props} step={step} />;
+    // Задача с кодом — только в уроках (банки её не дают): в чате не показываем.
+    case "code":
+      return null;
   }
 }

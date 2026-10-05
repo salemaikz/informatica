@@ -14,6 +14,7 @@ import { UNITS } from "../src/content/course";
 import { SKILLS } from "../src/content/skills";
 import { checkInput } from "../src/lib/check";
 import { isQuestion } from "../src/lib/evaluate";
+import { bankFor } from "../src/lib/bank";
 import { validateEnt, validateScene, validateStep } from "../tests/validate";
 
 const id = process.argv[2];
@@ -83,11 +84,20 @@ async function main() {
     for (const s of lesson.skills) if (!knownSkills.has(s)) err(`навык ${s} не зарегистрирован в skills.ts`);
     for (const s of lesson.steps) if (s.skill && !lesson.skills.includes(s.skill)) err(`${s.id}: навык ${s.skill} не в lesson.skills`);
     if (lesson.conspect.ru.length < 300 || lesson.conspect.kk.length < 300) err("конспект короче 300 символов");
+    // Микроурок (этап 14): навык общий с родительским уроком — у навыка уже должен быть банк.
+    if (lesson.micro) for (const s of lesson.skills) if (!bankFor(s)) err(`микроурок: у навыка ${s} нет банка (навык должен быть общим с родительским уроком)`);
     if (!lesson.entTopics?.length) warn("не указаны entTopics");
     const questions = lesson.steps.filter(isQuestion) as QuestionStep[];
     if (questions.length < 4) err(`заданий ${questions.length} — нужно минимум 4`);
-    if (questions.length > 9) warn(`заданий ${questions.length} — по методике не больше 8`);
-    if (lesson.steps.length < 10 || lesson.steps.length > 18) warn(`шагов ${lesson.steps.length} — по методике 12–15`);
+    if (lesson.micro) {
+      // Микроурок (этап 14, #46): 9–12 шагов, 4–6 заданий, 3–5 минут.
+      if (questions.length > 6) err(`микроурок: заданий ${questions.length} — не больше 6`);
+      if (lesson.steps.length < 9 || lesson.steps.length > 12) err(`микроурок: шагов ${lesson.steps.length} — нужно 9–12`);
+      if (lesson.durationMin < 3 || lesson.durationMin > 5) err(`микроурок: durationMin ${lesson.durationMin} — нужно 3–5`);
+    } else {
+      if (questions.length > 9) warn(`заданий ${questions.length} — по методике не больше 9`);
+      if (lesson.steps.length < 14 || lesson.steps.length > 18) warn(`шагов ${lesson.steps.length} — по методике 14–18`);
+    }
     for (const q of questions) {
       if (!q.hint) err(`${q.id}: нет hint (бесплатная подсказка обязательна)`);
       if ((q.type === "choice" || q.type === "multi") && !q.whyWrong) warn(`${q.id}: нет whyWrong`);
@@ -110,8 +120,12 @@ async function main() {
   }
 
   // ---------- Банк ----------
-  const banks = await load<SkillBank[]>(`src/lib/bank/${id}.ts`, "BANKS");
-  if (!banks) {
+  // Микроурок: свой банк и задания ЕНТ не нужны — навык общий с родительским уроком (этап 14).
+  const micro = !!lesson?.micro;
+  const banks = micro ? undefined : await load<SkillBank[]>(`src/lib/bank/${id}.ts`, "BANKS");
+  if (micro) {
+    // пропускаем
+  } else if (!banks) {
     err(`нет файла src/lib/bank/${id}.ts с export const BANKS`);
   } else {
     for (const b of banks) {
@@ -170,8 +184,10 @@ async function main() {
   }
 
   // ---------- Задания ЕНТ ----------
-  const items = await load<EntItem[]>(`src/content/ent/${id}.ts`, "ITEMS");
-  if (!items) {
+  const items = micro ? undefined : await load<EntItem[]>(`src/content/ent/${id}.ts`, "ITEMS");
+  if (micro) {
+    // пропускаем
+  } else if (!items) {
     err(`нет файла src/content/ent/${id}.ts с export const ITEMS`);
   } else {
     items.forEach((it) => validateEnt(it).forEach(err));

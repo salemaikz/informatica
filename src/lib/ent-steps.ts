@@ -2,14 +2,15 @@ import { ENT_POOL } from "@/content/ent";
 import { contextQuestionOf, isAnswered, scoreQuestion, type ExamAnswers, type ExamPaper } from "./exam";
 import type { WrongItem } from "./history";
 import { plain, tx } from "./text";
-import type { ChoiceStep, EntItem, Lang, L, MultiStep, QuestionStep, Text } from "./types";
+import type { ChoiceStep, EntItem, EntMatch, EntMatchStep, Lang, L, MultiStep, QuestionStep, Text } from "./types";
 
 // Задания ЕНТ как шаги плеера: по ссылке «ent:<id>» / «ent:<id>:<n>» собираем задание для LessonPlayer,
 // чтобы ошибки пробного ЕНТ попадали в общую «работу над ошибками» и в историю тестов.
 // Чистая логика без React (тесты — tests/ent-steps.test.ts).
 //
 // Ссылки:
-//   ent:<id>      — «один верный» (single) → choice, «несколько верных» (multi) → multi
+//   ent:<id>      — «один верный» (single) → choice, «несколько верных» (multi) → multi,
+//                   «соответствие» целиком (match) → entmatch (2 пункта × 4 описания, 2/1/0 — этап 14)
 //   ent:<id>:<n>  — пункт соответствия (match, n = 0 для A, 1 для B) или вопрос контекстного задания
 //                   (context, n — номер вопроса с нуля) → choice
 // id шага в плеере = сама ссылка, поэтому верный ответ в плеере закрывает ошибку с тем же stepId.
@@ -52,9 +53,25 @@ export function parseEntRef(ref: string, pool: readonly EntItem[] = ENT_POOL): {
 
 const choiceBase = (item: EntItem, ref: string) => ({ id: ref, skill: item.skill, level: item.level, ent: true as const });
 
+/** «Соответствие» ЕНТ целиком → шаг entmatch (id шага = ссылка ent:<id>). */
+export function entMatchStep(item: EntMatch, ref: string = entRef(item.id)): EntMatchStep {
+  return {
+    ...choiceBase(item, ref),
+    type: "entmatch",
+    prompt: item.prompt,
+    items: item.items,
+    choices: item.choices,
+    answer: item.answer,
+    explanation: item.explanation,
+    hint: item.hint,
+    scene: item.scene,
+  };
+}
+
 /**
  * Задание ЕНТ по ссылке → шаг для LessonPlayer (id шага = ref). Нет такого задания или не хватает n — undefined.
- * single → choice, multi → multi, match с n → choice (условие + пункт n), context с n → choice (общий текст + вопрос n).
+ * single → choice, multi → multi, match без n → entmatch, match с n → choice (условие + пункт n),
+ * context с n → choice (общий текст + вопрос n).
  */
 export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL): QuestionStep | undefined {
   const parsed = parseEntRef(ref, pool);
@@ -91,7 +108,8 @@ export function entStepFromRef(ref: string, pool: readonly EntItem[] = ENT_POOL)
       return step;
     }
     case "match": {
-      if (n === undefined || n >= item.items.length || n >= item.answer.length) return undefined;
+      if (n === undefined) return entMatchStep(item, ref);
+      if (n >= item.items.length || n >= item.answer.length) return undefined;
       const step: ChoiceStep = {
         ...choiceBase(item, ref),
         type: "choice",

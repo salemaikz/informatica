@@ -97,14 +97,26 @@ export const UNITS: Unit[] = [
       { id: "py-1-vars", title: { ru: "Переменные и выражения", kk: "Айнымалылар және өрнектер" }, status: "soon" },
       { id: "py-1b-types", title: { ru: "Типы данных: int, float, str, bool", kk: "Деректер типтері: int, float, str, bool" }, status: "soon" },
       { id: "py-1c-ops", title: { ru: "Операции: //, %, ** и порядок действий", kk: "Амалдар: //, %, ** және амалдар реті" }, status: "soon" },
+      // Микроуроки цепочки «Ветвления» (этап 14, #46): if → if-else → elif, затем py-2-if собирает всё вместе.
+      { id: "py-2a-if", title: { ru: "if: если условие верно", kk: "if: шарт ақиқат болса" }, status: "soon" },
+      { id: "py-2a-else", title: { ru: "if–else: два пути", kk: "if–else: екі жол" }, status: "soon" },
+      { id: "py-2a-elif", title: { ru: "elif: выбор из нескольких", kk: "elif: бірнеше нұсқадан таңдау" }, status: "soon" },
       { id: "py-2-if", title: { ru: "Ветвления", kk: "Тармақталу" }, status: "soon" },
       { id: "py-2b-logic", title: { ru: "Сложные условия: and, or, not, elif", kk: "Күрделі шарттар: and, or, not, elif" }, status: "soon" },
       { id: "py-3-loops", title: { ru: "Циклы", kk: "Циклдер" }, status: "soon" },
+      // Микроуроки цепочки «range» (этап 14): перед подробным уроком про for.
+      { id: "py-3a-range", title: { ru: "range(n): повторить n раз", kk: "range(n): n рет қайталау" }, status: "soon" },
+      { id: "py-3a-range2", title: { ru: "range(a, b): от и до", kk: "range(a, b): бастап және дейін" }, status: "soon" },
+      { id: "py-3a-step", title: { ru: "range с шагом и счёт вниз", kk: "Қадамы бар range және кері санау" }, status: "soon" },
       { id: "py-3b-for", title: { ru: "Цикл for и range подробно", kk: "for циклі және range толығырақ" }, status: "soon" },
       { id: "py-3c-while", title: { ru: "Цикл while, break и continue", kk: "while циклі, break және continue" }, status: "soon" },
       { id: "py-3d-nested", title: { ru: "Вложенные циклы", kk: "Кірістірілген циклдер" }, status: "soon" },
       { id: "py-3e-patterns", title: { ru: "Типовые алгоритмы: сумма, счётчик, максимум", kk: "Типтік алгоритмдер: қосынды, санағыш, максимум" }, status: "soon" },
       { id: "py-4-strings", title: { ru: "Строки", kk: "Жолдар" }, status: "soon" },
+      // Микроуроки цепочки «Срезы» (этап 14): перед уроком про срезы с шагом и методы строк.
+      { id: "py-4a-index", title: { ru: "Индексы строки: с начала и с конца", kk: "Жол индекстері: басынан және соңынан" }, status: "soon" },
+      { id: "py-4a-slice", title: { ru: "Срез [a:b]: где начало и конец", kk: "[a:b] тілімі: басы мен соңы қайда" }, status: "soon" },
+      { id: "py-4a-step", title: { ru: "Срез с шагом: [::2] и [::-1]", kk: "Қадамы бар тілім: [::2] және [::-1]" }, status: "soon" },
       { id: "py-4b-methods", title: { ru: "Срезы и методы строк", kk: "Жол тілімдері және әдістері" }, status: "soon" },
       { id: "py-5-lists", title: { ru: "Списки", kk: "Тізімдер" }, status: "soon" },
       { id: "py-5b-listops", title: { ru: "Списки: методы и обработка", kk: "Тізімдер: әдістер және өңдеу" }, status: "soon" },
@@ -193,6 +205,10 @@ export const UNITS: Unit[] = [
     entTopics: ["t12", "t13"],
     lessons: [
       { id: "data-1-sheets", title: { ru: "Электронные таблицы и формулы", kk: "Электрондық кестелер және формулалар" }, status: "soon" },
+      // Микроуроки цепочки «Ссылки» (этап 14): относительная → абсолютная → смешанная, затем data-2-refs.
+      { id: "data-2a-relative", title: { ru: "Относительная ссылка: формула едет следом", kk: "Салыстырмалы сілтеме: формула бірге жылжиды" }, status: "soon" },
+      { id: "data-2a-absolute", title: { ru: "Абсолютная ссылка: знак $", kk: "Абсолютті сілтеме: $ белгісі" }, status: "soon" },
+      { id: "data-2a-mixed", title: { ru: "Смешанная ссылка: $A1 и A$1", kk: "Аралас сілтеме: $A1 және A$1" }, status: "soon" },
       { id: "data-2-refs", title: { ru: "Ссылки и функции", kk: "Сілтемелер және функциялар" }, status: "soon" },
       { id: "data-3-functions", title: { ru: "Функции СУММ, СРЗНАЧ, МАКС, МИН, СЧЁТ", kk: "СУММ, СРЗНАЧ, МАКС, МИН, СЧЁТ функциялары" }, status: "soon" },
       { id: "data-4-if", title: { ru: "Функция ЕСЛИ и условия", kk: "ЕСЛИ функциясы және шарттар" }, status: "soon" },

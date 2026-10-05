@@ -1,7 +1,7 @@
 import type { ClozeBlank, ClozeStep, ClozeToken, Lang, QuestionStep, Step } from "./types";
 import type { CheckSolutionResponse } from "./ai-types";
 import { checkInput, divisionLadder, toBinary } from "./check";
-import { multiPoints } from "./ent";
+import { matchPoints, multiPoints } from "./ent";
 import { plain, tx } from "./text";
 
 // Ответы ученика по типам шагов и их проверка. Чистые функции — покрыты тестами.
@@ -16,7 +16,14 @@ export type Answer =
   | { type: "order"; order: number[] }
   | { type: "solution"; image?: string; typed: string }
   /** Значения полей «решаем вместе» по порядку следования пропусков. */
-  | { type: "cloze"; values: string[] };
+  | { type: "cloze"; values: string[] }
+  /** «Соответствие» ЕНТ: выбранное описание для каждого пункта (null — ещё не выбрано). */
+  | { type: "entmatch"; picks: (number | null)[] }
+  /**
+   * Задача с кодом: компонент сам запускает проверку и отправляет итог (submit).
+   * tries — сколько раз запускалась проверка; ok — прошли ли тесты; false при «Показать решение».
+   */
+  | { type: "code"; ok: boolean; tries: number; code: string };
 
 export interface StepResult {
   correct: boolean;
@@ -66,8 +73,14 @@ export function isReady(step: QuestionStep, a: Answer | null): boolean {
       return !!a.image || a.typed.trim() !== "";
     case "cloze":
       return step.type === "cloze" && a.values.length === clozeBlanks(step).length && a.values.every((v) => v.trim() !== "");
+    case "entmatch":
+      return step.type === "entmatch" && a.picks.length === step.items.length && a.picks.every((p) => p !== null);
+    case "code":
+      return a.tries > 0 || !a.ok;
   }
 }
+
+const LETTERS = ["A", "B", "C", "D"];
 
 /** Верный ответ в текстовом виде (для обратной связи, ИИ и статистики). */
 export function expectedText(step: QuestionStep, lang: Lang): string {
@@ -92,6 +105,10 @@ export function expectedText(step: QuestionStep, lang: Lang): string {
       return step.lines
         .map((line) => line.map((t) => (isBlank(t) ? t.blank[0] : tx(t, lang))).join(" "))
         .join("\n");
+    case "entmatch":
+      return step.items.map((_, i) => `${LETTERS[i]} — ${tx(step.choices[step.answer[i]] ?? "", lang)}`).join("; ");
+    case "code":
+      return lang === "kk" ? "барлық тест өтеді" : "все тесты пройдены";
   }
 }
 
@@ -135,6 +152,21 @@ export function evaluate(step: QuestionStep, a: Answer, lang: Lang): StepResult 
     const score = Math.max(0, 1 - 0.25 * a.wrong);
     const given = a.wrong ? (lang === "kk" ? `қате: ${a.wrong}` : `ошибок: ${a.wrong}`) : "";
     return { correct: a.wrong === 0, score, given, expected };
+  }
+  if (step.type === "entmatch" && a.type === "entmatch") {
+    // Как на ЕНТ: оба пункта — 2 балла, один — 1, ни одного — 0 (п. 18 Правил, matchPoints).
+    const given = a.picks.map((p, i) => `${LETTERS[i]} — ${p === null ? "—" : tx(step.choices[p] ?? "", lang)}`).join("; ");
+    const points = matchPoints(step.answer, a.picks);
+    if (points === 2) return ok(given);
+    if (points === 1) return { correct: false, score: 0.5, given, expected, partial: true };
+    return fail(given);
+  }
+  if (step.type === "code" && a.type === "code") {
+    // С первой проверки — верно; со второй и дальше — частично (как ответ после подсказки); решение не найдено — неверно.
+    const given = a.ok ? (lang === "kk" ? `тест өтті (${a.tries} әрекет)` : `тесты пройдены (попыток: ${a.tries})`) : lang === "kk" ? "шешім табылмады" : "решение не найдено";
+    if (a.ok && a.tries <= 1) return ok(given);
+    if (a.ok) return { correct: false, score: 0.5, given, expected, partial: true };
+    return fail(given);
   }
   if (step.type === "order" && a.type === "order") {
     const given = a.order.map((i) => tx(step.items[i], lang)).join(" → ");

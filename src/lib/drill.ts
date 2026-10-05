@@ -16,10 +16,14 @@ import { collectWorked } from "@/games/build/logic";
 // Сборка сессий тренировки, «экстерна» и урока игрой. Чистая логика без React (тесты — tests/drill.test.ts).
 // Все задания берутся из банка навыков (lib/bank): он же питает уроки, игры и пробный ЕНТ.
 
-/** history — работа над ошибками одного теста из истории (/drill?mode=history&entry=<id>). */
-export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic" | "history";
+/**
+ * history — работа над ошибками одного теста из истории (/drill?mode=history&entry=<id>).
+ * Этап 14: practice / minitest — узел «Практика» группы (&node=practice:<урок>), recap — «Повторение» раздела (&unit=u3),
+ * context — контекстное задание практикума (&item=<id задания ЕНТ>).
+ */
+export type DrillMode = "smart" | "mistakes" | "skill" | "review" | "extern" | "topic" | "history" | "practice" | "recap" | "minitest" | "context";
 
-const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history"];
+const MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context"];
 
 /** Режим из адреса; неизвестный — «умная тренировка». */
 export function parseDrillMode(v: unknown): DrillMode {

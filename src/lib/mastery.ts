@@ -3,7 +3,11 @@
 //
 // «Освоено» (решение #67, аудит T5): оценка ≥ MASTERED_FROM и не меньше MASTER_CLEAN верных самостоятельных
 // первых попыток и успехи минимум в MASTER_DAYS разных дня. Ответ после подсказки и повтор ошибки весят вдвое меньше
-// и не считаются самостоятельными. Затухание без практики — этап 14 (#45).
+// и не считаются самостоятельными.
+//
+// Затухание без практики (этап 14, #45): часть оценки выше DECAY_BASE тает вдвое за DECAY_HALF_LIFE_DAYS дней
+// с последнего ответа (lastSeen). В хранилище лежит оценка «на момент lastSeen»; читатели берут decaySkills(stats, now),
+// а новый ответ сдвигает уже затухшую оценку (updateSkill). Ниже базы оценка не тает: слабый навык и так слабый.
 
 export interface SkillStat {
   attempts: number;
@@ -32,6 +36,44 @@ export const ASSISTED_WEIGHT = 0.5;
 export const SEED_RIGHT = 0.45;
 export const SEED_WRONG = 0.15;
 
+/** Затухание (#45): уровень, ниже которого оценка не тает, и полураспад части выше него. */
+export const DECAY_BASE = 0.5;
+export const DECAY_HALF_LIFE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Оценка навыка на момент now с учётом затухания: BASE + (m − BASE) · 2^(−дни/30), m ≤ BASE — без изменений.
+ * Через 30 дней без практики 1,0 → 0,75, 0,9 → 0,7; через 60 — 0,625 и 0,6. now ≤ lastSeen (или lastSeen = 0) — без затухания.
+ */
+export function decayedMastery(stat: Pick<SkillStat, "mastery" | "lastSeen"> | undefined, now: number): number {
+  const m = num(stat?.mastery);
+  const seen = num(stat?.lastSeen);
+  if (m <= DECAY_BASE || !seen || !(now > seen)) return m;
+  const days = (now - seen) / DAY_MS;
+  return Math.round((DECAY_BASE + (m - DECAY_BASE) * 2 ** (-days / DECAY_HALF_LIFE_DAYS)) * 1000) / 1000;
+}
+
+/** Навык с затухшей оценкой (остальные поля как есть). Тот же объект, если оценка не изменилась. */
+export function decayStat<T extends SkillStat>(stat: T, now: number): T {
+  const m = decayedMastery(stat, now);
+  return m === stat.mastery ? stat : { ...stat, mastery: m };
+}
+
+/**
+ * Все навыки на момент now (#45) — так их читают карта, прогресс, прогноз, тренировка, игры и ИИ-наставник.
+ * now = 0 (сервер, первый кадр) — без затухания. Тот же объект, если ничего не затухло.
+ */
+export function decaySkills<T extends SkillStat>(stats: Record<string, T>, now: number): Record<string, T> {
+  if (!(now > 0)) return stats;
+  let out: Record<string, T> | null = null;
+  for (const [id, st] of Object.entries(stats)) {
+    if (!st) continue;
+    const d = decayStat(st, now);
+    if (d !== st) (out ??= { ...stats })[id] = d;
+  }
+  return out ?? stats;
+}
+
 export function emptySkillStat(): SkillStat {
   return { attempts: 0, correct: 0, mastery: 0, lastSeen: 0, clean: 0, okDays: 0, okDay: "" };
 }
@@ -58,7 +100,8 @@ export function updateSkill(stat: SkillStat | undefined, score: number, now = Da
   const outcome = Math.max(0, Math.min(1, Number.isFinite(score) ? score : 0));
   const w = Math.max(0, Math.min(1, opts.weight ?? 1));
   const attempts = num(s.attempts);
-  const prev = num(s.mastery);
+  // Новый ответ сдвигает оценку, уже затухшую с прошлого раза (#45): после долгого перерыва навык быстро «вспоминается».
+  const prev = decayedMastery(s, now);
   // Первый ответ: старт 0,2 + 0,5 × результат (верный ответ после подсказки стартует ниже — 0,45, а не 0,7).
   const mastery = attempts === 0 ? 0.2 + 0.5 * outcome * w : prev + ALPHA * w * (outcome - prev);
   const success = outcome >= 0.99;
