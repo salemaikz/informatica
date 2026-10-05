@@ -32,6 +32,7 @@ import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
 import { HeartCost } from "@/components/economy/HeartCost";
+import { HeartsBar } from "@/components/economy/HeartsBar";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
@@ -115,7 +116,10 @@ function MiniStart({ title, count, onStart }: { title: string; count: number; on
   const [noHearts, setNoHearts] = useState(false);
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center gap-4 px-4 py-8">
-      <h1 className="text-2xl font-extrabold">{title}</h1>
+      <div className="flex items-start justify-between gap-2">
+        <h1 className="text-2xl font-extrabold">{title}</h1>
+        <HeartsBar />
+      </div>
       <p className="flex flex-wrap items-center gap-1.5">
         <Pill tone="muted">{t("exam.fmt.questions", { n: count })}</Pill>
         <HeartCost n={ENTRY_COST.check} />
@@ -146,6 +150,8 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   const recordCourseNode = useApp((s) => s.recordCourseNode);
   // Мини-тест: вход оплачен кнопкой «Начать» (плеер дальше не списывает).
   const [started, setStarted] = useState(false);
+  // Сколько сердечек списала кнопка «Начать» (0 — безлимит): плеер показывает «−N» и предупреждает при выходе.
+  const [prepaid, setPrepaid] = useState(0);
   // Итог мини-теста: баллы «как на ЕНТ» и слабое место (этап 14).
   const [mini, setMini] = useState<{ points: number; max: number; weak?: string } | null>(null);
   const markReviewed = useApp((s) => s.markReviewed);
@@ -249,7 +255,9 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
           title={title}
           count={session.steps.length}
           onStart={() => {
-            if (!useApp.getState().payEntry(ENTRY_COST.check).ok) return false;
+            const res = useApp.getState().payEntry(ENTRY_COST.check);
+            if (!res.ok) return false;
+            setPrepaid(res.paid);
             setStarted(true);
             return true;
           }}
@@ -267,6 +275,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
       testMode={mode === "minitest"}
+      prepaid={mode === "minitest" ? prepaid : undefined}
     />
   );
 }

@@ -43,13 +43,20 @@ export function HeartsChip({ className }: { className?: string }) {
         className,
       )}
     >
+      {/* Пульс пустого сердца — внешний элемент, не зависит от одноразового вздрагивания при списании. */}
       <m.span
-        key={delta.id}
         className="flex"
-        animate={lost ? { rotate: [0, -16, 14, -9, 6, 0], scale: [1, 1.3, 0.88, 1.06, 1] } : empty && !reduce ? { scale: [1, 1.22, 1] } : { scale: 1 }}
-        transition={lost ? { duration: 0.55, ease: "easeInOut" } : empty && !reduce ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
+        animate={empty && !reduce ? { scale: [1, 1.22, 1] } : { scale: 1 }}
+        transition={empty && !reduce ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
       >
-        <Heart size={20} fill={empty ? "none" : "currentColor"} />
+        <m.span
+          key={delta.id}
+          className="flex"
+          animate={lost ? { rotate: [0, -16, 14, -9, 6, 0], scale: [1, 1.3, 0.88, 1.06, 1] } : { rotate: 0, scale: 1 }}
+          transition={lost ? { duration: 0.55, ease: "easeInOut" } : { duration: 0.2 }}
+        >
+          <Heart size={20} fill={empty ? "none" : "currentColor"} />
+        </m.span>
       </m.span>
       {v.unlimited ? <InfinityIcon size={20} strokeWidth={3} aria-hidden /> : <span className="tabular-nums">{formatHearts(v.count)}</span>}
       <HeartLossPop delta={delta} reduce={reduce} />

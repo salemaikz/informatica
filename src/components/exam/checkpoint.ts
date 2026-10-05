@@ -66,6 +66,21 @@ export function unitCreditIds(unitId: string, paper: Pick<ExamPaper, "items">, d
   return lessonsToCredit(paper, readyOf(unitId), (id) => isDone(done, id));
 }
 
+/**
+ * Навыки готовых непройденных уроков раздела: тест покрывает их в первую очередь, чтобы засчитать как можно больше уроков
+ * (у раздела с навыков больше, чем заданий, повторная попытка берёт навыки ещё не засчитанных уроков).
+ */
+export function unitPrioritySkills(unitId: string, done: DoneMap): string[] {
+  const set = new Set<string>();
+  for (const x of readyOf(unitId)) if (!isDone(done, x.id)) x.skills.forEach((sk) => set.add(sk));
+  return [...set];
+}
+
+/** Сколько готовых уроков раздела ещё не пройдено (и не засчитано). */
+export function unitPendingCount(unitId: string, done: DoneMap): number {
+  return readyOf(unitId).filter((x) => !isDone(done, x.id)).length;
+}
+
 /** С какого урока начать, если тест не сдан: первый готовый непройденный урок раздела. */
 export function unitStartLesson(unitId: string, done: DoneMap): string | undefined {
   return readyOf(unitId).find((x) => !isDone(done, x.id))?.id;

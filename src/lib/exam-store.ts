@@ -185,11 +185,11 @@ export function sanitizeReview(raw: unknown): ExamAiReview | undefined {
   };
 }
 
-/** id засчитанных уроков: короткие строки без лишних знаков, не больше 40 штук. */
+/** id засчитанных уроков: короткие строки без лишних знаков, не больше 40 штук. Пустой список сохраняется (сдан, засчитывать нечего); не массив — undefined (старая попытка). */
 export function sanitizeCredited(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out = [...new Set(raw.filter((x): x is string => typeof x === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(x)))].slice(0, 40);
-  return out.length ? out : undefined;
+  return out;
 }
 
 /** Состояние попытки (без бумаги). null — запись повреждена. */

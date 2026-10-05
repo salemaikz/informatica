@@ -31,7 +31,7 @@ import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
 import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
-import { examTitle, unitStartLesson } from "./checkpoint";
+import { examTitle, unitPendingCount, unitStartLesson } from "./checkpoint";
 import { StarRow } from "./StarRow";
 
 const TONE_COLOR: Record<Tone, string> = {
@@ -64,12 +64,15 @@ function Bar({ label, points, max, hint }: { label: string; points: number; max:
 }
 
 /** Итог теста по разделу: какие уроки засчитаны, а если не сдан — с какого урока начать. */
-function UnitCredit({ unitId, points, max, credited }: { unitId: string; points: number; max: number; credited: string[] }) {
+/** credited: undefined — попытка старая (до зачёта уроков) или её нет в хранилище: утверждать про уроки нечего. */
+function UnitCredit({ unitId, points, max, credited }: { unitId: string; points: number; max: number; credited?: string[] }) {
   const { t, l } = useT();
   const lessons = useApp((s) => s.lessons);
   const passed = unitPassed(points, max);
   const pct = Math.round(ratioOf(points, max) * 100);
-  if (passed && credited.length) {
+  const pending = unitPendingCount(unitId, lessons);
+  const rest = pending > 0 ? <p className="text-sm font-bold text-warning-strong">{t("unittest.result.remaining", { n: pending })}</p> : null;
+  if (passed && credited?.length) {
     return (
       <div className="flex flex-col gap-3 rounded-3xl border-2 border-success/40 bg-success-soft p-4">
         <p className="flex items-center gap-2 text-lg font-extrabold text-success-strong">
@@ -84,6 +87,7 @@ function UnitCredit({ unitId, points, max, credited }: { unitId: string; points:
             </li>
           ))}
         </ul>
+        {rest}
         <ButtonLink href="/learn" variant="success" icon={<Flag size={18} aria-hidden />}>
           {t("unittest.result.toMap")}
         </ButtonLink>
@@ -91,7 +95,12 @@ function UnitCredit({ unitId, points, max, credited }: { unitId: string; points:
     );
   }
   if (passed) {
-    return <p className="rounded-2xl border-2 border-success/40 bg-success-soft p-3.5 text-sm font-semibold">{t("unittest.result.nothing", { n: pct })}</p>;
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl border-2 border-success/40 bg-success-soft p-3.5 text-sm font-semibold">
+        <p>{t(credited ? "unittest.result.nothing" : "unittest.result.passed", { n: pct })}</p>
+        {rest}
+      </div>
+    );
   }
   const lessonId = unitStartLesson(unitId, lessons);
   const lesson = lessonId ? LESSON_META[lessonId] : undefined;
@@ -343,7 +352,7 @@ export function ExamResult({ id }: { id: string }) {
       />
 
       {/* Тест по разделу: зачёт уроков (старые попытки без поля credited — без списка). */}
-      {kind === "unit" && unitId && <UnitCredit unitId={unitId} points={points} max={maxPoints} credited={attempt?.credited ?? []} />}
+      {kind === "unit" && unitId && <UnitCredit unitId={unitId} points={points} max={maxPoints} credited={attempt?.credited} />}
 
       {attempt && <ExamNotes paper={attempt.paper} />}
 

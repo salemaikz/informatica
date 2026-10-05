@@ -130,7 +130,7 @@ test("карта: узел «Практика» после группы «Вет
   expect(errors).toEqual([]);
 });
 
-test("мини-тест: открывается из листа практики и списывает сердечко при первом ответе", async ({ page }) => {
+test("мини-тест: открывается из листа практики, экран старта и списание сердечка на «Начать»", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 5, "dark");
   await page.goto("/learn");
@@ -140,12 +140,21 @@ test("мини-тест: открывается из листа практики
   await sheet.getByRole("link", { name: /Мини-тест/ }).click();
   await page.waitForURL("**/drill?mode=minitest**");
 
-  // Вход ещё не списан — первое задание (single уровня A) открыто, сердечек 5.
+  // Экран старта: число заданий и цена входа; пока не нажата «Начать» — ничего не списано.
+  await expect(page.getByText("Заданий: 6")).toBeVisible();
   await expect(hearts(page, 5)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
+  await page.getByRole("button", { name: "Начать" }).click();
+
+  // После «Начать»: плеер со счётчиком 4, первое задание открыто, второго списания при ответе нет.
+  await expect(hearts(page, 4)).toBeVisible();
   await expect(page.locator("main button[aria-pressed]").first()).toBeVisible();
   await page.locator("main button[aria-pressed]").first().click();
   await page.getByRole("button", { name: "Проверить", exact: true }).click();
   await expect(hearts(page, 4)).toBeVisible();
+  // Выход: окно предупреждает, что плата за вход уже списана.
+  await page.getByRole("button", { name: "Выйти" }).first().click();
+  await expect(page.getByText(/Плата за вход уже списана/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -153,6 +162,7 @@ test("мини-тест: итог — баллы как на ЕНТ, слабо�
   const errors = trackErrors(page);
   await seed(page, 5);
   await page.goto(`/drill?mode=minitest&node=${NODE_ID}`);
+  await page.getByRole("button", { name: "Начать" }).click();
   await expect(page.locator("main button[aria-pressed]").first()).toBeVisible();
   // В тесте до ответа нет подсказки и «Спросить Бита» (как на ЕНТ).
   await expect(page.getByRole("button", { name: /Подсказка/ })).toHaveCount(0);

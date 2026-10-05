@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LESSONS, UNITS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { SKILLS } from "@/content/skills";
-import { checkpointById, checkpointOf, examTitle } from "@/components/exam/checkpoint";
+import { checkpointById, checkpointOf, examTitle, unitPrioritySkills } from "@/components/exam/checkpoint";
 import { EXAM_FORMAT, examLink, historyPoints, parseRunParams } from "@/components/exam/logic";
 import { checkpointSkillIds, readyLessonCount } from "@/components/learn/map";
 import {
@@ -367,6 +367,42 @@ describe("покрытие навыков раздела (#95)", () => {
     }
   });
 
+  const readyOf = (unit: Unit) => unit.lessons.filter((r) => r.status === "available" && LESSONS[r.id]).map((r) => ({ id: r.id, skills: LESSONS[r.id].skills }));
+
+  it("навыки готовых уроков идут первыми: где они помещаются в вариант, при 100% засчитываются все уроки", () => {
+    let checked = 0;
+    for (const unit of UNITS) {
+      const cp = checkpointOf(unit, LESSONS, SKILLS);
+      if (!cp) continue;
+      const ready = readyOf(unit);
+      const lessonSkills = new Set(ready.flatMap((x) => x.skills));
+      const inBank = new Set(ENT_POOL.map((i) => i.skill));
+      if (lessonSkills.size > cp.size || ![...lessonSkills].every((sk) => inBank.has(sk))) continue;
+      checked++;
+      for (let seed = 1; seed <= 40; seed++) {
+        const p = buildExam({ kind: "unit", seed, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: unitPrioritySkills(unit.id, {}) });
+        expect(lessonsToCredit(p, ready, () => false), `${unit.id} seed ${seed}`).toEqual(ready.map((x) => x.id));
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(6);
+  });
+
+  it("раздел, где навыков уроков больше, чем заданий: повторная попытка берёт навыки ещё не засчитанных уроков", () => {
+    const unit = UNITS.find((u) => u.id === "u3")!;
+    const cp = checkpointOf(unit, LESSONS, SKILLS)!;
+    const ready = readyOf(unit);
+    const first = buildExam({ kind: "unit", seed: 1, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: unitPrioritySkills(unit.id, {}) });
+    const credited = lessonsToCredit(first, ready, () => false);
+    expect(credited.length).toBeGreaterThan(0);
+    const done = Object.fromEntries(credited.map((id) => [id, { completions: 1 }]));
+    const prio = unitPrioritySkills(unit.id, done);
+    const second = buildExam({ kind: "unit", seed: 2, pool: ENT_POOL, skillIds: cp.skillIds, prioritySkills: prio });
+    // Навыки пройденных уроков не занимают места раньше навыков непройденных.
+    const covered = prio.filter((sk) => paperSkillIds(second).has(sk)).length;
+    expect(covered).toBe(Math.min(prio.length, second.items.length));
+    expect(lessonsToCredit(second, ready, (id) => id in done).length).toBeGreaterThan(0);
+  });
+
   it("в тестовом банке с тремя навыками представлены все", () => {
     for (let seed = 1; seed <= 10; seed++) expect(paperSkillIds(unitPaper(seed))).toEqual(new Set(OWN));
   });
@@ -394,7 +430,7 @@ describe("зачёт уроков за тест по разделу (#95)", () =
   it("засчитанные уроки в попытке: только корректные id, только у теста по разделу", () => {
     expect(sanitizeCredited(["ns-1-bits", "ns-2-x", "ns-1-bits", "<b>", 5, ""])).toEqual(["ns-1-bits", "ns-2-x"]);
     expect(sanitizeCredited("x")).toBeUndefined();
-    expect(sanitizeCredited([])).toBeUndefined();
+    expect(sanitizeCredited([])).toEqual([]);
     const { paper: _p, ...state } = { id: "ex-1", kind: "unit" as const, seed: 1, unit: "u3", paper: unitPaper(1), answers: {}, current: 0, startedAt: 1, elapsedMs: 1, credited: ["ns-1-bits"] };
     void _p;
     expect(sanitizeState(state, unitPaper(1))?.credited).toEqual(["ns-1-bits"]);

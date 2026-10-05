@@ -36,11 +36,13 @@ import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { HeartCost } from "@/components/economy/HeartCost";
-import { readHearts } from "@/components/economy/HeartsBar";
+import { HeartPaidPop } from "@/components/economy/HeartLoss";
+import { HeartsBar, readHearts } from "@/components/economy/HeartsBar";
+import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
 import { ChallengeBanner } from "./ChallengeBanner";
-import { checkpointById, examTitle, unitCreditIds } from "./checkpoint";
+import { checkpointById, examTitle, unitCreditIds, unitPrioritySkills } from "./checkpoint";
 import { ExamNotes } from "./ExamNotes";
 import { formatClock, randomSeed, remainingSec } from "./logic";
 import { Navigator } from "./Navigator";
@@ -72,7 +74,8 @@ type Phase =
   | ({ name: "intro"; replaces: ExamAttempt | null } & Fresh)
   /** Есть начатая другая попытка: продолжить или начать новую. */
   | { name: "resume"; active: ExamAttempt; fresh: Fresh | null }
-  | { name: "run"; attempt: ExamAttempt };
+  /** paid — сердечки, списанные на «Начать» (новая попытка): «−N» показывается при входе. Продолжение — без платы. */
+  | { name: "run"; attempt: ExamAttempt; paid?: number };
 
 const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string) =>
   a.kind === kind &&
@@ -88,7 +91,7 @@ function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], u
   // Тест по разделу: навыки раздела. Неизвестный раздел или раздел без теста (нет готовых уроков, < 10 заданий)
   // даёт пустой вариант — экран условий скажет об этом.
   const cp = kind === "unit" ? checkpointById(unit) : null;
-  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [] }), seed: s, topics, unit: cp?.unitId };
+  return { paper: buildExam({ kind, seed: s, pool: ENT_POOL, topics, skillIds: cp?.skillIds ?? [], prioritySkills: cp ? unitPrioritySkills(cp.unitId, useApp.getState().lessons) : undefined }), seed: s, topics, unit: cp?.unitId };
 }
 
 /** Экран прохождения: загрузка → (продолжить?) → условия → сами задания. Спокойная оболочка без маскота, XP, звуков и ИИ. */
@@ -133,7 +136,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
     };
   }, [kind, seed, topics, unit, challenge]);
 
-  if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} />;
+  if (phase.name === "run") return <Runner key={phase.attempt.id} initial={phase.attempt} paid={phase.paid} />;
 
   return (
     <Calm>
@@ -191,7 +194,7 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit, challenge: chall
             // Статистика (#69): попытка создана и оплачена. Продолжение начатой — не старт.
             track({ e: "exam_start", kind: attempt.kind });
             if (attempt.challenge) track({ e: "challenge", step: "start" });
-            setPhase({ name: "run", attempt });
+            setPhase({ name: "run", attempt, paid: cost });
             return "started";
           }}
         />
@@ -256,17 +259,21 @@ function Intro({
   const empty = paper.items.length === 0;
   return (
     <div className="flex flex-col gap-4 pt-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">
-          {examTitle(paper.kind, unit, t, l)}
-        </h1>
-        {!empty && (
-          <p className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Pill tone="muted">{t("exam.fmt.questions", { n: paper.items.length })}</Pill>
-            <Pill tone="muted">{t("common.minutes", { n: Math.round(paper.timeLimitSec / 60) })}</Pill>
-            <Pill tone="muted">{t("exam.fmt.points", { n: paper.maxPoints })}</Pill>
-          </p>
-        )}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-extrabold">
+            {examTitle(paper.kind, unit, t, l)}
+          </h1>
+          {!empty && (
+            <p className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Pill tone="muted">{t("exam.fmt.questions", { n: paper.items.length })}</Pill>
+              <Pill tone="muted">{t("common.minutes", { n: Math.round(paper.timeLimitSec / 60) })}</Pill>
+              <Pill tone="muted">{t("exam.fmt.points", { n: paper.maxPoints })}</Pill>
+            </p>
+          )}
+        </div>
+        {/* Счётчик сердечек: «Начать» их списывает, а этот экран вне оболочки без счётчика в шапке. */}
+        {!empty && <HeartsBar />}
       </div>
       {challenge && !empty && <ChallengeBanner challenge={challenge} maxPoints={paper.maxPoints} currentPool={currentPoolTag()} />}
       {empty ? (
@@ -316,8 +323,9 @@ function Intro({
 
 type Sheet = null | "nav" | "finish" | "exit";
 
-function Runner({ initial }: { initial: ExamAttempt }) {
+function Runner({ initial, paid }: { initial: ExamAttempt; /** Списано на «Начать» (сердечки) — показываем «−N». */ paid?: number }) {
   const { t, l } = useT();
+  const reduce = useReduceMotion();
   const router = useRouter();
   useToolboxLevel("ent");
 
@@ -466,10 +474,9 @@ function Runner({ initial }: { initial: ExamAttempt }) {
       const r = scoreExam(paper, attempt.answers);
       if (unitPassed(r.points, r.maxPoints)) {
         const ids = unitCreditIds(attempt.unit, paper, useApp.getState().lessons);
-        if (ids.length) {
-          useApp.getState().completeLessons(ids, "extern", r.points / r.maxPoints);
-          attempt.credited = ids;
-        }
+        if (ids.length) useApp.getState().completeLessons(ids, "extern", r.points / r.maxPoints);
+        // Пустой список тоже пишем: «сдан, засчитывать нечего» отличается от старой попытки без поля.
+        attempt.credited = ids;
       }
     }
     // Статистика (#69): конец попытки — ровно здесь (doneRef не пускает второй раз), а не на экране итога, который открывают из истории снова.
@@ -504,6 +511,7 @@ function Runner({ initial }: { initial: ExamAttempt }) {
 
   return (
     <div className="min-h-dvh bg-bg">
+      <HeartPaidPop amount={paid ?? 0} reduce={reduce} />
       <header className="sticky top-0 z-30 border-b-2 border-border bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-3 pt-[env(safe-area-inset-top)] min-[400px]:gap-2">
           <button

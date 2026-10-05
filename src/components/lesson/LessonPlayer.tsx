@@ -81,6 +81,11 @@ export interface PlayerProps {
   resultsExtra?: ReactNode;
   /** Цена входа в сердечках (#40): списывается, когда урок начался — первый переход «дальше», первый ответ или «Пропустить». Нет или 0 — бесплатно (тренировка). */
   entryCost?: number;
+  /**
+   * Вход уже оплачен до плеера (мини-тест: «Начать» на экране старта) — сколько сердечек списано (0 — безлимит).
+   * Плеер не списывает, показывает счётчик с «−N», а окно выхода предупреждает, что плата не вернётся.
+   */
+  prepaid?: number;
   /** Продолжить сохранённое прохождение (#41) — только урок в режиме «Учиться». */
   resume?: LessonRun;
   /** Сохранять прохождение после каждого шага (#41) — только урок в режиме «Учиться». */
@@ -190,6 +195,7 @@ export function LessonPlayer({
   onSessionFinish,
   resultsExtra,
   entryCost = 0,
+  prepaid,
   resume,
   saveRun = false,
   testMode = false,
@@ -232,7 +238,7 @@ export function LessonPlayer({
   // Шторка «Не хватает сердечек» при первом ответе (#40); плата за вход — ensurePaid.
   const [outOpen, setOutOpen] = useState(false);
   // Вход оплачен (сердечки списаны): для подсказки в окне выхода. Сам учёт — paidAtRef.
-  const [paid, setPaid] = useState(!!init?.paid);
+  const [paid, setPaid] = useState(!!init?.paid || (prepaid ?? 0) > 0);
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
   // Разбор: сколько шагов уже открыто. Песочница: достигнута ли цель. Сбрасываются при переходе к следующему шагу.
   const [revealed, setRevealed] = useState(1);
@@ -737,9 +743,9 @@ export function LessonPlayer({
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
           <ComboFlame combo={combo} />
-          {entryCost > 0 && (
+          {(entryCost > 0 || prepaid !== undefined) && (
             <span data-tour="lesson-hearts" className="flex">
-              <HeartsBar />
+              <HeartsBar initialLoss={prepaid} />
             </span>
           )}
           {/* В тесте до ответа Бита не спрашиваем (как на ЕНТ); после ответа — «Почему?» на панели. */}

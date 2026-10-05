@@ -71,6 +71,11 @@ export interface BuildExamOpts {
   topics?: EntTopicId[];
   /** Для kind = "unit": навыки раздела (`unitSkillIds`); берутся только задания этих навыков. */
   skillIds?: readonly string[];
+  /**
+   * Для kind = "unit": навыки готовых уроков раздела. Пока какой-то из них не взят ни разу, задания берутся
+   * только из них (потом — из всех навыков раздела): так вариант покрывает уроки, которые тест засчитывает.
+   */
+  prioritySkills?: readonly string[];
 }
 
 // ---------- Темы и соседи ----------
@@ -342,7 +347,8 @@ export const hasUnitExam = (pool: readonly EntItem[], skillIds: readonly string[
 /**
  * Тест по разделу: 14 single, 3 multi, 2 match и 1 вопрос контекстного задания (нет контекстных — 15 single),
  * уровни ≈ 50/30/20, без повторов. Вид, которого не хватило, добирается другими видами (с записью в notes).
- * Навыки раздела представлены равномерно: пока какой-то навык не взят ни разу, берём задания его, а не повторяем другие.
+ * Навыки раздела представлены равномерно: пока какой-то навык не взят ни разу, берём задания его, а не повторяем другие;
+ * навыки готовых уроков (`prioritySkills`) — в первую очередь.
  */
 function buildUnitExam(opts: BuildExamOpts): ExamPaper {
   const { seed } = opts;
@@ -380,7 +386,11 @@ function buildUnitExam(opts: BuildExamOpts): ExamPaper {
   const used = new Set<string>();
   const skillUse = new Map<string, number>();
   const bump = (skill: string) => skillUse.set(skill, (skillUse.get(skill) ?? 0) + 1);
-  const least = <T extends { skill: string }>(cands: T[]): T[] => {
+  const priority = new Set(opts.prioritySkills ?? []);
+  const least = <T extends { skill: string }>(all: T[]): T[] => {
+    // Навык готового урока, не взятый ни разу, идёт раньше остальных.
+    const fresh = all.filter((c) => priority.has(c.skill) && !skillUse.get(c.skill));
+    const cands = fresh.length ? fresh : all;
     const min = Math.min(...cands.map((c) => skillUse.get(c.skill) ?? 0));
     return cands.filter((c) => (skillUse.get(c.skill) ?? 0) === min);
   };
