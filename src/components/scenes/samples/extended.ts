@@ -46,6 +46,8 @@ export const SAMPLES: Scene[] = [
     changes: [{ cell: [1, 2], from: "70" }],
     join: { columns: ["ID", "City"], rows: [["1", "Almaty"], ["2", "Astana"]], links: [[0, 0], [1, 1]] },
   },
+  { kind: "hardware", items: ["switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber", "printer-dot", "printer-inkjet"] },
+  { kind: "hardware", items: ["printer-laser", "plotter", "pen-tablet", "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator"] },
   {
     kind: "circuit",
     inputs: ["A", "B"],
@@ -112,5 +114,46 @@ export const SAMPLES: Scene[] = [
     range: { from: [2, 1], to: [5, 3] },
     arrows: [{ from: [0, 0], to: [15, 7], tone: "warning" }],
     formula: { cell: "H1", text: "=SUM(A1:G1)" },
+  },
+  {
+    // Полусумматор без значений, трёхбуквенные имена выходов.
+    kind: "circuit",
+    inputs: ["A", "B"],
+    gates: [{ id: "s", op: "xor", in: ["A", "B"] }, { id: "c", op: "and", in: ["A", "B"] }],
+    output: "s",
+    outputs: [{ gate: "s", name: "Sum" }, { gate: "c", name: "Car" }],
+  },
+  {
+    // Выходы из разных столбцов: S от xor, перенос с инверсией (И-НЕ по смыслу) — вентиль НЕ во втором столбце.
+    kind: "circuit",
+    inputs: ["A", "B"],
+    gates: [{ id: "x", op: "xor", in: ["A", "B"] }, { id: "c", op: "and", in: ["A", "B"] }, { id: "n", op: "not", in: ["c"] }],
+    output: "x",
+    outputs: [{ gate: "x", name: "S" }, { gate: "n", name: "Cn" }],
+    values: { A: 1, B: 1 },
+  },
+  {
+    // Худший случай маршрутизации: выход X берётся с вентиля раннего столбца, а на его строке дальше стоит НЕ.
+    kind: "circuit",
+    inputs: ["A", "B"],
+    gates: [{ id: "x", op: "xor", in: ["A", "B"] }, { id: "n", op: "not", in: ["x"] }],
+    output: "n",
+    outputs: [{ gate: "n", name: "F" }, { gate: "x", name: "X" }],
+    values: { A: 1, B: 0 },
+  },
+  {
+    // Полный сумматор: выходы S и Co.
+    kind: "circuit",
+    inputs: ["A", "B", "Ci"],
+    gates: [
+      { id: "x1", op: "xor", in: ["A", "B"] },
+      { id: "s", op: "xor", in: ["x1", "Ci"] },
+      { id: "a1", op: "and", in: ["A", "B"] },
+      { id: "a2", op: "and", in: ["x1", "Ci"] },
+      { id: "c", op: "or", in: ["a1", "a2"] },
+    ],
+    output: "s",
+    outputs: [{ gate: "s", name: "S" }, { gate: "c", name: "Co" }],
+    values: { A: 1, B: 0, Ci: 1 },
   },
 ];

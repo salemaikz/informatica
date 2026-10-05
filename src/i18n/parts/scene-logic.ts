@@ -2,4 +2,26 @@ import type { L } from "@/lib/types";
 
 // Этап 16Б, волна 3 (сцены gates, switches и выходы circuit; ТЗ — docs/specs/stage16b-wave3*.md). Ключи — `scene.gates.*, scene.switches.*, scene.circuit.*`.
 // Казахский — литературный, термины по глоссарию НЦТ, без глаголов с родом в русском. Вычитано моделью, носителем — нет.
-export const sceneLogicDict = {} satisfies Record<string, L>;
+export const sceneLogicDict = {
+  // gates: названия вентилей под значками
+  "scene.gates.and": { ru: "И", kk: "ЖӘНЕ" },
+  "scene.gates.or": { ru: "ИЛИ", kk: "НЕМЕСЕ" },
+  "scene.gates.not": { ru: "НЕ", kk: "ЕМЕС" },
+  "scene.gates.nand": { ru: "И-НЕ", kk: "ЖӘНЕ-ЕМЕС" },
+  "scene.gates.nor": { ru: "ИЛИ-НЕ", kk: "НЕМЕСЕ-ЕМЕС" },
+  "scene.gates.xor": { ru: "Исключающее ИЛИ", kk: "Қатаң НЕМЕСЕ" },
+  "scene.gates.ariaHl": { ru: "выделено", kk: "бөлектелген" },
+  "scene.gates.aria": { ru: "Логические вентили: значки, названия и формулы", kk: "Логикалық вентильдер: белгілері, атаулары және формулалары" },
+
+  // switches: цепь с ключами и лампой
+  "scene.switches.aria.and": { ru: "Электрическая цепь: ключи соединены последовательно", kk: "Электр тізбегі: кілттер тізбектей жалғанған" },
+  "scene.switches.aria.or": { ru: "Электрическая цепь: ключи соединены параллельно", kk: "Электр тізбегі: кілттер параллель жалғанған" },
+  "scene.switches.aria.not": { ru: "Электрическая цепь: кнопка размыкает цепь", kk: "Электр тізбегі: түймені басқанда тізбек үзіледі" },
+  "scene.switches.aria.xor": { ru: "Электрическая цепь: два переключателя, лампа как в коридоре", kk: "Электр тізбегі: екі ауыстырып қосқыш, дәліздегі шам сияқты" },
+  "scene.switches.lamp": { ru: "лампа", kk: "шам" },
+  "scene.switches.lampOn": { ru: "горит", kk: "жанады" },
+  "scene.switches.lampOff": { ru: "не горит", kk: "жанбайды" },
+
+  // circuit: схема с несколькими выходами
+  "scene.circuit.ariaOutputs": { ru: "Логическая схема с несколькими выходами", kk: "Бірнеше шығысы бар логикалық схема" },
+} satisfies Record<string, L>;
