@@ -279,6 +279,7 @@ const REASON_KEY: Record<Exclude<ChipReason, "buy" | "ai" | "refund">, DictKey> 
   dailyGoal: "shop.ledger.dailyGoal",
   achievement: "shop.ledger.achievement",
   exam: "shop.ledger.exam",
+  case: "case.ledger",
 };
 
 const ITEM_NAME: Record<string, DictKey> = {

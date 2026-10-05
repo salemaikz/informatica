@@ -85,6 +85,7 @@ import {
   type ShopItemId,
   type Wallet,
 } from "./economy";
+import { casesForLevelUp, claimLevelCase, queueCases, type LevelCaseRoll } from "./level-case";
 import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type HistoryEntry, type WrongItem } from "./history";
 import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
 import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
@@ -381,6 +382,11 @@ export interface AppActions {
   recordDiagnostic: (summary: DiagnosticSummary, skillAnswers: Record<string, boolean[]>, opts?: { skipBasics?: boolean }) => void;
   /** Покупка за чипы: сердечко, полный запас, бустер. */
   buy: (id: ShopItemId) => BuyResult;
+  /**
+   * Открыть кейс за уровень (волна 1Б, R3): код бросает приз по seed, сразу выдаёт его и убирает кейс из очереди.
+   * Нет такого кейса — null. Опыт из приза новых кейсов не порождает.
+   */
+  openLevelCase: (level: number, seed: number) => LevelCaseRoll | null;
   /** Пробный период «Безлимита» (один раз). false — уже был или тариф платный. */
   startTrial: () => boolean;
   /** Окно тарифов показано. */
@@ -490,6 +496,14 @@ const emptyDay = (): DayStat => ({ xp: 0, answers: 0, correct: 0, seconds: 0, le
 /** Действующий тариф прямо сейчас. */
 const tierOf = (s: Pick<AppState, "plan">, now = Date.now()) => effectiveTier(s.plan, now);
 
+/** Кейс за каждый новый уровень (волна 1Б, R3): очередь неоткрытых кейсов пополняется при росте опыта prev → next. */
+function addLevelCases(prev: AppState, next: AppState): AppState {
+  if (next.xp <= prev.xp) return next;
+  const levels = casesForLevelUp(levelInfo(prev.xp).level, levelInfo(next.xp).level);
+  if (!levels.length) return next;
+  return { ...next, pendingCases: queueCases(next.pendingCases, levels) };
+}
+
 /**
  * Чипы за то, что изменилось между prev и next: опыт (5 XP = 2 чипа), дневная цель, новые достижения
  * и бонусы extra. Всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
@@ -514,7 +528,7 @@ function settleChips(prev: AppState, next: AppState, extra: { base: number; reas
     wallet = { ...wallet, chips: wallet.chips + g.amount, earned: wallet.earned + g.amount };
     ledger = pushLedger(ledger, { id: uid(), at: now, amount: g.amount, reason: g.reason });
   }
-  return wallet === next.wallet ? next : { ...next, wallet, ledger };
+  return addLevelCases(prev, wallet === next.wallet ? next : { ...next, wallet, ledger });
 }
 
 /** Закрыть ошибку: убрать из списка ошибок и отметить исправленной в истории тестов. */
@@ -1123,6 +1137,16 @@ export const useApp = create<AppState & AppActions>()(
           ledger: pushLedger(s.ledger, { id: uid(), at: now, amount: -price, reason: "buy", note: id }),
         });
         return { ok: true };
+      },
+
+      openLevelCase: (level, seed) => {
+        const s = get();
+        const now = Date.now();
+        const claim = claimLevelCase(s, level, seed, { now, today: todayKey(), tier: tierOf(s, now), ledgerId: uid() });
+        if (!claim) return null;
+        const { xp, wallet, hearts, boost, ledger, pendingCases } = claim.state;
+        set({ xp, wallet, hearts, boost, ledger, pendingCases });
+        return claim.roll;
       },
 
       startTrial: () => {
