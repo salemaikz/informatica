@@ -21,9 +21,9 @@ const verdict = (id: string, code: string) => {
 };
 
 describe("SQL: задачи", () => {
-  it("20 задач, уникальные id, двуязычные, навыки db.*, уровни A/B/C", () => {
-    expect(TASKS).toHaveLength(20);
-    expect(new Set(TASKS.map((t) => t.id)).size).toBe(20);
+  it("30 задач, уникальные id, двуязычные, навыки db.*, уровни A/B/C", () => {
+    expect(TASKS).toHaveLength(30);
+    expect(new Set(TASKS.map((t) => t.id)).size).toBe(30);
     for (const t of TASKS) {
       expect(t.lang).toBe("sql");
       expect(["db.select", "db.modify", "db.where", "db.order", "db.group", "db.join", "db.ddl"]).toContain(t.skill);
@@ -197,6 +197,115 @@ describe("SQL: задачи", () => {
     expect(verdict("sql-20-delete", `${del} price <= 3000 OR pages > 350`).ok).toBe(false); // без года
     expect(verdict("sql-20-delete", `${del} (price <= 3000 OR pages > 350) AND year <= 2019`).ok).toBe(true);
     expect(verdict("sql-20-delete", `${del} year < 2020 AND price <= 3000; ${del} year < 2020 AND pages > 350;`).ok).toBe(true);
+  });
+
+  it("этап 14: +10 задач (sql-21…sql-30) — состав, уровни и результаты эталонов (сверены с sqlite3)", () => {
+    const added = TASKS.slice(20);
+    expect(added.map((t) => t.id)).toEqual([
+      "sql-21-where-not",
+      "sql-22-calc-column",
+      "sql-23-distinct-desc",
+      "sql-24-order-offset",
+      "sql-25-group-count",
+      "sql-26-group-year",
+      "sql-27-having-avg",
+      "sql-28-join-teacher",
+      "sql-29-join-orders",
+      "sql-30-join-sum",
+    ]);
+    expect([1, 2, 3].map((lv) => added.filter((t) => t.level === lv).length)).toEqual([3, 4, 3]);
+    const count = (skills: string[]) => added.filter((t) => skills.includes(t.skill ?? "")).length;
+    expect([count(["db.select", "db.where"]), count(["db.order"]), count(["db.group"]), count(["db.join"])]).toEqual([2, 2, 3, 3]);
+    for (const t of added) {
+      expect(t.hint?.ru.length, t.id).toBeGreaterThan(20);
+      expect(t.starter.trim().length, t.id).toBeGreaterThan(10);
+    }
+    const rows = (id: string) => {
+      const r = runSql(SQL, task(id).check.reference);
+      return r.ok ? (r.sets[0]?.rows ?? []) : null;
+    };
+    expect(rows("sql-21-where-not")).toHaveLength(9);
+    expect(rows("sql-22-calc-column")).toEqual([
+      ["Python for Kids", 4050],
+      ["Learn Python Fast", 4590],
+      ["Алгоритмы и структуры", 4320],
+      ["Python и данные", 5040],
+      ["JavaScript Start", 3780],
+    ]);
+    expect(rows("sql-23-distinct-desc")).toEqual([[11], [10], [9]]);
+    expect(rows("sql-24-order-offset")).toEqual([
+      ["JavaScript Start", 4200],
+      ["Web Design Basics", 3900],
+      ["Базы данных", 3500],
+    ]);
+    expect(rows("sql-25-group-count")).toEqual([
+      [9, 2],
+      [10, 3],
+      [11, 4],
+    ]);
+    expect(rows("sql-26-group-year")).toHaveLength(7);
+    expect(rows("sql-27-having-avg")?.map((r) => r[0])).toEqual(["Астана", "Алматы", "Шымкент"]);
+    expect(rows("sql-28-join-teacher")).toHaveLength(12);
+    expect(rows("sql-29-join-orders")).toEqual([
+      ["Dana", 2],
+      ["Aruzhan", 3],
+      ["Томирис", 2],
+      ["Бекзат", 2],
+    ]);
+    expect(rows("sql-30-join-sum")).toEqual([
+      ["Python for Kids", 3],
+      ["Learn Python Fast", 3],
+      ["JavaScript Start", 3],
+    ]);
+  });
+
+  it("этап 14: другие верные записи проходят, типичные ошибки — нет", () => {
+    // db.where: != и NOT; «меньше» вместо «не равно»
+    expect(verdict("sql-21-where-not", "SELECT title, year FROM books WHERE year != 2021").ok).toBe(true);
+    expect(verdict("sql-21-where-not", "SELECT title, year FROM books WHERE NOT year = 2021").ok).toBe(true);
+    expect(verdict("sql-21-where-not", "SELECT title, year FROM books WHERE year < 2021").ok).toBe(false);
+    // db.select: 0.9 вместо 9 / 10, вычитание, условие по цене со скидкой
+    expect(verdict("sql-22-calc-column", "SELECT title, price * 0.9 FROM books WHERE price > 4000").ok).toBe(true);
+    expect(verdict("sql-22-calc-column", "SELECT title, price - price / 10 AS sale FROM books WHERE price > 4000").ok).toBe(true);
+    expect(verdict("sql-22-calc-column", "SELECT title, price - 10 FROM books WHERE price > 4000").ok).toBe(false);
+    expect(verdict("sql-22-calc-column", "SELECT title, price * 9 / 10 FROM books WHERE price * 9 / 10 > 4000").ok).toBe(false);
+    // db.order: без DISTINCT, не тот порядок, GROUP BY вместо DISTINCT; OFFSET и границы
+    expect(verdict("sql-23-distinct-desc", "SELECT class FROM students ORDER BY class DESC").ok).toBe(false);
+    expect(verdict("sql-23-distinct-desc", "SELECT DISTINCT class FROM students ORDER BY class").ok).toBe(false);
+    expect(verdict("sql-23-distinct-desc", "SELECT class FROM students GROUP BY class ORDER BY class DESC").ok).toBe(true);
+    const top = "SELECT title, price FROM books";
+    expect(verdict("sql-24-order-offset", `${top} WHERE year >= 2020 ORDER BY price DESC LIMIT 2, 3`).ok).toBe(true);
+    expect(verdict("sql-24-order-offset", `${top} WHERE year >= 2020 ORDER BY price DESC LIMIT 3 OFFSET 3`).ok).toBe(false);
+    expect(verdict("sql-24-order-offset", `${top} WHERE year >= 2020 ORDER BY price DESC LIMIT 5`).ok).toBe(false);
+    expect(verdict("sql-24-order-offset", `${top} ORDER BY price DESC LIMIT 3 OFFSET 2`).ok).toBe(false);
+    expect(verdict("sql-24-order-offset", `${top} WHERE year > 2020 ORDER BY price DESC LIMIT 3 OFFSET 2`).ok).toBe(false);
+    // db.group: WHERE до группировки, подходящие агрегаты, HAVING и порядок
+    expect(verdict("sql-25-group-count", "SELECT class, COUNT(*) FROM students GROUP BY class").ok).toBe(false);
+    expect(verdict("sql-25-group-count", "SELECT class, COUNT(id) FROM students WHERE score > 70 GROUP BY class").ok).toBe(true);
+    expect(verdict("sql-26-group-year", "SELECT year, SUM(pages), AVG(price) FROM books GROUP BY year").ok).toBe(false);
+    expect(verdict("sql-26-group-year", "SELECT year, COUNT(pages), MIN(price) FROM books GROUP BY year").ok).toBe(false);
+    const avg = "SELECT city, AVG(score) FROM students GROUP BY city";
+    expect(verdict("sql-27-having-avg", `${avg} HAVING COUNT(*) >= 3 ORDER BY AVG(score) DESC`).ok).toBe(true);
+    expect(verdict("sql-27-having-avg", `${avg} HAVING COUNT(id) > 2 ORDER BY 2 DESC`).ok).toBe(true);
+    expect(verdict("sql-27-having-avg", `${avg} ORDER BY AVG(score) DESC`).ok).toBe(false);
+    expect(verdict("sql-27-having-avg", `${avg} HAVING COUNT(*) > 3 ORDER BY AVG(score) DESC`).ok).toBe(false);
+    const order = verdict("sql-27-having-avg", `${avg} HAVING COUNT(*) >= 3 ORDER BY AVG(score)`);
+    expect(order.ok).toBe(false);
+    expect((order.message as { ru: string }).ru).toContain("порядок");
+    // db.join: без условия связи, связь по разным названиям столбцов, группировка по названию
+    expect(verdict("sql-28-join-teacher", "SELECT students.name, classes.teacher FROM students, classes").ok).toBe(false);
+    expect(verdict("sql-28-join-teacher", "SELECT s.name, c.teacher FROM students s INNER JOIN classes c ON s.class = c.class").ok).toBe(true);
+    const j29 = "SELECT students.name, orders.qty FROM orders JOIN students";
+    expect(verdict("sql-29-join-orders", `${j29} ON orders.student_id = students.id WHERE orders.qty >= 2`).ok).toBe(true);
+    expect(verdict("sql-29-join-orders", `${j29} ON orders.id = students.id WHERE orders.qty >= 2`).ok).toBe(false);
+    expect(verdict("sql-29-join-orders", `${j29} ON orders.student_id = students.id WHERE orders.qty > 2`).ok).toBe(false);
+    const j30 = "SELECT books.title, SUM(orders.qty) FROM orders JOIN books ON orders.book_id = books.id";
+    expect(verdict("sql-30-join-sum", `${j30} GROUP BY books.title HAVING SUM(orders.qty) > 2`).ok).toBe(true);
+    expect(verdict("sql-30-join-sum", `${j30} GROUP BY books.id`).ok).toBe(false);
+    expect(verdict("sql-30-join-sum", `${j30} GROUP BY books.id HAVING SUM(orders.qty) >= 2`).ok).toBe(false);
+    const w = verdict("sql-30-join-sum", `${j30} WHERE SUM(orders.qty) > 2 GROUP BY books.id`);
+    expect(w.ok).toBe(false);
+    expect((w.message as { ru: string }).ru).toContain("HAVING");
   });
 
   it("баллы учеников уникальны (порядок ORDER BY однозначен)", () => {
