@@ -173,7 +173,7 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 - `lessons[id]`: `via` (learn/check/game/extern), `stage`/`dueAt` — расписание повторения (`lib/review.ts`: `scheduleAfter`, `dueLessons`, `lessonXpFactor`).
 - `notebook` — конспекты 2.0 (`lib/notebook.ts`), картинки — IndexedDB (`lib/note-images.ts`).
 - `exams` — итоги пробников; сами вопросы и ответы попытки — IndexedDB (`lib/exam-store.ts`).
-- Новые действия: `completeLessons`, `markReviewed`, `createFolder/updateFolder/deleteFolder`, `createNote/updateNote/deleteNote`, `recordExam`, `importProgress`.
+- Новые действия: `completeLessons`, `markReviewed`, `createFolder/updateFolder/deleteFolder`, `createNote/updateNote/deleteNote`, `recordExam` (`importProgress` удалён в v0.9.1 — резервной копии нет, решение #60).
 - Серия с заморозками — `lib/gamification.ts` (`bumpStreak`, `liveStreak`, `streakAtRisk`).
 
 ### Маршруты
@@ -291,7 +291,7 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Каждый маршрут `app/api/ai/*`: `guardAi(req, { route, units })` → отказ (`403 forbidden_origin`, `429 rate_limited`/`daily_limit`, `503 ai_busy`) или `GuardOk` с `release()` и cookie нового устройства (`withGuardHeaders`).
 - Порядок: строгий `sameOrigin` (production — только с `Origin`) → устройство по подписанной cookie `inf_ai` (HMAC, `Path=/api`) → новые устройства с IP → всплеск (устройство и IP) → суточные лимиты устройства, IP и сайта. Списание атомарное (`incrBy`) до вызова модели; отказ на любом шаге откатывает уже списанное.
 - IP — `clientIp()`/`ipKey()` в `server/rate-limit.ts`: первый адрес `x-forwarded-for`, IPv6 по /64, в хранилище — хеш. `kvRateLimit` — всплеск в общем хранилище; `preCheckAi` в `tutor` — дешёвый счётчик до разбора тела.
-- `release()` — только если модель запрос не получила (`openAiRejected(e, signal)` в `server/openai.ts`: `APIError` со статусом и без обрыва клиентом). Таймаут вызова — `callTimeoutMs(maxDuration)`, потолки токенов — `MAX_TOKENS`.
+- `release()` — только если модель запрос не получила (`openAiRejected(e, signal)` в `server/openai.ts`: `APIError` со статусом и без обрыва клиентом). Таймаут вызова — `callTimeoutMs(maxDuration)`, потолки токенов на выход — `MAX_TOKENS`, бюджет входа — `INPUT_BUDGET` (символы: чат 16 000, фото 6 000 + изображение, отзыв 6 000) и `fitInput()` в `server/context.ts`: сначала отбрасывается старая история, потом укорачиваются необязательные части контекста; системные правила и последний вопрос не трогаются (#64). В лог `[ai]` пишется `chars=`.
 - Клиент считает те же «обращения»: `AI_UNITS` и `AI_DAILY_CAP` в `lib/economy.ts`; коды ошибок → тексты — `lib/ai-errors.ts` (`aiCodeKey`) и `aiErrorKey` в `lib/ai.ts`.
 
 ### Поток ответа и кризис
@@ -302,14 +302,14 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - `lib/issue.ts` — типы, причины, лимиты, проверка и обрезка тела (`parseIssue`), отправка с клиента; `components/issue/ReportIssueButton.tsx` — кнопка и шторка (портал в `body`, общий набор «в полёте»). Запись — строка `[issue]` в журнал и `pushCapped` в `issues` / `client-errors`.
 - `lib/client-errors.ts` + `components/app/ClientErrorReporter.tsx` (в `app/layout.tsx`, вне `Providers`) — автоотчёты о сбоях в production; страницы `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` (язык без стора — `readStoredProfile` в `lib/client-errors.ts`).
 
-### Сохранение (`lib/safe-storage.ts`, `lib/backup*.ts`, решение #57)
-- Стор пишет через `safeStorage`: статусы `ok | memory | full` (баннер `StorageBanner`), нечитаемое сохранение → копия `informatica-v1-broken`, запись заблокирована, `Providers` показывает `RecoveryScreen` (фаза `hydrationPhase`: loading → ready | failed, таймаут 4 с).
-- Копия v3: `buildBackup` / `parseBackup` (чистая логика, `BACKUP_LIMITS`, `ECONOMY_CAPS`) и `exportBackup` / `importBackup` (IndexedDB: чаты, фото, черновик; старое удаляется только после успешной записи нового).
-- `requestPersistentStorage()` — из обработчиков нажатия (конец онбординга, импорт).
+### Сохранение (`lib/safe-storage.ts`, решения #57, #60)
+- Стор пишет через `safeStorage`: статусы `ok | memory | full` (баннер `StorageBanner`). Нечитаемое сохранение (битый JSON, сбой чтения, миграции или слияния) не перезаписывается: запись в основной ключ заблокирована, `Providers` показывает `RecoveryScreen` («Попробовать ещё раз», «Начать заново» с подтверждением; фаза `hydrationPhase`: loading → ready | failed, таймаут 4 с). Копий и выгрузок нет (#60); старый ключ `informatica-v1-broken` при запуске удаляется.
+- `requestPersistentStorage()` — по нажатию в конце онбординга. `downloadBlob` (`lib/download.ts`) — только для файла напоминаний (.ics).
 
 ### Школьный трек и правовые страницы
 - `entVisible(profile)` (`lib/school.ts`) / `useEntVisible()` — одна точка решения «показывать ЕНТ»; `visibleGroups`/`hubGroup` в `components/app/nav.ts`; `EntOnly` — карточка на `/exam`, `/exam/run`, `/plan` (`ENT_ONLY_PATHS`).
-- `/about`, `/privacy`, `/terms` — `components/legal/LegalPage.tsx`, тексты — `content/legal.ts` (ru и kk, тесты сверяют их с константами кода); язык гостя — `lib/guest-lang.ts`. Превью ссылки — `metadata` в `app/layout.tsx` (`lib/site-meta.ts`) и `public/og.png` (`scripts/og-image.mjs`).
+- `/privacy`, `/terms` — `components/legal/LegalPage.tsx`, тексты — `content/legal.ts` (ru и kk; подрядчики и технологии не названы, решение #62; контакт — `LEGAL_CONTACT`); «Кто мы» убрано (#60); язык гостя — `lib/guest-lang.ts`.
+- Прогресс общий для обоих треков: «урок пройден» — одно определение `isPassedStat` (`lib/school.ts`) для школьной карты и карт курса ЕНТ; источник — `lessons`/`skills` стора, `profile.track` на них не влияет (#63). Превью ссылки — `metadata` в `app/layout.tsx` (`lib/site-meta.ts`) и `public/og.png` (`scripts/og-image.mjs`).
 
 ### Веса ЕНТ
 - `content/ent-topics.ts`: `examCount` по плану НЦТ, `CONTEXT_TOPICS = ["t06", "t07"]`, `topicWeight`; раскладка «Карты ЕНТ» — `components/learn/ent-grid.ts` (`fillGrid` повторяет `grid-flow-row-dense`, тест — `learn-map`).
