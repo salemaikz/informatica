@@ -562,12 +562,17 @@ export const lesson: Lesson = {
       lines: [
         [".card {"],
         ["    width: 300px;"],
-        ["    ", { blank: ["margin"], mode: "text" }, ": 0 auto;"],
+        ["    ", { blank: ["margin"], mode: "text", label: { ru: "margin", kk: "margin" } }, ": 0 auto;"],
         ["    padding: 16px;"],
         ["    border: 2px solid blue;"],
-        ["    text-align: ", { blank: ["center"], mode: "text" }, ";"],
-        ["    box-sizing: ", { blank: ["border-box"], mode: "text" }, ";"],
+        ["    text-align: ", { blank: ["center"], mode: "text", label: { ru: "center", kk: "center" } }, ";"],
+        ["    box-sizing: ", { blank: ["border-box"], mode: "text", label: { ru: "border-box", kk: "border-box" } }, ";"],
         ["}"],
+      ],
+      bank: [
+        { ru: "padding", kk: "padding" },
+        { ru: "left", kk: "left" },
+        { ru: "content-box", kk: "content-box" },
       ],
       explanation: T(
         "Блок по центру — `margin: 0 auto` (нужна `width`, она есть). Текст по центру — `text-align: center`. Чтобы 300 px включали padding и border, пишут `box-sizing: border-box`.",

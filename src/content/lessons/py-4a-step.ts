@@ -155,9 +155,10 @@ export const lesson: Lesson = {
       lines: [
         [{ ru: "Шаг 2, начало не указано — стартуем с номера 0.", kk: "Қадам 2, басы көрсетілмеген — 0 нөмірінен бастаймыз." }],
         [{ ru: "Номера:", kk: "Нөмірлер:" }, " 0, ", { blank: ["2"], mode: "number" }, ", ", { blank: ["4"], mode: "number" }],
-        ["s[0] = A,  s[2] = ", { blank: ["T"], mode: "text" }, ",  s[4] = ", { blank: ["B"], mode: "text" }],
-        ["s[::2] = ", { blank: ["ATB", "'ATB'"], mode: "text" }],
+        ["s[0] = A,  s[2] = ", { blank: ["T"], mode: "text", label: { ru: "T", kk: "T" } }, ",  s[4] = ", { blank: ["B"], mode: "text", label: { ru: "B", kk: "B" } }],
+        ["s[::2] = ", { blank: ["ATB", "'ATB'"], mode: "text", label: { ru: "ATB", kk: "ATB" } }],
       ],
+      bank: [{ ru: "K", kk: "K" }, { ru: "O", kk: "O" }, { ru: "AKT", kk: "AKT" }],
       explanation: {
         ru: "Шаг 2 прибавляется к номеру: 0, 2, 4. Следующий номер 6 уже за строкой — стоп. Буквы `A`, `T`, `B` — вместе `ATB`.",
         kk: "2 қадамы нөмірге қосылады: 0, 2, 4. Келесі 6 нөмірі жолдан тыс — тоқтаймыз. `A`, `T`, `B` әріптері — бірге `ATB`.",
