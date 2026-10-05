@@ -70,6 +70,13 @@ import { topicTestDict } from "./parts/topic-test";
 import { perfectDict } from "./parts/perfect";
 import { rewardsDict } from "./parts/rewards";
 import { praiseDict } from "./parts/praise";
+import { rarityDict } from "./parts/rarity";
+import { cosmeticsDict } from "./parts/cosmetics";
+import { guideDict } from "./parts/guide";
+import { dockDict } from "./parts/dock";
+import { econ16cDict } from "./parts/econ16c";
+import { gamifyDict } from "./parts/gamify";
+import { progress16cDict } from "./parts/progress16c";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -573,6 +580,13 @@ export const dict = {
   ...perfectDict,
   ...rewardsDict,
   ...praiseDict,
+  ...rarityDict,
+  ...cosmeticsDict,
+  ...guideDict,
+  ...dockDict,
+  ...econ16cDict,
+  ...gamifyDict,
+  ...progress16cDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

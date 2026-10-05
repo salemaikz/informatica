@@ -10,6 +10,7 @@
   - streak  (оранжевый)— серия дней
   - ai      (фиолетовый)— всё, что делает ИИ
   - heart   (розово-красный) — сердечки (жизни в уроках)
+  - rarity-common/rare/epic/legendary — только редкость (украшения, достижения, ступени уровня)
   Чипы (валюта) и тарифы — золотой gold (награды).
 */
 :root {
@@ -49,6 +50,16 @@
   --heart: #f2416b;
   --heart-strong: #c92a50;
   --heart-soft: #ffe8ee;
+
+  /* Редкость (этап 16В): украшения профиля, достижения, ступени уровня. Только для редкости — не для «верно/неверно». */
+  --rarity-common: #6f7a8f;
+  --rarity-common-soft: #eef1f5;
+  --rarity-rare: #0e96ab;
+  --rarity-rare-soft: #ddf4f7;
+  --rarity-epic: #bf3fb8;
+  --rarity-epic-soft: #fae8f9;
+  --rarity-legendary: #e08a00;
+  --rarity-legendary-soft: #fff0d4;
 
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 16%, var(--surface));
@@ -106,6 +117,15 @@
   --heart-strong: #d63c62;
   --heart-soft: #3d1a26;
 
+  --rarity-common: #9aa4b8;
+  --rarity-common-soft: #232a38;
+  --rarity-rare: #3cc3d6;
+  --rarity-rare-soft: #10313a;
+  --rarity-epic: #e070da;
+  --rarity-epic-soft: #3a1c3a;
+  --rarity-legendary: #ffb52e;
+  --rarity-legendary-soft: #3a2a0e;
+
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
   --device-shell-2: color-mix(in srgb, var(--muted) 40%, var(--surface));
@@ -162,6 +182,15 @@
     --heart-strong: #d63c62;
     --heart-soft: #3d1a26;
 
+    --rarity-common: #9aa4b8;
+    --rarity-common-soft: #232a38;
+    --rarity-rare: #3cc3d6;
+    --rarity-rare-soft: #10313a;
+    --rarity-epic: #e070da;
+    --rarity-epic-soft: #3a1c3a;
+    --rarity-legendary: #ffb52e;
+    --rarity-legendary-soft: #3a2a0e;
+
     /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
     --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
     --device-shell-2: color-mix(in srgb, var(--muted) 40%, var(--surface));
@@ -211,6 +240,14 @@
   --color-heart: var(--heart);
   --color-heart-strong: var(--heart-strong);
   --color-heart-soft: var(--heart-soft);
+  --color-rarity-common: var(--rarity-common);
+  --color-rarity-common-soft: var(--rarity-common-soft);
+  --color-rarity-rare: var(--rarity-rare);
+  --color-rarity-rare-soft: var(--rarity-rare-soft);
+  --color-rarity-epic: var(--rarity-epic);
+  --color-rarity-epic-soft: var(--rarity-epic-soft);
+  --color-rarity-legendary: var(--rarity-legendary);
+  --color-rarity-legendary-soft: var(--rarity-legendary-soft);
   --color-on-primary: var(--on-primary);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
