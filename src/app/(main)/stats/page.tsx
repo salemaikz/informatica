@@ -1,79 +1,51 @@
 "use client";
 
-import { BookCheck, Clock, Flame, Snowflake, Sparkles, Target, Trash2, Trophy, Zap } from "lucide-react";
+import { Snowflake, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { SKILLS } from "@/content/skills";
 import { useApp } from "@/lib/store";
-import { masteryLevel } from "@/lib/mastery";
-import { useLevel, useStreak } from "@/lib/hooks";
-import { levelTitle } from "@/lib/gamification";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Markdown } from "@/components/Markdown";
 import { WeekChart } from "@/components/app/WeekChart";
-import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { GoalsPanel, WeekCard } from "@/components/goals/GoalsPanel";
 import { HistoryStatsCard } from "@/components/history/HistoryCards";
+import { CourseProgressCard } from "@/components/progress/CourseProgressCard";
+import { SkillsMasteryCard } from "@/components/progress/SkillsMasteryCard";
+import { StatsTiles } from "@/components/progress/StatsTiles";
+import { TopicTable } from "@/components/progress/TopicTable";
+import { UnitProgressList } from "@/components/progress/UnitProgressList";
+import { WeakSpotsCard } from "@/components/progress/WeakSpotsCard";
 import { useEntVisible } from "@/components/school/useEntVisible";
 
-function Tile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="rounded-2xl border-2 border-border bg-surface p-3">
-      <p className="flex items-center gap-1.5 text-xs font-extrabold text-muted">
-        {icon} {label}
-      </p>
-      <p className="mt-1 text-2xl font-extrabold">{value}</p>
-      {sub && <p className="text-xs font-bold text-muted">{sub}</p>}
-    </div>
-  );
-}
-
-function formatDuration(sec: number, lang: "ru" | "kk") {
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
-  const hs = lang === "kk" ? "сағ" : "ч";
-  const ms = lang === "kk" ? "мин" : "мин";
-  return h ? `${h} ${hs} ${m} ${ms}` : `${m} ${ms}`;
-}
-
+/**
+ * «Прогресс»: сверху шкала курса, слабые места, разделы и темы (#71); затем честные числа (#66, #68),
+ * цели, история, освоение навыков (#67), ошибки и «что ИИ знает обо мне».
+ */
 export default function StatsPage() {
-  const { t, l, lang } = useT();
-  const days = useApp((s) => s.days);
-  const skills = useApp((s) => s.skills);
-  const lessons = useApp((s) => s.lessons);
+  const { t } = useT();
   const mistakes = useApp((s) => s.mistakes);
   const memory = useApp((s) => s.memory);
   const setMemory = useApp((s) => s.setMemory);
-  const { xp, level } = useLevel();
-  const { current, best } = useStreak();
   const freezes = useApp((s) => s.streak.freezes ?? 0);
-  // Цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
+  // Темы ЕНТ, цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
   const ent = useEntVisible();
-
-  const totals = Object.values(days).reduce((a, d) => ({ answers: a.answers + d.answers, correct: a.correct + d.correct, seconds: a.seconds + d.seconds }), { answers: 0, correct: 0, seconds: 0 });
-  const accuracy = totals.answers ? Math.round((totals.correct / totals.answers) * 100) : 0;
-  const empty = totals.answers === 0;
 
   return (
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
-      {ent ? <GoalsPanel /> : <WeekCard showEdit />}
+      <CourseProgressCard />
+      <WeakSpotsCard />
+      <UnitProgressList />
+      {ent && <TopicTable />}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile icon={<Zap size={14} className="text-gold" />} label={t("stats.totalXp")} value={xp} />
-        <Tile icon={<Trophy size={14} className="text-primary" />} label={t("stats.level")} value={level} sub={l(levelTitle(level))} />
-        <Tile icon={<Flame size={14} className="text-streak" />} label={t("stats.streak")} value={current} sub={t("stats.best", { n: best })} />
-        <Tile icon={<Target size={14} className="text-success" />} label={t("stats.accuracy")} value={empty ? "—" : `${accuracy}%`} />
-        <Tile icon={<Clock size={14} className="text-primary" />} label={t("stats.time")} value={formatDuration(totals.seconds, lang)} />
-        <Tile icon={<BookCheck size={14} className="text-primary" />} label={t("stats.lessons")} value={Object.keys(lessons).length} />
-      </div>
+      <StatsTiles />
+
+      {ent ? <GoalsPanel /> : <WeekCard showEdit />}
 
       <Card className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-          <Snowflake size={24} />
+          <Snowflake size={24} aria-hidden />
         </span>
         <div className="min-w-0">
           <p className="font-extrabold">{t("goals.streak.freezes", { n: freezes })}</p>
@@ -88,32 +60,7 @@ export default function StatsPage() {
         <WeekChart />
       </Card>
 
-      <Card>
-        <p className="mb-3 font-extrabold">{t("stats.skills")}</p>
-        {empty ? (
-          <p className="font-semibold text-muted">{t("stats.noData")}</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {SKILLS.map((sk) => {
-              const st = skills[sk.id];
-              const lvl = masteryLevel(st);
-              return (
-                <li key={sk.id}>
-                  <div className="mb-1 flex justify-between gap-2 text-sm font-bold">
-                    <span>{l(sk.title)}</span>
-                    <span className="flex items-center gap-1.5 text-muted">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: MASTERY_COLOR[lvl] }} />
-                      {t(`mastery.${lvl}`)}
-                      {st && ` · ${Math.round(st.mastery * 100)}%`}
-                    </span>
-                  </div>
-                  <ProgressBar value={st?.mastery ?? 0} color={MASTERY_COLOR[lvl]} height={10} />
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+      <SkillsMasteryCard />
 
       {mistakes.length > 0 && (
         <Card>

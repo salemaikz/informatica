@@ -2,12 +2,9 @@
 
 import clsx from "clsx";
 import { Flame, Target, Zap } from "lucide-react";
-import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useDaily, useLevel, useStreak } from "@/lib/hooks";
 import { levelTitle } from "@/lib/gamification";
-import { weakSkills } from "@/lib/mastery";
-import { useApp } from "@/lib/store";
-import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
@@ -87,27 +84,12 @@ export function LevelCard() {
   );
 }
 
+/**
+ * «Слабые места» в правой колонке: адресные ссылки на тренировку по навыкам (lib/progress → weakSpots).
+ * Подгружается лениво и только на клиенте: логика курса и банков заданий не попадает в общий код всех страниц оболочки.
+ */
+const WeakTopicsRail = dynamic(() => import("@/components/progress/WeakTopicsRail").then((m) => m.WeakTopicsRail), { ssr: false });
+
 export function WeakTopicsCard() {
-  const { t, l } = useT();
-  const skills = useApp((s) => s.skills);
-  const weak = weakSkills(skills).slice(0, 3);
-  if (!weak.length) return null;
-  return (
-    <Card className="border-danger/30">
-      <p className="mb-2 font-extrabold">{t("learn.weak.title")}</p>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {weak.map((id) => (
-          <span key={id} className="rounded-full bg-danger-soft px-3 py-1 text-sm font-bold text-danger">
-            {skillById(id) ? l(skillById(id)!.title) : id}
-          </span>
-        ))}
-      </div>
-      <Link
-        href="/drill?mode=smart"
-        className="flex h-11 items-center justify-center rounded-2xl bg-danger font-extrabold text-white shadow-[0_4px_0_var(--danger-strong)] active:translate-y-[3px] active:shadow-none"
-      >
-        {t("learn.weak.cta")}
-      </Link>
-    </Card>
-  );
+  return <WeakTopicsRail />;
 }
