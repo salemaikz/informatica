@@ -336,7 +336,7 @@ export function ExamResult({ id }: { id: string }) {
         )}
       </Card>
 
-      <StreakIgnite />
+      <StreakIgnite sound={false} />
 
       {/* Вызов друга (#73): больше / столько же / меньше. Меньше — не ошибка, поэтому не красным. */}
       {attempt?.challenge && kind !== "unit" && (

@@ -32,6 +32,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Pill } from "@/components/ui/Pill";
 import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
+import { comboTier, pickPraise } from "@/lib/praise";
 import { AiCost, AiFreeDot, useAiQuotaText } from "@/components/economy/AiCost";
 import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
@@ -45,6 +46,7 @@ import { ComboBadge, StreakFlame } from "@/components/motion/ComboFlame";
 import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 import { XpIcon } from "@/components/economy/XpIcon";
 import { Shake } from "@/components/motion/Shake";
+import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { XpBurst } from "@/components/motion/XpBurst";
 import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
 import { LessonVideo } from "@/videos/LessonVideo";
@@ -99,8 +101,6 @@ export interface PlayerProps {
    */
   testMode?: boolean;
 }
-
-const PRAISE: DictKey[] = ["fb.correct.1", "fb.correct.2", "fb.correct.3", "fb.correct.4"];
 
 /** Цвета панели ответа (токены, работают и в тёмной теме). */
 const TONE_PANEL = {
@@ -223,6 +223,7 @@ export function LessonPlayer({
     kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : mode === "context" ? "/code/context" : mode === "codeview" ? "/code/review" : "/practice";
 
   const total = steps.length;
+  const reduceMotion = useReduceMotion();
   const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));
   const [pos, setPos] = useState(init?.pos ?? 0);
   const [answer, setAnswer] = useState<Answer | null>(null);
@@ -234,7 +235,7 @@ export function LessonPlayer({
   const [maxCombo, setMaxCombo] = useState(init?.maxCombo ?? 0);
   const [xp, setXp] = useState(init?.xp ?? 0);
   const [gain, setGain] = useState(0);
-  const [praise, setPraise] = useState<DictKey>(PRAISE[0]);
+  const [praise, setPraise] = useState<DictKey>("fb.correct.1");
   const [checkError, setCheckError] = useState<DictKey | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
@@ -362,7 +363,8 @@ export function LessonPlayer({
       if (doneEvent) track(doneEvent);
       const achievements = useApp.getState().consumeNewAchievements();
       const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
-      giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : "complete");
+      // Идеальный урок — своя фанфара вместо обычной (Results её не повторяет).
+      giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : result.accuracy >= 1 ? "perfect" : "complete");
       setSession({ result, bonusXp, achievements, chips, heart });
       requestLessonFeedback(result, setFeedback);
     },
@@ -512,7 +514,7 @@ export function LessonPlayer({
       setGain(gained);
       setResult(res);
       setPhase("feedback");
-      setPraise(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
+      setPraise((prev) => pickPraise(newCombo, prev, Math.random()));
       setDone(newDone);
       if (needRetry) setQueue(newQueue);
       // Шаг пройден — сохраняем прохождение со следующей позиции (повтор ошибки уже в очереди).
@@ -751,7 +753,20 @@ export function LessonPlayer({
           >
             <X size={24} />
           </button>
-          <ProgressBar value={progress} className="flex-1" label={title} />
+          <div className="relative min-w-0 flex-1 rounded-full">
+            <ProgressBar value={progress} label={title} />
+            {/* Свечение на комбо — отдельный слой поверх полосы: сама полоса не перемонтируется. */}
+            {comboTier(combo) > 0 && phase === "feedback" && result?.correct && !reduceMotion && !testMode && (
+              <m.span
+                key={`glow-${records.length}`}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_14px_3px_var(--streak)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+              />
+            )}
+          </div>
           <StreakFlame />
           {(entryCost > 0 || prepaid !== undefined) && (
             <span data-tour="lesson-hearts" className="flex">
@@ -933,7 +948,7 @@ export function LessonPlayer({
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...springSoft, delay: 0.04 }}
             >
-              <Mascot mood={result.correct ? "happy" : result.score > 0 ? "thinking" : "sad"} size={52} className="shrink-0" />
+              <Mascot key={done + ":" + records.length} mood={result.correct ? (comboTier(combo) >= 5 ? "celebrate" : "happy") : result.score > 0 ? "thinking" : "sad"} size={52} className="shrink-0" />
               <div className="min-w-0 flex-1">
                 {/* Заголовок результата + компактная кнопка «Сообщить об ошибке» справа (−my-1: высота панели не растёт). */}
                 <div className="flex items-start gap-1">
