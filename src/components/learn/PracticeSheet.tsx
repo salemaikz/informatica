@@ -15,7 +15,7 @@ import { bestPercent, type NodeItem } from "./map";
 import { pluralKey } from "./useLearn";
 
 // Лист узла «Практика» / «Повторение»: что внутри, лучший результат и кнопки. У практики ещё «Мини-тест» —
-// 6 заданий ЕНТ группы в настоящем формате, 1 сердечко (#81). Практика и повторение — бесплатно.
+// 6 заданий ЕНТ группы в настоящем формате, 1 сердечко (#81). Практика и повторение тоже стоят сердечко (этап 16В, решение F).
 
 function SheetBody({ item, unit, unitIndex }: { item: NodeItem; unit: Unit; unitIndex: number }) {
   const { t, l } = useT();
@@ -42,7 +42,7 @@ function SheetBody({ item, unit, unitIndex }: { item: NodeItem; unit: Unit; unit
         </div>
       </div>
 
-      <p className="font-semibold text-muted">{t(practice ? "course3.sheet.practice.desc" : "course3.sheet.recap.desc", { n: practice ? PRACTICE_COUNT : RECAP_COUNT })}</p>
+      <p className="font-semibold text-muted">{t(practice ? "econ16c.sheet.practice.desc" : "econ16c.sheet.recap.desc", { n: practice ? PRACTICE_COUNT : RECAP_COUNT })}</p>
 
       {runs > 0 ? (
         <p className="flex items-center gap-2 text-sm font-extrabold text-success-strong">
@@ -63,10 +63,12 @@ function SheetBody({ item, unit, unitIndex }: { item: NodeItem; unit: Unit; unit
         {practice ? (
           <ButtonLink href={`/drill?mode=practice&node=${nodeId}`} size="lg" block icon={<Dumbbell size={20} aria-hidden />}>
             {t("course3.sheet.start")}
+            <HeartCost n={ENTRY_COST.drill} variant="solid" />
           </ButtonLink>
         ) : (
           <ButtonLink href={`/drill?mode=recap&unit=${item.unitId}`} size="lg" block icon={<RefreshCw size={20} aria-hidden />}>
             {t("course3.sheet.startRecap")}
+            <HeartCost n={ENTRY_COST.drill} variant="solid" />
           </ButtonLink>
         )}
         {hasTest && (

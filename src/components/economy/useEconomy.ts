@@ -4,7 +4,6 @@ import { useSyncExternalStore } from "react";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 import {
-  practiceHeartsLeft,
   aiFreeLeft,
   boostActive,
   chipMultiplier,
@@ -107,13 +106,6 @@ export function useHearts(): HeartsView {
   const tier = usePlanTier();
   const t = useNow();
   return heartsView(hearts, tier, t, todayKey());
-}
-
-/** Сколько раз сегодня тренировка ещё вернёт сердечко (до PRACTICE_HEART_DAILY в день). */
-export function usePracticeHeartsLeft(): number {
-  const ph = useApp((s) => s.practiceHearts);
-  useNow(); // новый день — счётчик сбрасывается
-  return practiceHeartsLeft(ph, todayKey());
 }
 
 /** Сердечки с секундным обновлением — для строки с обратным отсчётом до следующего. */

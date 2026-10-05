@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Этап 11 (v0.10): сердечки — плата за вход, а не за ошибки (#40); незаконченный урок можно продолжить (#41).
 // Этап 15 (F2): вход списывается, когда урок начался (первое «Продолжить» или первый ответ), а не только при ответе;
-// теория урока (`/theory/<id>`) стоит 0,5; «Сердечки закончились» ведёт на бесплатную тренировку.
+// теория урока (`/theory/<id>`) стоит 0,5. Этап 16В: бесплатной тренировки нет — при нуле сердечек путь: ждать, купить за чипы, «Безлимит».
 // Урок ns-1-bits: 0 история → 1 теория → 2 песочница (цель: 5 ламп) → 3 теория → 4 задание «1 бит» (верно «2», вариант «1» — ошибка)
 // → 5 теория → 6 задание «3 лампочки» (верно «8», вариант «3» — ошибка).
 
@@ -184,30 +184,43 @@ test("урок: открыл и сразу вышел — сердечко не 
   expect(errors).toEqual([]);
 });
 
-test("урок: сердечек нет — на входе «Сердечки закончились», запасной путь — бесплатная тренировка, не теория", async ({ page }) => {
+test("урок: сердечек нет — на входе «Сердечки закончились»: время до следующего, купить за чипы, «Безлимит»; бесплатной тренировки нет", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 0);
   await page.goto("/lesson/ns-1-bits");
   await expect(page.getByRole("heading", { name: "Сердечки закончились" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Тренировка вернёт сердечко/ })).toBeVisible();
+  await expect(page.getByText(/Следующее сердечко через/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /\+1 сердечко/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Безлимит/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Тренировка вернёт сердечко/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Тренировка — бесплатно" })).toHaveCount(0);
   await expect(page.getByText("Пока почитай теорию урока")).toHaveCount(0);
   // Урок не открылся.
   await expect(page.locator("footer")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test("«Сердечки закончились»: тренировка уже не вернёт сердечко — остаётся ссылка «Тренировка — бесплатно»", async ({ page }) => {
+test("тренировка стоит сердечко: сердечек нет — на входе «Сердечки закончились», тренировка не открылась", async ({ page }) => {
   const errors = trackErrors(page);
-  await page.goto("/onboarding");
-  const today = await page.evaluate(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
-  await seed(page, 0, { practiceHearts: { day: today, count: 3 } });
-  await page.goto("/lesson/ns-1-bits");
+  await seed(page, 0);
+  await page.goto("/drill?mode=skill&skill=ns.dec2bin");
   await expect(page.getByRole("heading", { name: "Сердечки закончились" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Тренировка — бесплатно" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Тренировка вернёт сердечко/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Безлимит/ })).toBeVisible();
+  // Задание не показано, плеера нет.
+  await expect(page.locator("footer")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("тренировка: открыл и закрыл — бесплатно, сердечки в плеере видны, возврата за тренировку нет", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page, 3);
+  await page.goto("/drill?mode=skill&skill=ns.dec2bin");
+  // Вход спишется при первом ответе (как у урока): пока 3.
+  await expect(hearts(page, 3)).toBeVisible();
+  await page.getByRole("button", { name: "Выйти" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Выйти" }).click();
+  await page.waitForURL("**/practice");
+  expect(await savedHearts(page)).toBe(3);
   expect(errors).toEqual([]);
 });
 

@@ -3,6 +3,7 @@
 
 import type { SessionResult } from "./types";
 import type { PerfectRun } from "./rewards-state";
+import { PERFECT_DROP } from "./economy";
 
 /** Достижение «5 идеальных подряд». */
 export const PERFECT_RUN_GOAL = 5;
@@ -27,4 +28,45 @@ export function nextPerfectRun(run: PerfectRun, o: { perfect: boolean; first: bo
   if (!o.perfect) return run.current === 0 ? run : { ...run, current: 0 };
   const current = run.current + 1;
   return { current, best: Math.max(run.best, current) };
+}
+
+// ---------- «Сюрприз за идеальный урок» (этап 16В, решение B) ----------
+
+/**
+ * Источник случайного числа для броска. Тесты подменяют `next` (vi.spyOn), а не Math.random: им же пользуется uid() стора,
+ * и общий мок склеил бы идентификаторы записей.
+ */
+export const dropRandom = { next: (): number => Math.random() };
+
+/** Что выпало за идеальный урок или тест на 100%: пол-сердечка, чипы или ничего. */
+export type PerfectDrop = { kind: "heart"; amount: 0.5 } | { kind: "chips"; amount: number } | { kind: "none" };
+
+/**
+ * Бросок «сюрприза»: `r` — число из [0, 1) (`dropRandom.next()` вызывает действие стора ровно один раз).
+ * r < 0,2 — пол-сердечка (запас полон или «Безлимит» — вместо него чипы: показанное = выданное); r < 0,4 — чипы; иначе ничего.
+ * Множитель тарифа и бустера к чипам не применяется.
+ */
+export function rollPerfectDrop(r: number, o: { heartsFull: boolean; unlimited: boolean }): PerfectDrop {
+  const chips: PerfectDrop = { kind: "chips", amount: PERFECT_DROP.chips };
+  if (!(r >= 0)) return { kind: "none" };
+  if (r < PERFECT_DROP.heartChance) return o.heartsFull || o.unlimited ? chips : { kind: "heart", amount: PERFECT_DROP.heart };
+  if (r < PERFECT_DROP.heartChance + PERFECT_DROP.chipsChance) return chips;
+  return { kind: "none" };
+}
+
+/** Тест засчитан «на 100%»: баллы равны максимуму (максимум > 0). */
+export function isPerfectExam(points: number, maxPoints: number): boolean {
+  return maxPoints > 0 && points >= maxPoints;
+}
+
+/** Проверка сохранённого броска (данные из localStorage недоверенные): неизвестное — null. */
+export function sanitizePerfectDrop(raw: unknown): PerfectDrop | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as { kind?: unknown; amount?: unknown };
+  if (d.kind === "none") return { kind: "none" };
+  if (d.kind === "heart") return { kind: "heart", amount: PERFECT_DROP.heart };
+  if (d.kind === "chips" && typeof d.amount === "number" && Number.isFinite(d.amount) && d.amount > 0) {
+    return { kind: "chips", amount: Math.min(99, Math.floor(d.amount)) || PERFECT_DROP.chips };
+  }
+  return null;
 }

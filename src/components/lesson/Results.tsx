@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BadgeCheck, BookOpen, Library, Clock, Cpu, Flame, Heart, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
+import { BookOpen, Library, Clock, Cpu, Flame, Map as MapIcon, Repeat, RotateCcw, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
-import { isPerfectSession, PERFECT_RUN_SHOW_FROM } from "@/lib/perfect";
+import { isPerfectSession, PERFECT_RUN_SHOW_FROM, type PerfectDrop } from "@/lib/perfect";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
 import { formatFactor, nextLessonId } from "@/lib/drill-meta";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -26,6 +26,7 @@ import { Pill } from "@/components/ui/Pill";
 import { XpIcon } from "@/components/economy/XpIcon";
 import { useChips } from "@/components/economy/useEconomy";
 import { chipsKey } from "@/components/economy/xp-chips";
+import { PerfectDropTile } from "@/components/economy/PerfectDropTile";
 import { ChipFlight } from "@/components/motion/ChipFlight";
 import { formatMult } from "@/components/economy/shop-helpers";
 import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
@@ -100,10 +101,9 @@ export function Results({
   result,
   bonusXp,
   chips = 0,
-  heart = false,
   firstPass = false,
   lessonChips: lessonPart = 0,
-  perfectChips: perfectBonus = 0,
+  perfectDrop = null,
   achievements,
   feedback,
   via,
@@ -120,12 +120,11 @@ export function Results({
   bonusXp: number;
   /** Чипов заработано за сессию (разница wallet.earned с начала). */
   chips?: number;
-  /** Тренировка вернула сердечко. */
-  heart?: boolean;
-  /** Первое прохождение урока и фактически начисленные чипы за урок / за «идеально» (из finishSession, уже с множителем). */
+  /** Первое прохождение урока и фактически начисленные чипы за урок (из finishSession, уже с множителем). */
   firstPass?: boolean;
   lessonChips?: number;
-  perfectChips?: number;
+  /** «Сюрприз за идеальный урок» / мини-тест на 100% (этап 16В): что уже выдано в finishSession; null — броска не было. */
+  perfectDrop?: PerfectDrop | null;
   achievements: string[];
   feedback: FeedbackState;
   /** Режим урока (check — «Проверить себя»). */
@@ -150,11 +149,13 @@ export function Results({
   // «Идеально!» (R2): урок без единой ошибки. Чипы и серия — только за первое прохождение (в сторе уже одно засчитанное).
   const perfect = kind === "lesson" && isPerfectSession(result);
   const perfectRun = useApp((s) => s.perfectRun.current);
-  // Из чего сложились чипы сессии: урок, идеально, прочее (цель дня, достижения). Суммы уже умножены — стор их и начислил.
-  const otherChips = Math.max(0, chips - lessonPart - perfectBonus);
+  // Чипы из сюрприза показывает своя плитка (с полётом чипов), в сумму сессии они не входят.
+  const dropChips = perfectDrop?.kind === "chips" ? perfectDrop.amount : 0;
+  const sessionChips = Math.max(0, chips - dropChips);
+  // Из чего сложились чипы сессии: урок, прочее (цель дня, достижения). Суммы уже умножены — стор их и начислил.
+  const otherChips = Math.max(0, sessionChips - lessonPart);
   const chipParts = [
     lessonPart > 0 ? t(firstPass ? "perfect.break.lesson" : "perfect.break.repeat", { n: lessonPart }) : "",
-    perfectBonus > 0 ? t("perfect.break.perfect", { n: perfectBonus }) : "",
     otherChips > 0 ? t("perfect.break.other", { n: otherChips }) : "",
   ].filter(Boolean);
 
@@ -267,9 +268,9 @@ export function Results({
         </ul>
       )}
 
-      {/* Сколько чипов дала сессия — с разбивкой (урок · идеально · прочее). У тренировки без чипов плитки нет. */}
+      {/* Сколько чипов дала сессия — с разбивкой (урок · прочее). У тренировки без чипов плитки нет. */}
       <div className="flex flex-wrap items-start justify-center gap-2">
-        {(kind === "lesson" || chips > 0) && (
+        {(kind === "lesson" || sessionChips > 0) && (
           <m.div
             className="relative flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
             initial={{ opacity: 0, scale: 0.6 }}
@@ -277,34 +278,20 @@ export function Results({
             transition={{ ...springBouncy, delay: 0.55 }}
           >
             <span data-chip-target className="inline-flex items-center gap-1.5 font-extrabold">
-              <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", chips), { n: chips })}
+              <Cpu size={18} className="text-gold" aria-hidden /> {t(chipsKey("xp.chipsPlus", sessionChips), { n: sessionChips })}
             </span>
-            {chips > 0 && <ChipFlight amount={chips} targetSelector="[data-chip-target]" />}
+            {sessionChips > 0 && <ChipFlight amount={sessionChips} targetSelector="[data-chip-target]" />}
             {chipParts.length > 0 && <span className="text-xs font-bold text-muted">{chipParts.join(" · ")}{chipMult !== 1 ? ` · ${t("perfect.multNote", { mult: formatMult(chipMult) })}` : ""}</span>}
           </m.div>
         )}
-        {perfectBonus > 0 && (
-          <m.span
-            className="inline-flex items-center gap-1.5 rounded-full border-2 border-gold bg-gold-soft px-3.5 py-1.5 font-extrabold text-warning-strong"
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ ...springBouncy, delay: 0.7 }}
-          >
-            <BadgeCheck size={18} className="text-gold" aria-hidden /> {t(chipsKey("perfect.chips", perfectBonus), { n: perfectBonus })}
-          </m.span>
-        )}
-        {heart && (
-          <m.span
-            className="inline-flex items-center gap-1.5 rounded-full border-2 border-heart bg-heart-soft px-3.5 py-1.5 font-extrabold text-heart-strong"
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ ...springBouncy, delay: 0.7 }}
-            title={t("hearts.res.heartHint")}
-          >
-            <Heart size={18} fill="currentColor" aria-hidden /> {t("hearts.res.heart")}
-          </m.span>
-        )}
       </div>
+
+      {/* «Сюрприз за идеальный урок» (этап 16В): капсула раскрывается и показывает то, что уже выдано стором. */}
+      {perfectDrop && (
+        <div className="mx-auto w-full max-w-sm">
+          <PerfectDropTile drop={perfectDrop} variant={kind === "lesson" ? "lesson" : "test"} delay={0.8} flightTarget="[data-chip-target]" />
+        </div>
+      )}
 
       {/* Серия идеальных уроков подряд — с 2-го (R2). */}
       {perfect && firstPass && perfectRun >= PERFECT_RUN_SHOW_FROM && (

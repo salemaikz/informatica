@@ -15,12 +15,14 @@ import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, UNIT_PASS_RATIO, uni
 import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
 import { decaySkills } from "@/lib/mastery";
+import { sanitizePerfectDrop } from "@/lib/perfect";
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
 import type { EntTopicId } from "@/lib/types";
 import { Markdown } from "@/components/Markdown";
 import { AiCost } from "@/components/economy/AiCost";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
+import { PerfectDropTile } from "@/components/economy/PerfectDropTile";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
@@ -201,6 +203,10 @@ export function ExamResult({ id }: { id: string }) {
 
   const ratio = ratioOf(points, maxPoints);
   const tone = toneOf(ratio);
+  // «Сюрприз» за тест на 100% (этап 16В): уже выдан в recordExam; показываем то же. Капсула раскрывается, только пока результат свежий
+  // (итоги открыты сразу после теста) — из истории показываем исход без звука и полёта чипов.
+  const drop = kind === "topic" || kind === "unit" ? sanitizePerfectDrop(summary?.drop) : null;
+  const dropFresh = !!summary && now - summary.at < 3 * 60_000;
   const durationSec = result?.timeSec ?? summary?.durationSec ?? 0;
   const at = attempt?.finishedAt ?? summary?.at ?? 0;
   const topicRows = (
@@ -337,6 +343,12 @@ export function ExamResult({ id }: { id: string }) {
       </Card>
 
       <StreakIgnite sound={false} />
+
+      {drop && (
+        <div className="mx-auto w-full max-w-sm">
+          <PerfectDropTile drop={drop} variant="test" animate={dropFresh} delay={0.3} />
+        </div>
+      )}
 
       {/* Вызов друга (#73): больше / столько же / меньше. Меньше — не ошибка, поэтому не красным. */}
       {attempt?.challenge && kind !== "unit" && (

@@ -1,21 +1,21 @@
 "use client";
 
-import { ArrowRight, Clock, Cpu, Crown, Dumbbell, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
+import { ArrowRight, Clock, Cpu, Crown, Heart, HeartCrack, HeartPlus, HeartPulse } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { feedback } from "@/lib/feedback";
-import { ENTRY_COST, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, canAfford, formatHearts, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
+import { ENTRY_COST, canAfford, formatHearts, itemPrice, shopItem, type ShopItemId } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Shake } from "@/components/motion/Shake";
 import { springBouncy, springSoft } from "@/components/motion/presets";
-import { useChips, useHearts, useNow, usePracticeHeartsLeft } from "./useEconomy";
+import { useChips, useHearts, useNow } from "./useEconomy";
 import { formatNum, formatRemaining, shopAvailability } from "./shop-helpers";
 import { readHearts } from "./HeartsBar";
 
@@ -97,7 +97,7 @@ function BuyRow({
   );
 }
 
-/** Бесплатные и платные пути вернуть сердечки: тренировка, Безлимит. */
+/** Путь вернуть сердечки по ссылке: «Безлимит». */
 function LinkCard({ href, icon, title, desc, tone }: { href: string; icon: ReactNode; title: string; desc: string; tone: "primary" | "gold" }) {
   return (
     <Link
@@ -136,8 +136,6 @@ function Content({
   const hearts = useHearts();
   const { chips } = useChips();
   const now = useNow();
-  // Карточку «Тренировка вернёт сердечко» показываем, только пока сегодняшний лимит возвратов не исчерпан.
-  const practiceLeft = usePracticeHeartsLeft();
   // Сердечек снова хватает на вход (вернулись по таймеру или куплены) — предлагаем продолжить.
   const back = canAfford(hearts, need);
   // Сердечки есть, но на вход за 2 не хватает — «Не хватает сердечек», а не «закончились».
@@ -172,7 +170,7 @@ function Content({
           {back ? t("hearts.out.back") : short ? t("hearts.out.titleShort") : t("hearts.out.title")}
         </h2>
         <p className="font-semibold text-muted">
-          {back ? t("hearts.out.backText") : what === "theory" ? t("hearts15.out.theoryText", { cost: formatHearts(ENTRY_COST.theory) }) : t("hearts.out.text")}
+          {back ? t("hearts.out.backText") : what === "theory" ? t("hearts15.out.theoryText", { cost: formatHearts(ENTRY_COST.theory) }) : t("econ16c.out.text")}
         </p>
         {!back && need !== 1 && (
           <p className="text-sm font-extrabold text-heart-strong">{t("hearts.out.need", { need: formatHearts(need), have: formatHearts(hearts.count) })}</p>
@@ -205,22 +203,7 @@ function Content({
           <BuyRow id="heart-1" icon={<Heart size={22} fill="currentColor" aria-hidden />} nameKey="hearts.out.one" descKey="hearts.out.oneDesc" onBought={bought} />
           <BuyRow id="hearts-3" icon={<HeartPlus size={22} aria-hidden />} nameKey="hearts.out.three" descKey="hearts.out.threeDesc" onBought={bought} />
           <BuyRow id="hearts-full" icon={<HeartPulse size={22} aria-hidden />} nameKey="hearts.out.refill" descKey="hearts.out.refillDesc" onBought={bought} />
-          {practiceLeft > 0 && (
-            <LinkCard
-              href="/practice"
-              tone="primary"
-              icon={<Dumbbell size={24} />}
-              title={t("hearts.out.practice")}
-              desc={t("hearts.out.practiceDesc", { n: PRACTICE_HEART_MIN_ANSWERS, p: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100) })}
-            />
-          )}
-          <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("hearts.out.unlimited")} desc={t("hearts.out.unlimitedDesc")} />
-          {/* Запасной путь: тренировка бесплатна (теория теперь платная). Если она уже вернёт сердечко — это карточка выше. */}
-          {practiceLeft <= 0 && (
-            <ButtonLink href="/practice" variant="ghost" block icon={<Dumbbell size={18} />}>
-              {t("hearts15.out.practiceFree")}
-            </ButtonLink>
-          )}
+          <LinkCard href="/plans?from=hearts" tone="gold" icon={<Crown size={24} fill="currentColor" />} title={t("econ16c.out.unlimited")} desc={t("hearts.out.unlimitedDesc")} />
         </m.div>
       )}
 
@@ -232,11 +215,12 @@ function Content({
 }
 
 /**
- * «Сердечки закончились» / «Не хватает сердечек» (#40: сердечки — плата за вход в урок, тест или игру):
- * купить за чипы (+1, +3, полный запас), вернуть тренировкой (бесплатно), взять «Безлимит» или выйти.
+ * «Сердечки закончились» / «Не хватает сердечек» (#40: сердечки — плата за вход в урок, тренировку, тест или игру):
+ * подождать следующее (таймер), купить за чипы (+1, +3, полный запас), взять «Безлимит» или выйти.
+ * Бесплатной тренировки больше нет (этап 16В).
  * layout="sheet" — шторка поверх экрана (open/onClose); layout="screen" — полноэкранно на входе.
  * need — цена входа (0,5, 1 или 2): окно предлагает продолжить, когда сердечек хватает на вход.
- * what="theory" — окно чтения конспекта (0,5): другой текст. Запасной путь — «Тренировка — бесплатно».
+ * what="theory" — окно чтения конспекта (0,5): другой текст.
  * onResume — сердечек хватает (куплены или восстановились): окно закрывается, вызывающий продолжает вход.
  */
 export function OutOfHearts({

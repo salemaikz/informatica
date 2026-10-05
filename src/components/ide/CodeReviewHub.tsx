@@ -4,6 +4,8 @@ import { ArrowLeft, ChevronRight, Code2, Database, FileCode, Globe, Shuffle, Tab
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { ENTRY_COST } from "@/lib/economy";
 import { READ_KINDS } from "@/lib/code-read";
 import { REVIEW_MIN_ITEMS, type ReviewArea } from "@/lib/code-review-areas";
 import type { ReadKind } from "@/lib/types";
@@ -87,7 +89,10 @@ export function CodeReviewHub({ areas }: { areas: readonly ReviewAreaCount[] }) 
         })}
       </ul>
 
-      <p className="text-sm font-semibold text-muted">{t("codeview.note")}</p>
+      <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-muted">
+        {t("econ16c.codeview.note")}
+        <HeartCost n={ENTRY_COST.drill} />
+      </p>
     </div>
   );
 }

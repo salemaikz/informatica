@@ -48,7 +48,7 @@ export function TheoryLock({ onOpen }: { onOpen: () => void }) {
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-extrabold leading-tight text-heart-strong">{t("hearts15.theory.lockTitle", { cost: formatHearts(ENTRY_COST.theory) })}</h2>
-          <p className="mt-1 text-sm font-semibold text-muted">{t("hearts15.theory.lockText")}</p>
+          <p className="mt-1 text-sm font-semibold text-muted">{t("econ16c.theory.lockText")}</p>
         </div>
       </div>
       <Button block onClick={onOpen}>

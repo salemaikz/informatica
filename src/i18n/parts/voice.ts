@@ -49,5 +49,4 @@ export const voiceDict = {
   "quiz.dot.todo": { ru: "ещё не решено", kk: "әлі шығарылмаған" },
   "quiz.done.title": { ru: "Задачи решены", kk: "Есептер шығарылды" },
   "quiz.done.text": { ru: "Итог сохранён в чате.", kk: "Қорытынды чатта сақталды." },
-  "quiz.done.heart": { ru: "+1 сердечко за тренировку", kk: "Жаттығу үшін +1 жүрек" },
 } satisfies Record<string, L>;

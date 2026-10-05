@@ -6,6 +6,7 @@ import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AnswerRecord, Lang, Lesson, LessonVia, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
+import type { PerfectDrop } from "@/lib/perfect";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { taskSecrets } from "@/lib/task-secrets";
@@ -252,10 +253,9 @@ export function LessonPlayer({
     bonusXp: number;
     achievements: string[];
     chips: number;
-    heart: boolean;
     firstPass: boolean;
     lessonChips: number;
-    perfectChips: number;
+    perfectDrop: PerfectDrop | null;
   } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется (при продолжении — из сохранения).
@@ -360,7 +360,7 @@ export function LessonPlayer({
         ...(kind === "lesson" && lesson?.micro ? { micro: true } : {}),
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
-      const { bonusXp, heart, firstPass, lessonChips, perfectChips } = finishSession(result);
+      const { bonusXp, firstPass, lessonChips, perfectDrop } = finishSession(result);
       onSessionFinish?.(result);
       const doneEvent = finishEvent({ kind, lessonId, via, mode, accuracy: result.accuracy, durationSec: result.durationSec });
       if (doneEvent) track(doneEvent);
@@ -368,7 +368,7 @@ export function LessonPlayer({
       const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
       // Идеальный урок — своя фанфара вместо обычной (Results её не повторяет).
       giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : result.accuracy >= 1 ? "perfect" : "complete");
-      setSession({ result, bonusXp, achievements, chips, heart, firstPass, lessonChips, perfectChips });
+      setSession({ result, bonusXp, achievements, chips, firstPass, lessonChips, perfectDrop });
       requestLessonFeedback(result, setFeedback);
     },
     [finishSession, kind, lessonId, lesson, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
@@ -712,10 +712,9 @@ export function LessonPlayer({
         result={session.result}
         bonusXp={session.bonusXp}
         chips={session.chips}
-        heart={session.heart}
         firstPass={session.firstPass}
         lessonChips={session.lessonChips}
-        perfectChips={session.perfectChips}
+        perfectDrop={session.perfectDrop}
         achievements={session.achievements}
         feedback={feedback}
         via={via}

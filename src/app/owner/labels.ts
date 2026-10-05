@@ -22,6 +22,7 @@ const HEARTS_WHERE: Dict = {
   exam: "пробный ЕНТ",
   checkpoint: "контрольная точка",
   game: "игра",
+  drill: "тренировка",
 };
 const DRILL_MODE: Dict = {
   other: "другое (неизвестный режим)",

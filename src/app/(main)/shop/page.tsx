@@ -1,14 +1,11 @@
 "use client";
 
 import {
-  ChevronRight,
   Cpu,
-  Dumbbell,
   Heart,
   HeartPlus,
   Rocket,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { track } from "@/lib/analytics";
 import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
@@ -20,17 +17,15 @@ import { ShopStatus } from "@/components/economy/ShopStatus";
 import { ShopPlanBanner } from "@/components/economy/ShopPlanBanner";
 import {
   ChipItemRow,
-  IconTile,
   MoneyRow,
   ShopSection,
 } from "@/components/economy/ShopParts";
-import { useHearts, usePlanTier, usePracticeHeartsLeft } from "@/components/economy/useEconomy";
+import { useHearts, usePlanTier } from "@/components/economy/useEconomy";
 import {
   formatNum,
   formatSpan,
   formatMult,
 } from "@/components/economy/shop-helpers";
-import { practiceRule } from "@/components/economy/shop-rules";
 
 /** Магазин: строка сердечек и бустера (баланс — в шапке), тариф, сердечки за чипы и «Как работают сердечки», множитель, наборы за ₸ (оплата скоро), как заработать, цена ИИ, история чипов. */
 export default function ShopPage() {
@@ -41,10 +36,6 @@ export default function ShopPage() {
   });
   const hearts = useHearts();
   const tier = usePlanTier();
-  // Тренировка вернёт сердечко, только пока не исчерпан дневной лимит возвратов.
-  const practiceLeft = usePracticeHeartsLeft();
-  const showPractice = !hearts.unlimited && hearts.count < hearts.max && practiceLeft > 0;
-  const practice = practiceRule();
   // Клик по товару за ₸ (спрос, #69): id товара из каталога экономики; оплата пока не подключена.
   const pick = (item: string, what: string) => {
     track({ e: "shop_click", item });
@@ -67,12 +58,14 @@ export default function ShopPage() {
       <ShopStatus />
       <ShopPlanBanner />
 
+      {/* Метка data-tour="shop-hearts" — для проводника Бита (сцена page-shop). */}
+      <div data-tour="shop-hearts">
       <ShopSection
         title={t("shop.hearts.title")}
         hint={
           hearts.unlimited
             ? t("shop.hearts.hintUnlimited")
-            : t("shop.hearts.hint", { time: formatHours(PLAN_FEATURES[tier].regenMs, lang) })
+            : t("econ16c.hearts.hint", { time: formatHours(PLAN_FEATURES[tier].regenMs, lang) })
         }
       >
         <div className="flex flex-col gap-2.5">
@@ -103,25 +96,9 @@ export default function ShopPage() {
               descKey="shop.item.hearts-full.desc"
             />
           )}
-          {showPractice && (
-            <Link
-              href="/practice"
-              className="flex items-center gap-3 rounded-3xl border-2 border-dashed border-success/50 bg-success-soft p-3.5 transition-[translate] active:translate-y-0.5"
-            >
-              <IconTile tone="primary">
-                <Dumbbell size={24} />
-              </IconTile>
-              <span className="min-w-0 flex-1 font-extrabold leading-snug text-success-strong">
-                {t("shop.free.practice", { n: practice.answers, p: practice.percent })}
-              </span>
-              <ChevronRight
-                size={20}
-                className="shrink-0 text-success-strong"
-              />
-            </Link>
-          )}
         </div>
       </ShopSection>
+      </div>
 
       <ShopSection title={t("shop.rules.title")} hint={t("shop.rules.hint")}>
         <HeartRules />

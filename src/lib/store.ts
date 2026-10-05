@@ -22,7 +22,7 @@ import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { sanitizeTips, type TipId, type TipsState } from "./tips";
 import { EMPTY_PERFECT_RUN, sanitizePendingCases, sanitizePerfectRun, type PerfectRun } from "./rewards-state";
-import { isPerfectSession, nextPerfectRun, PERFECT_RUN_GOAL } from "./perfect";
+import { dropRandom, isPerfectExam, isPerfectSession, nextPerfectRun, PERFECT_RUN_GOAL, rollPerfectDrop, type PerfectDrop } from "./perfect";
 import { unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
@@ -58,8 +58,6 @@ import {
   effectiveTier,
   FREE_PLAN,
   heartsView,
-  practiceEarnsHeart,
-  practiceHeartsLeft,
   spendHearts,
   pushLedger,
   quoteAi,
@@ -229,6 +227,8 @@ export interface ExamSummary {
   questions?: number;
   /** Тег банка заданий варианта (#73): для вызова другу на тот же вариант. Старые попытки — без тега. */
   pool?: string;
+  /** «Сюрприз» за тест на 100% (этап 16В): тест по теме и по разделу; бросок сделан и выдан в recordExam. Нет — не бросали. */
+  drop?: PerfectDrop;
 }
 
 export interface AppState {
@@ -265,8 +265,6 @@ export interface AppState {
   ledger: LedgerEntry[];
   /** Активный множитель чипов. */
   boost: Boost | null;
-  /** Сколько тренировок сегодня уже вернули сердечко. */
-  practiceHearts: { day: string; count: number };
   /** Незаконченные уроки (#41): id урока → сохранённое прохождение (lib/lesson-run.ts). В резервную копию не входит. */
   lessonRuns: Record<string, LessonRun>;
   /** Чтение конспекта урока оплачено (этап 15, lib/theory-pay.ts): id урока → когда (мс); старше суток отбрасывается. */
@@ -298,15 +296,17 @@ export interface AppState {
 /** Итог урока/тренировки для экрана результатов. */
 export interface FinishOutcome {
   bonusXp: number;
-  /** Тренировка вернула сердечко. */
-  heart: boolean;
   /** Урок без единой ошибки (все задания с первой попытки, без пропусков); у тренировки всегда false. */
   perfect: boolean;
   /** Первое прохождение урока (до этого статы урока не было); у тренировки false. */
   firstPass: boolean;
-  /** Чипы, начисленные за сам урок и за «идеально» (уже с множителем тарифа и бустера); 0 — не начислялись. */
+  /** Чипы, начисленные за сам урок (уже с множителем тарифа и бустера); 0 — не начислялись. */
   lessonChips: number;
-  perfectChips: number;
+  /**
+   * «Сюрприз за идеальный урок» (этап 16В): идеальное первое прохождение урока и мини-тест на 100% — бросок сделан и выдан
+   * в этом же действии (пол-сердечка или чипы), итоги показывают то же. null — броска не было.
+   */
+  perfectDrop: PerfectDrop | null;
 }
 
 export type BuyResult = { ok: true } | { ok: false; reason: BuyFail };
@@ -483,7 +483,6 @@ const initialState: AppState = {
   wallet: START_WALLET,
   ledger: [],
   boost: null,
-  practiceHearts: { day: "", count: 0 },
   lessonRuns: {},
   theoryPaid: {},
   skillDays: {},
@@ -537,6 +536,23 @@ function settleChips(prev: AppState, next: AppState, extra: { base: number; reas
     ledger = pushLedger(ledger, { id: uid(), at: now, amount: g.amount, reason: g.reason });
   }
   return addLevelCases(prev, wallet === next.wallet ? next : { ...next, wallet, ledger });
+}
+
+/**
+ * «Сюрприз за идеальный урок» (этап 16В): бросок по числу r и выдача — пол-сердечка (addHearts) или чипы (с записью `perfect`
+ * в истории, без множителя тарифа и бустера). Сердечко при полном запасе или «Безлимите» уже заменено чипами в rollPerfectDrop.
+ */
+function applyPerfectDrop(state: AppState, r: number, now: number): { state: AppState; drop: PerfectDrop } {
+  const today = todayKey();
+  const tier = tierOf(state, now);
+  const view = heartsView(state.hearts, tier, now, today);
+  const drop = rollPerfectDrop(r, { heartsFull: !view.unlimited && view.count >= view.max, unlimited: view.unlimited });
+  if (drop.kind === "heart") return { state: { ...state, hearts: addHearts(state.hearts, drop.amount, tier, now, today) }, drop };
+  if (drop.kind === "chips") {
+    const wallet = { ...state.wallet, chips: state.wallet.chips + drop.amount, earned: state.wallet.earned + drop.amount };
+    return { state: { ...state, wallet, ledger: pushLedger(state.ledger, { id: uid(), at: now, amount: drop.amount, reason: "perfect" }) }, drop };
+  }
+  return { state, drop };
 }
 
 /** Закрыть ошибку: убрать из списка ошибок и отметить исправленной в истории тестов. */
@@ -689,7 +705,9 @@ function cleanSkills(raw: unknown): Record<string, SkillStat> {
 
 /** Собирает состояние из сохранения поверх текущего (новые поля — значения по умолчанию). */
 export function mergeState(persisted: unknown, current: AppState & AppActions): AppState & AppActions {
-  const p = (persisted ?? {}) as Partial<AppState>;
+  const p = { ...((persisted ?? {}) as Partial<AppState>) };
+  // Этап 16В: возврата сердечка за тренировку больше нет — поле старых сохранений молча отбрасываем.
+  delete (p as Record<string, unknown>).practiceHearts;
   return {
     ...current,
     ...p,
@@ -703,10 +721,6 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     wallet: sanitizeWallet(p.wallet),
     ledger: Array.isArray(p.ledger) ? p.ledger.filter((e) => !!e && typeof e.amount === "number").slice(0, 50) : [],
     boost: sanitizeBoost(p.boost),
-    practiceHearts:
-      p.practiceHearts && typeof p.practiceHearts.day === "string" && typeof p.practiceHearts.count === "number"
-        ? p.practiceHearts
-        : { day: "", count: 0 },
     lessonRuns: sanitizeLessonRuns(p.lessonRuns),
     theoryPaid: sanitizeTheoryPaid(p.theoryPaid, Date.now()),
     skillDays: sanitizeSkillDays(p.skillDays),
@@ -817,7 +831,6 @@ export const useApp = create<AppState & AppActions>()(
       finishSession: (result) => {
         const s = get();
         const now = Date.now();
-        const firstTry = result.answers.filter((a) => !a.retry);
         // Пропущенное задание (например, решение по фото) — уже не «без ошибок».
         const perfect = isPerfectSession(result);
         const isLesson = result.kind === "lesson" && !!result.lessonId;
@@ -866,34 +879,28 @@ export const useApp = create<AppState & AppActions>()(
         const entry = entryFromSession(result, uid(), now, result.mode);
         if (entry) next = { ...next, history: pushHistory(next.history, entry) };
 
-        // Тренировка возвращает сердечко (не больше PRACTICE_HEART_DAILY раз в день). Экстерн — платный тест (#40), не тренировка.
-        let heart = false;
         const tier = tierOf(next, now);
-        if (result.kind === "drill" && result.mode !== "extern" && result.mode !== "minitest" && practiceEarnsHeart(firstTry.length, result.accuracy)) {
-          const ph = next.practiceHearts.day === today ? next.practiceHearts : { day: today, count: 0 };
-          const view = heartsView(next.hearts, tier, now, today);
-          if (!view.unlimited && view.count < view.max && practiceHeartsLeft(ph, today) > 0) {
-            next = { ...next, hearts: addHearts(next.hearts, 1, tier, now, today), practiceHearts: { day: today, count: ph.count + 1 } };
-            heart = true;
-          }
-        }
 
-        // Чипы (#105): урок 3 (повтор 1), идеальный первый раз +5. Тренировка и игры чипов не дают.
+        // Чипы (#105): урок 3 (повтор 1). Тренировка и игры чипов не дают.
         const extra: { base: number; reason: ChipReason }[] = [];
         const chipMult = chipMultiplier(tier, next.boost, now);
         let lessonGain = 0;
-        let perfectGain = 0;
         if (isLesson) {
           extra.push({ base: lessonChipBase(!prev), reason: "lesson" });
           lessonGain = earnAmount(lessonChipBase(!prev), chipMult);
-          if (perfect && !prev) {
-            extra.push({ base: CHIP_REWARD.perfect, reason: "perfect" });
-            perfectGain = earnAmount(CHIP_REWARD.perfect, chipMult);
-          }
+        }
+        // «Сюрприз за идеальный урок» (этап 16В): идеальное первое прохождение урока и мини-тест группы на 100%.
+        // Кубик бросаем один раз, выдаём сразу; итоги показывают то, что выдано.
+        const dropEligible = perfect && ((isLesson && !prev) || (result.kind === "drill" && result.mode === "minitest"));
+        let perfectDrop: PerfectDrop | null = null;
+        if (dropEligible) {
+          const dropped = applyPerfectDrop(next, dropRandom.next(), now);
+          next = dropped.state;
+          perfectDrop = dropped.drop;
         }
         next = settleChips(s, next, extra, now);
         set(next);
-        return { bonusXp, heart, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectChips: perfectGain };
+        return { bonusXp, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectDrop };
       },
 
       completeLessons: (lessonIds, via, accuracy) =>
@@ -1363,6 +1370,17 @@ export const useApp = create<AppState & AppActions>()(
                 }
               : s.days,
           };
+          // «Сюрприз» (этап 16В): тест по теме и тест по разделу на 100% — один бросок на попытку, выдача сразу.
+          // Повторная запись той же попытки не бросает заново: результат берём из уже записанной попытки.
+          let withDrop: AppState = next;
+          const prevDrop = s.exams.find((e) => e.id === summary.id)?.drop;
+          let drop: PerfectDrop | undefined = prevDrop;
+          if (isNew && (summary.kind === "topic" || summary.kind === "unit") && isPerfectExam(summary.points, summary.maxPoints) && answered > 0) {
+            const dropped = applyPerfectDrop(next, dropRandom.next(), now);
+            withDrop = dropped.state;
+            drop = dropped.drop;
+          }
+          if (drop) withDrop = { ...withDrop, exams: withDrop.exams.map((e) => (e.id === summary.id ? { ...e, drop } : e)) };
           // Чипы (#105): 10 за завершённый пробный ЕНТ (отвечено не меньше половины заданий) и 10 за сданный тест раздела
           // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
           const examChips: { base: number; reason: ChipReason }[] = [];
@@ -1373,7 +1391,7 @@ export const useApp = create<AppState & AppActions>()(
               if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
             }
           }
-          return settleChips(s, { ...next, ...evaluate(next) }, examChips);
+          return settleChips(s, { ...withDrop, ...evaluate(withDrop) }, examChips);
         }),
 
       // Тариф и пробный период сброс прогресса не трогает.

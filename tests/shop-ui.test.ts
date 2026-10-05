@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AI_COST, ENTRY_COST, HOUR, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ACCURACY, PRACTICE_HEART_MIN_ANSWERS, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
+import { AI_COST, ENTRY_COST, HOUR, PLAN_FEATURES, REFILL_MIN_MISSING, SHOP_ITEMS, itemPrice, shopItem, buyItem, type AiKind, type HeartsView } from "@/lib/economy";
 import { dayDiff, formatClock, formatCompact, formatCountdown, showBoostLine, formatMult, formatNum, formatRemaining, formatSpan, heartWaitMs, heartsGain, knownAiKind, knownShopId, shopAvailability } from "@/components/economy/shop-helpers";
-import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, practiceRule, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
+import { ENTRY_RULE_KEYS, FREE_ENTRIES, FREE_ENTRY_KEYS, entryRules, refillGain, regenRules, shownPrice } from "@/components/economy/shop-rules";
 import { compareRows } from "@/components/plans/plans-helpers";
 import { dict, type DictKey } from "@/i18n/dict";
 
@@ -276,13 +276,16 @@ describe("цены и «Полный запас» в магазине (#60)", ()
 });
 
 describe("«Как работают сердечки»: числа из констант", () => {
-  it("цены входа: урок 1, большой урок 2, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 2, игра 1, теория 0,5 (экстерна в правилах больше нет)", () => {
+  it("цены входа: урок 1, большой урок 2, тренировка 1, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 2, игра 1, теория 0,5 (экстерна в правилах больше нет)", () => {
     const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
-    expect(rules).toEqual({ lesson: 1, bigLesson: 2, check: 1, exam: 1, checkpoint: 2, game: 1, theory: 0.5 });
+    expect(rules).toEqual({ lesson: 1, bigLesson: 2, drill: 1, check: 1, exam: 1, checkpoint: 2, game: 1, theory: 0.5 });
+    expect(rules.drill).toBe(ENTRY_COST.drill);
     expect(rules.theory).toBe(ENTRY_COST.theory);
     // теория платная: в бесплатных её больше нет, зато есть шпаргалка
     expect(FREE_ENTRIES).not.toContain("theory");
     expect(FREE_ENTRIES).toContain("cheatsheet");
+    // этап 16В: бесплатной тренировки нет — тренировка, повторение и работа над ошибками из «бесплатного» ушли
+    expect([...FREE_ENTRIES]).toEqual(["code", "cheatsheet", "chat"]);
     expect(rules.lesson).toBe(ENTRY_COST.lesson);
     expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
   });
@@ -294,13 +297,9 @@ describe("«Как работают сердечки»: числа из конс
     expect(formatRemaining(free.regenMs, "ru")).toBe("6 ч");
     expect(formatRemaining(lite.regenMs, "kk")).toBe("3 сағ");
   });
-  it("возврат за тренировку: от 6 ответов, точность 70%, до 3 раз в день", () => {
-    expect(practiceRule()).toEqual({ answers: PRACTICE_HEART_MIN_ANSWERS, percent: Math.round(PRACTICE_HEART_MIN_ACCURACY * 100), daily: PRACTICE_HEART_DAILY });
-    expect(practiceRule()).toEqual({ answers: 6, percent: 70, daily: 3 });
-  });
   it("у каждой строки правил есть подпись в словаре (ru и kk)", () => {
     const keys: string[] = [...entryRules().map((r) => ENTRY_RULE_KEYS[r.id]), ...FREE_ENTRIES.map((id) => FREE_ENTRY_KEYS[id])];
-    keys.push("shop.rules.title", "shop.rules.hint", "shop.rules.paid", "hearts15.rules.when", "shop.rules.free", "shop.rules.regen", "shop.rules.regen.row", "shop.rules.regen.unlimited", "shop.rules.practice");
+    keys.push("shop.rules.title", "shop.rules.hint", "shop.rules.paid", "econ16c.rules.when", "shop.rules.free", "shop.rules.regen", "shop.rules.regen.row", "shop.rules.regen.unlimited", "econ16c.rules.zero", "econ16c.hearts.hint", "econ16c.out.text");
     for (const k of keys) {
       const v = dict[k as DictKey];
       expect(v, k).toBeDefined();
@@ -309,7 +308,7 @@ describe("«Как работают сердечки»: числа из конс
     }
   });
   it("числа в текстах правил — только плейсхолдерами (кроме «+1» у возврата за время)", () => {
-    const keys = Object.keys(dict).filter((k) => /^shop\.rules\.|^shop\.item\.hearts-full|^shop\.fail\.overflowRefill|^shop\.hearts\.hint$|^shop\.free\.practice$/.test(k));
+    const keys = Object.keys(dict).filter((k) => /^shop\.rules\.|^shop\.item\.hearts-full|^shop\.fail\.overflowRefill|^econ16c\.(rules|hearts|out)\./.test(k));
     expect(keys.length).toBeGreaterThan(20);
     for (const k of keys) {
       const v = dict[k as DictKey];
@@ -318,11 +317,11 @@ describe("«Как работают сердечки»: числа из конс
       expect(strip(v.kk), k).not.toMatch(/\d/);
     }
   });
-  it("плейсхолдеры правил: {max}/{time}, {n}/{p}/{d}", () => {
+  it("плейсхолдеры правил: {max}/{time}, {time}, {cost}", () => {
     const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
     expect(ph(dict["shop.rules.regen.row"].ru)).toEqual(["max", "time"]);
-    expect(ph(dict["shop.rules.practice"].ru)).toEqual(["d", "n", "p"]);
-    expect(ph(dict["shop.free.practice"].ru)).toEqual(["n", "p"]);
+    expect(ph(dict["econ16c.hearts.hint"].ru)).toEqual(["time"]);
+    expect(ph(dict["econ16c.rules.when"].ru)).toEqual(["cost"]);
     expect(ph(dict["shop.item.hearts-full.plus"].ru)).toEqual(["n"]);
     expect(ph(dict["shop.item.hearts-full.desc"].ru)).toEqual(["p"]);
   });

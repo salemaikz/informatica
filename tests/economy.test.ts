@@ -29,7 +29,6 @@ import {
   canStartTrial,
   chipMultiplier,
   lessonChips,
-  perfectChips,
   earnAmount,
   effectiveTier,
   extendBoost,
@@ -39,6 +38,7 @@ import {
   heartsNow,
   heartsView,
   ENTRY_COST,
+  PERFECT_DROP,
   entryCost,
   itemPrice,
   lessonCost,
@@ -48,8 +48,6 @@ import {
   packSaving,
   perMonthOfYear,
   planDaysLeft,
-  practiceEarnsHeart,
-  practiceHeartsLeft,
   pushLedger,
   quoteAi,
   refillHearts,
@@ -309,12 +307,6 @@ describe("сердечки: spendHearts / addHearts / refill", () => {
     expect(refillHearts("free", T0, TODAY)).toEqual({ count: 5, updatedAt: T0, day: TODAY });
     expect(refillHearts("lite", T0, TODAY).count).toBe(10);
   });
-
-  it("practiceEarnsHeart: от 6 ответов и точности 70% (#65)", () => {
-    expect(practiceEarnsHeart(6, 0.7)).toBe(true);
-    expect(practiceEarnsHeart(5, 1)).toBe(false);
-    expect(practiceEarnsHeart(10, 0.69)).toBe(false);
-  });
 });
 
 describe("сердечки с шагом 0,5 (этап 15)", () => {
@@ -388,9 +380,11 @@ describe("сердечки с шагом 0,5 (этап 15)", () => {
 });
 
 describe("плата за вход (#40)", () => {
-  it("цены входа: урок, проверка, пробник, игра — 1; контрольная и экстерн — 2; теория урока — 0,5", () => {
-    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5 });
+  it("цены входа: урок, проверка, пробник, игра, тренировка — 1; контрольная и экстерн — 2; теория урока — 0,5", () => {
+    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5, drill: 1 });
     expect(entryCost("theory")).toBe(0.5);
+    // этап 16В: любая тренировка стоит сердечко (решение F), у «урока игрой» цена урока не меняется
+    expect(entryCost("drill")).toBe(1);
   });
   it("большой урок (hearts: 2) — 2; «урок игрой» стоит как урок", () => {
     expect(lessonCost(undefined)).toBe(1);
@@ -658,17 +652,22 @@ describe("чипы: заработок", () => {
     expect(START_WALLET).toEqual({ chips: 20, earned: 20, spent: 0 });
   });
 
-  it("CHIP_REWARD: числа решения #105", () => {
-    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, perfect: 5, dailyGoal: 5, unit: 10, exam: 10, achievement: 10 });
+  it("CHIP_REWARD: числа решения #105 (идеального бонуса +5 больше нет — этап 16В)", () => {
+    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, dailyGoal: 5, unit: 10, exam: 10, achievement: 10 });
+    expect("perfect" in CHIP_REWARD).toBe(false);
   });
 
-  it("lessonChips / perfectChips: урок 3 (повтор 1), идеально 5; множитель тарифа и бустера", () => {
+  it("PERFECT_DROP: шанс 20% на пол-сердечка, 20% на 3 чипа (этап 16В, решение B)", () => {
+    expect(PERFECT_DROP).toEqual({ heartChance: 0.2, chipsChance: 0.2, chips: 3, heart: 0.5 });
+    // шанс «ничего» — остаток: 60%
+    expect(1 - PERFECT_DROP.heartChance - PERFECT_DROP.chipsChance).toBeCloseTo(0.6, 10);
+  });
+
+  it("lessonChips: урок 3 (повтор 1); множитель тарифа и бустера", () => {
     expect(lessonChips(true, 1)).toBe(3);
     expect(lessonChips(false, 1)).toBe(1);
-    expect(perfectChips(1)).toBe(5);
     expect(lessonChips(true, 1.5)).toBe(4);
     expect(lessonChips(false, 1.5)).toBe(1);
-    expect(perfectChips(1.5)).toBe(7);
     expect(lessonChips(true, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
     expect(lessonChips(true, 0)).toBe(0);
   });
@@ -990,12 +989,3 @@ describe("sanitize*: мусор на входе", () => {
   });
 });
 
-describe("practiceHeartsLeft", () => {
-  it("до трёх возвратов в день, вчерашний счётчик не считается", () => {
-    expect(practiceHeartsLeft(undefined, "2027-01-15")).toBe(3);
-    expect(practiceHeartsLeft({ day: "2027-01-15", count: 2 }, "2027-01-15")).toBe(1);
-    expect(practiceHeartsLeft({ day: "2027-01-15", count: 3 }, "2027-01-15")).toBe(0);
-    expect(practiceHeartsLeft({ day: "2027-01-15", count: 9 }, "2027-01-15")).toBe(0);
-    expect(practiceHeartsLeft({ day: "2027-01-14", count: 3 }, "2027-01-15")).toBe(3);
-  });
-});
