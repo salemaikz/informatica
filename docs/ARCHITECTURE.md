@@ -326,3 +326,24 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Плеер (`saveRun`) пишет снимок (`components/lesson/run-snapshot.ts` → `buildRun`) в обработчиках: после оплаты входа (на текущем шаге), после ответа (`pos + 1`, повтор ошибки уже в очереди), при переходе к шагу; после выхода с экрана не пишет. `finishSession` урока в режиме «Учиться» удаляет сохранение.
 - `LessonScreen`: `usableRun` один раз при входе → `ResumeLesson` («Продолжить» бесплатно, если `runPaid` — оплачен и не позже `RUN_GRACE_MS` = 20 мин с последнего действия; оплата перепроверяется при нажатии) или плеер с нуля; `restoreRun` восстанавливает состояние плеера.
 
+
+## v0.11: этап 12 — аналитика, прогресс, честные цифры, старт
+
+### Честные цифры (решения #66–#68)
+- **Точность** — `lib/accuracy.ts`: `tallyOf(records)` (первые попытки; `AnswerRecord.skipped` — счёт 0; `hinted` — отдельно), `accuracyOf`, `completionOf`, `daysAccuracy(days)` (по новым полям дня, иначе «приблизительно» по старым). У дня (`DayStat`) — `asked/score/skipped/hinted`, игры — `games/gameCorrect/gameSeconds`; старые `answers/correct` остаются для дней до v0.11.
+- **Освоение** — `lib/mastery.ts`: `updateSkill(stat, score, now, { weight, clean, day })`, вес `answerWeight` (подсказка или повтор — 0,5), `masteryLevel` (≥ 0,8 + `MASTER_CLEAN` = 4 самостоятельных верных + `MASTER_DAYS` = 2 дня; поля `clean/okDays/okDay`), `migrateSkillStat` (при каждой загрузке в `mergeState`: старым навыкам с оценкой ≥ 0,8 и ≥ 6 ответами — «освоено»), `seedSkill` (диагностика, ≤ 0,45).
+- **Активное время** — `lib/active-time.ts` (чистые `tick`/`input`/`takeSeconds`, `studyKindOf(pathname)`, пороги простоя 60 с / 3 мин), `lib/active-clock.ts` (часы вкладки: `startActiveClock`, `setStudyPath`, `activeMs()`), `components/app/ActiveTimeAgent.tsx` в `Providers` → `addActiveSeconds(sec, game)` — единственный писатель `DayStat.seconds`. Плеер считает длительность урока и время ответа разницей `activeMs()`.
+- **Плеер** — `lib/player-events.ts`: запись пропуска, итог сессии через `tallyOf`, события урока; флаг «с подсказкой» — шторка ИИ в фазе ответа.
+- **Срез по навыкам** — `lib/skill-days.ts`: `skillDays[день][навык] = { n, s, h?, sec? }`, 60 дней; пишут `recordAnswer`, `recordCodeTask`, `recordExam`.
+
+### Прогресс ученика (решение #71)
+- `lib/progress.ts`: `courseProgress` (готовые уроки на карте, `skipBasics` исключает `u0`), `unitRows`, `topicStats`, `topicTrend`, `weakSpots` (+ `drillHref`); компоненты — `components/progress/*` (`CourseProgressCard`/`CourseProgressBadge`, `UnitProgressList`, `TopicTable` со спарклайном, `WeakSpotsCard`, плитки статистики). «Слабые места» в оболочке (`Widgets.tsx`) — через `next/dynamic` без SSR.
+
+### Старт (решение #70)
+- Онбординг (`app/onboarding/page.tsx`) → ЕНТ: `/diagnostic?from=onboarding`; школа: окно тарифов. Диагностика: `lib/diagnostic.ts` (`buildDiagnostic` — 10 single A/B по темам, `scoreDiagnostic`), экран `app/diagnostic` + `components/diagnostic/*` (пул ЕНТ — динамический импорт), сохранение — `recordDiagnostic` (профиль `diagnostic`, мягкий посев навыков, `skipBasics`). Прогноз (`lib/forecast.ts`): `basis: "diagnostic"`, пока нет пробников и меньше 30 ответов; дальше темы с ответами меньше `TOPIC_PRACTICE_MIN` берутся из диагностики. Профиль: `targetScoreSet` («пока не знаю» → без цели на графиках).
+
+### Аналитика и обратная связь (решения #47, #69)
+- Контракт событий — `lib/analytics.ts` (`AnalyticsEvent`, `track`, `setAnalyticsSink`); проверка — `lib/analytics-schema.ts` (общая для клиента и сервера); отправка — `lib/analytics-client.ts` (буфер, пачки, `sendBeacon`, событие удержания `active`), приёмник — `components/app/AnalyticsAgent.tsx` в `Providers` до экранов. Включено только при `NEXT_PUBLIC_ANALYTICS=1` и `profile.analytics`.
+- Сервер: `app/api/events` (sameOrigin → лимит по хешу IP до чтения тела → тело ≤ 4000 байт → проверка → потолки событий и новых полей) → `server/kv.ts` (`hincrMany` в хеш дня `ev:<день>`). Общие помощники — `server/body.ts`, `server/ip-hash.ts`.
+- Владелец: `app/owner` + `app/api/owner/{login,logout}` (`server/owner-auth.ts` — cookie с HMAC и сроком, `OWNER_SECRET`; `server/owner-data.ts`, `lib/owner-report.ts` — сводка из счётчиков и списков жалоб/ошибок). Не кэшируется сервис-воркером, не требует онбординга.
+- Отзывы: `/feedback` (`components/issue/FeedbackScreen.tsx`, вид обращения `feedback` в `lib/issue.ts`), «Что помешало?» — `components/issue/BreakReasonCard.tsx` в `AppShell`.
