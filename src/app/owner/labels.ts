@@ -68,6 +68,10 @@ const ISSUE_REASON: Dict = {
   content: "ошибка в задании или теории",
 };
 
+const SHARE_WHAT: Dict = { exam: "результат пробника", course: "% курса", streak: "серия", challenge: "вызов другу", report: "отчёт родителю" };
+const SHARE_HOW: Dict = { native: "меню телефона", copy: "скопировали ссылку", wa: "WhatsApp", tg: "Telegram", save: "сохранили картинку", manual: "скопировали вручную" };
+const CHALLENGE_STEP: Dict = { accept: "приняли вызов на странице результата", start: "начали вариант по вызову", more: "итог: больше, чем у друга", same: "итог: столько же", less: "итог: меньше" };
+
 export const label = {
   from: (c: string) => pick(FROM, c),
   heartsWhere: (c: string) => pick(HEARTS_WHERE, c),
@@ -75,6 +79,13 @@ export const label = {
   examKind: (c: string) => pick(EXAM_KIND, c),
   breakReason: (c: string) => pick(BREAK, c),
   feedback: (c: string) => pick(FEEDBACK, c),
+  /** `exam:wa` → «результат пробника — WhatsApp». */
+  share: (c: string) => {
+    const [what = "", how = ""] = c.split(":");
+    return `${pick(SHARE_WHAT, what)} — ${pick(SHARE_HOW, how)}`;
+  },
+  shareWhat: (c: string) => pick(SHARE_WHAT, c),
+  challengeStep: (c: string) => pick(CHALLENGE_STEP, c),
   track: (c: string) => pick(TRACK, c),
   issueType: (c: string) => pick(ISSUE_TYPE, c),
   issueWhere: (c: string) => pick(ISSUE_WHERE, c),

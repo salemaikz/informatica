@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { analyticsEnabledOnServer, startAnalytics, trackActiveToday } from "@/lib/analytics-client";
+import { isRecipientPath } from "@/lib/public-paths";
 import { useApp } from "@/lib/store";
 
 /**
@@ -10,10 +12,12 @@ import { useApp } from "@/lib/store";
  * Раз в календарный день шлёт событие active (удержание D0/D1/D7/D30 по дню первого запуска): при загрузке и каждый раз, когда
  * вкладку или PWA снова показали (телефон чаще возобновляет приложение из фона, чем перезагружает его).
  * Смонтирован в Providers ПЕРЕД {children}: эффекты экрана (paywall_view, lesson_start) должны застать приёмник.
+ * На страницах получателя ссылки (/r/…, /report) active не шлём: там родитель или друг, а не ученик (#72–#74).
  */
 export function AnalyticsAgent() {
   const allowed = useApp((s) => s.profile.analytics !== false);
   const createdAt = useApp((s) => s.profile.createdAt);
+  const recipient = isRecipientPath(usePathname() ?? "");
 
   // Приёмник: выключили в профиле — снимается, накопленное не отправляется.
   useEffect(() => {
@@ -24,7 +28,7 @@ export function AnalyticsAgent() {
   // Удержание: объявляется один раз в календарный день (отметка в localStorage). Не только при загрузке: открытую вкладку
   // или PWA ученик возобновляет на следующий день без перезагрузки — проверяем при возврате на экран; повторы за день отсекает отметка.
   useEffect(() => {
-    if (!analyticsEnabledOnServer() || !allowed) return;
+    if (!analyticsEnabledOnServer() || !allowed || recipient) return;
     trackActiveToday(createdAt);
     const onVisible = () => {
       if (document.visibilityState === "visible") trackActiveToday(createdAt);
@@ -35,7 +39,7 @@ export function AnalyticsAgent() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", onVisible);
     };
-  }, [allowed, createdAt]);
+  }, [allowed, createdAt, recipient]);
 
   return null;
 }

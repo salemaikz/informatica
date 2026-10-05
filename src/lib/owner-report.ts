@@ -298,6 +298,8 @@ export interface OwnerReport {
   diagnostic: { finished: number; notFinished: number };
   breakReasons: Count[];
   feedback: Count[];
+  /** Поделиться (#72, #73): `<что>:<как>`, открытия ссылок получателями, шаги вызова другу. */
+  share: { sent: Count[]; opened: Count[]; challenge: Count[] };
   practice: { games: GameRow[]; drills: StartFinishRow[]; exams: StartFinishRow[] };
 }
 
@@ -357,6 +359,7 @@ export function buildOwnerReport(days: readonly DayFields[], names: ReportNames)
     diagnostic: { finished: sum["dg:1"] ?? 0, notFinished: sum["dg:0"] ?? 0 },
     breakReasons: counts(sum, "br:"),
     feedback: counts(sum, "fb:"),
+    share: { sent: counts(sum, "sh:"), opened: counts(sum, "so:"), challenge: counts(sum, "chl:") },
     practice: { games, drills: startFinish(sum, "ds:", "df:"), exams: startFinish(sum, "xs:", "xf:") },
   };
 }

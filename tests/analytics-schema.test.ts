@@ -27,12 +27,15 @@ const SAMPLES: Record<AnalyticsName, AnalyticsEvent> = {
   active: { e: "active", d: 7 },
   break_reason: { e: "break_reason", code: "other_prep" },
   feedback: { e: "feedback", kind: "content" },
+  share: { e: "share", what: "challenge", how: "wa" },
+  share_open: { e: "share_open", what: "report" },
+  challenge: { e: "challenge", step: "accept" },
 };
 
 describe("белый список событий статистики", () => {
   it("в схеме ровно те события, что в контракте lib/analytics.ts", () => {
     expect(Object.keys(EVENT_SCHEMA).sort()).toEqual(Object.keys(SAMPLES).sort());
-    expect(Object.keys(SAMPLES)).toHaveLength(23);
+    expect(Object.keys(SAMPLES)).toHaveLength(26);
   });
 
   it("каждое верное событие проходит без изменений", () => {
@@ -143,5 +146,16 @@ describe("белый список событий статистики", () => {
     // Мусор в начале пачки не освобождает место: сначала обрезка, потом проверка.
     const junkFirst = [...Array.from({ length: 30 }, () => "мусор"), SAMPLES.active];
     expect(parseEvents(junkFirst)).toEqual([]);
+  });
+});
+
+describe("поделиться и вызов (#72, #73)", () => {
+  it("значения только из белых списков", () => {
+    expect(parseEvent({ e: "share", what: "exam", how: "native" })).toEqual({ e: "share", what: "exam", how: "native" });
+    expect(parseEvent({ e: "share", what: "exam", how: "instagram" })).toBeNull();
+    expect(parseEvent({ e: "share", what: "name", how: "copy" })).toBeNull();
+    expect(parseEvent({ e: "share_open", what: "challenge" })).toBeNull();
+    expect(parseEvent({ e: "challenge", step: "win" })).toBeNull();
+    expect(parseEvent({ e: "challenge", step: "more", code: "x1-m-14-19-k-1-a9zq" })).toEqual({ e: "challenge", step: "more" });
   });
 });

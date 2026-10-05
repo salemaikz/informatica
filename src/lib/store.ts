@@ -216,6 +216,8 @@ export interface ExamSummary {
   title?: string;
   /** Заданий в варианте (знаменатель точности дня, #66; пропущенные — со счётом 0). */
   questions?: number;
+  /** Тег банка заданий варианта (#73): для вызова другу на тот же вариант. Старые попытки — без тега. */
+  pool?: string;
 }
 
 export interface AppState {

@@ -11,6 +11,12 @@ export type PaywallFrom = "onboarding" | "auto" | "shop" | "profile" | "hearts" 
 export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game";
 /** Ответ на «Что помешало?» после перерыва. */
 export type BreakReason = "time" | "hard" | "boring" | "forgot" | "other_prep" | "other";
+/** Чем поделились (#72): результат пробника, % курса, серия, вызов другу, отчёт родителю. */
+export type ShareWhat = "exam" | "course" | "streak" | "challenge" | "report";
+/** Как поделились: системное меню, копирование, WhatsApp, Telegram, сохранение картинки, ручное копирование из поля. */
+export type ShareHow = "native" | "copy" | "wa" | "tg" | "save" | "manual";
+/** Шаг вызова друга (#73): принял на странице результата, начал вариант, итог против друга. */
+export type ChallengeStep = "accept" | "start" | "more" | "same" | "less";
 
 export type AnalyticsEvent =
   // Урок: старт (resume — продолжение сохранённого), выход до конца (step — пройдено шагов из of), конец (acc — точность в %, sec — активные секунды)
@@ -47,7 +53,11 @@ export type AnalyticsEvent =
   // «Что помешало?» после перерыва
   | { e: "break_reason"; code: BreakReason }
   // Отзыв со страницы обратной связи (только факт и вид, текст идёт отдельно через /api/issue)
-  | { e: "feedback"; kind: "idea" | "bug" | "content" | "other" };
+  | { e: "feedback"; kind: "idea" | "bug" | "content" | "other" }
+  // Поделиться (#72): что и как; открытие ссылки получателем (/r/… — exam/course/streak, /report — report); вызов другу (#73)
+  | { e: "share"; what: ShareWhat; how: ShareHow }
+  | { e: "share_open"; what: "exam" | "course" | "streak" | "report" }
+  | { e: "challenge"; step: ChallengeStep };
 
 export type AnalyticsName = AnalyticsEvent["e"];
 

@@ -6,6 +6,7 @@
 import { del, get, set } from "idb-keyval";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import { EXAM_TIME_LIMIT_SEC, isAnswered, scoreExam, scoreQuestion, type ExamAnswer, type ExamAnswers, type ExamKind, type ExamPaper, type ExamQuestion } from "./exam";
+import { sanitizeChallenge, type Challenge } from "./challenge";
 import type { ExamSummary } from "./store";
 import type { EntTopicId } from "./types";
 
@@ -41,6 +42,10 @@ export interface ExamAttempt {
   elapsedMs: number;
   finishedAt?: number;
   review?: ExamAiReview;
+  /** Тег банка заданий, на котором собран вариант (`currentPoolTag`, #73): им делятся в вызове другу. */
+  pool?: string;
+  /** Вызов друга, с которым начата попытка (#73): баннер и сравнение переживают перезагрузку. */
+  challenge?: Challenge;
 }
 
 /** Всё, кроме бумаги: часто пишется. */
@@ -196,8 +201,14 @@ export function sanitizeState(raw: unknown, paper: ExamPaper): ExamAttemptState 
     elapsedMs: fin(s.elapsedMs) ? Math.max(0, s.elapsedMs) : 0,
     finishedAt: fin(s.finishedAt) ? s.finishedAt : undefined,
     review: sanitizeReview(s.review),
+    pool: isPoolTag(s.pool) ? s.pool : undefined,
+    // Вызов — только для полного, мини и теста по теме (контрольной не делятся, #73).
+    challenge: paper.kind !== "unit" ? (sanitizeChallenge(s.challenge) ?? undefined) : undefined,
   };
 }
+
+/** Тег банка заданий: 4 знака [a-z0-9] (lib/challenge.ts → poolTag). */
+export const isPoolTag = (s: unknown): s is string => typeof s === "string" && /^[a-z0-9]{4}$/.test(s);
 
 /** Целая попытка из двух записей. null — что-то повреждено или нет бумаги. */
 export function sanitizeAttempt(rawPaper: unknown, rawState: unknown): ExamAttempt | null {
@@ -311,6 +322,7 @@ export function buildSummary(attempt: ExamAttempt, finishedAt: number, title?: s
     title: attempt.kind === "unit" && title ? title : undefined,
     // Знаменатель точности дня (#66): весь вариант, пропущенные — со счётом 0.
     questions: attempt.paper.items.length,
+    pool: isPoolTag(attempt.pool) ? attempt.pool : undefined,
   };
 }
 

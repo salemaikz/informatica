@@ -2,7 +2,7 @@
 // Строго по типам из lib/analytics.ts: неизвестное событие, лишнее поле или значение не того вида — отбрасываются.
 // Чистая логика без React и без сервера: покрыта tests/analytics-schema.test.ts.
 
-import type { AnalyticsEvent, BreakReason, HeartOutWhere, PaywallFrom } from "@/lib/analytics";
+import type { AnalyticsEvent, BreakReason, ChallengeStep, HeartOutWhere, PaywallFrom, ShareHow, ShareWhat } from "@/lib/analytics";
 
 /** Не больше стольких событий в одной пачке (лишние отбрасываются до проверки). */
 export const MAX_BATCH = 30;
@@ -38,6 +38,10 @@ export const isSafeId = (v: unknown): v is string => typeof v === "string" && ID
 export const PAYWALL_FROMS: readonly PaywallFrom[] = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "other"];
 export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game"];
 export const BREAK_REASONS: readonly BreakReason[] = ["time", "hard", "boring", "forgot", "other_prep", "other"];
+export const SHARE_WHATS: readonly ShareWhat[] = ["exam", "course", "streak", "challenge", "report"];
+export const SHARE_HOWS: readonly ShareHow[] = ["native", "copy", "wa", "tg", "save", "manual"];
+export const SHARE_OPENS = ["exam", "course", "streak", "report"] as const;
+export const CHALLENGE_STEPS: readonly ChallengeStep[] = ["accept", "start", "more", "same", "less"];
 const VIA = ["learn", "check"] as const;
 const EXAM_KINDS = ["full", "mini", "topic", "unit"] as const;
 const FEEDBACK_KINDS = ["idea", "bug", "content", "other"] as const;
@@ -89,6 +93,9 @@ export const EVENT_SCHEMA: Record<AnalyticsEvent["e"], Schema> = {
   active: { d: oneOf([0, 1, 7, 30]) },
   break_reason: { code: oneOf(BREAK_REASONS) },
   feedback: { kind: oneOf(FEEDBACK_KINDS) },
+  share: { what: oneOf(SHARE_WHATS), how: oneOf(SHARE_HOWS) },
+  share_open: { what: oneOf(SHARE_OPENS) },
+  challenge: { step: oneOf(CHALLENGE_STEPS) },
 };
 
 /** Одно событие из недоверенных данных: только известное имя и только поля из схемы; иначе null. Лишние поля отбрасываются. */

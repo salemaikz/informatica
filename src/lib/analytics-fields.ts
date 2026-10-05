@@ -93,6 +93,15 @@ export function fieldsOf(ev: AnalyticsEvent): Record<string, number> {
     case "feedback":
       f[`fb:${ev.kind}`] = 1;
       break;
+    case "share":
+      f[`sh:${ev.what}:${ev.how}`] = 1;
+      break;
+    case "share_open":
+      f[`so:${ev.what}`] = 1;
+      break;
+    case "challenge":
+      f[`chl:${ev.step}`] = 1;
+      break;
   }
   return f;
 }

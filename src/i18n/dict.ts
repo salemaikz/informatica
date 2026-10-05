@@ -43,6 +43,8 @@ import { progressDict } from "./parts/progress";
 import { feedbackDict } from "./parts/feedback";
 import { diagnosticDict } from "./parts/diagnostic";
 import { resultsDict } from "./parts/results";
+import { challengeDict } from "./parts/challenge";
+import { reportDict } from "./parts/report";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -520,6 +522,8 @@ export const dict = {
   ...feedbackDict,
   ...diagnosticDict,
   ...resultsDict,
+  ...challengeDict,
+  ...reportDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

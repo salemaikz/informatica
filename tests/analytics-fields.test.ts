@@ -39,6 +39,9 @@ describe("поля суточного хеша: что пишет каждое �
     expect(fieldsOf({ e: "active", d: 30 })).toEqual({ active: 1, "act:30": 1 });
     expect(fieldsOf({ e: "break_reason", code: "hard" })).toEqual({ break_reason: 1, "br:hard": 1 });
     expect(fieldsOf({ e: "feedback", kind: "idea" })).toEqual({ feedback: 1, "fb:idea": 1 });
+    expect(fieldsOf({ e: "share", what: "course", how: "tg" })).toEqual({ share: 1, "sh:course:tg": 1 });
+    expect(fieldsOf({ e: "share_open", what: "exam" })).toEqual({ share_open: 1, "so:exam": 1 });
+    expect(fieldsOf({ e: "challenge", step: "less" })).toEqual({ challenge: 1, "chl:less": 1 });
   });
 
   it("в полях нет ничего, кроме значений из события: ни id, ни IP, ни времени", () => {

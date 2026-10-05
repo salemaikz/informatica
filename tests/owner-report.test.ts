@@ -248,6 +248,9 @@ describe("сводка целиком", () => {
     ...ev({ e: "break_reason", code: "hard" }, 2),
     { e: "break_reason", code: "time" },
     ...ev({ e: "feedback", kind: "idea" }, 2),
+    ...ev({ e: "share", what: "exam", how: "wa" }, 3),
+    ...ev({ e: "share_open", what: "exam" }, 2),
+    ...ev({ e: "challenge", step: "accept" }, 1),
     ...ev({ e: "game_start", game: "binary-race", lesson: 0 }, 4),
     ...ev({ e: "game_finish", game: "binary-race", acc: 90 }, 3),
     { e: "game_quit", game: "binary-race" },
@@ -288,6 +291,7 @@ describe("сводка целиком", () => {
       { key: "time", n: 1 },
     ]);
     expect(r.feedback).toEqual([{ key: "idea", n: 2 }]);
+    expect(r.share).toEqual({ sent: [{ key: "exam:wa", n: 3 }], opened: [{ key: "exam", n: 2 }], challenge: [{ key: "accept", n: 1 }] });
     expect(r.practice.games).toEqual([
       { key: "binary-race", starts: 4, finishes: 3, quits: 1 },
       { key: "only-quit", starts: 0, finishes: 0, quits: 1 },

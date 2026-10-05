@@ -207,6 +207,18 @@ export function OwnerView({ data }: { data: OwnerData }) {
         <Counts rows={r.feedback} name={label.feedback} />
       </Section>
 
+      <Section title="Поделиться" hint="Что и как отправили; сколько раз ссылку открыли получатели; вызов другу по шагам. Без имён и содержимого.">
+        {r.share.sent.length + r.share.opened.length + r.share.challenge.length === 0 ? (
+          <Empty />
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Counts rows={r.share.sent} name={label.share} />
+            <Counts rows={r.share.opened} name={(c) => `открыли: ${label.shareWhat(c)}`} />
+            <Counts rows={r.share.challenge} name={label.challengeStep} />
+          </div>
+        )}
+      </Section>
+
       <Section title="Игры, тренировка, пробники">
         {r.practice.games.length + r.practice.drills.length + r.practice.exams.length === 0 ? (
           <Empty />
