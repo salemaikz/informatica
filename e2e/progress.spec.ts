@@ -65,7 +65,7 @@ test("«Прогресс» на телефоне: шкала, слабые ме�
     await expect(seven).toHaveAttribute("aria-pressed", "true");
 
     // Честные цифры: «сам / с подсказкой / пропущено», активное время
-    await expect(main.getByText("сам: 7 · с подсказкой: 2 · пропущено: 1")).toBeVisible();
+    await expect(main.getByText("без подсказки: 7 · с подсказкой: 2 · пропущено: 1")).toBeVisible();
     await expect(main.getByText("активное время")).toBeVisible();
 
     expect(await overflow(page), theme).toBeLessThanOrEqual(1);

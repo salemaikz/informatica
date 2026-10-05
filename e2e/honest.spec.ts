@@ -101,7 +101,7 @@ test("урок: пропуск решения по фото — точность
   await expect(page.getByRole("heading", { name: "Урок пройден!" })).toBeVisible();
   await expect(accuracyTile(page)).toContainText("67%");
   await expect(accuracyTile(page)).not.toContainText("100%");
-  await expect(page.getByText("сам: 2 из 3")).toBeVisible();
+  await expect(page.getByText("без подсказки: 2 из 3")).toBeVisible();
   await expect(page.getByText("пропущено: 1")).toBeVisible();
   // «С подсказкой» при нуле не показываем; пропуск — не ошибка: карточки «Последние ошибки» нет.
   await expect(page.getByText(/с подсказкой:/)).toHaveCount(0);
@@ -131,7 +131,7 @@ test("урок: подсказка до ответа — «с подсказко
 
   await expect(page.getByRole("heading", { name: "Урок пройден!" })).toBeVisible();
   await expect(page.getByText("с подсказкой: 1")).toBeVisible();
-  await expect(page.getByText("сам: 2 из 3")).toBeVisible();
+  await expect(page.getByText("без подсказки: 2 из 3")).toBeVisible();
   // Верный ответ с подсказкой в точность входит, а «пропущено» не появляется.
   await expect(accuracyTile(page)).toContainText("100%");
   await expect(page.getByText(/пропущено:/)).toHaveCount(0);
