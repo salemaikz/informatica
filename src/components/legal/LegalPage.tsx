@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileWarning } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -64,11 +64,6 @@ export function LegalPage({ doc }: { doc: LegalId }) {
           <h1 className="break-words text-2xl font-extrabold leading-tight">{t(`legal.title.${doc}`)}</h1>
         </div>
       </div>
-
-      <p className="flex items-start gap-2.5 rounded-2xl border-2 border-warning/40 bg-warning-soft px-4 py-3 text-sm font-semibold">
-        <FileWarning size={18} aria-hidden className="mt-0.5 shrink-0 text-warning-strong" />
-        <span>{t("legal.draft")}</span>
-      </p>
 
       <Card className="sm:p-6">
         <Markdown>{legalMarkdown(d, lang)}</Markdown>

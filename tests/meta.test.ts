@@ -61,14 +61,32 @@ describe("тексты превью ссылки", () => {
     expect(metaDict["meta.title"].kk).toContain("ҰБТ");
   });
 
-  it("заголовки правовых страниц — на двух языках в одной строке", () => {
+  it("заголовки правовых страниц — на двух языках в одной строке; страниц две (политика и условия)", () => {
+    expect([...LEGAL_IDS].sort()).toEqual(["privacy", "terms"]);
     for (const id of LEGAL_IDS) {
       const t = legalTitle(id);
       expect(t, id).toContain(" · ");
       expect(t.length, id).toBeLessThanOrEqual(70);
     }
+    expect(legalTitle("privacy")).toBe("Политика конфиденциальности · Құпиялылық саясаты");
+    expect(legalTitle("terms")).toBe("Условия использования · Пайдалану шарттары");
     expect(biText({ ru: "а", kk: "б" })).toBe("а · б");
     expect(biText({ ru: "а", kk: "б" }, " ")).toBe("а б");
+  });
+
+  it("в превью и заголовках нет названий подрядчиков и технологий, «Кто мы» нет", () => {
+    const stack = /openai|vercel|upstash|jsdelivr|cdn|pyodide|sql\.js|gpt|inf_ai/i;
+    const all = [
+      ...Object.values(metaDict).flatMap((v) => [v.ru, v.kk]),
+      siteTitle(),
+      siteDescription(),
+      ogAlt(),
+      ...LEGAL_IDS.map((id) => legalTitle(id)),
+    ];
+    for (const text of all) {
+      expect(text.match(stack), text).toBeNull();
+      expect(text, text).not.toMatch(/Кто мы|Біз кімбіз/);
+    }
   });
 });
 
