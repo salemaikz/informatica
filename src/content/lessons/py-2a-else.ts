@@ -232,13 +232,14 @@ export const lesson: Lesson = {
         ],
         [
           { ru: "Условие n % 2 == 0 даёт ", kk: "n % 2 == 0 шарты мынаны береді: " },
-          { blank: ["False"], mode: "text" },
+          { blank: ["False"], mode: "text", label: { ru: "False", kk: "False" } },
         ],
         [
           { ru: "Выполнится ветка else и выведется слово ", kk: "else тармағы орындалып, мына сөз шығады: " },
-          { blank: ["odd"], mode: "text" },
+          { blank: ["odd"], mode: "text", label: { ru: "odd", kk: "odd" } },
         ],
       ],
+      bank: [{ ru: "even", kk: "even" }, { ru: "None", kk: "None" }, { ru: "True", kk: "True" }],
       hint: {
         ru: "Сначала найди остаток от деления 9 на 2. Потом сравни его с нулём.",
         kk: "Алдымен 9 санын 2-ге бөлгендегі қалдықты тап. Содан кейін оны нөлмен салыстыр.",

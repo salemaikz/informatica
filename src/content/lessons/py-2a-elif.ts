@@ -220,19 +220,20 @@ export const lesson: Lesson = {
       lines: [
         [
           { ru: "Условие n >= 90 даёт ", kk: "n >= 90 шарты мынаны береді: " },
-          { blank: ["False"], mode: "text" },
+          { blank: ["False"], mode: "text", label: { ru: "False", kk: "False" } },
         ],
         [
           { ru: "Условие n >= 70 даёт ", kk: "n >= 70 шарты мынаны береді: " },
-          { blank: ["False"], mode: "text" },
+          { blank: ["False"], mode: "text", label: { ru: "False", kk: "False" } },
         ],
         [
           { ru: "Условие n >= 50 даёт ", kk: "n >= 50 шарты мынаны береді: " },
-          { blank: ["True"], mode: "text" },
+          { blank: ["True"], mode: "text", label: { ru: "True", kk: "True" } },
           { ru: ", поэтому выведется ", kk: ", сондықтан мына сан шығады: " },
           { blank: ["3"], mode: "number" },
         ],
       ],
+      bank: [{ ru: "None", kk: "None" }, { ru: "Error", kk: "Error" }],
       hint: {
         ru: "Иди по условиям сверху вниз. Число 50 — граница: подумай, входит ли она в условие со знаком >=.",
         kk: "Шарттармен жоғарыдан төмен жүр. 50 саны — шек: оның >= белгісі бар шартқа кіретінін ойлан.",

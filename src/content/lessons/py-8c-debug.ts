@@ -493,9 +493,10 @@ export const lesson: Lesson = {
         [{ ru: "В списке элементов: len(a) = ", kk: "Тізімдегі элемент саны: len(a) = " }, { blank: ["4"], mode: "number" }],
         [{ ru: "range(len(a) + 1) даёт i = 0, 1, 2, 3, ", kk: "range(len(a) + 1) мына мәндерді береді: i = 0, 1, 2, 3, " }, { blank: ["4"], mode: "number" }],
         [{ ru: "Номера элементов списка — от 0 до ", kk: "Тізім элементтерінің нөмірлері — 0-ден мынаған дейін: " }, { blank: ["3"], mode: "number" }],
-        [{ ru: "При i = 4 Python остановит программу: ", kk: "i = 4 болғанда Python программаны тоқтатады: " }, { blank: ["IndexError"], mode: "text" }],
+        [{ ru: "При i = 4 Python остановит программу: ", kk: "i = 4 болғанда Python программаны тоқтатады: " }, { blank: ["IndexError"], mode: "text", label: { ru: "IndexError", kk: "IndexError" } }],
         [{ ru: "Чтобы перебрать 4 элемента, нужно range(", kk: "4 элементті аралау үшін мынау керек: range(" }, { blank: ["4"], mode: "number" }, ")"],
       ],
+      bank: [{ ru: "ValueError", kk: "ValueError" }, { ru: "SyntaxError", kk: "SyntaxError" }, { ru: "NameError", kk: "NameError" }],
       explanation: {
         ru: "В списке 4 элемента, их номера 0, 1, 2, 3. Из-за `+ 1` цикл доходит до i = 4, а элемента a[4] нет: на этом круге программа падает с IndexError, и `print(s)` не выполняется. Правильно: `range(len(a))`, то есть range(4).",
         kk: "Тізімде 4 элемент бар, нөмірлері 0, 1, 2, 3. `+ 1` себебінен цикл i = 4 мәніне дейін жетеді, ал a[4] элементі жоқ: осы айналымда программа IndexError қатесімен құлайды, ал `print(s)` орындалмайды. Дұрысы: `range(len(a))`, яғни range(4).",

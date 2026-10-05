@@ -391,11 +391,12 @@ export const lesson: Lesson = {
       ),
       lines: [
         [l("Нужны имя ученика и фамилия руководителя: первое поле — из Students, второе — из Classes.", "Оқушының аты және жетекшінің тегі керек: бірінші өріс — Students кестесінен, екіншісі — Classes кестесінен.")],
-        ["SELECT Students.Name, Classes.", { blank: ["Teacher"], mode: "text" }],
+        ["SELECT Students.Name, Classes.", { blank: ["Teacher"], mode: "text", label: { ru: "Teacher", kk: "Teacher" } }],
         ["FROM Students"],
-        [{ blank: ["JOIN", "INNER JOIN"], mode: "text", width: 4 }, " Classes"],
-        [{ blank: ["ON"], mode: "text", width: 2 }, " Students.", { blank: ["ClassID"], mode: "text" }, " = Classes.ClassID;"],
+        [{ blank: ["JOIN", "INNER JOIN"], mode: "text", width: 4, label: { ru: "JOIN", kk: "JOIN" } }, " Classes"],
+        [{ blank: ["ON"], mode: "text", width: 2, label: { ru: "ON", kk: "ON" } }, " Students.", { blank: ["ClassID"], mode: "text", label: { ru: "ClassID", kk: "ClassID" } }, " = Classes.ClassID;"],
       ],
+      bank: [{ ru: "WHERE", kk: "WHERE" }, { ru: "Name", kk: "Name" }, { ru: "GROUP BY", kk: "GROUP BY" }],
       explanation: l(
         "Руководитель — поле Teacher таблицы Classes. Вторую таблицу присоединяет JOIN, а правило поиска пары задаёт ON: Students.ClassID = Classes.ClassID — внешний ключ равен ключу.",
         "Жетекші — Classes кестесінің Teacher өрісі. Екінші кестені JOIN қосады, ал жұпты іздеу ережесін ON береді: Students.ClassID = Classes.ClassID — сыртқы кілт бастапқы кілтке тең.",
@@ -455,7 +456,7 @@ export const lesson: Lesson = {
     },
     {
       id: "jn-q-city",
-      type: "input",
+      type: "choice",
       skill: SKILL,
       level: 1,
       prompt: l(
@@ -464,12 +465,18 @@ export const lesson: Lesson = {
       ),
       scene: custOrders(),
       reveal: custOrders({ rows: [1], caption: l("Заказ 13 → клиент 2 → Алматы", "13-тапсырыс → 2-клиент → Алматы") }),
-      answers: ["Алматы"],
-      mode: "text",
+      options: ["Астана", "Алматы", "Шымкент", "Караганда"],
+      correct: 1,
       explanation: l(
         "Заказ 13 принадлежит клиенту с CustID = 2 (это Бауыржан). По ключу находим клиента 2 в Customers: его город — Алматы.",
         "13-тапсырыс CustID = 2 клиентке жатады (бұл — Бауыржан). Кілт бойынша Customers кестесінен 2-клиентті табамыз: оның қаласы — Алматы.",
       ),
+      whyWrong: [
+        l("Астана — город клиентов 1 и 3, а заказ 13 сделал клиент 2.", "Астана — 1 және 3 клиенттердің қаласы, ал 13-тапсырысты 2-клиент берген."),
+        null,
+        l("Шымкент — город клиента 4, у него другой заказ.", "Шымкент — 4-клиенттің қаласы, оның тапсырысы басқа."),
+        l("Такого города в таблице Customers нет.", "Customers кестесінде мұндай қала жоқ."),
+      ],
       hint: l(
         "Найди заказ 13 в Orders и посмотри его CustID. Затем найди такой же CustID в таблице Customers.",
         "Orders кестесінен 13-тапсырысты тауып, оның CustID мәніне қара. Содан кейін Customers кестесінен дәл сондай CustID-ті тап.",
