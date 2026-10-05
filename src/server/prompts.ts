@@ -1,5 +1,5 @@
 import "server-only";
-import type { StudentContext, TaskContext, TutorMode } from "@/lib/ai-types";
+import type { LessonChatContext, StudentContext, TaskContext, TutorMode } from "@/lib/ai-types";
 import type { Lang } from "@/lib/types";
 import { renderContext, styleRule } from "./context";
 
@@ -66,17 +66,28 @@ const CHAT_MODE_RULE: Record<"free" | "explain" | "tasks" | "check" | "ent", (to
     `ЧАТ «ГОТОВИМСЯ К ЕНТ». Помогаешь готовиться к ЕНТ по информатике (40 заданий, 50 баллов: 25 с одним ответом, 5 с несколькими, 5 на соответствие, 5 по контексту; калькулятор и черновик на экзамене есть). Опирайся на слабые и сильные темы и ошибки ученика из данных ниже: составляй короткий план (по дням или неделям), советуй, какие темы и задания тренировать в приложении (уроки, тренировка, пробный ЕНТ), объясняй тактику экзамена (время ≈ 2 минуты на задание, частичные баллы). Без обещаний конкретного балла.`,
 };
 
+/**
+ * Чат по теме урока теории (этап 16В, P6): кнопка «Спросить Бита об этой теме». Дополнение к свободному чату: ответы держатся
+ * темы урока, опираются на его конспект (он идёт ниже, обрезан по бюджету — server/context.ts). Задания урока модель не видит.
+ */
+export function lessonChatRule(lesson: LessonChatContext): string {
+  const topic = lesson.topic ? ` (тема ЕНТ: «${lesson.topic}»)` : "";
+  return `ЧАТ ПО ТЕМЕ УРОКА «${lesson.title}»${topic}. Ученик читает этот урок и задаёт вопросы по его теме. Держись темы урока: опирайся на конспект ниже, объясняй как новичку — простыми словами, через знакомое из жизни, с маленьким примером. Если вопрос шире урока — ответь коротко и свяжи с темой урока. Если вопрос совсем не по теме — одной фразой верни ученика к теме урока. Если в конспекте нет ответа — скажи об этом и объясни своими словами, не выдумывай факты. Заданий урока ты не видишь: готовых ответов к ним не давай, показывай приём на другом примере. До 200 слов.\n\nКОНСПЕКТ УРОКА:\n${lesson.conspect}`;
+}
+
 export function tutorSystemPrompt(
   ctx: StudentContext,
   mode: TutorMode,
   task?: TaskContext,
-  opts: { neutral?: boolean; noLeak?: boolean; chatMode?: keyof typeof CHAT_MODE_RULE; topic?: string } = {},
+  opts: { neutral?: boolean; noLeak?: boolean; chatMode?: keyof typeof CHAT_MODE_RULE; topic?: string; lesson?: LessonChatContext } = {},
 ): string {
   const student = opts.neutral
     ? `СТИЛЬ ОБЪЯСНЕНИЙ: ${styleRule(ctx.style)}.`
     : `ДАННЫЕ УЧЕНИКА (для персонализации, не пересказывай их дословно):\n${renderContext(ctx)}`;
   const chatRule = mode === "chat" && opts.chatMode ? CHAT_MODE_RULE[opts.chatMode](opts.topic) : "";
-  const parts = [BASE, LANG_RULE[ctx.lang], MODE_RULE[mode], ...(chatRule ? [chatRule] : []), student];
+  // Чат по теме урока — только свободный чат (в других режимах свой план ответа); в кэшируемых путях урока нет.
+  const lessonRule = mode === "chat" && opts.lesson && (!opts.chatMode || opts.chatMode === "free") ? lessonChatRule(opts.lesson) : "";
+  const parts = [BASE, LANG_RULE[ctx.lang], MODE_RULE[mode], ...(chatRule ? [chatRule] : []), ...(lessonRule ? [lessonRule] : []), student];
   if (task?.ide) {
     // Практикум кода: условие, код ученика, ошибка. Готовую программу целиком — только если задача уже решена.
     const t = [`ПРАКТИКУМ КОДА (${task.ide})${task.prompt ? `, задача «${task.prompt}»` : ""}.`];

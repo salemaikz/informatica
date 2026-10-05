@@ -25,7 +25,7 @@ export function useTutor() {
 
   const ask = useCallback(
     async (
-      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string; chatMode?: ChatMode; topic?: string },
+      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string; chatMode?: ChatMode; topic?: string; lessonId?: string },
       onText: (text: string) => void,
     ): Promise<string | null> => {
       const app = useApp.getState();

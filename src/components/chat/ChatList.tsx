@@ -28,14 +28,14 @@ function ChatRow({ chat, active, now, onMenu }: { chat: ChatMeta; active: boolea
       )}
     >
       <Link href={`/tutor/${chat.id}`} className="flex min-h-16 min-w-0 flex-1 items-center gap-3 p-2.5" aria-current={active ? "page" : undefined}>
-        <ModeBadge mode={chat.mode} size={40} />
+        <ModeBadge mode={chat.mode} size={40} lesson={!!chat.lessonId} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             {chat.pinned && <Pin size={13} className="shrink-0 text-ai" aria-label={t("chat2.pinnedMark")} />}
             <span className="truncate font-extrabold">{displayTitle(chat, lang, t)}</span>
             {time && <span className="ml-auto shrink-0 pl-1 text-xs font-bold text-muted">{time}</span>}
           </span>
-          <span className="block truncate text-sm font-semibold text-muted">{chat.preview || t(MODE_DESC_KEY[chat.mode])}</span>
+          <span className="block truncate text-sm font-semibold text-muted">{chat.preview || (chat.lessonId ? t("theory16c.chat.badge") : t(MODE_DESC_KEY[chat.mode]))}</span>
         </span>
       </Link>
       <button

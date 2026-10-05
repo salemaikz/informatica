@@ -59,6 +59,15 @@ export interface TutorRequest {
   /** ИИ-чат 2.0: режим чата (только для mode "chat") и тема ЕНТ (t01–t13). */
   chatMode?: "free" | "explain" | "tasks" | "check" | "ent";
   topic?: string;
+  /** Чат по теме урока (этап 16В, P6; только свободный чат): id урока — название и конспект урока добавляет сервер, клиент их не шлёт. */
+  lessonId?: string;
+}
+
+/** Урок, по которому идёт чат: название, тема ЕНТ и конспект на языке ученика (сервер собирает по id, конспект обрезан по бюджету). */
+export interface LessonChatContext {
+  title: string;
+  topic?: string;
+  conspect: string;
 }
 
 export interface CheckSolutionRequest {

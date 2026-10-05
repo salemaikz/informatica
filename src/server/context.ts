@@ -1,6 +1,8 @@
 import "server-only";
-import type { StudentContext, TaskContext } from "@/lib/ai-types";
+import type { LessonChatContext, StudentContext, TaskContext } from "@/lib/ai-types";
 import type { Lang } from "@/lib/types";
+import { entTopicById } from "@/content/ent-topics";
+import { lessonEntTopic } from "@/lib/theory";
 import type { WithTrack } from "@/lib/school";
 import { clampSecrets } from "@/lib/answer-leak";
 
@@ -66,6 +68,54 @@ export function sanitizeHistory(raw: unknown): HistoryMsg[] {
     out.unshift(msgs[i]);
   }
   return out;
+}
+
+// ---------- Чат по теме урока (этап 16В, P6) ----------
+// Клиент присылает только id урока (контент уроков клиенту не нужен — сторож скорости, tests/bundle-guard.test.ts):
+// название, тему ЕНТ и конспект сервер берёт из каталога и шпаргалок. Конспект уходит в системный промпт целиком
+// (самый длинный — ~1600 символов) и входит в бюджет входа (fitInput: base).
+
+/** Сколько символов конспекта урока берём в промпт: с запасом на самый длинный (~1600) и на рост курса. */
+export const LESSON_CONSPECT_MAX_CHARS = 2000;
+
+/** id урока с клиента: строчные латинские буквы, цифры и дефис («ns-1-bits»); всё остальное — не урок. */
+export function sanitizeLessonId(v: unknown): string | undefined {
+  return typeof v === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(v) ? v : undefined;
+}
+
+/** Конспект не длиннее max символов: режем по границе абзаца, затем строки (если граница не слишком далеко), иначе по длине; в конце «…». */
+export function clipConspect(text: string, max = LESSON_CONSPECT_MAX_CHARS): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const floor = Math.floor(max * 0.6);
+  const para = cut.lastIndexOf("\n\n");
+  const line = cut.lastIndexOf("\n");
+  const at = para >= floor ? para : line >= floor ? line : max;
+  return `${cut.slice(0, at).trimEnd()}…`;
+}
+
+/**
+ * Контекст чата по теме урока: название, тема ЕНТ и обрезанный конспект на языке ученика. undefined — id не урок
+ * (тогда чат идёт как обычный свободный). Каталог и шпаргалки грузим по требованию — обычным запросам они не нужны.
+ */
+export async function loadLessonChat(rawId: unknown, lang: Lang): Promise<LessonChatContext | undefined> {
+  const id = sanitizeLessonId(rawId);
+  if (!id) return undefined;
+  const [{ lessonMeta }, { UNITS }, { CONSPECTS }] = await Promise.all([
+    import("@/content/catalog"),
+    import("@/content/course-map"),
+    import("@/content/conspects.generated"),
+  ]);
+  const meta = lessonMeta(id);
+  const conspect = Object.hasOwn(CONSPECTS, id) ? CONSPECTS[id] : undefined;
+  if (!meta || !conspect) return undefined;
+  const topicId = lessonEntTopic(meta, UNITS);
+  return {
+    title: meta.title[lang],
+    topic: topicId ? entTopicById(topicId).title[lang] : undefined,
+    conspect: clipConspect(conspect[lang]),
+  };
 }
 
 /** Текст про стиль объяснений для промпта (по умолчанию — коротко). */

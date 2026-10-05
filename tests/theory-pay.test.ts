@@ -1,28 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAY, ENTRY_COST, HOUR, MINUTE, heartsView } from "@/lib/economy";
 import {
+  THEORY_FREE_CARDS,
   THEORY_PAID_MAX,
-  THEORY_READ_MS,
   THEORY_REPEAT_MS,
+  isTheoryCardLocked,
   putTheoryPaid,
   sanitizeTheoryPaid,
   shouldPayTheory,
   theoryCost,
   theoryFreeUntil,
   theoryPayState,
+  theoryUntilLabel,
 } from "@/lib/theory-pay";
 import { mergeState, useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 
 const NOW = 1_800_000_000_000;
-const base = { done: false, unlimited: false, paidAt: undefined as number | undefined, now: NOW };
+const base = { unlimited: false, paidAt: undefined as number | undefined, now: NOW };
 
-describe("плата за теорию: правила (этап 15, F2.3)", () => {
-  it("цена — ENTRY_COST.theory = 0,5; читаем 15 секунд, повтор — сутки", () => {
+describe("плата за теорию: правила (этап 15, F2.3; этап 16В — явная плата, пройденный урок тоже платный)", () => {
+  it("цена — ENTRY_COST.theory = 0,5; повтор — сутки; без оплаты открыта одна карточка", () => {
     expect(theoryCost()).toBe(0.5);
     expect(ENTRY_COST.theory).toBe(0.5);
-    expect(THEORY_READ_MS).toBe(15_000);
     expect(THEORY_REPEAT_MS).toBe(DAY);
+    expect(THEORY_FREE_CARDS).toBe(1);
   });
 
   it("обычный непройденный урок без оплаты — платим", () => {
@@ -30,9 +32,11 @@ describe("плата за теорию: правила (этап 15, F2.3)", () 
     expect(shouldPayTheory(base)).toBe(true);
   });
 
-  it("пройденный урок — бесплатно, даже если оплаты не было", () => {
-    expect(theoryPayState({ ...base, done: true })).toBe("done");
-    expect(shouldPayTheory({ ...base, done: true })).toBe(false);
+  it("пройденный урок платный, как и любой другой: прохождение на оплату не влияет (владелец: «теория тоже платная»)", () => {
+    // Пройденность в правилах не участвует вовсе: лишнее поле не меняет ответа.
+    const input = { ...base, done: true } as typeof base;
+    expect(theoryPayState(input)).toBe("pay");
+    expect(shouldPayTheory(input)).toBe(true);
   });
 
   it("«Безлимит» (и пробный) — бесплатно", () => {
@@ -40,8 +44,7 @@ describe("плата за теорию: правила (этап 15, F2.3)", () 
     expect(shouldPayTheory({ ...base, unlimited: true })).toBe(false);
   });
 
-  it("пройден важнее безлимита и оплаты; безлимит важнее оплаты", () => {
-    expect(theoryPayState({ ...base, done: true, unlimited: true, paidAt: NOW - HOUR })).toBe("done");
+  it("безлимит важнее оплаты", () => {
     expect(theoryPayState({ ...base, unlimited: true, paidAt: NOW - HOUR })).toBe("unlimited");
   });
 
@@ -66,6 +69,35 @@ describe("плата за теорию: правила (этап 15, F2.3)", () 
 
   it("theoryFreeUntil: сутки после оплаты", () => {
     expect(theoryFreeUntil(NOW)).toBe(NOW + DAY);
+  });
+});
+
+describe("ворота: какие карточки закрыты без оплаты", () => {
+  it("платить нужно — открыта только первая карточка, остальные (и конспект) закрыты", () => {
+    expect(isTheoryCardLocked("pay", 0)).toBe(false);
+    for (const i of [1, 2, 5, 11]) expect(isTheoryCardLocked("pay", i), String(i)).toBe(true);
+  });
+
+  it("оплачено или «Безлимит» — закрытых карточек нет", () => {
+    for (const state of ["paid", "unlimited"] as const) for (const i of [0, 1, 7]) expect(isTheoryCardLocked(state, i)).toBe(false);
+  });
+});
+
+describe("«Оплачено до …»: когда закончатся сутки", () => {
+  const at = (h: number, m: number) => new Date(2027, 0, 15, h, m, 0).getTime();
+
+  it("оплата сегодня — сутки заканчиваются завтра в то же время", () => {
+    // 14:30 сегодня → до 14:30 завтра
+    expect(theoryUntilLabel(at(14, 30), at(14, 31))).toEqual({ day: "tomorrow", time: "14:30" });
+  });
+
+  it("оплата вчера — до сегодняшнего времени", () => {
+    const paid = new Date(2027, 0, 14, 9, 5, 0).getTime();
+    expect(theoryUntilLabel(paid, at(7, 0))).toEqual({ day: "today", time: "09:05" });
+  });
+
+  it("часы и минуты с ведущим нулём", () => {
+    expect(theoryUntilLabel(new Date(2027, 0, 14, 0, 0, 0).getTime(), at(10, 0)).time).toBe("00:00");
   });
 });
 
@@ -160,13 +192,16 @@ describe("стор: payTheory", () => {
     expect(heart()).toBe(4);
   });
 
-  it("пройденный урок — бесплатно, запись не создаётся", () => {
+  it("пройденный урок — тоже платно (этап 16В): 0,5 и запись об оплате", () => {
     useApp.setState((s) => ({
       lessons: { ...s.lessons, [LESSON]: { completions: 1, bestAccuracy: 1, lastAt: Date.now(), totalXp: 10 } },
     }));
+    expect(st().payTheory(LESSON)).toMatchObject({ ok: true, paid: 0.5 });
+    expect(heart()).toBe(4.5);
+    expect(st().theoryPaid[LESSON]).toBe(Date.now());
+    // и повтор за сутки — бесплатно
     expect(st().payTheory(LESSON)).toMatchObject({ ok: true, paid: 0 });
-    expect(heart()).toBe(5);
-    expect(st().theoryPaid).toEqual({});
+    expect(heart()).toBe(4.5);
   });
 
   it("«Безлимит» (в том числе пробный) — бесплатно", () => {

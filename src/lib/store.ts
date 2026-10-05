@@ -49,6 +49,16 @@ import type { GameMode, GameResult } from "@/games/types";
 import { dropRun, putRun, sanitizeLessonRuns, type LessonRun } from "./lesson-run";
 import { putTheoryPaid, sanitizeTheoryPaid, shouldPayTheory, theoryCost, type TheoryPaid } from "./theory-pay";
 import {
+  putTheoryRead,
+  sanitizeTheoryLast,
+  sanitizeTheoryMode,
+  sanitizeTheoryRead,
+  THEORY_CARD_MAX,
+  type TheoryLast,
+  type TheoryMode,
+  type TheoryRead,
+} from "./theory";
+import {
   ACHIEVEMENT_CHIPS,
   addHearts,
   applyAiUsage,
@@ -285,6 +295,12 @@ export interface AppState {
   lessonRuns: Record<string, LessonRun>;
   /** Чтение конспекта урока оплачено (этап 15, lib/theory-pay.ts): id урока → когда (мс); старше суток отбрасывается. */
   theoryPaid: TheoryPaid;
+  /** Последний открытый конспект и карточка (этап 16В, lib/theory.ts): «Продолжить чтение» в «Теории». */
+  theoryLast: TheoryLast | null;
+  /** Прочитанные до конца конспекты: id урока → когда (этап 16В). */
+  theoryRead: TheoryRead;
+  /** Как читать конспект: по карточкам или всё сразу (этап 16В; запоминается). */
+  theoryMode: TheoryMode;
   /** Дневной срез по навыкам за 60 дней (#71): динамика, время и точность по темам (lib/skill-days.ts). */
   skillDays: SkillDays;
   /** Когда показывали окно тарифов. */
@@ -388,6 +404,12 @@ export interface AppActions {
    * конспект уже оплачен за последние сутки (paid 0). Иначе списывает и запоминает в theoryPaid. ok: false — не хватает, ничего не списано.
    */
   payTheory: (lessonId: string) => { ok: boolean; paid: number; view: HeartsView };
+  /** Открыт конспект урока на карточке card (с нуля) — запоминаем для «Продолжить чтение». Не платит и не трогает прогресс уроков. */
+  noteTheoryOpen: (lessonId: string, card: number) => void;
+  /** Конспект дочитан до конца (последняя карточка открыта оплаченным чтением) — статус «прочитан». */
+  markTheoryRead: (lessonId: string) => void;
+  /** Запомнить, как читать конспект: по карточкам или всё сразу. */
+  setTheoryMode: (mode: TheoryMode) => void;
   /** Сохранить незаконченный урок (плеер — после каждого шага). */
   saveLessonRun: (run: LessonRun) => void;
   /** Узел курса 3.0 пройден (практика, повторение) или сдан мини-тест группы — точность 0..1. */
@@ -428,7 +450,7 @@ export interface AppActions {
 
   // ---- ИИ-чат 2.0 ----
   /** Новый чат; возвращает id. Больше MAX_CHATS — вытесняется самый старый незакреплённый (его сообщения удаляет вызывающий). */
-  createChat: (mode: ChatMode, title?: string, topic?: EntTopicId) => string;
+  createChat: (mode: ChatMode, title?: string, topic?: EntTopicId, lessonId?: string) => string;
   renameChat: (id: string, title: string) => void;
   pinChat: (id: string, pinned: boolean) => void;
   /** Удаляет чат из списка (сообщения из IndexedDB удаляет вызывающий: deleteMessages). */
@@ -506,6 +528,9 @@ const initialState: AppState = {
   cosmetics: EMPTY_COSMETICS,
   lessonRuns: {},
   theoryPaid: {},
+  theoryLast: null,
+  theoryRead: {},
+  theoryMode: "cards",
   skillDays: {},
   paywall: { lastShownAt: 0, views: 0 },
   pushAsk: EMPTY_PUSH_ASK,
@@ -753,6 +778,9 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     cosmetics: sanitizeCosmetics(p.cosmetics),
     lessonRuns: sanitizeLessonRuns(p.lessonRuns),
     theoryPaid: sanitizeTheoryPaid(p.theoryPaid, Date.now()),
+    theoryLast: sanitizeTheoryLast(p.theoryLast),
+    theoryRead: sanitizeTheoryRead(p.theoryRead),
+    theoryMode: sanitizeTheoryMode(p.theoryMode),
     skillDays: sanitizeSkillDays(p.skillDays),
     // #67: у старых навыков нет clean и дней — migrateSkillStat переводит их на новое правило (и проверяет данные).
     skills: cleanSkills(p.skills),
@@ -1126,14 +1154,29 @@ export const useApp = create<AppState & AppActions>()(
         const today = todayKey();
         const tier = tierOf(s, now);
         const view = heartsView(s.hearts, tier, now, today);
-        const done = (s.lessons[lessonId]?.completions ?? 0) > 0;
-        if (!shouldPayTheory({ done, unlimited: tier === "unlimited", paidAt: s.theoryPaid[lessonId], now })) return { ok: true, paid: 0, view };
+        // Пройденный урок тоже платный (этап 16В): бесплатно только «Безлимит» и повторное чтение за сутки.
+        if (!shouldPayTheory({ unlimited: tier === "unlimited", paidAt: s.theoryPaid[lessonId], now })) return { ok: true, paid: 0, view };
         const cost = theoryCost();
         const hearts = spendHearts(s.hearts, cost, tier, now, today);
         if (!hearts) return { ok: false, paid: 0, view };
         set({ hearts, theoryPaid: putTheoryPaid(s.theoryPaid, lessonId, now) });
         return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
       },
+
+      noteTheoryOpen: (lessonId, card) =>
+        set((s) => {
+          const next = sanitizeTheoryLast({ id: lessonId, card: Math.min(card, THEORY_CARD_MAX), at: Date.now() });
+          if (!next) return {};
+          // Тот же урок и та же карточка — не пишем заново (каждая запись — запись в localStorage).
+          if (s.theoryLast && s.theoryLast.id === next.id && s.theoryLast.card === next.card) return {};
+          return { theoryLast: next };
+        }),
+
+      // Уже отмечен — не пишем заново (запись — в localStorage; время дочитывания нигде не нужно, важен факт).
+      markTheoryRead: (lessonId) =>
+        set((s) => (lessonId && lessonId.length <= 80 && !s.theoryRead[lessonId] ? { theoryRead: putTheoryRead(s.theoryRead, lessonId, Date.now()) } : {})),
+
+      setTheoryMode: (mode) => set((s) => (s.theoryMode === mode ? {} : { theoryMode: sanitizeTheoryMode(mode) })),
 
       saveLessonRun: (run) => set((s) => ({ lessonRuns: putRun(s.lessonRuns, run, Date.now()) })),
 
@@ -1241,11 +1284,11 @@ export const useApp = create<AppState & AppActions>()(
 
       // ---------- ИИ-чат 2.0 ----------
 
-      createChat: (mode, title, topic) => {
+      createChat: (mode, title, topic, lessonId) => {
         const id = `c${uid()}`;
         const now = Date.now();
         set((s) => {
-          let chats = [{ id, title: (title ?? "").trim().slice(0, TITLE_LEN), mode, topic, createdAt: now, updatedAt: now, preview: "", count: 0 }, ...s.chats];
+          let chats = [{ id, title: (title ?? "").trim().slice(0, TITLE_LEN), mode, topic, lessonId, createdAt: now, updatedAt: now, preview: "", count: 0 }, ...s.chats];
           if (chats.length > MAX_CHATS) {
             const victim = [...chats].reverse().find((c) => !c.pinned && c.id !== id);
             if (victim) chats = chats.filter((c) => c.id !== victim.id);

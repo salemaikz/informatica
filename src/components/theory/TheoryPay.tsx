@@ -2,27 +2,42 @@
 
 import { BadgeCheck, Heart, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { ENTRY_COST, MINUTE, formatHearts } from "@/lib/economy";
-import { THEORY_READ_MS, THEORY_REPEAT_MS, theoryFreeUntil, type TheoryPayState } from "@/lib/theory-pay";
+import { ENTRY_COST, formatHearts } from "@/lib/economy";
+import { theoryUntilLabel, type TheoryPayState } from "@/lib/theory-pay";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
-import { useNow } from "@/components/economy/useEconomy";
-import { formatRemaining } from "@/components/economy/shop-helpers";
+import { useHearts, useNow } from "@/components/economy/useEconomy";
 
-/** Строка про плату за чтение конспекта: сколько стоит, оплачено ли, почему бесплатно. */
+/** Кнопка оплаты чтения: сердечко (heart), «Читать дальше — 0,5». Обычная `Button`, перекрашенная в цвет сердечек. */
+export function TheoryPayButton({ onClick, className, ...rest }: { onClick: () => void; className?: string; "data-tour"?: string }) {
+  const { t } = useT();
+  return (
+    <Button
+      size="lg"
+      block
+      onClick={onClick}
+      className={cn("whitespace-nowrap bg-heart px-3 shadow-[0_4px_0_var(--heart-strong)]", className)}
+      icon={<Heart size={20} fill="currentColor" className="shrink-0" aria-hidden />}
+      {...rest}
+    >
+      {t("theory16c.gate.button", { cost: formatHearts(ENTRY_COST.theory) })}
+    </Button>
+  );
+}
+
+/** Строка про плату за чтение: сколько стоит, до какого часа оплачено или «Безлимит — бесплатно». */
 export function TheoryPayStatus({ state, paidAt }: { state: TheoryPayState; paidAt: number | undefined }) {
-  const { t, lang } = useT();
+  const { t } = useT();
   const now = useNow();
-  // Часы интерфейса тикают раз в 15 секунд и могут отставать от оплаты: больше «суток без минуты» не показываем (иначе «ещё 2 дня»).
-  const left = state === "paid" && paidAt !== undefined ? Math.min(Math.max(0, theoryFreeUntil(paidAt) - now), THEORY_REPEAT_MS - MINUTE) : 0;
-  const text =
-    state === "pay"
-      ? t("hearts15.theory.pay", { cost: formatHearts(ENTRY_COST.theory), sec: Math.round(THEORY_READ_MS / 1000) })
-      : state === "paid"
-        ? t("hearts15.theory.paid", { time: formatRemaining(left, lang) })
-        : state === "done"
-          ? t("hearts15.theory.done")
-          : t("hearts15.theory.unlimited");
+  let text: string;
+  if (state === "pay") text = t("theory16c.pay.free", { cost: formatHearts(ENTRY_COST.theory) });
+  else if (state === "unlimited") text = t("theory16c.pay.unlimited");
+  else {
+    // Оплачено: до какого часа читать бесплатно (сегодня или завтра; сутки после оплаты).
+    const at = paidAt ?? 0;
+    const until = theoryUntilLabel(at, now > 0 ? now : at);
+    text = t(until.day === "today" ? "theory16c.pay.paidToday" : "theory16c.pay.paidTomorrow", { time: until.time });
+  }
   const paying = state === "pay";
   const Icon = paying ? Heart : BadgeCheck;
   return (
@@ -37,23 +52,24 @@ export function TheoryPayStatus({ state, paidAt }: { state: TheoryPayState; paid
   );
 }
 
-/** Вместо продолжения конспекта, когда не хватает сердечек: что делать и кнопка «Вернуть сердечки». */
-export function TheoryLock({ onOpen }: { onOpen: () => void }) {
+/** Ворота: вместо закрытой карточки или остатка конспекта — что платно, сколько и кнопка «Читать дальше — 0,5». */
+export function TheoryGate({ onPay }: { onPay: () => void }) {
   const { t } = useT();
+  const hearts = useHearts();
+  const cost = formatHearts(ENTRY_COST.theory);
   return (
-    <section className="flex flex-col items-start gap-3 rounded-3xl border-2 border-heart/40 bg-heart-soft p-4 sm:p-5" aria-live="polite">
+    <section className="flex flex-col gap-3 rounded-3xl border-2 border-heart/40 bg-heart-soft p-4 sm:p-5" aria-live="polite">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-heart" aria-hidden>
           <Lock size={20} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-extrabold leading-tight text-heart-strong">{t("hearts15.theory.lockTitle", { cost: formatHearts(ENTRY_COST.theory) })}</h2>
-          <p className="mt-1 text-sm font-semibold text-muted">{t("econ16c.theory.lockText")}</p>
+          <h2 className="text-lg font-extrabold leading-tight text-heart-strong">{t("theory16c.gate.title", { cost })}</h2>
+          <p className="mt-1 text-sm font-semibold text-muted">{t("theory16c.gate.text")}</p>
         </div>
       </div>
-      <Button block onClick={onOpen}>
-        {t("hearts15.theory.lockButton")}
-      </Button>
+      <TheoryPayButton onClick={onPay} />
+      <p className="text-center text-xs font-extrabold text-heart-strong">{t("theory16c.gate.have", { have: formatHearts(hearts.count) })}</p>
     </section>
   );
 }

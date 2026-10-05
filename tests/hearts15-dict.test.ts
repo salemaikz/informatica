@@ -11,7 +11,7 @@ const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 describe("hearts15.*: словарь", () => {
   it("ключи есть, у каждого непустые ru и kk", () => {
-    expect(keys.length).toBeGreaterThan(15);
+    expect(keys.length).toBeGreaterThan(10); // ключи платы за теорию переехали в theory16c.* (этап 16В)
     for (const k of keys) {
       expect(dict[k].ru.trim().length, k).toBeGreaterThan(0);
       expect(dict[k].kk.trim().length, k).toBeGreaterThan(0);
