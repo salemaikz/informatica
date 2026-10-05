@@ -99,7 +99,7 @@ export function PlotterArt() {
     <Art>
       <Shadow cy={84} rx={56} />
       {/* стойка-ножки */}
-      <path d="M22 62 L16 82 M98 62 L104 82" stroke={C.shell3} strokeWidth={3} strokeLinecap="round" />
+      <path d="M14 62 L9 82 M106 62 L111 82" stroke={C.shell3} strokeWidth={3} strokeLinecap="round" />
       {/* широкий корпус */}
       <rect x="4" y="30" width="112" height="34" rx="4" fill={C.shell3} />
       <rect x="4" y="26" width="112" height="34" rx="4" fill={C.shell1} />
@@ -111,13 +111,14 @@ export function PlotterArt() {
       {/* направляющая и каретка с пером */}
       <rect x="10" y="33" width="100" height="3" rx="1.5" fill={C.shell3} />
       <rect x="64" y="30" width="14" height="14" rx="2" fill={C.dark} />
-      <rect x="69" y="44" width="4" height="7" fill={C.danger} />
       <rect x="9" y="40" width="14" height="6" rx="2" fill={C.glass} />
       <circle cx="30" cy="43" r="1.5" fill={C.success} />
       {/* широкий лист с чертежом */}
-      <path d="M12 56 H108 L112 82 H8 Z" fill={C.paper} stroke={C.paperLine} strokeWidth={0.6} strokeLinejoin="round" />
-      <path d="M22 76 V66 H40 V74 H56 V62 H72" fill="none" stroke={C.primary} strokeWidth={1.4} strokeLinejoin="round" />
-      <circle cx="88" cy="70" r="6" fill="none" stroke={C.danger} strokeWidth={1.4} />
+      <path d="M24 56 H96 L100 82 H20 Z" fill={C.paper} stroke={C.paperLine} strokeWidth={0.6} strokeLinejoin="round" />
+      <path d="M30 76 V66 H44 V74 H58 V62 H72" fill="none" stroke={C.primary} strokeWidth={1.4} strokeLinejoin="round" />
+      <circle cx="86" cy="70" r="6" fill="none" stroke={C.primary} strokeWidth={1.4} />
+      <rect x="69" y="44" width="4" height="14" rx="1" fill={C.dark2} />
+      <rect x="69" y="55" width="4" height="3" fill={C.danger} />
     </Art>
   );
 }
@@ -133,7 +134,7 @@ export function PenTabletArt() {
       <path d="M28 24 H106 L105.6 27 H27.7 Z" {...GLOSS} />
       <path d="M34 54 C44 34 54 62 66 44 S78 36 88 46" fill="none" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" />
       {[0, 1, 2, 3].map((i) => (
-        <rect key={i} x={13.5 - i * 0.7} y={28 + i * 10} width="5" height="6" rx="1.5" fill={C.shell3} />
+        <rect key={i} x={20.5 - i * 2.6} y={28 + i * 10} width="4" height="6" rx="1.5" fill={C.shell3} />
       ))}
       {/* перо */}
       <g transform="rotate(35 95 40)">

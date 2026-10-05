@@ -71,7 +71,7 @@ export function RobotVacuumArt() {
       <circle cx="60" cy="39" r="2.6" fill={C.primary} />
       <circle cx="60" cy="60" r="4.5" fill={C.dark} />
       <circle cx="60" cy="60" r="2" fill={C.success} />
-      <path d="M96 60 L110 50 M96 60 L112 60 M96 60 L109 69" stroke={C.danger} strokeWidth={2.2} strokeLinecap="round" />
+      <path d="M96 60 L110 50 M96 60 L112 60 M96 60 L109 69" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" />
       <circle cx="96" cy="60" r="2.4" fill={C.dark2} />
     </Art>
   );

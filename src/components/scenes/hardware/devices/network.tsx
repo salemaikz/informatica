@@ -4,15 +4,15 @@ import { Art, C, GLOSS, Shadow, Waves } from "./kit";
 // Сетевые устройства: коммутатор, концентратор, модем, точка доступа, сетевая карта, витая пара, оптоволокно.
 
 /** Порт RJ-45: гнездо с контактами; plug — вставлен кабель сверху. */
-function Port({ x, y, plug, color = C.primary }: { x: number; y: number; plug?: boolean; color?: string }) {
+function Port({ x, y, plug, color = C.primary, len = 28 }: { x: number; y: number; plug?: boolean; color?: string; len?: number }) {
   return (
     <g>
       <rect x={x} y={y} width="9" height="8" rx="1.2" fill={C.dark2} />
       <path d={`M${x + 1.8} ${y + 8} V${y + 6.2} H${x + 7.2} V${y + 8}`} fill="none" stroke={C.gold} strokeWidth={0.8} />
       {plug && (
         <g>
-          <rect x={x - 0.5} y={y - 2} width="10" height="9" rx="1.2" fill={C.shell1} />
-          <rect x={x + 1.5} y={y - 14} width="6" height="12.5" fill={color} />
+          <rect x={x + 1.5} y={y - len} width="6" height={len - 1} rx="1.5" fill={color} />
+          <rect x={x - 0.5} y={y - 2} width="10" height="9" rx="1.2" fill={C.shell2} stroke={C.shell3} strokeWidth={0.6} />
         </g>
       )}
     </g>
@@ -25,7 +25,7 @@ export function SwitchArt() {
     const x = 17 + i * 11.6;
     const on = i % 3 !== 2;
     ports.push(<Port key={`a${i}`} x={x} y={46} plug={on} color={i % 2 ? C.primary : C.success} />);
-    ports.push(<circle key={`l${i}`} cx={x + 4.5} cy={41} r={1.1} fill={on ? C.success : C.shell3} />);
+    ports.push(<circle key={`l${i}`} cx={x + 4.5} cy={58} r={1.1} fill={on ? C.success : C.shell3} />);
   }
   return (
     <Art>
@@ -37,8 +37,8 @@ export function SwitchArt() {
       <circle cx="11" cy="50" r="1.6" fill={C.dark2} />
       <circle cx="109" cy="50" r="1.6" fill={C.dark2} />
       {ports}
-      <rect x="17" y="59" width="26" height="1.6" rx="0.8" fill={C.shell3} />
-      <rect x="86" y="59" width="20" height="1.6" rx="0.8" fill={C.shell3} />
+      <rect x="17" y="62" width="26" height="1.6" rx="0.8" fill={C.shell3} />
+      <rect x="86" y="62" width="20" height="1.6" rx="0.8" fill={C.shell3} />
     </Art>
   );
 }
@@ -51,16 +51,18 @@ export function HubArt() {
       <rect x="28" y="42" width="64" height="30" rx="4" fill={C.shell3} />
       <rect x="28" y="39" width="64" height="30" rx="4" fill={C.shell2} />
       <rect x="28" y="39" width="64" height="3" rx="1.5" {...GLOSS} />
-      <Port x={34} y={54} plug color={C.primary} />
-      <Port x={47} y={54} plug color={C.success} />
-      <Port x={60} y={54} plug color={C.gold} />
-      <Port x={73} y={54} plug color={C.ai} />
+      <Port x={34} y={54} plug len={22} color={C.primary} />
+      <Port x={47} y={54} plug len={22} color={C.success} />
+      <Port x={60} y={54} plug len={22} color={C.gold} />
+      <Port x={73} y={54} plug len={22} color={C.ai} />
       {[38, 51, 64, 77].map((x) => (
-        <circle key={x} cx={x + 0.5} cy={47} r={1.2} fill={C.success} />
+        <circle key={x} cx={x + 0.5} cy={65} r={1.2} fill={C.success} />
       ))}
       {/* стрелки наружу: хаб повторяет кадр на все порты */}
-      <path d="M60 36 V30 M60 30 L40 18 M60 30 L52 14 M60 30 L68 14 M60 30 L80 18" fill="none" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
-      <path d="M36 14 L42 20 L35 22 Z M50 8 L54 14 L47 15 Z M70 8 L73 15 L66 14 Z M84 14 L85 22 L78 20 Z" fill={C.primary} />
+      <path d="M60 26 V20 M60 20 L40 12 M60 20 L52 7 M60 20 L68 7 M60 20 L80 12" fill="none" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
+      {[[40, 12], [52, 7], [68, 7], [80, 12]].map(([cx, cy]) => (
+        <circle key={cx} cx={cx} cy={cy} r={2.8} fill={C.primary} />
+      ))}
     </Art>
   );
 }
@@ -119,8 +121,8 @@ export function NicArt() {
       <rect x="6" y="28" width="22" height="20" rx="2" fill={C.shell2} />
       <rect x="9" y="31" width="16" height="14" rx="1.2" fill={C.dark2} />
       <path d="M11 44 V40 H23 V44" fill="none" stroke={C.gold} strokeWidth={0.9} />
-      <circle cx="10" cy="24" r="1.5" fill={C.success} />
-      <circle cx="16" cy="24" r="1.5" fill={C.warning} />
+      <circle cx="18" cy="20" r="1.5" fill={C.success} />
+      <circle cx="18" cy="25" r="1.5" fill={C.warning} />
       <rect x="44" y="28" width="22" height="22" rx="1.5" fill={C.dark} />
       <rect x="47" y="31" width="16" height="16" rx="1" fill={C.dark2} />
       <rect x="76" y="30" width="12" height="8" rx="1" fill={C.dark} />
@@ -143,11 +145,13 @@ export function CableUtpArt() {
       <rect x="2" y="27" width="48" height="4" rx="2" {...GLOSS} />
       {/* срез оболочки: четыре витые пары (цветной + белый провод) */}
       {pairs.map((a, i) => {
-        const y = 21 + i * 7;
+        const y = 29.5 + i * 3.7;
+        const w = `M44 ${y} C54 ${y + 9} 68 ${y - 9} 82 ${y}`;
         return (
           <g key={i}>
-            <path d={`M44 ${y + 4} C54 ${y - 6} 68 ${y + 12} 82 ${y + 4}`} fill="none" stroke={a} strokeWidth={2.8} strokeLinecap="round" />
-            <path d={`M44 ${y + 4} C54 ${y + 14} 68 ${y - 4} 82 ${y + 4}`} fill="none" stroke={C.paper} strokeWidth={2.8} strokeLinecap="round" />
+            <path d={`M44 ${y} C54 ${y - 9} 68 ${y + 9} 82 ${y}`} fill="none" stroke={a} strokeWidth={2.6} strokeLinecap="round" />
+            <path d={w} fill="none" stroke={C.paperLine} strokeWidth={3.6} strokeLinecap="round" />
+            <path d={w} fill="none" stroke={C.paper} strokeWidth={2.4} strokeLinecap="round" />
           </g>
         );
       })}
@@ -170,10 +174,10 @@ export function CableFiberArt() {
       <rect x="2" y="30" width="44" height="22" rx="11" fill={C.warning} fillOpacity={0.85} />
       <rect x="2" y="32" width="44" height="4" rx="2" {...GLOSS} />
       <rect x="40" y="33" width="12" height="16" fill={C.shell3} />
-      {[-6, -2, 2, 6].map((d, i) => (
-        <path key={i} d={`M42 ${41 + d / 2} L68 ${41 + d * 0.6}`} stroke={i % 2 ? C.gold : C.primary} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-      ))}
       <rect x="52" y="30" width="14" height="22" rx="2" fill={C.shell2} />
+      {[-6, -2, 2, 6].map((d, i) => (
+        <path key={i} d={`M42 ${41 + d / 3} L67 ${41 + d * 1.3}`} stroke={i % 2 ? C.gold : C.primary} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      ))}
       {/* разъём SC */}
       <rect x="66" y="26" width="28" height="30" rx="3" fill={C.shell1} stroke={C.shell3} strokeWidth={0.8} />
       <rect x="66" y="26" width="28" height="3" rx="1.5" {...GLOSS} />
