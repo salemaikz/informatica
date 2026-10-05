@@ -6,6 +6,8 @@ import type { Scene } from "@/lib/types";
 import { subscript } from "@/lib/calc";
 import { cn } from "@/lib/cn";
 import { ColumnRow, DigitTile, SumLine, WeightChip, type ChipTone, type SumTerm, type TileTone } from "./primitives";
+import { BinaryExtScene } from "./BinaryExtScene";
+import { isBinaryExt } from "./numbers";
 import { binarySum, chipWeights, parseBits, sumTerms, tileMetrics, wrongSum } from "./logic";
 
 type BinaryScene = Extract<Scene, { kind: "binary" }>;
@@ -30,6 +32,8 @@ function Direction({ wrong, delay }: { wrong: boolean; delay: number }) {
 
 /** Двоичная запись: цифры → веса (справа налево) → зачёркнутые нули → сумма. Элементы живут между шагами. */
 export function BinaryScene({ scene }: { scene: BinaryScene }) {
+  // Новые параметры (группы, сдвиг, пропуск, И) — отдельный рисунок; старые сцены рисуются как раньше.
+  if (isBinaryExt(scene)) return <BinaryExtScene scene={scene} />;
   const digits = parseBits(scene.bits);
   const n = digits.length;
   const wrong = !!scene.wrongDirection;
