@@ -10,3 +10,6 @@ export const springSoft: Transition = { type: "spring", stiffness: 340, damping:
 export const springBouncy: Transition = { type: "spring", stiffness: 460, damping: 17 };
 /** Кривая «ease-out expo» для переходов между шагами и страницами. */
 export const easeOut = [0.22, 1, 0.36, 1] as const;
+
+/** Задержка появления i-го элемента «лесенки» (плитки итогов), с. */
+export const staggerDelay = (i: number, base = 0.1, step = 0.12) => base + i * step;

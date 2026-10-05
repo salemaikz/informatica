@@ -6,11 +6,11 @@
 
 export type SoundName =
   | "correct" | "wrong" | "complete" | "tap" | "combo" | "levelUp" | "xp" | "pop"
-  // Волна 1Б (docs/specs/stage16b-wave1b.md, R4): пока звучат как близкие старые, свой звук делает пакет R4.
+  // Волна 1Б (docs/specs/stage16b-wave1b.md, R4).
   | "perfect" | "chips" | "streak" | "caseTick" | "caseReveal";
 
 export interface SoundOptions {
-  /** Для "combo": размер комбо — чем больше, тем выше тон и длиннее «искры». */
+  /** Для "combo": размер комбо (ступени 3/5/10); для "caseTick": номер щелчка. */
   step?: number;
 }
 
@@ -127,6 +127,9 @@ const N = {
   C7: 2093,
 };
 
+/** Счётчик верных ответов — для чередования трёх вариантов звука. */
+let correctVariant = 0;
+
 export function playSound(name: SoundName, opts: SoundOptions = {}) {
   try {
     const a = create();
@@ -137,16 +140,26 @@ export function playSound(name: SoundName, opts: SoundOptions = {}) {
       if (a.currentTime > 0.05) return;
     }
     const t0 = a.currentTime + 0.005;
-    // Заготовки волны 1Б: до пакета R4 — звуки-заменители.
-    const alias: Partial<Record<SoundName, SoundName>> = { perfect: "complete", chips: "xp", streak: "levelUp", caseTick: "tap", caseReveal: "levelUp" };
-    const kind = alias[name] ?? name;
-    switch (kind) {
-      case "correct":
-        // Яркий двойной звон (квинта вверх) с мягким хвостом.
-        chime(a, t0, N.A5, 0, 0.22);
-        chime(a, t0, N.E6, 0.085, 0.55, 0.55);
-        chime(a, t0, N.E6, 0.21, 0.35, 0.12);
+    switch (name) {
+      case "correct": {
+        // Три варианта по кругу: квинта вверх, терция вверх, «трель» — чтобы не приедалось.
+        const variant = correctVariant++ % 3;
+        if (variant === 0) {
+          chime(a, t0, N.A5, 0, 0.22);
+          chime(a, t0, N.E6, 0.085, 0.55, 0.55);
+          chime(a, t0, N.E6, 0.21, 0.35, 0.12);
+        } else if (variant === 1) {
+          chime(a, t0, N.G5, 0, 0.2);
+          chime(a, t0, N.C6, 0.08, 0.2, 0.5);
+          chime(a, t0, N.E6, 0.16, 0.55, 0.5);
+        } else {
+          chime(a, t0, N.E5, 0, 0.16, 0.5);
+          chime(a, t0, N.A5, 0.06, 0.16, 0.5);
+          chime(a, t0, N.C6, 0.12, 0.2, 0.5);
+          chime(a, t0, N.A5 * 2, 0.19, 0.5, 0.45);
+        }
         break;
+      }
       case "wrong":
         // Мягкий низкий «бонк»: синус с падающей высотой и срезом верхов — без дребезга.
         voice(a, t0, { freq: 240, to: 150, dur: 0.17, vol: 0.85, attack: 0.008, lp: 700 });
@@ -179,16 +192,57 @@ export function playSound(name: SoundName, opts: SoundOptions = {}) {
         voice(a, t0, { freq: 700, to: 430, dur: 0.04, vol: 0.32, attack: 0.002 });
         break;
       case "combo": {
-        // Взлетающая «искра»: чем длиннее серия, тем выше и длиннее.
+        // Взлетающая «искра»: ступени 3 / 5 / 10 — выше, длиннее, с аккордом на финише.
         const step = Math.max(3, opts.step ?? 3);
+        const tier = step >= 10 ? 10 : step >= 5 ? 5 : 3;
         const base = N.E5 * 2 ** (Math.min(step - 3, 7) / 12);
-        const ratios = [1, 1.2599, 1.4983, 2, 2.5198].slice(0, step >= 7 ? 5 : step >= 5 ? 4 : 3);
+        const ratios = [1, 1.2599, 1.4983, 2, 2.5198].slice(0, tier === 10 ? 5 : tier === 5 ? 4 : 3);
         ratios.forEach((r, i) => {
           const last = i === ratios.length - 1;
           chime(a, t0, base * r, i * 0.055, last ? 0.55 : 0.16, last ? 0.55 : 0.45);
         });
+        if (tier >= 5) chime(a, t0, base * 2, ratios.length * 0.055, 0.7, 0.3);
+        if (tier === 10) {
+          const at = ratios.length * 0.055;
+          chime(a, t0, base * 3, at, 0.8, 0.3);
+          voice(a, t0, { freq: base / 2, at, dur: 0.5, vol: 0.3, type: "triangle", lp: 900 });
+        }
         break;
       }
+      case "perfect":
+        // Короткая фанфара: два «трубных» удара и яркий аккорд.
+        voice(a, t0, { freq: 196, dur: 0.18, vol: 0.4, type: "triangle", lp: 1200 });
+        voice(a, t0, { freq: 261.6, at: 0.14, dur: 0.18, vol: 0.4, type: "triangle", lp: 1200 });
+        [N.G5, N.C6, N.E6].forEach((f, i) => chime(a, t0, f, 0.05 + i * 0.1, 0.22, 0.5));
+        chime(a, t0, N.G6, 0.42, 0.9, 0.45);
+        chime(a, t0, N.C7, 0.42, 1, 0.35);
+        chime(a, t0, N.E6, 0.42, 0.95, 0.35);
+        break;
+      case "chips":
+        // «Монетка»: два быстрых металлических звона, второй выше.
+        voice(a, t0, { freq: 1568, dur: 0.07, vol: 0.4, type: "square", lp: 3000, attack: 0.002 });
+        chime(a, t0, N.G6, 0.05, 0.28, 0.4);
+        chime(a, t0, N.C7, 0.12, 0.45, 0.35);
+        break;
+      case "streak":
+        // Огонь загорелся: низкий «вжух» вверх и тёплый аккорд.
+        voice(a, t0, { freq: 180, to: 720, dur: 0.35, vol: 0.4, type: "sawtooth", lp: 900, attack: 0.04 });
+        voice(a, t0, { freq: 120, to: 480, dur: 0.35, vol: 0.3, type: "triangle", lp: 700, attack: 0.04 });
+        chime(a, t0, N.C6, 0.3, 0.7, 0.45);
+        chime(a, t0, N.G6, 0.38, 0.8, 0.4);
+        break;
+      case "caseTick": {
+        // Щелчок ленты кейса; шаг (0..) слегка меняет высоту — лента «живая».
+        const k = (opts.step ?? 0) % 3;
+        voice(a, t0, { freq: 1100 + k * 90, to: 700, dur: 0.035, vol: 0.4, attack: 0.002, type: "triangle" });
+        break;
+      }
+      case "caseReveal":
+        // «Раскрытие» приза: короткий нарастающий глайд и яркий звон.
+        voice(a, t0, { freq: 300, to: 900, dur: 0.22, vol: 0.35, type: "triangle", lp: 1500, attack: 0.03 });
+        [N.C6, N.E6, N.G6].forEach((f, i) => chime(a, t0, f, 0.2 + i * 0.06, 0.4, 0.45));
+        chime(a, t0, N.C7, 0.4, 0.9, 0.4);
+        break;
       case "pop":
         // «Пузырёк»: короткий глайд вверх.
         voice(a, t0, { freq: 320, to: 760, dur: 0.07, vol: 0.5, attack: 0.003 });
