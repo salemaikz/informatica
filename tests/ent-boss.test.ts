@@ -3,7 +3,9 @@ import { LESSONS } from "@/content/course";
 import { ENT_POOL } from "@/content/ent";
 import { buildCheck } from "@/lib/drill";
 import { entBossIndex, withEntBoss } from "@/lib/ent-boss";
-import { entRef } from "@/lib/ent-steps";
+import { entRef, parseEntRef } from "@/lib/ent-steps";
+import { REVIEW_LESSON_RE } from "@/lib/lesson-size";
+import { readKindOf } from "@/lib/code-read";
 import { evaluate } from "@/lib/evaluate";
 import type { EntItem, EntMatch, EntMulti, EntSingle, EntMatchStep, Lesson, MultiStep, Step } from "@/lib/types";
 import { validateStep } from "./validate";
@@ -253,7 +255,8 @@ describe("withEntBoss: все уроки карты (реальный банк �
       const own = new Set(l.steps.map((s) => s.id));
       const added = out.steps.filter((s) => !own.has(s.id));
       expect(added.length).toBeGreaterThan(0);
-      expect(added.length).toBeLessThanOrEqual(2);
+      // «Соответствие», «несколько верных» и (уроки по коду, SQL, таблицам, вебу — этап 15, #87) «чтение кода».
+      expect(added.length).toBeLessThanOrEqual(REVIEW_LESSON_RE.test(l.id) ? 3 : 2);
       for (const s of added) {
         problems.push(...validateStep(s));
         if (!s.id.startsWith("ent:")) problems.push(`${l.id}: вставлен не ent-шаг ${s.id}`);
@@ -323,5 +326,32 @@ describe("shuffleOptions: «соответствие» в работе над о
       seen.add(out.answer.join(","));
     }
     expect(seen.size).toBeGreaterThan(3);
+  });
+});
+
+describe("«чтение кода» в уроке (этап 15, #87)", () => {
+  const map = Object.values(LESSONS).filter((l) => !l.micro && !l.school);
+  it("урок по коду, SQL, таблицам и вебу получает ровно одно задание «ошибка / правка / пропуск / зачем строка»", () => {
+    const off: string[] = [];
+    for (const l of map.filter((x) => REVIEW_LESSON_RE.test(x.id))) {
+      const own = new Set(l.steps.map((s) => s.id));
+      const reviews = withEntBoss(l).steps.filter((s) => {
+        if (own.has(s.id)) return false;
+        const p = parseEntRef(s.id);
+        const k = p && p.item.kind === "single" ? readKindOf(p.item) : null;
+        return k === "bug" || k === "fix" || k === "fill" || k === "purpose";
+      });
+      if (reviews.length !== 1) off.push(`${l.id}: ${reviews.length}`);
+    }
+    expect(off).toEqual([]);
+  });
+  it("остальные уроки «чтения кода» не получают", () => {
+    for (const l of map.filter((x) => !REVIEW_LESSON_RE.test(x.id))) {
+      expect(withEntBoss(l).steps.length - l.steps.length, l.id).toBeLessThanOrEqual(2);
+    }
+  });
+  it("школьный урок — как есть", () => {
+    const school = { ...LESSONS["py-0-start"], school: true as const };
+    expect(withEntBoss(school)).toBe(school);
   });
 });
