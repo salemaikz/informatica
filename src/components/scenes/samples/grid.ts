@@ -19,9 +19,9 @@ export const SAMPLES: Extract<Scene, { kind: "grid" }>[] = [
     axes: { row: "i", col: "j", from: 0 },
     values: Array.from({ length: 10 }, (_, r) => Array.from({ length: 10 }, (_, c) => String(r * 10 + c))),
     marks: [
-      { tone: "ai", rows: [2] },
+      { tone: "muted", rows: [2] },
       { tone: "success", cols: [7] },
-      { tone: "danger", region: "anti" },
+      { tone: "ai", region: "anti" },
       { tone: "gold", cells: [[0, 0], [9, 9]] },
     ],
   },
@@ -33,7 +33,7 @@ export const SAMPLES: Extract<Scene, { kind: "grid" }>[] = [
     axes: { row: "i", col: "j", from: 1 },
     path: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 3], [1, 2], [1, 1], [1, 0], [2, 0], [2, 1], [2, 2], [2, 3]],
     numbered: true,
-    marks: [{ tone: "success", cells: [[0, 0]] }, { tone: "danger", cells: [[2, 3]] }],
+    marks: [{ tone: "success", cells: [[0, 0]] }, { tone: "gold", cells: [[2, 3]] }],
   },
   // зал: пустые клетки и места под диагональю, 4-символьные значения
   {
@@ -48,7 +48,7 @@ export const SAMPLES: Extract<Scene, { kind: "grid" }>[] = [
     kind: "grid",
     rows: 4,
     cols: 5,
-    values: [["Итог", "", "", "", "Σ"], ["a", "b", "c", "", "d"], ["e", "f", "g", "", ""], ["h", "i", "j", "k", "l"]],
+    values: [["A1", "", "", "", "Σ"], ["a", "b", "c", "", "d"], ["e", "f", "g", "", ""], ["h", "i", "j", "k", "l"]],
     merges: [{ r: 0, c: 0, cs: 4 }, { r: 0, c: 4, rs: 2 }, { r: 1, c: 3, rs: 2, cs: 1 }],
     marks: [{ tone: "warning", cells: [[0, 1]] }],
     hatch: true,
@@ -63,5 +63,34 @@ export const SAMPLES: Extract<Scene, { kind: "grid" }>[] = [
     axes: { row: "n", col: "k", from: 1 },
     values: Array.from({ length: 6 }, (_, r) => Array.from({ length: 6 }, (_, c) => (c <= r ? "*" : ""))),
     marks: [{ tone: "primary", region: "lower" }, { tone: "success", region: "diag" }],
+  },
+  // обход матрицы со значениями: линия пути и номера поверх чисел
+  {
+    kind: "grid",
+    rows: 4,
+    cols: 4,
+    axes: { row: "i", col: "j" },
+    values: Array.from({ length: 4 }, (_, r) => Array.from({ length: 4 }, (_, c) => String(r * 4 + c + 1))),
+    path: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 3]],
+    numbered: true,
+  },
+  // 10 × 10: путь возвращается в клетку, номера «1,31,33» и значения
+  {
+    kind: "grid",
+    rows: 10,
+    cols: 10,
+    axes: { col: "j" },
+    values: Array.from({ length: 10 }, (_, r) => Array.from({ length: 10 }, (_, c) => String(r * 10 + c))),
+    path: [[0, 0], [0, 1], [0, 0], [1, 0]],
+    numbered: true,
+  },
+  // подпись и объединение без штриховки
+  {
+    kind: "grid",
+    rows: 2,
+    cols: 3,
+    values: [["A1", "", "B1"], ["A2", "B2", "C2"]],
+    merges: [{ r: 0, c: 0, cs: 2 }],
+    caption: { ru: "Объединённая ячейка", kk: "Біріктірілген ұяшық" },
   },
 ];

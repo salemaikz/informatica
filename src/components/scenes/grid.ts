@@ -105,6 +105,15 @@ export interface GridLayout {
   /** Номера обхода по клеткам: «r:c» → номера по порядку (клетка может встретиться дважды). */
   numbers: Map<string, number[]>;
   numFont: number;
+  /** Кегль имён осей (подгоняется под AXIS_NAME / ширину сетки). */
+  nameFont: number;
+  /** Текст номеров обхода по клеткам («1,3», при >2 визитах «1…5») и его кегль. */
+  numLabels: Map<string, { text: string; font: number }>;
+}
+
+/** Подпись номеров обхода: два номера — через запятую, больше — «первый…последний». */
+export function numberLabel(ns: number[]): string {
+  return ns.length > 2 ? `${ns[0]}…${ns[ns.length - 1]}` : ns.join(",");
 }
 
 /** Размер клетки: сетка влезает в 360 px вместе с осями, но не больше CELL_MAX. */
@@ -190,6 +199,21 @@ export function gridLayout(scene: GridData): GridLayout {
       numbers.set(k, [...(numbers.get(k) ?? []), i + 1]);
     });
 
+  const numFont0 = Math.max(8, Math.min(10, cell * 0.3));
+  const numLabels = new Map<string, { text: string; font: number }>();
+  for (const [k, ns] of numbers) {
+    const text = numberLabel(ns);
+    numLabels.set(k, { text, font: fitFont(text, cell - 4, numFont0, 6) });
+  }
+  // клетка с номером обхода и значением: значение чуть ниже и не крупнее 0.42 клетки, чтобы не касаться номера
+  for (const b of blocks) {
+    if (b.value === "" || !numbers.has(b.key)) continue;
+    const nf = numLabels.get(b.key)!.font;
+    b.fontSize = Math.min(b.fontSize, Math.max(6, cell * 0.42));
+    b.textY += nf * 0.3;
+  }
+  const nameFont = fitFont(axes?.row ?? "", AXIS_NAME - 2, 13, 7);
+
   return {
     w,
     h,
@@ -203,7 +227,9 @@ export function gridLayout(scene: GridData): GridLayout {
     colName: axes?.col ? { text: axes.col, x: ox + (cols * cell) / 2, y: GRID_PAD + AXIS_NAME / 2 + 1 } : undefined,
     path,
     numbers,
-    numFont: Math.max(6, Math.min(10, cell * 0.3)),
+    numFont: numFont0,
+    nameFont,
+    numLabels,
   };
 }
 

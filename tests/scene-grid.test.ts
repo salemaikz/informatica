@@ -4,13 +4,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/grid";
 import { GRID_VB, cellLayers, cellSize, fitFont, gridAria, gridLayout, inRegion, markedCount, pathArrow } from "@/components/scenes/grid";
+import { estimateTextWidth } from "@/components/scenes/text-width";
 import { dict } from "@/i18n/dict";
 import type { Scene } from "@/lib/types";
 import { validateScene } from "./validate";
 
 type G = Extract<Scene, { kind: "grid" }>;
-const t = (key: keyof typeof dict, p?: Record<string, string | number>) =>
-  dict[key].ru.replace(/\{(\w+)\}/g, (_, k) => String(p?.[k]));
+const mkT = (lang: "ru" | "kk") => (key: keyof typeof dict, p?: Record<string, string | number>) =>
+  dict[key][lang].replace(/\{(\w+)\}/g, (_, k) => String(p?.[k]));
+const t = mkT("ru");
 
 describe("grid: области", () => {
   it("диагональ, побочная, над и под", () => {
@@ -127,13 +129,38 @@ describe("grid: путь", () => {
   });
 });
 
+describe("grid: читаемость", () => {
+  it("подпись номеров обхода не шире клетки, повторы сворачиваются", () => {
+    const s: G = {
+      kind: "grid",
+      rows: 10,
+      cols: 10,
+      axes: { row: "ijk", col: "j" },
+      values: Array.from({ length: 10 }, (_, r) => Array.from({ length: 10 }, (_, c) => String(r * 10 + c))),
+      path: Array.from({ length: 33 }, (_, i) => (i % 2 ? [0, 1] : [0, 0]) as [number, number]),
+      numbered: true,
+    };
+    const L = gridLayout(s);
+    for (const nl of L.numLabels.values()) expect(estimateTextWidth(nl.text, nl.font)).toBeLessThanOrEqual(L.cell);
+    expect(L.numLabels.get("0:0")!.text).toBe("1…33");
+    // имя оси из 3 символов помещается в колонку имени
+    expect(estimateTextWidth("ijk", L.nameFont)).toBeLessThanOrEqual(16);
+  });
+  it("значение в клетке с номером сдвинуто вниз", () => {
+    const s: G = { kind: "grid", rows: 2, cols: 2, values: [["7", ""], ["", ""]], path: [[0, 0], [0, 1]], numbered: true };
+    const b = gridLayout(s).blocks[0];
+    expect(b.textY).toBeGreaterThan(b.y + gridLayout(s).cell / 2);
+  });
+});
+
 describe("grid: описание и рендер", () => {
   it("aria на обоих языках без пустых мест", () => {
-    for (const s of SAMPLES) {
-      const txt = gridAria(s, t);
-      expect(txt).not.toMatch(/undefined|\{/);
-    }
-    expect(gridAria(SAMPLES[1], t)).toContain("Объединённых клеток: 2");
+    for (const lang of ["ru", "kk"] as const)
+      for (const s of SAMPLES) {
+        const txt = gridAria(s, mkT(lang));
+        expect(txt).not.toMatch(/undefined|\{|\}/);
+      }
+    expect(gridAria(SAMPLES[1], t)).toContain("Объединений: 2");
   });
   it("образцы рисуются через SceneView", () => {
     for (const s of SAMPLES) {
