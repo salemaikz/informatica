@@ -1145,7 +1145,11 @@ export const useApp = create<AppState & AppActions>()(
         const claim = claimLevelCase(s, level, seed, { now, today: todayKey(), tier: tierOf(s, now), ledgerId: uid() });
         if (!claim) return null;
         const { xp, wallet, hearts, boost, ledger, pendingCases } = claim.state;
-        set({ xp, wallet, hearts, boost, ledger, pendingCases });
+        // Опыт из приза мог пересечь порог достижения (xp_500): проверяем и платим за него, но кейсов не плодим.
+        // Для этого settleChips получает prev с тем же xp: чипов «за опыт» и нового кейса нет, остаются только чипы за достижения.
+        const merged: AppState = { ...s, xp, wallet, hearts, boost, ledger, pendingCases };
+        const settled = settleChips(merged, { ...merged, ...evaluate(merged) }, [], now);
+        set({ xp, wallet: settled.wallet, hearts, boost, ledger: settled.ledger, pendingCases, achievements: settled.achievements, newAchievements: settled.newAchievements });
         return claim.roll;
       },
 

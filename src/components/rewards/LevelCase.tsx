@@ -49,15 +49,29 @@ function buzz() {
  * лента только показывает уже выпавшее. Касание экрана во время прокрутки сразу ведёт к призу;
  * при «Меньше анимаций» прокрутки нет — приз показывается сразу.
  */
-export function LevelCase({ level, onClose, onOpened }: { level: number; onClose: () => void; /** Приз уже выдан (кейс убран из очереди). */ onOpened?: () => void }) {
+export function LevelCase({
+  level,
+  onClose,
+  onOpened,
+  initialRoll,
+}: {
+  level: number;
+  onClose: () => void;
+  /** Приз уже выдан (кейс убран из очереди): родитель запоминает бросок. */
+  onOpened?: (roll: LevelCaseRoll) => void;
+  /** Окно перемонтировано после выдачи приза: сразу показываем уже выпавший приз (без ленты, конфетти и звука). */
+  initialRoll?: LevelCaseRoll;
+}) {
   const { t } = useT();
   const reduce = useReduceMotion();
-  const [phase, setPhase] = useState<Phase>("closed");
-  const [roll, setRoll] = useState<LevelCaseRoll | null>(null);
+  const [phase, setPhase] = useState<Phase>(initialRoll ? "reveal" : "closed");
+  const [roll, setRoll] = useState<LevelCaseRoll | null>(initialRoll ?? null);
+  // Фокус до открытия окна: вернём его при закрытии (читается один раз, до первой отрисовки).
+  const [returnTo] = useState<Element | null>(() => (typeof document === "undefined" ? null : document.activeElement));
   const x = useMotionValue(-CARD_W / 2);
   const controls = useRef<AnimationPlaybackControls | null>(null);
   const spinning = useRef(false);
-  const revealed = useRef(false);
+  const revealed = useRef(!!initialRoll);
   const lastIdx = useRef(0);
   const lastTick = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -79,8 +93,9 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
     return () => {
       controls.current?.stop();
       pending.current.forEach(clearTimeout);
+      if (returnTo instanceof HTMLElement && returnTo.isConnected) returnTo.focus({ preventScroll: true });
     };
-  }, []);
+  }, [returnTo]);
 
   const reveal = useCallback((r: LevelCaseRoll) => {
     if (revealed.current) return;
@@ -100,7 +115,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
       return;
     }
     setRoll(r);
-    onOpened?.();
+    onOpened?.(r);
     if (reduce) {
       reveal(r);
       return;
@@ -130,7 +145,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
 
   // Конфетти на открытии приза.
   useEffect(() => {
-    if (phase !== "reveal" || reduce) return;
+    if (phase !== "reveal" || reduce || initialRoll) return;
     const colors = ["#f0b400", "#f5c22e", "#1a91d6", "#7656f5", "#f2416b"];
     let cancelled = false;
     void import("canvas-confetti").then(({ default: confetti }) => {
@@ -140,7 +155,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
     return () => {
       cancelled = true;
     };
-  }, [phase, reduce]);
+  }, [phase, reduce, initialRoll]);
 
   return (
     <m.div
@@ -153,6 +168,10 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
     >
+      {/* Постоянная «живая область» для скринридера: приз объявляется, когда появляется */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {phase === "reveal" && roll ? `${prizeName(roll.prize, t)}. ${prizeDesc(roll.prize, t)}` : ""}
+      </p>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-gold-soft to-transparent" />
       <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-5 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-10 text-center">
         {phase === "closed" && (
@@ -174,7 +193,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
               <p className="text-balance font-semibold text-muted">{t("case.sub")}</p>
             </m.div>
             <m.div className="flex w-full flex-col gap-2" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.3 }}>
-              <Button variant="primary" size="lg" block onClick={begin}>
+              <Button variant="primary" size="lg" block onClick={begin} autoFocus>
                 {t("case.open")}
               </Button>
               <Button variant="ghost" size="md" block onClick={onClose}>
@@ -188,9 +207,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
           <>
             <div className="flex flex-col gap-1">
               <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("case.level", { n: level })}</p>
-              <h1 className="text-balance text-2xl font-extrabold leading-tight" aria-live="polite">
-                {t("case.spinning")}
-              </h1>
+              <h1 className="text-balance text-2xl font-extrabold leading-tight">{t("case.spinning")}</h1>
             </div>
             <div className="relative -mx-5 h-36 w-[calc(100%+2.5rem)] overflow-hidden" aria-hidden>
               <m.div className="absolute left-1/2 top-3 flex gap-2.5" style={{ x }}>
@@ -203,7 +220,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
               </m.div>
               <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-bg to-transparent" />
               <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-bg to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-gold" title={t("case.pointer")} />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-gold" />
             </div>
             <p className="text-balance text-sm font-semibold text-muted">{t("case.skip")}</p>
           </>
@@ -230,7 +247,7 @@ export function LevelCase({ level, onClose, onOpened }: { level: number; onClose
               <p className="text-balance font-semibold text-muted">{prizeDesc(roll.prize, t)}</p>
             </m.div>
             <m.div className="w-full" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.5 }}>
-              <Button variant="primary" size="lg" block onClick={onClose}>
+              <Button variant="primary" size="lg" block onClick={onClose} autoFocus>
                 {t("case.done")}
               </Button>
             </m.div>

@@ -2,22 +2,28 @@
 
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { isPublicPath } from "@/lib/public-paths";
+import type { LevelCaseRoll } from "@/lib/level-case";
 import { tourBlocking } from "@/lib/tour";
 import { useApp } from "@/lib/store";
 import { LevelCase } from "./LevelCase";
 
-/** Где кейс не показываем: урок, тест, игра, практикум, диагностика, оформление тарифа — человек занят делом. */
-const BUSY_PREFIXES = ["/lesson", "/drill", "/exam", "/game", "/code", "/diagnostic", "/onboarding", "/plans"];
+/**
+ * Где кейс открывается сам: только «спокойные» страницы — карта, профиль, статистика. Белый список (а не чёрный):
+ * любая страница, где ученик чем-то занят (урок, квиз в чате, игра, практикум, оформление тарифа…) и любая будущая — кейс не перебивает.
+ */
+const CASE_PREFIXES = ["/learn", "/profile", "/stats"];
 
-export function caseBlockedPath(pathname: string): boolean {
-  return isPublicPath(pathname) || BUSY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+export function caseAllowedPath(pathname: string): boolean {
+  return CASE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/** Обратное к `caseAllowedPath` (для тестов и читаемости). */
+export const caseBlockedPath = (pathname: string): boolean => !caseAllowedPath(pathname);
+
 /**
- * Невидимый «агент»: когда в `pendingCases` есть неоткрытый кейс, а ученик не в уроке, тесте или игре —
+ * Невидимый «агент»: когда в `pendingCases` есть неоткрытый кейс, а ученик на карте, в профиле или статистике —
  * открывает кейс за уровень (после итогов урока: ученик вышел на карту, и кейс уже ждёт). «Позже» — до следующего запуска
- * приложения не навязываем (кейс остаётся в карточке «Кейс ждёт»). Вставляется в `Providers`.
+ * приложения не навязываем ни этот кейс, ни остальные из очереди (они остаются в карточке «Кейс ждёт»). Вставляется в `Providers`.
  */
 export function CaseAgent() {
   const pathname = usePathname();
@@ -26,20 +32,23 @@ export function CaseAgent() {
   // Пока идёт проводник первого входа (#104), кейс не перебивает его.
   const touring = useApp((s) => tourBlocking(s.tips));
   const [later, setLater] = useState<number[]>([]);
-  // Кейс, который ученик уже открыл: после выдачи приза его нет в очереди, но окно с призом должно остаться.
-  const [active, setActive] = useState<number | null>(null);
+  // Уже открытый кейс (приз выдан, кейса нет в очереди): хранится выданный бросок, чтобы после перемонтирования окна
+  // (кнопка «назад», смена страницы) показать приз, а не закрытый кейс заново.
+  const [opened, setOpened] = useState<{ level: number; roll: LevelCaseRoll } | null>(null);
 
-  if (!onboarded || touring || caseBlockedPath(pathname)) return null;
-  const level = active ?? pending.find((l) => !later.includes(l));
+  if (!onboarded || touring || !caseAllowedPath(pathname)) return null;
+  const level = opened?.level ?? pending.find((l) => !later.includes(l));
   if (level === undefined) return null;
   return (
     <LevelCase
       key={level}
       level={level}
-      onOpened={() => setActive(level)}
+      initialRoll={opened?.roll}
+      onOpened={(roll) => setOpened({ level, roll })}
       onClose={() => {
-        setActive(null);
-        setLater((a) => [...a, level]);
+        // «Позже» на закрытом кейсе откладывает всю очередь; «Отлично» после приза — только закрывает окно.
+        setLater((a) => (opened ? [...a, level] : [...a, level, ...pending]));
+        setOpened(null);
       }}
     />
   );
