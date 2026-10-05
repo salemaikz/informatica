@@ -42,7 +42,7 @@ export const lesson: Lesson = {
     kk: "Программа мен интерпретатор дегеніміз не, экранға қалай шығарады (print, sep, end), адамнан қалай сұрайды (input) және жаңадан бастаушылар қандай қате жібереді",
   },
   skills: ["py.io"],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t06"],
   steps: [
     {

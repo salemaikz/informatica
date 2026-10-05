@@ -27,7 +27,7 @@ export const lesson: Lesson = {
     kk: "Тізімдерді жинаймыз, тазалаймыз және өңдейміз: *, +, extend, split, in, del, сұрыптау, аралау және циклде жоюдың тұзақтары",
   },
   skills: ["py.listops"],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t06"],
   steps: [
     // ---------- 1. Ситуация ----------

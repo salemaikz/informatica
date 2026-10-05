@@ -13,7 +13,7 @@ export const lesson: Lesson = {
     kk: "Айнымалы — атауы бар қорап, типтер, қалдықпен бөлу және санның цифрлары — программа не шығаратынын болжау",
   },
   skills: ["py.vars"],
-  durationMin: 8,
+  durationMin: 11,
   entTopics: ["t06"],
   steps: [
     {

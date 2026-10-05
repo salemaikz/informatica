@@ -45,7 +45,7 @@ export const lesson: Lesson = {
     kk: "«Болғанша» циклі: ол қашан тоқтайды және шексіз циклден қалай сақтану керек, break және continue, ҰБТ демосындағы касса, санды цифрлары бойынша кері жазу",
   },
   skills: [SKILL],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t06"],
   steps: [
     // ---------- 1. Ситуация ----------

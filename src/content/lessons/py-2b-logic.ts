@@ -52,7 +52,7 @@ export const lesson: Lesson = {
     kk: "not, and, or басымдығы, қос теңсіздік, кірістірілген if, де Морган заңы және тұзақтар — күрделі шарттарды қалай оқуға және құруға болады",
   },
   skills: ["py.cond"],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t06"],
   steps: [
     // ---------- 1. Ситуация ----------

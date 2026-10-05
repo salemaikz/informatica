@@ -35,7 +35,7 @@ export const lesson: Lesson = {
     kk: "Қалдық — «айналып жүру», оңнан солға есептелетін дәреже, += қысқартылған жазбасы, санның цифрлары, уақыт және теріс сандар — Python есептейтін барлық нәрсе",
   },
   skills: ["py.ops"],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t06"],
   steps: [
     {

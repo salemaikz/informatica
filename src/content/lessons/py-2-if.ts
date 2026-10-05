@@ -16,7 +16,7 @@ export const lesson: Lesson = {
     kk: "Программаға таңдауды үйретеміз: if, elif, else, and, or, not шарттары және шегініс тұзақтары",
   },
   skills: ["py.if"],
-  durationMin: 7,
+  durationMin: 10,
   entTopics: ["t06"],
   steps: [
     // ---------- 1. Ситуация ----------

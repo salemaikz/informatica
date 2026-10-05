@@ -45,7 +45,7 @@ export const lesson: Lesson = {
     kk: "Қадамы бар және теріс қадамды тілімдер, find, count, replace, strip, split және join, әдіс тізбектері және ҰБТ тұзақтары",
   },
   skills: ["py.strmethods"],
-  durationMin: 9,
+  durationMin: 12,
   entTopics: ["t07"],
   steps: [
     // ---------- 1. Ситуация ----------

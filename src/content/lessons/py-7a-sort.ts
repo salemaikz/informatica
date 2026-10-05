@@ -69,7 +69,7 @@ export const lesson: Lesson = {
   },
   skills: ["py.sort"],
   entTopics: ["t07"],
-  durationMin: 9,
+  durationMin: 12,
   steps: [
     // ---------- 1. Ситуация ----------
     {
