@@ -7,8 +7,8 @@ import { dict, type DictKey } from "@/i18n/dict";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { shortDate } from "@/lib/date";
-import { dataFromHash, unpackData } from "@/lib/hash-pack";
-import { parseParentReport, type ParentReport, type ReportEnt } from "@/lib/parent-report";
+import { dataFromHash, isSelfView, stripSelfMark, unpackData } from "@/lib/hash-pack";
+import { parseParentReport, TOPIC_NO_DATA, type ParentReport, type ReportEnt } from "@/lib/parent-report";
 import { useApp } from "@/lib/store";
 import { fmt } from "@/lib/text";
 import type { Lang } from "@/lib/types";
@@ -44,10 +44,21 @@ export function ReportView() {
       if (!alive) return;
       const report = parseParentReport(raw);
       setLoaded({ key: packed, report });
-      // «Открыли отчёт» — один раз на ссылку и только при удачном разборе (#69).
+      // «Открыли отчёт» — один раз на ссылку, только при удачном разборе (#69) и не для собственного просмотра
+      // ученика (метка «me=1» от кнопки «Посмотреть отчёт»). Метку после чтения убираем из адреса: если ученик
+      // скопирует адрес из вкладки просмотра, у получателя ссылка будет чистой и открытие посчитается.
       if (report && opened.current !== packed) {
         opened.current = packed;
-        track({ e: "share_open", what: "report" });
+        const hashNow = window.location.hash;
+        if (isSelfView(hashNow)) {
+          try {
+            window.history.replaceState(null, "", window.location.pathname + window.location.search + stripSelfMark(hashNow));
+          } catch {
+            // адрес не обновился — не страшно
+          }
+        } else {
+          track({ e: "share_open", what: "report" });
+        }
       }
     });
     return () => {
@@ -221,17 +232,21 @@ function EntBlocks({ ent, lang, t }: { ent: ReportEnt; lang: Lang; t: TFn }) {
         ) : (
           <>
             <p className="mb-3 text-sm font-semibold text-muted">{t("report.topics.hint")}</p>
+            {f.basis === "diagnostic" && <p className="mb-3 text-sm font-semibold text-muted">{t("report.topics.prelim")}</p>}
             <ul className="flex flex-col gap-3">
               {ENT_TOPICS.map((tp, i) => {
-                const pct = ent.topics[i] ?? 0;
+                const raw = ent.topics[i] ?? TOPIC_NO_DATA;
+                const noData = raw === TOPIC_NO_DATA;
+                const pct = noData ? 0 : raw;
                 const tone = toneOfRatio(pct / 100);
+                const shown = noData ? t("report.topics.nodata") : `${pct}%`;
                 return (
                   <li key={tp.id}>
                     <div className="flex items-baseline justify-between gap-3 text-sm font-bold">
                       <span className="min-w-0">{tp.title[lang]}</span>
-                      <span className={cn("shrink-0 tabular-nums", pct > 0 ? TONE_TEXT[tone] : "text-muted")}>{pct}%</span>
+                      <span className={cn("shrink-0 tabular-nums", !noData && pct > 0 ? TONE_TEXT[tone] : "text-muted")}>{shown}</span>
                     </div>
-                    <ProgressBar value={pct / 100} color={pct > 0 ? BAR[tone] : LEVEL_COLOR.none} label={`${tp.title[lang]}: ${pct}%`} className="mt-1" />
+                    <ProgressBar value={pct / 100} color={!noData && pct > 0 ? BAR[tone] : LEVEL_COLOR.none} label={`${tp.title[lang]}: ${shown}`} className="mt-1" />
                   </li>
                 );
               })}
