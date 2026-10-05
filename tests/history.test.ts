@@ -221,6 +221,30 @@ describe("historyTotals", () => {
     expect(t.openMistakes).toBe(2);
   });
 
+  it("средний результат взвешенный: сумма верных / сумма заданий, а не среднее процентов", () => {
+    // 2 задания на 100% и 38 заданий на 50%: среднее процентов дало бы 75%, взвешенное — 52,5%
+    const list = [entry({ id: "a", correct: 2, total: 2 }), entry({ id: "b", correct: 19, total: 38 })];
+    expect(historyTotals(list).avgScore).toBeCloseTo(21 / 40);
+    expect(historyTotals(list).avgScore).not.toBeCloseTo(0.75);
+  });
+
+  it("пропуск входит в знаменатель: 8 верных из 10 при 2 пропусках — 80%, а не 100%", () => {
+    // в записи урока total = все предъявленные задания (первые попытки), пропуск — не верный
+    expect(historyTotals([entry({ correct: 8, total: 10 })]).avgScore).toBeCloseTo(0.8);
+  });
+
+  it("пробный ЕНТ входит по доле баллов, с весом числа заданий", () => {
+    const list = [entry({ id: "l", correct: 10, total: 10 }), entry({ id: "x", kind: "exam", correct: 5, total: 30, points: 15, maxPoints: 50 })];
+    // 10 + 0,3 × 30 = 19 верных из 40 заданий
+    expect(historyTotals(list).avgScore).toBeCloseTo(19 / 40);
+  });
+
+  it("запись без заданий: с баллами — как одно задание, пустая — не весит", () => {
+    expect(historyTotals([entry({ correct: 0, total: 0 })]).avgScore).toBe(0);
+    expect(historyTotals([entry({ id: "a", correct: 4, total: 4 }), entry({ id: "z", correct: 0, total: 0 })]).avgScore).toBe(1);
+    expect(historyTotals([entry({ id: "x", kind: "exam", correct: 0, total: 0, points: 25, maxPoints: 50 })]).avgScore).toBeCloseTo(0.5);
+  });
+
   it("исправленные не считаются", () => {
     const list = [entry({ wrong: [wrongItem("x"), wrongItem("y")], fixed: ["x"] })];
     expect(historyTotals(list).openMistakes).toBe(1);

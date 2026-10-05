@@ -142,7 +142,7 @@ export function HistoryDetail({ id }: { id: string }) {
             </Ring>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-extrabold text-muted">{t("history.detail.result")}</p>
-              <p className={cn("text-2xl font-extrabold leading-tight tabular-nums", TONE_TEXT[tone])}>{entryResult(entry, t)}</p>
+              <p className={cn("text-xl font-extrabold leading-tight tabular-nums", TONE_TEXT[tone])}>{entryResult(entry, t)}</p>
               {counts.total > 0 && (
                 <p className={cn("mt-1 text-sm font-extrabold", counts.open > 0 ? "text-danger" : "text-success-strong")}>
                   {t("history.row.mistakes", { n: counts.total, k: counts.fixed })}

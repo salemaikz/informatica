@@ -31,8 +31,9 @@ export function HistoryRow({ entry }: { entry: HistoryEntry }) {
           <p className="mt-0.5 truncate text-xs font-bold text-muted">{clock ? `${clock} · ${kind}` : kind}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className={cn("font-extrabold leading-tight tabular-nums", TONE_TEXT[tone])}>{entryResult(entry, t)}</p>
-          <p className="text-xs font-bold tabular-nums text-muted">{entryPercent(entry)}%</p>
+          <p className={cn("font-extrabold leading-tight tabular-nums", TONE_TEXT[tone])}>{entryPercent(entry)}%</p>
+          {/* «верно X из N»: пропущенные задания входят в N (#66) */}
+          <p className="text-xs font-bold tabular-nums text-muted">{entryResult(entry, t)}</p>
         </div>
         <ChevronRight size={18} className="-mr-1 shrink-0 text-muted" aria-hidden />
       </div>

@@ -130,8 +130,8 @@ describe("логика экрана истории", () => {
     expect(entryTitle(entry({ kind: "check", title: "" }), t)).toBe("Проверка себя");
   });
 
-  it("результат: «8 / 10» и «32 / 50 баллов», процент, цвет", () => {
-    expect(entryResult(entry(), t)).toBe("8 / 10");
+  it("результат: «верно 8 из 10» (пропуск входит в N) и «32 / 50 баллов», процент, цвет", () => {
+    expect(entryResult(entry(), t)).toBe("верно 8 из 10");
     const ex = entry({ kind: "exam", points: 32, maxPoints: 50, correct: 0, total: 0 });
     expect(entryResult(ex, t)).toBe("32 / 50 баллов");
     expect(entryPercent(ex)).toBe(64);

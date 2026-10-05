@@ -128,12 +128,24 @@ export interface HistoryTotals {
   openMistakes: number;
 }
 
+/**
+ * Итоги истории. Средний результат — взвешенный (#66): сумма верных / сумма заданий, а не среднее процентов тестов
+ * (иначе тест из 2 заданий весит как тест из 40). Вес записи — число заданий (`total`); у пробного ЕНТ «верные» —
+ * доля баллов × задания. Запись без заданий, но с баллами, весит как одно задание; пустая — не весит.
+ */
 export function historyTotals(list: HistoryEntry[]): HistoryTotals {
   const open = new Set<string>();
-  for (const e of list) for (const w of openWrong(e)) open.add(w.stepId);
+  let correct = 0;
+  let total = 0;
+  for (const e of list) {
+    for (const w of openWrong(e)) open.add(w.stepId);
+    const weight = e.total > 0 ? e.total : e.maxPoints ? 1 : 0;
+    correct += entryScore(e) * weight;
+    total += weight;
+  }
   return {
     tests: list.length,
-    avgScore: list.length ? list.reduce((a, e) => a + entryScore(e), 0) / list.length : 0,
+    avgScore: total > 0 ? Math.min(1, correct / total) : 0,
     openMistakes: open.size,
   };
 }

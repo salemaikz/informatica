@@ -53,7 +53,8 @@ export const historyDict = {
   "history.exam.topic": { ru: "Пробный ЕНТ · по теме", kk: "Сынақ ҰБТ · тақырып бойынша" },
 
   // Результат и ошибки записи
-  "history.result.count": { ru: "{a} / {b}", kk: "{a} / {b}" },
+  // «Верно X из N»: пропуск входит в N (#66)
+  "history.result.count": { ru: "верно {a} из {b}", kk: "{b} ішінен {a} дұрыс" },
   "history.result.points": { ru: "{a} / {b} баллов", kk: "{a} / {b} балл" },
   "history.row.mistakes": { ru: "Ошибок: {n} · исправлено: {k}", kk: "Қате: {n} · түзетілді: {k}" },
   "history.row.clean": { ru: "Без ошибок", kk: "Қатесіз" },
