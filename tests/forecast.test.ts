@@ -334,3 +334,27 @@ describe("прогноз после диагностики: без скачко�
     }
   });
 });
+
+describe("темы «по диагностике» не считаются освоенными (C37)", () => {
+  const perfect: DiagnosticSummary = { at: 1, points: 10, max: 10, byTopic: Object.fromEntries(ENT_TOPICS.map((t) => [t.id, { points: 1, max: 1 }])) as never };
+
+  it("предварительный прогноз — все темы provisional; без диагностики — пусто", () => {
+    expect(forecastScore({ skills: {}, exams: [], now: NOW, diagnostic: perfect }).provisional).toHaveLength(ENT_TOPICS.length);
+    expect(forecastScore({ skills: allSkills(0.9, 3), exams: [], now: NOW }).provisional).toEqual([]);
+  });
+
+  it("после 30+ ответов provisional остаются темы, где своей практики мало", () => {
+    // все навыки t04 — по 10 ответов, остальное не тронуто
+    const skills = Object.fromEntries(SKILLS.filter((s) => s.ent === "t04").map((s) => [s.id, stat(0.9, 10)]));
+    const f = forecastScore({ skills, exams: [], now: NOW, diagnostic: perfect });
+    expect(f.basis).toBe("mastery");
+    expect(f.provisional).not.toContain("t04");
+    expect(f.provisional).toContain("t05");
+    expect(f.byTopic.t05).toBeGreaterThanOrEqual(0.8); // оценка по диагностике остаётся, но план её не засчитает
+  });
+
+  it("баллы пробника по теме снимают пометку", () => {
+    const f = forecastScore({ skills: {}, exams: [exam(40)], now: NOW, diagnostic: perfect });
+    expect(f.provisional).toEqual([]);
+  });
+});

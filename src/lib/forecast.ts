@@ -40,6 +40,11 @@ export interface Forecast {
   answers: number;
   /** Освоение темы 0..1. */
   byTopic: Record<EntTopicId, number>;
+  /**
+   * Темы, оценка которых ещё опирается на входную диагностику (по навыкам темы меньше TOPIC_PRACTICE_MIN ответов
+   * и нет баллов пробников): «освоенной» такую тему не считаем (план недели, #70). Без диагностики — пусто.
+   */
+  provisional: EntTopicId[];
 }
 
 export const MAX_SCORE = ENT_POINTS;
@@ -86,6 +91,13 @@ export function blendedTopicMastery(skills: Record<string, SkillStat>, diagByTop
 }
 
 const TOPIC_IDS: EntTopicId[] = ENT_TOPICS.map((t) => t.id);
+
+/** Средний вес собственной практики навыков темы (0 — только диагностика, 1 — у всех навыков ≥ TOPIC_PRACTICE_MIN ответов). */
+function practiceWeight(skills: Record<string, SkillStat>, t: EntTopicId): number {
+  const ids = SKILLS.filter((s) => s.ent === t);
+  if (!ids.length) return 0;
+  return ids.reduce((acc, s) => acc + Math.min(1, attemptsOf(skills[s.id]) / TOPIC_PRACTICE_MIN), 0) / ids.length;
+}
 
 const fin = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 /** NaN/мусор из сохранения → 0. */
@@ -165,13 +177,14 @@ export function forecastScore(input: ForecastInput): Forecast {
 
   // Диагностика — только пока нет пробников и ответов по навыкам набралось мало (посеянные диагностикой — тоже «мало»).
   const diag = !hasExams && masteryAnswers < DIAGNOSTIC_UNTIL_ANSWERS ? diagnostic : null;
-  if (diag) return { score: diag.score, low: diag.low, high: diag.high, basis: "diagnostic", answers: Math.round(input.diagnostic!.max), byTopic: diag.byTopic };
+  if (diag) return { score: diag.score, low: diag.low, high: diag.high, basis: "diagnostic", answers: Math.round(input.diagnostic!.max), byTopic: diag.byTopic, provisional: [...TOPIC_IDS] };
 
   const basis: ForecastBasis = hasMastery && hasExams ? "both" : hasExams ? "exams" : hasMastery ? "mastery" : "none";
   const answers = (hasMastery ? masteryAnswers : 0) + examAnswers;
 
   // Тема: доля баллов по пробникам (взвешенно) и освоение навыков.
   const byTopic = {} as Record<EntTopicId, number>;
+  const provisional: EntTopicId[] = [];
   for (const t of TOPIC_IDS) {
     let num = 0;
     let den = 0;
@@ -188,9 +201,10 @@ export function forecastScore(input: ForecastInput): Forecast {
     else if (fromExam !== null) v = fromExam;
     else v = hasMastery ? mastery[t] : 0;
     byTopic[t] = Math.round(clamp01(v) * 1000) / 1000;
+    if (diagnostic && fromExam === null && practiceWeight(input.skills, t) < 1) provisional.push(t);
   }
 
-  if (basis === "none") return { score: 0, low: 0, high: 0, basis, answers: 0, byTopic };
+  if (basis === "none") return { score: 0, low: 0, high: 0, basis, answers: 0, byTopic, provisional };
 
   const raw = basis === "both" ? EXAM_SHARE * examScore + (1 - EXAM_SHARE) * masteryScore : basis === "exams" ? examScore : masteryScore;
   const score = Math.max(0, Math.min(MAX_SCORE, Math.round(raw)));
@@ -202,5 +216,6 @@ export function forecastScore(input: ForecastInput): Forecast {
     basis,
     answers,
     byTopic,
+    provisional,
   };
 }

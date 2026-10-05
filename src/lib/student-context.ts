@@ -13,16 +13,20 @@ import { LESSONS } from "@/content/course";
 export function buildStudentContext(s: AppState): StudentContext & WithTrack {
   const lang = s.profile.lang;
   // Слабые места — те же, что видит ученик в «Прогрессе» (lib/progress → weakSpots): низкая оценка, падение точности, давность.
-  const weak: string[] = weakSpots({ skills: s.skills, skillDays: s.skillDays, now: Date.now() }, 5).map((w) => {
-    // Названия — на языке ученика, чтобы ИИ не смешивал языки в ответе.
-    const title = skillById(w.skill) ? tx(skillById(w.skill)!.title, lang) : w.skill;
-    return `${title} (${Math.round(w.mastery * 100)}%)`;
-  });
+  // Названия — на языке ученика, чтобы ИИ не смешивал языки в ответе.
+  const titled = (id: string, mastery: number) => `${skillById(id) ? tx(skillById(id)!.title, lang) : id} (${Math.round(mastery * 100)}%)`;
+  const spots = weakSpots({ skills: s.skills, skillDays: s.skillDays, now: Date.now() }, 5);
+  const weak: string[] = spots.map((w) => titled(w.skill, w.mastery));
+  // Слабые навыки, у которых ответов ещё мало для «Слабых мест» (например, после диагностики), — тоже наставнику, до 5 всего.
+  const listed = new Set(spots.map((w) => w.skill));
+  for (const [id, stat] of Object.entries(s.skills)) {
+    if (weak.length >= 5) break;
+    if (!listed.has(id) && skillById(id) && masteryLevel(stat) === "weak") weak.push(titled(id, stat.mastery));
+  }
   const strong: string[] = [];
   for (const [id, stat] of Object.entries(s.skills)) {
     if (masteryLevel(stat) !== "mastered") continue;
-    const title = skillById(id) ? tx(skillById(id)!.title, lang) : id;
-    strong.push(`${title} (${Math.round(stat.mastery * 100)}%)`);
+    strong.push(titled(id, stat.mastery));
   }
   const notes = ownNotesText(s.notebook, 700);
   return {

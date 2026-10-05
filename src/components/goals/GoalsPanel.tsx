@@ -108,13 +108,15 @@ export function GoalsPanel({ className }: { className?: string }) {
 
   /** Предварительный прогноз: по входной диагностике, а не по ответам и пробникам. */
   const prelim = forecast.basis === "diagnostic";
-  // Пока прогноз предварительный, диагностика не делает тему «освоенной» (#70): план строим из значений не выше порога
-  // освоения — иначе темы, которых в диагностике не было, молча считались бы освоенными, а при 10/10 план был бы пуст.
+  // Диагностика не делает тему «освоенной» (#70): пока оценка темы опирается на неё (`forecast.provisional` — весь
+  // предварительный прогноз и темы, где своей практики ещё мало), план строим из значений не выше порога освоения —
+  // иначе темы, которых в диагностике не было, молча считались бы освоенными, а при 10/10 план был бы пуст.
   const planBasis = useMemo(() => {
-    if (!prelim) return forecast.byTopic;
+    if (!forecast.provisional.length) return forecast.byTopic;
     const cap = PLAN_MASTERED - 0.01;
-    return Object.fromEntries(ENT_TOPICS.map((tp) => [tp.id, Math.min(forecast.byTopic[tp.id] ?? 0, cap)]));
-  }, [prelim, forecast.byTopic]);
+    const shaky = new Set(forecast.provisional);
+    return Object.fromEntries(ENT_TOPICS.map((tp) => [tp.id, shaky.has(tp.id) ? Math.min(forecast.byTopic[tp.id] ?? 0, cap) : (forecast.byTopic[tp.id] ?? 0)]));
+  }, [forecast.provisional, forecast.byTopic]);
   const plan = useMemo(() => weeklyPlan(planBasis, 3), [planBasis]);
   const ready = useMemo(
     // Только готовые уроки: черновики «скоро» могут уже лежать в реестре.
