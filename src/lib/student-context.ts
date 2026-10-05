@@ -46,7 +46,6 @@ export function buildStudentContext(s: AppState): StudentContext & WithTrack {
     weak,
     strong,
     mistakes: s.mistakes.slice(0, 5).map((m) => ({ q: m.prompt.slice(0, 200), given: m.given, expected: m.expected })),
-    memory: s.memory,
     notes,
     lessons: Object.keys(s.lessons).map((id) => (LESSON_META[id] ? tx(LESSON_META[id].title, lang) : id)),
   };

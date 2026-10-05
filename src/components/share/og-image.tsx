@@ -8,7 +8,7 @@ import { sharePercent, type ShareResult } from "@/lib/share-code";
 import { APP_NAME } from "@/lib/site-meta";
 import { metaDict } from "@/i18n/parts/meta";
 import { landingModel } from "./landing";
-import { tr } from "./labels";
+import { lessonTexts, tr } from "./labels";
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_FONT = "Nunito";
@@ -111,6 +111,17 @@ export function ogImageTree(r: ShareResult | null): ReactElement {
         <div style={{ display: "flex", fontSize: 190, fontWeight: 900, color: C.text, lineHeight: 1 }}>{`${p}%`}</div>
         <Bar ratio={p / 100} showPct={false} />
         <div style={{ display: "flex", fontSize: 32, fontWeight: 900, color: C.primaryStrong }}>{`${m.lines[0]} · ${m.lines[1]}`}</div>
+      </Shell>
+    );
+  }
+  if (r.t === "lesson") {
+    const lt = lessonTexts(lang, r);
+    return (
+      <Shell>
+        <div style={muted(40)}>{lt.lead}</div>
+        <div style={{ display: "flex", fontSize: 190, fontWeight: 900, color: C.text, lineHeight: 1 }}>{`${r.accuracy}%`}</div>
+        <Bar ratio={r.accuracy / 100} showPct={false} />
+        <div style={{ display: "flex", fontSize: 32, fontWeight: 900, color: C.primaryStrong }}>{lt.stats}</div>
       </Shell>
     );
   }

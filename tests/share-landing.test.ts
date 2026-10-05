@@ -59,6 +59,16 @@ describe("страница результата: метки по коду", () =
     expect(m.lines[0]).toBe("Рекорд: 30");
     expect(m.acceptHref).toBeNull();
   });
+  it("урок: точность в кольце, строки «Урок пройден» и «+XP · уроков пройдено», без ссылки на вариант", () => {
+    const m = landingModel({ t: "lesson", accuracy: 85, xp: 35, perfect: false, n: 12, lang: "ru" }, "ru");
+    expect(m.kind).toBe("lesson");
+    expect(m.big).toBe("85%");
+    expect(m.ratio).toBe(0.85);
+    expect(m.lines).toEqual(["Урок пройден", "+35 XP · Пройдено уроков: 12"]);
+    expect(m.acceptHref).toBeNull();
+    const perfect = landingModel({ t: "lesson", accuracy: 100, xp: 48, perfect: true, n: 1, lang: "kk" }, "kk");
+    expect(perfect.lines).toEqual(["Бірде-бір қатесіз!", "+48 XP · Өтілген сабақтар: 1"]);
+  });
   it("битый код — нейтральная карточка без числа и без «Пройти этот же вариант»", () => {
     const m = landingModel(null, "kk");
     expect(m.kind).toBe("invalid");
@@ -116,6 +126,8 @@ describe("тексты сообщения и превью", () => {
     { t: "course", done: 5, total: 40, lang: "kk", grade: "9" },
     { t: "streak", days: 3, best: 3, lang: "ru" },
     { t: "streak", days: 21, best: 40, lang: "kk" },
+    { t: "lesson", accuracy: 85, xp: 35, perfect: false, n: 12, lang: "ru" },
+    { t: "lesson", accuracy: 100, xp: 48, perfect: true, n: 1, lang: "kk" },
   ];
   it("нет «официально», «прогноз», «Ұлттық» и глаголов с родом; нет незакрытых {подстановок}", () => {
     for (const r of all) {
@@ -124,6 +136,17 @@ describe("тексты сообщения и превью", () => {
         expect(text.toLowerCase()).not.toMatch(/официальн|прогноз|болжам|ресми/);
         expect(text).not.toMatch(GENDERED);
       }
+    }
+  });
+  it("урок: сообщение и превью — только числа, без глаголов с родом; в ru-строках progress16c.share.* их тоже нет", () => {
+    const lesson: ShareResult = { t: "lesson", accuracy: 85, xp: 35, perfect: false, n: 12, lang: "ru" };
+    expect(messageText(lesson)).toBe("Урок в Informatica: точность 85%, +35 XP.");
+    expect(messageText({ ...lesson, perfect: true, accuracy: 100 })).toBe("Урок в Informatica — без единой ошибки! +35 XP.");
+    expect(metaTexts(lesson)).toEqual({ title: "Урок пройден на 85%", description: "+35 XP в Informatica. Занимайся вместе!" });
+    expect(metaTexts({ ...lesson, perfect: true }).title).toBe("Урок без единой ошибки");
+    expect(metaTexts({ ...lesson, lang: "kk" }).title).toBe("Сабақ 85% дәлдікпен өтілді");
+    for (const key of Object.keys(dict).filter((k) => k.startsWith("progress16c."))) {
+      expect(dict[key as keyof typeof dict].ru, key).not.toMatch(GENDERED);
     }
   });
   it("вызов — текст из ТЗ, ссылки в тексте нет", () => {
@@ -172,6 +195,14 @@ describe("карточка по результату", () => {
     expect(c).toMatchObject({ kind: "course", percent: 39, lessonsLabel: "37 из 96 уроков", subtitle: "курса подготовки к ЕНТ", lead: "Пройдено" });
     const s = cardModelOf({ t: "streak", days: 1, best: 4, lang: "ru" });
     expect(s).toMatchObject({ kind: "streak", days: 1, daysLabel: "день подряд", recordLabel: "Рекорд: 4" });
+  });
+  it("урок: карточка с точностью, XP, числом уроков и подписью «Мой урок»", () => {
+    const m = cardModelOf({ t: "lesson", accuracy: 85, xp: 35, perfect: false, n: 12, lang: "ru" });
+    expect(m).toMatchObject({ kind: "lesson", percent: 85, lead: "Урок пройден", xpLabel: "+35 XP", countLabel: "Пройдено уроков: 12", kicker: "Мой урок" });
+    const p = cardModelOf({ t: "lesson", accuracy: 100, xp: 48, perfect: true, n: 3, lang: "kk" });
+    expect(p).toMatchObject({ kind: "lesson", lead: "Бірде-бір қатесіз!", kicker: "Менің сабағым" });
+    // на карточке нет ни имени ученика, ни названия урока: только числа и подписи из словаря
+    expect(Object.keys(m).sort()).toEqual(["countLabel", "footer", "kicker", "kind", "lead", "percent", "siteHost", "siteName", "xpLabel"]);
   });
   it("у кода из ссылки тот же результат, что у карточки (round-trip через parseShare)", () => {
     const r = parseShare("x1-m-14-19-k-3051234567-a9zq");

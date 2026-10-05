@@ -11,7 +11,7 @@ import { ENT_TOPICS, topicWeight } from "@/content/ent-topics";
 import { SKILLS } from "@/content/skills";
 import type { SchoolGradePlan } from "@/content/school-program";
 import { daysAccuracy, type DaysAccuracy } from "./accuracy";
-import { MASTERED_FROM, WEAK_BELOW, masteryLevel, type SkillStat } from "./mastery";
+import { MASTERED_FROM, WEAK_BELOW, masteryLevel, masteryNeeds, type MasteryLevel, type SkillStat } from "./mastery";
 import type { LessonsDone } from "./school";
 import type { SkillDays } from "./skill-days";
 import type { DayStat } from "./store";
@@ -94,9 +94,15 @@ export interface UnitRow {
   ratio: number;
   /** Средняя оценка освоения навыков готовых уроков раздела, 0..1 (не тронутые — 0); null — готовых уроков нет. */
   mastery: number | null;
+  /** Навыков раздела всего и «освоено» по правилу #67 (этап 16В). */
+  skillsTotal: number;
+  skillsMastered: number;
 }
 
-/** Строки «Разделы курса»: пройдено/готово/скоро и средняя оценка освоения. */
+/** Сколько навыков из списка «освоено» (masteryLevel) — для строк разделов. */
+const masteredCount = (ids: readonly string[], skills: Record<string, SkillStat>): number => ids.filter((id) => masteryLevel(skills?.[id]) === "mastered").length;
+
+/** Строки «Разделы курса»: пройдено/готово/скоро, средняя оценка освоения и освоенные навыки. */
 export function unitRows(lessons: LessonsDone, skills: Record<string, SkillStat>, opts: ProgressOptions = {}): UnitRow[] {
   return shownUnits(opts).map((unit) => {
     let done = 0;
@@ -118,6 +124,8 @@ export function unitRows(lessons: LessonsDone, skills: Record<string, SkillStat>
       soon: unit.lessons.length - ready,
       ratio: ready > 0 ? done / ready : 0,
       mastery: skillIds.size ? avgMastery([...skillIds], skills) : null,
+      skillsTotal: skillIds.size,
+      skillsMastered: masteredCount([...skillIds], skills),
     };
   });
 }
@@ -130,10 +138,32 @@ export interface SchoolSectionRow {
   ready: number;
   soon: number;
   ratio: number;
+  /** Навыков раздела всего и «освоено» (навык засчитывается в первом разделе класса, где встретился). */
+  skillsTotal: number;
+  skillsMastered: number;
 }
 
-export function schoolSectionRows(plan: SchoolGradePlan, lessons: LessonsDone): SchoolSectionRow[] {
+/** Навыки готовых уроков каждого раздела плана (по порядку плана). Навык — только в первом разделе, где встретился. */
+function schoolSectionSkillIds(plan: SchoolGradePlan): string[][] {
+  const seen = new Set<string>();
   return plan.sections.map((s) => {
+    const ids: string[] = [];
+    for (const t of s.topics) {
+      for (const lesson of t.lessonIds) {
+        for (const sk of lessonMeta(lesson)?.skills ?? []) {
+          if (!TOPIC_OF.has(sk) || seen.has(sk)) continue;
+          seen.add(sk);
+          ids.push(sk);
+        }
+      }
+    }
+    return ids;
+  });
+}
+
+export function schoolSectionRows(plan: SchoolGradePlan, lessons: LessonsDone, skills: Record<string, SkillStat> = {}): SchoolSectionRow[] {
+  const skillIds = schoolSectionSkillIds(plan);
+  return plan.sections.map((s, i) => {
     const ids = new Set<string>();
     let soon = 0;
     for (const t of s.topics) {
@@ -141,8 +171,126 @@ export function schoolSectionRows(plan: SchoolGradePlan, lessons: LessonsDone): 
       t.lessonIds.forEach((id) => ids.add(id));
     }
     const done = [...ids].filter((id) => isDone(lessons, id)).length;
-    return { id: s.id, title: s.title, done, ready: ids.size, soon, ratio: ids.size ? done / ids.size : 0 };
+    return {
+      id: s.id,
+      title: s.title,
+      done,
+      ready: ids.size,
+      soon,
+      ratio: ids.size ? done / ids.size : 0,
+      skillsTotal: skillIds[i].length,
+      skillsMastered: masteredCount(skillIds[i], skills),
+    };
   });
+}
+
+// ---------- Навыки по разделам (этап 16В, N) ----------
+// «Освоение навыков» на /stats: навыки сгруппированы по разделам трека (разделы курса ЕНТ или разделы программы класса),
+// в группе — ВСЕ навыки раздела, в том числе ещё не начатые. Навык числится в одном разделе — в первом, где встретился.
+
+/** Раздел для группировки: название, цвет и навыки готовых уроков раздела (в порядке курса). */
+export interface SkillSection {
+  id: string;
+  title: L;
+  color: string;
+  skillIds: string[];
+}
+
+/** Разделы курса ЕНТ → навыки готовых уроков. Раздел «Старт» при skipBasics не входит (как в «Разделах курса»). */
+export function unitSkillSections(opts: ProgressOptions = {}): SkillSection[] {
+  const seen = new Set<string>();
+  const out: SkillSection[] = [];
+  for (const unit of shownUnits(opts)) {
+    const skillIds: string[] = [];
+    for (const ref of unit.lessons) {
+      if (!isReady(ref)) continue;
+      for (const sk of lessonMeta(ref.id)?.skills ?? []) {
+        if (!TOPIC_OF.has(sk) || seen.has(sk)) continue;
+        seen.add(sk);
+        skillIds.push(sk);
+      }
+    }
+    if (skillIds.length) out.push({ id: unit.id, title: unit.title, color: unit.color, skillIds });
+  }
+  return out;
+}
+
+/** Разделы программы класса → навыки готовых уроков. Разделы без готовых уроков (нет навыков) в список не попадают. */
+export function schoolSkillSections(plan: SchoolGradePlan): SkillSection[] {
+  const skillIds = schoolSectionSkillIds(plan);
+  const out: SkillSection[] = [];
+  plan.sections.forEach((s, i) => {
+    // Цвет раздела — по номеру в плане (как в «Разделах программы»).
+    if (skillIds[i].length) out.push({ id: s.id, title: s.title, color: UNITS[i % UNITS.length].color, skillIds: skillIds[i] });
+  });
+  return out;
+}
+
+/** Строка навыка в группе: уровень по правилу #67, оценка и (для «почти освоено») чего не хватает. */
+export interface SkillRow {
+  id: string;
+  level: MasteryLevel;
+  /** Оценка 0..1 (у не начатого — 0). */
+  mastery: number;
+  /** Чего не хватает до «освоено»: только у «в процессе» с оценкой от MASTERED_FROM. */
+  needs: { clean: number; days: number } | null;
+}
+
+export type SkillCounts = Record<MasteryLevel, number>;
+
+export interface SkillGroup {
+  id: string;
+  /** null — группа «Другие навыки» (названия нет в данных, подпись берёт экран). */
+  title: L | null;
+  color: string;
+  /** Сначала слабые, затем в процессе, освоенные и не начатые; внутри уровня — порядок курса. */
+  rows: SkillRow[];
+  counts: SkillCounts;
+}
+
+/** Порядок уровней в группе: что требует внимания — выше. */
+const LEVEL_ORDER: Record<MasteryLevel, number> = { weak: 0, progress: 1, mastered: 2, new: 3 };
+
+/** Цвет группы «Другие навыки» — нейтральный токен. */
+const OTHER_COLOR = "var(--muted)";
+
+function skillRow(id: string, skills: Record<string, SkillStat>): SkillRow {
+  const st = skills?.[id];
+  const level = masteryLevel(st);
+  const mastery = level === "new" ? 0 : Math.min(1, num(st?.mastery));
+  return { id, level, mastery, needs: level === "progress" && mastery >= MASTERED_FROM ? masteryNeeds(st) : null };
+}
+
+function groupOf(id: string, title: L | null, color: string, ids: readonly string[], skills: Record<string, SkillStat>): SkillGroup {
+  const counts: SkillCounts = { mastered: 0, progress: 0, weak: 0, new: 0 };
+  const rows = ids.map((sk, i) => ({ row: skillRow(sk, skills), i }));
+  for (const { row } of rows) counts[row.level]++;
+  rows.sort((a, b) => LEVEL_ORDER[a.row.level] - LEVEL_ORDER[b.row.level] || a.i - b.i);
+  return { id, title, color, rows: rows.map((r) => r.row), counts };
+}
+
+/**
+ * Группы навыков по разделам. Навыки, которых нет ни в одном разделе трека (например, школьные навыки у ученика ЕНТ
+ * или «Старт» при skipBasics), показываются отдельной группой «Другие навыки» — только те, по которым уже были ответы.
+ */
+export function skillGroups(sections: readonly SkillSection[], skills: Record<string, SkillStat>): SkillGroup[] {
+  const groups = sections.map((s) => groupOf(s.id, s.title, s.color, s.skillIds, skills));
+  const inSections = new Set(sections.flatMap((s) => s.skillIds));
+  const extra = SKILLS.filter((s) => !inSections.has(s.id) && num(skills?.[s.id]?.attempts) > 0).map((s) => s.id);
+  if (extra.length) groups.push(groupOf("other", null, OTHER_COLOR, extra, skills));
+  return groups;
+}
+
+/** Сумма по всем группам: «освоено · в процессе · слабо · не начато». */
+export function skillTotals(groups: readonly SkillGroup[]): SkillCounts {
+  const total: SkillCounts = { mastered: 0, progress: 0, weak: 0, new: 0 };
+  for (const g of groups) for (const k of Object.keys(total) as MasteryLevel[]) total[k] += g.counts[k];
+  return total;
+}
+
+/** Какая группа раскрыта по умолчанию: первая со слабыми навыками, иначе первая. Групп нет — null. */
+export function defaultOpenGroup(groups: readonly SkillGroup[]): string | null {
+  return (groups.find((g) => g.counts.weak > 0) ?? groups[0])?.id ?? null;
 }
 
 // ---------- Итоги по дням (плитки статистики) ----------

@@ -155,6 +155,9 @@ describe("поделиться и вызов (#72, #73)", () => {
     expect(parseEvent({ e: "share", what: "exam", how: "instagram" })).toBeNull();
     expect(parseEvent({ e: "share", what: "name", how: "copy" })).toBeNull();
     expect(parseEvent({ e: "share_open", what: "challenge" })).toBeNull();
+    // «Поделиться» уроком (этап 16В): вид «lesson» принимается и при отправке, и при открытии ссылки
+    expect(parseEvent({ e: "share", what: "lesson", how: "copy" })).toEqual({ e: "share", what: "lesson", how: "copy" });
+    expect(parseEvent({ e: "share_open", what: "lesson" })).toEqual({ e: "share_open", what: "lesson" });
     expect(parseEvent({ e: "challenge", step: "win" })).toBeNull();
     expect(parseEvent({ e: "challenge", step: "more", code: "x1-m-14-19-k-1-a9zq" })).toEqual({ e: "challenge", step: "more" });
   });

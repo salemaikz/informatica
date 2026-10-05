@@ -1,4 +1,4 @@
-// Карточка результата для «Поделиться» (#72): PNG 1080 × 1920 (вертикальная история) на canvas. Три вида: пробник, курс, серия.
+// Карточка результата для «Поделиться» (#72): PNG 1080 × 1920 (вертикальная история) на canvas. Четыре вида: пробник, курс, серия, урок.
 // Тексты приходят готовыми (язык выбирает компонент, см. components/share/labels.ts), здесь — только рисование.
 // Canvas не читает CSS-переменные, поэтому цвета — фиксированные hex, равные токенам СВЕТЛОЙ темы из src/app/globals.css (:root);
 // совпадение проверяет tests/share-card-colors.test.ts. Иконки — пути lucide (Path2D), эмодзи нет.
@@ -76,6 +76,17 @@ export type ShareCardModel =
       subtitle: string;
     })
   | (CardBase & {
+      kind: "lesson";
+      /** Точность урока, %. */
+      percent: number;
+      /** «Урок пройден» / «Без единой ошибки!». */
+      lead: string;
+      /** «+35 XP». */
+      xpLabel: string;
+      /** «Пройдено уроков: 12». */
+      countLabel: string;
+    })
+  | (CardBase & {
       kind: "streak";
       days: number;
       /** «дней подряд». */
@@ -105,6 +116,7 @@ export function cardFileName(m: Pick<ShareCardModel, "kind"> & Partial<{ examKin
   const safe = (s: string) => s.replace(/[^a-z0-9]+/gi, "").toLowerCase() || "x";
   if (m.kind === "exam") return `informatica-${safe(m.examKind ?? "exam")}-${m.points ?? 0}-of-${m.max ?? 0}.png`;
   if (m.kind === "course") return `informatica-course-${m.percent ?? 0}.png`;
+  if (m.kind === "lesson") return `informatica-lesson-${m.percent ?? 0}.png`;
   return `informatica-streak-${m.days ?? 0}.png`;
 }
 
@@ -322,6 +334,25 @@ function drawCourse(ctx: Ctx, m: Extract<ShareCardModel, { kind: "course" }>) {
   text(ctx, m.subtitle, cx, 1375, 52, 800, C.muted, "center", inner);
 }
 
+function drawLesson(ctx: Ctx, m: Extract<ShareCardModel, { kind: "lesson" }>) {
+  const C = CARD_COLORS;
+  const cx = CARD_WIDTH / 2;
+  const inner = CARD_WIDTH - 260;
+  drawPanel(ctx, 410, 1110);
+  text(ctx, m.lead, cx, 560, 64, 800, C.muted, "center", inner);
+  const ratio = Math.max(0, Math.min(1, m.percent / 100));
+  drawRing(ctx, cx, 880, 230, 56, ratio, cardToneColor(ratio));
+  text(ctx, `${m.percent}%`, cx, 950, 180, 900, C.text, "center", 340);
+  // XP — золотой плашкой (XP — золото по системе цветов), число уроков — строкой ниже.
+  ctx.font = `900 64px ${FONT}`;
+  const w = Math.min(inner, ctx.measureText(m.xpLabel).width + 120);
+  ctx.fillStyle = C.goldSoft;
+  roundRect(ctx, cx - w / 2, 1240, w, 112, 56);
+  ctx.fill();
+  text(ctx, m.xpLabel, cx, 1318, 64, 900, C.text, "center", w - 60);
+  text(ctx, m.countLabel, cx, 1450, 52, 800, C.muted, "center", inner);
+}
+
 function drawStreak(ctx: Ctx, m: Extract<ShareCardModel, { kind: "streak" }>) {
   const C = CARD_COLORS;
   const cx = CARD_WIDTH / 2;
@@ -364,6 +395,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, m: ShareCardModel): voi
   drawHeader(ctx, m);
   if (m.kind === "exam") drawExam(ctx, m);
   else if (m.kind === "course") drawCourse(ctx, m);
+  else if (m.kind === "lesson") drawLesson(ctx, m);
   else drawStreak(ctx, m);
   drawFooter(ctx, m);
 }

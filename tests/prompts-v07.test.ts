@@ -19,7 +19,6 @@ const ctx: StudentContext = {
   weak: [],
   strong: [],
   mistakes: [],
-  memory: "",
   notes: "",
   lessons: [],
 };

@@ -5,9 +5,9 @@ import { examLink } from "@/components/exam/logic";
 import { withChallenge } from "@/lib/challenge";
 import { sharePercent, type ShareResult } from "@/lib/share-code";
 import type { Lang } from "@/lib/types";
-import { daysWord, examKindLabel, ofLabel, tr } from "./labels";
+import { daysWord, examKindLabel, lessonTexts, ofLabel, tr } from "./labels";
 
-export type LandingKind = "exam" | "course" | "streak" | "invalid";
+export type LandingKind = "exam" | "course" | "streak" | "lesson" | "invalid";
 
 export interface LandingModel {
   kind: LandingKind;
@@ -95,5 +95,20 @@ export function landingModel(r: ShareResult | null, lang: Lang): LandingModel {
         text: tr(lang, "meta.description"),
         acceptHref: null,
       };
+    case "lesson": {
+      const lt = lessonTexts(lang, r);
+      return {
+        kind: "lesson",
+        eyebrow: tr(lang, "progress16c.share.land.eyebrow"),
+        chip: null,
+        big: `${r.accuracy}%`,
+        suffix: null,
+        suffixFirst: false,
+        lines: [lt.lead, lt.stats],
+        ratio: r.accuracy / 100,
+        text: tr(lang, "meta.description"),
+        acceptHref: null,
+      };
+    }
   }
 }

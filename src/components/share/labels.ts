@@ -37,6 +37,12 @@ export function daysWord(lang: Lang, n: number): string {
 /** «курса подготовки к ЕНТ» / «программы 8 класса». */
 const courseSubtitle = (lang: Lang, grade: string | null): string => (grade ? tr(lang, "share.card.class", { g: grade }) : tr(lang, "share.card.course"));
 
+/** Подписи урока (этап 16В): верхняя строка («Урок пройден» / «Без единой ошибки!») и итоговая («+35 XP · Пройдено уроков: 12»). */
+export function lessonTexts(lang: Lang, r: Extract<ShareResult, { t: "lesson" }>): { lead: string; stats: string; count: string } {
+  const count = tr(lang, "progress16c.share.count", { n: r.n });
+  return { lead: tr(lang, r.perfect ? "progress16c.share.leadPerfect" : "progress16c.share.lead"), stats: `+${r.xp} XP · ${count}`, count };
+}
+
 /** Язык результата — язык кода ссылки. */
 export const langOf = (r: ShareResult): Lang => r.lang;
 
@@ -67,6 +73,11 @@ export function metaTexts(r: ShareResult): PageTexts {
         title: tr(lang, "share.og.streak.title", { n: r.days, days: daysWord(lang, r.days) }),
         description: tr(lang, "share.og.streak.desc", { best: r.best }),
       };
+    case "lesson":
+      return {
+        title: r.perfect ? tr(lang, "progress16c.share.og.titlePerfect") : tr(lang, "progress16c.share.og.title", { p: r.accuracy }),
+        description: tr(lang, "progress16c.share.og.desc", { xp: r.xp }),
+      };
   }
 }
 
@@ -88,6 +99,8 @@ export function messageText(r: ShareResult, mode: MessageMode = "result"): strin
     }
     case "streak":
       return tr(lang, "share.msg.streak", { n: r.days, days: daysWord(lang, r.days) });
+    case "lesson":
+      return tr(lang, r.perfect ? "progress16c.share.msgPerfect" : "progress16c.share.msg", { p: r.accuracy, xp: r.xp });
   }
 }
 
@@ -140,5 +153,18 @@ export function cardModelOf(r: ShareResult, topics: readonly CardTopic[] = []): 
         daysLabel: daysWord(lang, r.days),
         recordLabel: tr(lang, "stats.best", { n: r.best }),
       };
+    case "lesson": {
+      const lt = lessonTexts(lang, r);
+      return {
+        ...base,
+        kind: "lesson",
+        kicker: tr(lang, "progress16c.share.kicker"),
+        footer: tr(lang, "share.card.footer.start"),
+        percent: r.accuracy,
+        lead: lt.lead,
+        xpLabel: `+${r.xp} XP`,
+        countLabel: lt.count,
+      };
+    }
   }
 }

@@ -8,7 +8,8 @@
 //   пробник:  x1-<f|m|t>-<баллы>-<максимум>-<r|k>-<seed>-<тег банка>[-<темы>]   темы — номера через склейку: t04,t05 → 0405
 //   курс:     c1-<пройдено>-<всего>-<r|k>[-g<класс>]                           класс — у школьного трека (% класса)
 //   серия:    s1-<дней>-<рекорд>-<r|k>
-// Версия в префиксе (x1, c1, s1): поменялся смысл или дизайн картинки — новый префикс, старые ссылки остаются валидными.
+//   урок:     l1-<точность %>-<XP>-<идеально 0|1>-<уроков пройдено>-<r|k>   только числа (этап 16В): ни названия урока, ни имени
+// Версия в префиксе (x1, c1, s1, l1): поменялся смысл или дизайн картинки — новый префикс, старые ссылки остаются валидными.
 
 import { ENT_TOPICS } from "@/content/ent-topics";
 import type { SchoolGrade } from "@/content/school-program";
@@ -39,7 +40,19 @@ export type ShareResult =
       /** Класс школьного трека (% класса); null — курс ЕНТ. */
       grade: SchoolGrade | null;
     }
-  | { t: "streak"; days: number; best: number; lang: Lang };
+  | { t: "streak"; days: number; best: number; lang: Lang }
+  | {
+      t: "lesson";
+      /** Точность урока, целые проценты 0…100. */
+      accuracy: number;
+      /** XP, начисленные за урок. */
+      xp: number;
+      /** Урок без единой ошибки и подсказки. */
+      perfect: boolean;
+      /** Сколько уроков у ученика пройдено всего (число, не название и не номер на карте). */
+      n: number;
+      lang: Lang;
+    };
 
 /** Предел длины кода (запас над самым длинным допустимым). */
 export const SHARE_CODE_MAX = 64;
@@ -47,6 +60,8 @@ export const SHARE_CODE_MAX = 64;
 export const SHARE_MAX_POINTS = 100;
 export const SHARE_MAX_LESSONS = 999;
 export const SHARE_MAX_DAYS = 9999;
+/** XP за один урок: потолок для кода (за урок даётся десятки, запас — на множители). */
+export const SHARE_MAX_XP = 999;
 
 const KIND_TO: Record<ShareExamKind, string> = { full: "f", mini: "m", topic: "t" };
 const KIND_FROM: Record<string, ShareExamKind> = { f: "full", m: "mini", t: "topic" };
@@ -89,6 +104,8 @@ function valid(r: ShareResult): boolean {
       return isInt(r.total, 1, SHARE_MAX_LESSONS) && isInt(r.done, 0, r.total) && (r.grade === null || GRADES.includes(r.grade));
     case "streak":
       return isInt(r.days, 1, SHARE_MAX_DAYS) && isInt(r.best, r.days, SHARE_MAX_DAYS);
+    case "lesson":
+      return isInt(r.accuracy, 0, 100) && isInt(r.xp, 0, SHARE_MAX_XP) && typeof r.perfect === "boolean" && isInt(r.n, 1, SHARE_MAX_LESSONS);
     default:
       return false;
   }
@@ -108,6 +125,8 @@ export function encodeShare(r: ShareResult): string | null {
       return ["c1", r.done, r.total, lang, ...(r.grade ? [`g${r.grade}`] : [])].join("-");
     case "streak":
       return ["s1", r.days, r.best, lang].join("-");
+    case "lesson":
+      return ["l1", r.accuracy, r.xp, r.perfect ? 1 : 0, r.n, lang].join("-");
   }
 }
 
@@ -156,6 +175,16 @@ function parseParts(p: string[]): ShareResult | null {
       const best = num(p[2]);
       if (!l || days === null || best === null) return null;
       return { t: "streak", days, best, lang: l };
+    }
+    case "l1": {
+      if (p.length !== 6) return null;
+      const l = lang(p[5]);
+      const accuracy = num(p[1]);
+      const xp = num(p[2]);
+      const flag = num(p[3]);
+      const n = num(p[4]);
+      if (!l || accuracy === null || xp === null || flag === null || flag > 1 || n === null) return null;
+      return { t: "lesson", accuracy, xp, perfect: flag === 1, n, lang: l };
     }
     default:
       return null;

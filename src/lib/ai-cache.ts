@@ -11,10 +11,11 @@ import { hashString } from "./text";
  * Версия в ключе кэша ответов (серверный Data Cache и клиент): меняем при любой правке промптов или потолков токенов —
  * старые ответы перестают подходить. 2 — этап 10: ответы, обрезанные потолком токенов и закэшированные раньше, больше не выдаются;
  * 3 — v0.9.1: в общей части промпта правила «не раскрывать стек, не говорить лишнего»;
- * 4 — этап 16Б: к нерешённому заданию ответ не называется (новые правила промпта, ответы-стоп-слова входят в ключ).
+ * 4 — этап 16Б: к нерешённому заданию ответ не называется (новые правила промпта, ответы-стоп-слова входят в ключ);
+ * 5 — этап 16В: «памяти наставника» нет — в общей части промпта вместо «заметок наставника» «заметки из конспекта».
  * Клиентский ключ хранилища (CLIENT_CACHE_KEY) меняется вместе с ней.
  */
-export const PROMPT_VERSION = 4;
+export const PROMPT_VERSION = 5;
 
 const STYLE_KEYS = ["short", "examples", "steps"] as const;
 
@@ -151,9 +152,9 @@ export function leaksAnswer(
 
 // ---------- Клиентский кэш (localStorage, LRU) ----------
 
-export const CLIENT_CACHE_KEY = "informatica:ai-cache:v4";
+export const CLIENT_CACHE_KEY = "informatica:ai-cache:v5";
 /** Прежние ключи хранилища: записи в них больше не читаются, при записи в новый ключ их стираем (место в localStorage). */
-const LEGACY_CLIENT_CACHE_KEYS = ["informatica:ai-cache:v1", "informatica:ai-cache:v2", "informatica:ai-cache:v3"];
+const LEGACY_CLIENT_CACHE_KEYS = ["informatica:ai-cache:v1", "informatica:ai-cache:v2", "informatica:ai-cache:v3", "informatica:ai-cache:v4"];
 export const CLIENT_CACHE_MAX = 150;
 
 /** Минимальный интерфейс хранилища (Storage в браузере, заглушка в тестах). */

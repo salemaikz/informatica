@@ -12,7 +12,7 @@ export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint
 /** Ответ на «Что помешало?» после перерыва. */
 export type BreakReason = "time" | "hard" | "boring" | "forgot" | "other_prep" | "other";
 /** Чем поделились (#72): результат пробника, % курса, серия, вызов другу, отчёт родителю. */
-export type ShareWhat = "exam" | "course" | "streak" | "challenge" | "report";
+export type ShareWhat = "exam" | "course" | "streak" | "lesson" | "challenge" | "report";
 /** Как поделились: системное меню, копирование, WhatsApp, Telegram, сохранение картинки, ручное копирование из поля. */
 export type ShareHow = "native" | "copy" | "wa" | "tg" | "save" | "manual";
 /** Шаг вызова друга (#73): принял на странице результата, начал вариант, итог против друга. */
@@ -56,7 +56,7 @@ export type AnalyticsEvent =
   | { e: "feedback"; kind: "idea" | "bug" | "content" | "other" }
   // Поделиться (#72): что и как; открытие ссылки получателем (/r/… — exam/course/streak, /report — report); вызов другу (#73)
   | { e: "share"; what: ShareWhat; how: ShareHow }
-  | { e: "share_open"; what: "exam" | "course" | "streak" | "report" }
+  | { e: "share_open"; what: "exam" | "course" | "streak" | "lesson" | "report" }
   | { e: "challenge"; step: ChallengeStep };
 
 export type AnalyticsName = AnalyticsEvent["e"];

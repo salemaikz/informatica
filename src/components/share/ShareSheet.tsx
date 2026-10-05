@@ -120,7 +120,7 @@ export function ShareSheet({
   const url = path ? absoluteUrl(path) : null;
   const file = card.status === "ready" ? card.file : null;
   const preparing = withCard && card.status === "loading";
-  const title = t(`share.sheet.title.${what}` as DictKey);
+  const title = what === "lesson" ? t("progress16c.share.title") : t(`share.sheet.title.${what}` as DictKey);
 
   const onSave = () => {
     if (card.status !== "ready") return;

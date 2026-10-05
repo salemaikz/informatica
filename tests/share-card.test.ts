@@ -43,6 +43,7 @@ describe("карточка: тон, файл, хост", () => {
     expect(cardFileName({ kind: "exam", examKind: "../x y", points: 1, max: 2 })).toBe("informatica-xy-1-of-2.png");
     expect(cardFileName({ kind: "course", percent: 42 })).toBe("informatica-course-42.png");
     expect(cardFileName({ kind: "streak", days: 5 })).toBe("informatica-streak-5.png");
+    expect(cardFileName({ kind: "lesson", percent: 85 })).toBe("informatica-lesson-85.png");
   });
   it("хост без протокола и пути", () => {
     expect(hostOf("https://informatica-chi.vercel.app")).toBe("informatica-chi.vercel.app");

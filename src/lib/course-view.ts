@@ -3,7 +3,7 @@
 
 import { schoolPlan } from "@/content/school-program";
 import type { Grade, SchoolDirection } from "./types";
-import { courseProgress } from "./progress";
+import { courseProgress, schoolSkillSections, unitSkillSections, type SkillSection } from "./progress";
 import { entVisible, gradeProgress, toSchoolGrade, type LessonsDone } from "./school";
 import type { Profile } from "./store";
 
@@ -42,4 +42,17 @@ export function courseViewOf({ lessons, track, grade: gradeRaw, direction, skipB
   // «Старт» исключён из процента, но пройденные в нём уроки — всё равно пройденные: сравниваем со счётом по всей карте.
   const anyDone = skipBasics ? courseProgress(lessons).done > 0 : c.done > 0;
   return { kind: "course", done: c.done, total: c.ready, soon: c.total - c.ready, ratio: c.ratio, skipBasics: !!skipBasics, anyDone };
+}
+
+/**
+ * Разделы трека для группировки навыков на «Прогрессе» (этап 16В): ученик ЕНТ — разделы курса, школьник — разделы программы
+ * его класса; класс не выбран («другое») — как курс (то же решение, что в `courseViewOf`).
+ */
+export function skillSectionsOf({ track, grade: gradeRaw, direction, skipBasics }: Omit<CourseViewInput, "lessons">): SkillSection[] {
+  if (!entVisible({ track })) {
+    const grade = toSchoolGrade(gradeRaw);
+    const plan = grade ? schoolPlan(grade, direction) : undefined;
+    if (plan) return schoolSkillSections(plan);
+  }
+  return unitSkillSections({ skipBasics });
 }

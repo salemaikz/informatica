@@ -14,7 +14,6 @@ export interface StudentContext {
   weak: string[];
   strong: string[];
   mistakes: { q: string; given: string; expected: string }[];
-  memory: string;
   notes: string;
   lessons: string[];
 }
@@ -89,6 +88,5 @@ export interface LessonFeedbackRequest {
 
 export interface LessonFeedbackResponse {
   feedback: string;
-  memory: string;
   focus: string[];
 }
