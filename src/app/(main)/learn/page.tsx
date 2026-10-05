@@ -82,7 +82,7 @@ export default function LearnPage() {
             onModes={() => hero && setSheet(hero.ref.id)}
           />
 
-          <PlanCard />
+          <PlanCard heroLessonId={hero?.ref.id} />
 
           <ViewSwitch view={view} onChange={setView} />
 

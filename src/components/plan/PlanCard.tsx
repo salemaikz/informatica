@@ -21,7 +21,11 @@ const HEAD =
  * Карточка плана для главной (под «Продолжить»): «Сегодня: N уроков» и кнопка на первый из них, неделя плана и её прогресс.
  * Если цели нет (ни даты ЕНТ, ни балла) — внизу одна строка-приглашение вместо отдельной карточки цели.
  */
-export function PlanCard({ className }: { className?: string }) {
+/**
+ * heroLessonId — урок, который уже предлагает карточка «Следующий урок» выше: кнопку на тот же урок не повторяем
+ * (отзыв владельца: главная без повторов).
+ */
+export function PlanCard({ className, heroLessonId }: { className?: string; heroLessonId?: string }) {
   const { t } = useT();
   const plan = usePlan();
   const today = useToday(plan);
@@ -91,7 +95,7 @@ export function PlanCard({ className }: { className?: string }) {
         height={10}
         label={t("plan.card.progress")}
       />
-      {target && (
+      {target && !(target.type === "lesson" && target.id === heroLessonId) && (
         <ButtonLink
           href={taskHref(target)}
           variant={primary ? "primary" : "secondary"}
