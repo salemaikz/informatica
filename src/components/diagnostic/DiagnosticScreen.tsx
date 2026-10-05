@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleHelp, ListChecks, Target } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { track, pct } from "@/lib/analytics";
 import { BASICS_MIN_ITEMS, buildDiagnostic, scoreDiagnostic, type DiagnosticResult } from "@/lib/diagnostic";
@@ -36,12 +36,11 @@ export function basicsPatch(res: Pick<DiagnosticResult, "basicsItems" | "skipBas
  * Входная диагностика (#70), полноэкранный маршрут /diagnostic (вне оболочки приложения, как /plans и /onboarding).
  * 10 заданий ЕНТ «один верный», ответ не раскрывается, без сердечек, XP и подсказок. Итог — предварительный прогноз
  * диапазоном и слабые темы. Не пробник: `recordDiagnostic`, а не `recordExam` — ни истории, ни серии, ни XP.
- * `?from=onboarding` — после итога (или пропуска) окно тарифов; без параметра (повтор из «Целей») — возврат на «Учиться».
+ * После итога (или пропуска) — на «Учиться»: после онбординга там встретит проводник (#104), окно тарифов сразу не показываем.
  */
 export function DiagnosticScreen() {
   const { t } = useT();
   const router = useRouter();
-  const fromOnboarding = useSearchParams().get("from") === "onboarding";
   const { data, failed } = useDiagnosticData();
   const recordDiagnostic = useApp((s) => s.recordDiagnostic);
 
@@ -52,17 +51,14 @@ export function DiagnosticScreen() {
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   /** Защита от двойного нажатия на последнем вопросе: итог записываем один раз. */
   const finished = useRef(false);
-  /** Защита от двойного нажатия «Дальше»: уход (и показ тарифов) — один раз. Отдельно от `finished`: на экране итога он уже true. */
+  /** Защита от двойного нажатия «Дальше»: уход — один раз. Отдельно от `finished`: на экране итога он уже true. */
   const left = useRef(false);
 
-  /** Дальше по маршруту: после онбординга — окно тарифов, иначе — на «Учиться». */
+  /** Дальше по маршруту: на «Учиться» (после онбординга там проводник; отметка показа тарифов ставится в онбординге). */
   const leave = () => {
     if (left.current) return;
     left.current = true;
-    if (fromOnboarding) {
-      useApp.getState().notePaywallShown();
-      router.replace("/plans?from=onboarding");
-    } else router.replace("/learn");
+    router.replace("/learn");
   };
 
   const skip = () => {
@@ -158,7 +154,7 @@ export function DiagnosticScreen() {
       {phase === "result" && result && data && (
         <div className="flex flex-1 flex-col pt-4">
           <h1 className="sr-only">{t("diag.result.title")}</h1>
-          <DiagnosticResultView result={result} ready={data.ready} fromOnboarding={fromOnboarding} />
+          <DiagnosticResultView result={result} ready={data.ready} />
         </div>
       )}
 

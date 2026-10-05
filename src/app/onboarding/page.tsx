@@ -132,6 +132,9 @@ export default function OnboardingPage() {
     track({ e: "onb_done", track: trackNow });
     // Просим браузер не стирать данные сайта — из нажатия кнопки, иначе Firefox на компьютере покажет окно «из ниоткуда».
     requestPersistentStorage();
+    // Окно тарифов сразу после онбординга больше не показываем (#104): ученика ведёт проводник (components/tour).
+    // Но отметку показа ставим всегда, и для прихода по ссылке друга тоже, — автопоказ тарифов будет не раньше чем через 3 дня.
+    useApp.getState().notePaywallShown();
     // Пришли по вызову друга (#73): сразу на его вариант — диагностику и тарифы можно пройти позже.
     // Для школьного трека тоже: /exam/run сам покажет карточку «для ЕНТ» с переключением.
     const pending = takePendingLink(new Date().getTime());
@@ -139,9 +142,6 @@ export default function OnboardingPage() {
       router.replace(pending);
       return;
     }
-    // Окно тарифов сразу после онбординга больше не показываем (#104): ученика ведёт проводник (components/tour).
-    // Но отметку показа оставляем — автопоказ тарифов будет не раньше чем через 3 дня.
-    useApp.getState().notePaywallShown();
     // ЕНТ: входная диагностика, потом «Учиться»; школа — сразу «Учиться», где проводник подведёт к первому уроку.
     router.replace(ent ? "/diagnostic?from=onboarding" : "/learn");
   };

@@ -4,28 +4,34 @@ import { NAV_STEPS, completedLessonsCount, learnScene, padRect, placeBubble, sam
 
 // Проводник первого входа (этап 16Б, P6): что показывать, когда ждут другие окна, геометрия выреза и пузыря.
 
+const ctx = { onboarded: true, pathname: "/learn" };
 const seen = (...ids: (typeof TIP_IDS)[number][]): TipsState => Object.fromEntries(ids.map((id) => [id, 1]));
 
 describe("learnScene: что показать на «Учиться»", () => {
   it("новый ученик без уроков — приветствие", () => {
-    expect(learnScene({}, { completedLessons: 0 })).toBe("welcome");
-    expect(learnScene(undefined, { completedLessons: 0 })).toBe("welcome");
+    expect(learnScene({}, { ...ctx, completedLessons: 0 })).toBe("welcome");
+    expect(learnScene(undefined, { ...ctx, completedLessons: 0 })).toBe("welcome");
   });
   it("приветствие закрыто, урока ещё нет — ничего (ждём первый урок)", () => {
-    expect(learnScene(seen("welcome"), { completedLessons: 0 })).toBeNull();
+    expect(learnScene(seen("welcome"), { ...ctx, completedLessons: 0 })).toBeNull();
   });
   it("первый урок пройден — обзор панели (приветствие показывать уже не нужно)", () => {
-    expect(learnScene(seen("welcome", "lesson-first", "after-first"), { completedLessons: 1 })).toBe("nav");
-    expect(learnScene({}, { completedLessons: 1 })).toBe("nav");
+    expect(learnScene(seen("welcome", "lesson-first", "after-first"), { ...ctx, completedLessons: 1 })).toBe("nav");
+    expect(learnScene({}, { ...ctx, completedLessons: 1 })).toBe("nav");
   });
   it("обзор показан — больше ничего", () => {
-    expect(learnScene(seen("nav"), { completedLessons: 5 })).toBeNull();
-    expect(learnScene(seen("nav"), { completedLessons: 0 })).toBeNull();
+    expect(learnScene(seen("nav"), { ...ctx, completedLessons: 5 })).toBeNull();
+    expect(learnScene(seen("nav"), { ...ctx, completedLessons: 0 })).toBeNull();
+  });
+  it("не на «Учиться» и до онбординга — ничего", () => {
+    expect(learnScene({}, { completedLessons: 0, onboarded: true, pathname: "/practice" })).toBeNull();
+    expect(learnScene({}, { completedLessons: 2, onboarded: true, pathname: "/lesson/x" })).toBeNull();
+    expect(learnScene({}, { completedLessons: 0, onboarded: false, pathname: "/learn" })).toBeNull();
   });
   it("«Пропустить» отмечает всё — после него ничего не показывается", () => {
     const all: TipsState = Object.fromEntries(TIP_IDS.map((id) => [id, 1]));
-    expect(learnScene(all, { completedLessons: 0 })).toBeNull();
-    expect(learnScene(all, { completedLessons: 3 })).toBeNull();
+    expect(learnScene(all, { ...ctx, completedLessons: 0 })).toBeNull();
+    expect(learnScene(all, { ...ctx, completedLessons: 3 })).toBeNull();
     expect(unseenTips(all)).toEqual([]);
   });
 });
@@ -59,7 +65,7 @@ describe("карточки и подсказки", () => {
     expect(showPageTip(seen("nav", "page-practice"), "page-tutor")).toBe(true);
   });
   it("«Показать подсказки снова»: пустое состояние запускает проводник заново", () => {
-    expect(learnScene(sanitizeTips({}), { completedLessons: 0 })).toBe("welcome");
+    expect(learnScene(sanitizeTips({}), { ...ctx, completedLessons: 0 })).toBe("welcome");
     expect(tourBlocking(sanitizeTips({}))).toBe(true);
   });
   it("число пройденных уроков: только с completions > 0", () => {

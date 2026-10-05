@@ -7,6 +7,10 @@ import { TIP_IDS, tipSeen, type TipId, type TipsState } from "./tips";
 export interface TourCtx {
   /** Сколько уроков пройдено хотя бы раз. */
   completedLessons: number;
+  /** Онбординг пройден. */
+  onboarded: boolean;
+  /** Текущий путь: проводник живёт только на «Учиться». */
+  pathname: string;
 }
 
 /** Сколько уроков пройдено хотя бы раз (по `useApp.lessons`). */
@@ -22,9 +26,10 @@ export type LearnScene = "welcome" | "nav";
  * Что показать на «Учиться»:
  * - `welcome` — пока нет ни одного пройденного урока и приветствие не закрыто;
  * - `nav` — обзор панели, когда пройден первый урок (или прежний ученик, у которого уроки уже есть).
- * Всё закрыто — null. Приветствие, закрытое при нуле уроков, ждёт первого урока молча.
+ * Всё закрыто, онбординг не пройден или путь не /learn — null. Приветствие, закрытое при нуле уроков, ждёт первого урока молча.
  */
 export function learnScene(tips: TipsState | undefined, ctx: TourCtx): LearnScene | null {
+  if (!ctx.onboarded || ctx.pathname !== "/learn") return null;
   if (tipSeen(tips, "nav")) return null;
   if (ctx.completedLessons >= 1) return "nav";
   return tipSeen(tips, "welcome") ? null : "welcome";

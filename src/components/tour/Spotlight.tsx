@@ -20,7 +20,7 @@ interface Box {
 /**
  * Затемнение экрана с вырезом вокруг `rect` и пузырь Бита рядом. `rect = null` — без выреза, пузырь по центру.
  * Нажатие на вырез = главная кнопка (подсвеченный элемент не «проваливается» под затемнение). Escape — `onEscape`
- * (закрыть весь проводник). Фокус — на главной кнопке; страница под затемнением не прокручивается.
+ * (закрыть весь проводник). Фокус — на главной кнопке и не выходит за пузырь (Tab по кругу); страница под затемнением не прокручивается.
  */
 export function Spotlight({
   rect,
@@ -71,6 +71,14 @@ export function Spotlight({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") escRef.current();
+      if (e.key !== "Tab") return;
+      // Ловушка фокуса: Tab ходит по кнопкам пузыря и не уходит на страницу под затемнением.
+      const items = [...(panelRef.current?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])];
+      e.preventDefault();
+      if (!items.length) return;
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      const next = at < 0 ? (e.shiftKey ? items.length - 1 : 0) : (at + (e.shiftKey ? items.length - 1 : 1)) % items.length;
+      items[next].focus({ preventScroll: true });
     };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;

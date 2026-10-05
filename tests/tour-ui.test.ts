@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TOUR_DELAY_MS, TourAgent } from "@/components/tour/TourAgent";
 import { PageTip } from "@/components/tour/PageTip";
 import { AfterFirstLesson } from "@/components/tour/AfterFirstLesson";
+import { PaywallAgent } from "@/components/plans/PaywallAgent";
 import { TIP_IDS } from "@/lib/tips";
+import { FREE_PLAN } from "@/lib/economy";
 import { useApp } from "@/lib/store";
 
 // Проводник первого входа (этап 16Б, P6): приветствие, обзор панели, «Пропустить», карточки страниц, итоги первого урока.
@@ -67,6 +69,7 @@ afterEach(async () => {
   host.remove();
   document.querySelectorAll("[data-tour]").forEach((e) => e.remove());
   useApp.getState().resetProgress();
+  useApp.setState({ plan: FREE_PLAN });
   vi.useRealTimers();
 });
 
@@ -97,6 +100,47 @@ describe("TourAgent: приветствие", () => {
     await click("Понятно");
     expect(tips().welcome).toBeGreaterThan(0);
     expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it("нет кнопки урока: текст без «Жми сюда»", async () => {
+    target.remove();
+    await render(createElement(TourAgent));
+    await wait(TOUR_DELAY_MS + 100);
+    expect(dialog()?.textContent).toContain("Выбери раздел ниже");
+    expect(dialog()?.textContent).not.toContain("Жми сюда");
+  });
+
+  it("ушли с «Учиться» и вернулись — пауза выдерживается заново", async () => {
+    doneLesson();
+    await render(createElement(TourAgent));
+    await wait(TOUR_DELAY_MS + 100);
+    expect(dialog()).not.toBeNull();
+    h.pathname = "/practice";
+    await render(createElement(TourAgent));
+    expect(dialog()).toBeNull();
+    h.pathname = "/learn";
+    await render(createElement(TourAgent));
+    expect(dialog()).toBeNull();
+    await wait(TOUR_DELAY_MS + 100);
+    expect(dialog()).not.toBeNull();
+  });
+
+  it("Tab не уходит из пузыря на страницу под затемнением", async () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    await render(createElement(TourAgent));
+    await wait(TOUR_DELAY_MS + 100);
+    await wait(100);
+    const inside = [...dialog()!.querySelectorAll("button")].filter((b) => b.getAttribute("tabindex") !== "-1");
+    expect(inside.length).toBeGreaterThan(0);
+    outside.focus();
+    for (let i = 0; i < inside.length + 2; i++) {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
+      });
+      expect(dialog()!.contains(document.activeElement)).toBe(true);
+    }
+    outside.remove();
   });
 
   it("«Пропустить» отмечает все подсказки", async () => {
@@ -157,6 +201,49 @@ describe("TourAgent: обзор панели после первого урок�
   });
 });
 
+describe("TourAgent: «Показать подсказки снова»", () => {
+  it("обзор пройден, подсказки сброшены — обзор снова начинается с первого шага", async () => {
+    doneLesson();
+    await render(createElement(TourAgent));
+    await wait(TOUR_DELAY_MS + 100);
+    await click("Дальше");
+    await click("Дальше");
+    await click("Готово");
+    expect(dialog()).toBeNull();
+    await act(async () => useApp.getState().resetTips());
+    await wait(10);
+    expect(dialog()?.textContent).toContain("1 из 3");
+  });
+
+  it("ученику школьного трека про пробный ЕНТ не говорят", async () => {
+    doneLesson();
+    useApp.setState((s) => ({ profile: { ...s.profile, track: "school" } }));
+    await render(createElement(TourAgent));
+    await wait(TOUR_DELAY_MS + 100);
+    await click("Дальше");
+    expect(dialog()?.textContent).toContain("Практика");
+    expect(dialog()?.textContent).not.toContain("ЕНТ");
+  });
+});
+
+describe("PaywallAgent и проводник", () => {
+  it("тарифы не открываются в запуске, где шёл проводник", async () => {
+    useApp.setState({ tips: {} });
+    await render(createElement(PaywallAgent));
+    await wait(10);
+    useApp.setState({ tips: { nav: 1 } });
+    await wait(10);
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it("проводник уже пройден — тарифы открываются по расписанию", async () => {
+    useApp.setState({ tips: { nav: 1 } });
+    await render(createElement(PaywallAgent));
+    await wait(10);
+    expect(h.push).toHaveBeenCalledWith("/plans?from=auto");
+  });
+});
+
 describe("PageTip", () => {
   it("пока идёт проводник — не показывается", async () => {
     await render(createElement(PageTip, { id: "page-practice" }));
@@ -170,6 +257,12 @@ describe("PageTip", () => {
     await act(async () => (host.querySelector('button[aria-label="Закрыть подсказку"]') as HTMLButtonElement).click());
     expect(host.querySelector('[role="note"]')).toBeNull();
     expect(tips()["page-practice"]).toBeGreaterThan(0);
+  });
+
+  it("школьному треку практика без пробного ЕНТ", async () => {
+    useApp.setState((s) => ({ tips: { nav: 1 }, profile: { ...s.profile, track: "school" } }));
+    await render(createElement(PageTip, { id: "page-practice" }));
+    expect(host.querySelector('[role="note"]')?.textContent).not.toContain("ЕНТ");
   });
 
   it("уход со страницы тоже считается показом", async () => {
@@ -196,6 +289,15 @@ describe("AfterFirstLesson", () => {
     await act(async () => (button("Понятно, дальше") as HTMLButtonElement).click());
     expect(tips()["after-first"]).toBeGreaterThan(0);
     expect(host.querySelector("section")).toBeNull();
+  });
+
+  it("«Безлимит»: бонус чипов с множителем, про восстановление сердечек не пишем", async () => {
+    doneLesson();
+    useApp.setState({ plan: { tier: "unlimited", since: Date.now(), until: Date.now() + 86_400_000, trial: false } as never });
+    await render(createElement(AfterFirstLesson));
+    expect(host.textContent).toContain("+10");
+    expect(host.textContent).toContain("не кончаются");
+    expect(host.textContent).not.toContain("каждые");
   });
 
   it("не показывается, когда пройдено больше одного урока", async () => {

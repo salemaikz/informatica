@@ -9,7 +9,7 @@ import { useNow, usePlanTier } from "@/components/economy/useEconomy";
 
 /**
  * Невидимый «агент»: на главной карте (/learn) бесплатному ученику, прошедшему онбординг, раз в несколько дней
- * открывает окно тарифов. Не чаще одного раза за монтирование.
+ * открывает окно тарифов. Не чаще одного раза за монтирование и не в запуске, где шёл проводник первого входа (#104).
  */
 export function PaywallAgent() {
   const pathname = usePathname();
@@ -22,9 +22,12 @@ export function PaywallAgent() {
   const tier = usePlanTier();
   const now = useNow();
   const fired = useRef(false);
+  // Проводник шёл в этом запуске приложения: тарифы в этот же запуск не открываем, чтобы окно напоминаний после «Готово» не потерялось.
+  const sawTour = useRef(false);
 
   useEffect(() => {
-    if (fired.current || pathname !== "/learn" || !onboarded || touring || now <= 0) return;
+    if (touring) sawTour.current = true;
+    if (fired.current || sawTour.current || pathname !== "/learn" || !onboarded || touring || now <= 0) return;
     if (!shouldShowPaywall(tier, paywall, now)) return;
     fired.current = true;
     notePaywallShown();

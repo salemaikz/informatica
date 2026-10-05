@@ -2,12 +2,12 @@
 
 import { Cpu, Flame, Heart } from "lucide-react";
 import type { ReactNode } from "react";
-import { CHIP_BONUS, HOUR, PLAN_FEATURES } from "@/lib/economy";
+import { CHIP_BONUS, HOUR, PLAN_FEATURES, earnAmount } from "@/lib/economy";
 import { completedLessonsCount, showAfterFirst } from "@/lib/tour";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
-import { usePlanTier } from "@/components/economy/useEconomy";
+import { useChips, usePlanTier } from "@/components/economy/useEconomy";
 import { Button } from "@/components/ui/Button";
 
 function Row({ tone, icon, children }: { tone: string; icon: ReactNode; children: ReactNode }) {
@@ -29,9 +29,12 @@ export function AfterFirstLesson({ className }: { className?: string }) {
   const tips = useApp((s) => s.tips);
   const completed = useApp((s) => completedLessonsCount(s.lessons));
   const tier = usePlanTier();
+  const { multiplier } = useChips();
   if (!showAfterFirst(tips, completed)) return null;
-  // Безлимит сердечек не восстанавливает — показываем срок обычного тарифа.
-  const hours = (PLAN_FEATURES[tier].regenMs || PLAN_FEATURES.free.regenMs) / HOUR;
+  // На «Безлимите» сердечки не кончаются — про срок восстановления не говорим; бонус чипов — с множителем тарифа.
+  const unlimited = tier === "unlimited";
+  const hours = PLAN_FEATURES[tier].regenMs / HOUR;
+  const bonus = earnAmount(CHIP_BONUS.lesson, multiplier);
 
   return (
     <section aria-label={t("tour.after.title")} className={cn("flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4 animate-fade-in", className)}>
@@ -41,13 +44,13 @@ export function AfterFirstLesson({ className }: { className?: string }) {
           {t("tour.after.xp")}
         </Row>
         <Row tone="bg-gold-soft text-gold" icon={<Cpu size={18} aria-hidden />}>
-          {t("tour.after.chips", { n: CHIP_BONUS.lesson })}
+          {t("tour.after.chips", { n: bonus })}
         </Row>
         <Row tone="bg-streak-soft text-streak" icon={<Flame size={18} aria-hidden />}>
           {t("tour.after.streak")}
         </Row>
         <Row tone="bg-heart-soft text-heart" icon={<Heart size={18} fill="currentColor" aria-hidden />}>
-          {t("tour.after.hearts", { h: hours })}
+          {unlimited ? t("tour.after.heartsUnlimited") : t("tour.after.hearts", { h: hours })}
         </Row>
       </ul>
       <Button block onClick={() => useApp.getState().noteTip("after-first")}>

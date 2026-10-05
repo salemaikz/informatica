@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { showPageTip } from "@/lib/tour";
+import { entVisible } from "@/lib/school";
 import type { TipId } from "@/lib/tips";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
@@ -27,6 +28,7 @@ export function PageTip({ id }: { id: PageTipId }) {
   const { t } = useT();
   const tips = useApp((s) => s.tips);
   const noteTip = useApp((s) => s.noteTip);
+  const ent = useApp((s) => entVisible(s.profile));
   const shown = showPageTip(tips, id);
 
   // Ушли со страницы, пока карточка была видна, — считаем показанной. Отложено на такт: двойной монтаж React в разработке
@@ -50,7 +52,7 @@ export function PageTip({ id }: { id: PageTipId }) {
   return (
     <div role="note" className="flex items-center gap-3 rounded-3xl border-2 border-border bg-surface p-3 animate-fade-in">
       <Mascot mood="happy" size={44} className="shrink-0" />
-      <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{t(TEXT[id])}</p>
+      <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{t(id === "page-practice" && !ent ? "tour.page.practice.school" : TEXT[id])}</p>
       <button
         type="button"
         onClick={() => noteTip(id)}
