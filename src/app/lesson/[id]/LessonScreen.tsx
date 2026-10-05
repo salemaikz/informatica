@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { getLesson } from "@/content/course";
 import { useT } from "@/i18n/useT";
+import { track } from "@/lib/analytics";
 import { buildCheck } from "@/lib/drill";
 import { ENTRY_COST, canAfford, lessonCost } from "@/lib/economy";
 import { runPaid, usableRun } from "@/lib/lesson-run";
@@ -11,6 +12,7 @@ import { useApp } from "@/lib/store";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResumeLesson } from "@/components/lesson/ResumeLesson";
 import { questionsAhead } from "@/components/lesson/run-snapshot";
+import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
 import { readHearts } from "@/components/economy/HeartsBar";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
@@ -41,6 +43,9 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
   const cost = asCheck ? ENTRY_COST.check : lessonCost(lesson);
   // Продолжение уже оплаченного входа (или без заданий впереди) бесплатно — на входе сердечки не нужны.
   const need = saved && choice !== "fresh" && (entry.paid || !entry.ahead) ? 0 : cost;
+  // Где закончились сердечки (#69): на входе (полноэкранное окно) и при выборе «Продолжить» / «Начать заново».
+  const outWhere = asCheck ? "check" : "lesson";
+  useHeartsOutOnEntry(need, outWhere);
 
   const restart = () => {
     useApp.getState().clearLessonRun(id);
@@ -48,14 +53,22 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
   };
   // «Начать заново» стоит всегда: не хватает сердечек — окно покупки, сохранение не трогаем.
   const askRestart = () => {
+    track({ e: "resume_choice", lesson: lesson.id, choice: "restart" });
     if (canAfford(readHearts(), cost)) restart();
-    else setShort("restart");
+    else {
+      track({ e: "hearts_out", where: outWhere });
+      setShort("restart");
+    }
   };
   // «Продолжить»: оплачен ли вход, проверяем в момент нажатия — 20 минут могли истечь, пока открыт экран выбора.
   const askContinue = () => {
+    track({ e: "resume_choice", lesson: lesson.id, choice: "continue" });
     const free = !entry.ahead || (!!saved && runPaid(saved, Date.now()));
     if (free || canAfford(readHearts(), cost)) setChoice("continue");
-    else setShort("continue");
+    else {
+      track({ e: "hearts_out", where: outWhere });
+      setShort("continue");
+    }
   };
 
   const theoryHref = `/theory/${lesson.id}`;

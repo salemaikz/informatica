@@ -18,6 +18,7 @@ import { formatFactor, nextLessonId } from "@/lib/drill";
 import { getLesson } from "@/content/course";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { masteryLevel } from "@/lib/mastery";
+import { breakdownOf } from "@/lib/player-events";
 import { skillById } from "@/content/skills";
 import { useT } from "@/i18n/useT";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -35,6 +36,13 @@ export const MASTERY_COLOR = {
   weak: "var(--danger)",
   progress: "var(--warning)",
   mastered: "var(--success)",
+} as const;
+
+/** Плитка точности по смыслу цвета (токены, обе темы). */
+const ACC_TILE = {
+  success: { cls: "border-success text-success", bg: "bg-success" },
+  warning: { cls: "border-warning text-warning-strong", bg: "bg-warning" },
+  danger: { cls: "border-danger text-danger", bg: "bg-danger" },
 } as const;
 
 function formatTime(sec: number) {
@@ -58,8 +66,10 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
     return;
   }
   onState({ status: "loading" });
-  const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
-  const skills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
+  // Пропуск — не ошибка и не повод судить об освоении: в контекст отзыва он не попадает (как и раньше, до записи пропусков).
+  const answered = result.answers.filter((a) => !a.skipped);
+  const mistakes = answered.filter((a) => !a.correct && !a.retry);
+  const skills = [...new Set(answered.map((a) => a.skill).filter(Boolean))] as string[];
   lessonFeedback({
     context: buildStudentContext(app),
     lesson: result.title,
@@ -123,8 +133,12 @@ export function Results({
 
   const accuracy = Math.round(result.accuracy * 100);
   const totalXp = result.xp + bonusXp;
-  const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
-  const sessionSkills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
+  // Пропущенное задание — не ошибка (#66): в «ошибки» и в темы урока не попадает.
+  const answered = result.answers.filter((a) => !a.skipped);
+  const mistakes = answered.filter((a) => !a.correct && !a.retry);
+  const sessionSkills = [...new Set(answered.map((a) => a.skill).filter(Boolean))] as string[];
+  // Из чего сложилась точность: сам / с подсказкой / пропущено (сумма = предъявлено).
+  const mix = breakdownOf(result);
 
   // Защита от двойного клика: второй клик «Продолжить» из урока не должен сразу уводить с итогов.
   const [armed, setArmed] = useState(false);
@@ -160,7 +174,8 @@ export function Results({
   }, []);
 
   const staticFeedback = accuracy >= 90 ? t("res.static.great") : accuracy >= 60 ? t("res.static.good") : t("res.static.ok");
-  const accTone = accuracy >= 80 ? "text-success" : accuracy >= 50 ? "text-warning-strong" : "text-danger";
+  // Точность по смыслу цвета: зелёная от 80%, янтарная 50–79%, красная ниже 50%.
+  const accTile = ACC_TILE[accuracy >= 80 ? "success" : accuracy >= 50 ? "warning" : "danger"];
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 px-4 pb-32 pt-8">
@@ -192,12 +207,13 @@ export function Results({
       <div className="grid grid-cols-3 gap-3">
         {[
           { icon: <Zap size={18} />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
-          { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: clsx("border-success", accTone), bg: "bg-success" },
-          { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-primary" },
+          { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: accTile.cls, bg: accTile.bg },
+          { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-primary", hint: t("res2.timeHint") },
         ].map((s, i) => (
           // Плитки въезжают лесенкой, числа «накручиваются» следом за своей плиткой.
           <m.div
             key={i}
+            title={"hint" in s ? s.hint : undefined}
             className={clsx("overflow-hidden rounded-2xl border-2", s.cls)}
             initial={{ opacity: 0, y: 28, scale: 0.85 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -212,6 +228,15 @@ export function Results({
           </m.div>
         ))}
       </div>
+
+      {/* Точность честная (#66): из скольких заданий сам, сколько с подсказкой и пропущено. Нейтральным цветом — это не оценка. */}
+      {mix.asked > 0 && (
+        <ul aria-label={t("res2.breakdown")} className="-mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs font-bold text-muted">
+          <li>{t("res2.self", { x: mix.self, n: mix.asked })}</li>
+          {mix.hinted > 0 && <li>{t("res2.hinted", { n: mix.hinted })}</li>}
+          {mix.skipped > 0 && <li>{t("res2.skipped", { n: mix.skipped })}</li>}
+        </ul>
+      )}
 
       {(chips > 0 || heart) && (
         <div className="flex flex-wrap justify-center gap-2">

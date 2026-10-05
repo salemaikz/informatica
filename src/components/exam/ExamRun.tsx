@@ -24,6 +24,8 @@ import {
 } from "@/lib/exam-store";
 import { examWrongItems } from "@/lib/ent-steps";
 import { canAfford, ENTRY_COST } from "@/lib/economy";
+import { track } from "@/lib/analytics";
+import { examFinishEvent } from "@/lib/player-events";
 import { useApp } from "@/lib/store";
 import type { EntTopicId } from "@/lib/types";
 import { ignoreKey } from "@/lib/keys";
@@ -157,6 +159,8 @@ export function ExamRun({ kind, seed, topics: topicsProp, unit }: ExamRunProps) 
               await deleteAttempt(attempt.id);
               return "short";
             }
+            // Статистика (#69): попытка создана и оплачена. Продолжение начатой — не старт.
+            track({ e: "exam_start", kind: attempt.kind });
             setPhase({ name: "run", attempt });
             return "started";
           }}
@@ -257,6 +261,7 @@ function Intro({
                 if (res === "short") {
                   setBusy(false);
                   setNoHearts(true);
+                  track({ e: "hearts_out", where: paper.kind === "unit" ? "checkpoint" : "exam" });
                 }
               })
               .catch(() => setBusy(false));
@@ -419,7 +424,10 @@ function Runner({ initial }: { initial: ExamAttempt }) {
     const app = useApp.getState();
     // Название для истории тестов — на языке ученика в момент записи.
     const title = attempt.kind === "unit" && attempt.unit ? examTitle("unit", attempt.unit, t, l) : undefined;
-    app.recordExam(buildSummary(attempt, now, title), skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
+    const summary = buildSummary(attempt, now, title);
+    app.recordExam(summary, skillScoresOf(paper, attempt.answers), examWrongItems(paper, attempt.answers, app.profile.lang));
+    // Статистика (#69): конец попытки — ровно здесь (doneRef не пускает второй раз), а не на экране итога, который открывают из истории снова.
+    track(examFinishEvent(attempt.kind, summary.points, summary.maxPoints));
     const { paper: _paper, ...state } = attempt;
     void _paper;
     try {

@@ -8,6 +8,8 @@ import type { GameMode, GameResult } from "@/games/types";
 import { gameById } from "@/games/registry";
 import { GAME_COMPONENTS } from "@/games/components";
 import { gameStatKey, type GameReward } from "@/lib/games";
+import { track } from "@/lib/analytics";
+import { gameFinishEvent } from "@/lib/player-events";
 import { useApp } from "@/lib/store";
 import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, gameSupportsSkills } from "@/lib/drill";
 import { entryCost } from "@/lib/economy";
@@ -85,8 +87,11 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
   const start = () => {
     if (!useApp.getState().payEntry(cost).ok) {
       setNoHearts(true);
+      track({ e: "hearts_out", where: "game" });
       return;
     }
+    // Статистика (#69): каждый запуск — своё событие, «урок игрой» помечен.
+    track({ e: "game_start", game: id, lesson: lesson ? 1 : 0 });
     const next = round + 1;
     setRound(next);
     setPhase({ name: "playing", round: next });
@@ -94,6 +99,8 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
 
   const finish = (result: GameResult) => {
     const reward = recordGame(id, result, mode);
+    const doneEvent = gameFinishEvent(id, result.correct, result.total);
+    if (doneEvent) track(doneEvent);
     if (sound) playSound("complete");
     if (reward.newBest && stat) {
       void import("canvas-confetti").then(({ default: confetti }) =>
@@ -111,13 +118,19 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
 
   const exitHref = lesson ? "/learn" : "/practice";
 
+  // Выход крестиком посреди игры (#69): раунд брошен, итогов не будет.
+  const close = () => {
+    if (phase.name === "playing") track({ e: "game_quit", game: id });
+    router.push(exitHref);
+  };
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4">
           <button
             type="button"
-            onClick={() => router.push(exitHref)}
+            onClick={close}
             aria-label={t("common.close")}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2"
           >

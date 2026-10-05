@@ -22,6 +22,17 @@ export function retryItem(step: Step): PlayerQueueItem {
   return { step, retry: true, key: `${step.id}:retry` };
 }
 
+/**
+ * Активное время прохождения, мс (#68): сохранённое до продолжения + то, что набежало на часах вкладки (lib/active-clock.ts)
+ * с момента показа плеера. clockAtMount — показание часов при монтировании, clockNow — сейчас.
+ * Простой, фон и закрытая вкладка в сумму не попадают; часы сбросились (вкладка перезапущена) — не уходим в минус.
+ */
+export function activeElapsed(savedMs: number, clockAtMount: number, clockNow: number): number {
+  const saved = Number.isFinite(savedMs) ? Math.max(0, savedMs) : 0;
+  const gained = Number.isFinite(clockNow - clockAtMount) ? Math.max(0, clockNow - clockAtMount) : 0;
+  return Math.round(saved + gained);
+}
+
 export interface RunSnapshotInput {
   lessonId: string;
   /** Шаги урока (для отпечатка sig) — те же, что у usableRun. */
@@ -35,7 +46,7 @@ export interface RunSnapshotInput {
   combo: number;
   maxCombo: number;
   skipped: number;
-  /** Время в уроке к этому моменту, мс. */
+  /** Активное время в уроке к этому моменту, мс (activeElapsed). */
   activeMs: number;
   xpFactor: number;
   /** Чипов заработано в этом прохождении к этому моменту. */

@@ -26,6 +26,7 @@ import {
   type DrillMode,
 } from "@/lib/drill";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
+import { useHeartsOutOnEntry } from "@/components/lesson/useHeartsOutOnEntry";
 import { EntryGate } from "@/components/economy/EntryGate";
 import { ButtonLink } from "@/components/ui/Button";
 
@@ -85,6 +86,8 @@ export function DrillScreen({ mode, skill, unit, topic, entry }: { mode: DrillMo
   const [outcome, setOutcome] = useState<ExternOutcome | null>(null);
   const completeLessons = useApp((s) => s.completeLessons);
   const markReviewed = useApp((s) => s.markReviewed);
+  // Экстерн стоит 2 сердечка (#40): не хватает на входе — «сердечки закончились» (#69). Пустой набор экран не открывает — события нет.
+  useHeartsOutOnEntry(mode === "extern" && session.steps.length ? ENTRY_COST.extern : 0, "extern");
 
   const onSessionFinish = useCallback(
     (result: SessionResult) => {
