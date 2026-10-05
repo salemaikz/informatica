@@ -106,7 +106,7 @@ export const UNITS: Unit[] = [
       { id: "py-3-loops", title: { ru: "Циклы", kk: "Циклдер" }, status: "soon" },
       // Микроуроки цепочки «range» (этап 14): перед подробным уроком про for.
       { id: "py-3a-range", title: { ru: "range(n): повторить n раз", kk: "range(n): n рет қайталау" }, status: "soon" },
-      { id: "py-3a-range2", title: { ru: "range(a, b): от и до", kk: "range(a, b): бастап және дейін" }, status: "soon" },
+      { id: "py-3a-range2", title: { ru: "range(a, b): от и до", kk: "range(a, b): бастау мен тоқтау" }, status: "soon" },
       { id: "py-3a-step", title: { ru: "range с шагом и счёт вниз", kk: "Қадамы бар range және кері санау" }, status: "soon" },
       { id: "py-3b-for", title: { ru: "Цикл for и range подробно", kk: "for циклі және range толығырақ" }, status: "soon" },
       { id: "py-3c-while", title: { ru: "Цикл while, break и continue", kk: "while циклі, break және continue" }, status: "soon" },
