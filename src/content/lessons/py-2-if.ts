@@ -473,17 +473,18 @@ export const lesson: Lesson = {
       lines: [
         [
           { ru: "Пусть x = −4. Первое условие x > 0 даёт ", kk: "x = −4 болсын. Бірінші x > 0 шарты мынаны береді: " },
-          { blank: ["False"], mode: "text" },
+          { blank: ["False"], mode: "text", label: { ru: "False", kk: "False" } },
         ],
         [
           { ru: "Тело if пропускаем и проверяем elif: x < 0 даёт ", kk: "if ішін өткізіп, elif тексереміз: x < 0 шарты мынаны береді: " },
-          { blank: ["True"], mode: "text" },
+          { blank: ["True"], mode: "text", label: { ru: "True", kk: "True" } },
         ],
         [
           { ru: "Значит, выведется слово: ", kk: "Демек, мына сөз шығарылады: " },
-          { blank: ["minus"], mode: "text" },
+          { blank: ["minus"], mode: "text", label: { ru: "minus", kk: "minus" } },
         ],
       ],
+      bank: [{ ru: "plus", kk: "plus" }, { ru: "zero", kk: "zero" }],
       hint: {
         ru: "Сравни −4 с нулём: отрицательное число меньше нуля. Каждое условие даёт True или False.",
         kk: "−4 санын нөлмен салыстыр: теріс сан нөлден кіші. Әр шарт True немесе False береді.",
