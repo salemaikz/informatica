@@ -7,6 +7,7 @@ import { CASE_WIN_INDEX, type LevelCaseRoll } from "@/lib/level-case";
 import { playSound, type SoundName } from "@/lib/sound";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
+import { LevelBadge } from "@/components/app/LevelBadge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/mascot/Mascot";
 import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
@@ -188,7 +189,10 @@ export function LevelCase({
               </m.span>
             </div>
             <m.div className="flex flex-col gap-1.5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.15 }}>
-              <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("case.level", { n: level })}</p>
+              <div className="flex items-center justify-center gap-2">
+                <LevelBadge level={level} size="md" />
+                <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("gamify.newLevel")}</p>
+              </div>
               <h1 className="text-balance text-3xl font-extrabold leading-tight">{t("case.title")}</h1>
               <p className="text-balance font-semibold text-muted">{t("case.sub")}</p>
             </m.div>
@@ -206,7 +210,10 @@ export function LevelCase({
         {phase === "spin" && roll && (
           <>
             <div className="flex flex-col gap-1">
-              <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("case.level", { n: level })}</p>
+              <div className="flex items-center justify-center gap-2">
+                <LevelBadge level={level} size="md" />
+                <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("gamify.newLevel")}</p>
+              </div>
               <h1 className="text-balance text-2xl font-extrabold leading-tight">{t("case.spinning")}</h1>
             </div>
             <div className="relative -mx-5 h-36 w-[calc(100%+2.5rem)] overflow-hidden" aria-hidden>

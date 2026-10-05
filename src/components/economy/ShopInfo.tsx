@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { AI_COST, CHIP_REWARD, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
+import { ACHIEVEMENT_CHIPS, AI_COST, CHIP_REWARD, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -168,14 +168,14 @@ export function HeartRules() {
   );
 }
 
-const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips: number }[] = [
+const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips: number; /** Верхняя граница, если награда от — до (достижения по редкости). */ chipsMax?: number }[] = [
   { id: "lessonFirst", icon: BookOpen, key: "economy.earn.lessonFirst", chips: CHIP_REWARD.lessonFirst },
   { id: "lessonRepeat", icon: RefreshCw, key: "economy.earn.lessonRepeat", chips: CHIP_REWARD.lessonRepeat },
   { id: "perfect", icon: BadgeCheck, key: "economy.earn.perfect", chips: CHIP_REWARD.perfect },
   { id: "dailyGoal", icon: Target, key: "economy.earn.dailyGoal", chips: CHIP_REWARD.dailyGoal },
   { id: "unit", icon: ClipboardCheck, key: "economy.earn.unit", chips: CHIP_REWARD.unit },
   { id: "exam", icon: GraduationCap, key: "economy.earn.exam", chips: CHIP_REWARD.exam },
-  { id: "achievement", icon: Trophy, key: "economy.earn.achievement", chips: CHIP_REWARD.achievement },
+  { id: "achievement", icon: Trophy, key: "economy.earn.achievement", chips: ACHIEVEMENT_CHIPS.common, chipsMax: ACHIEVEMENT_CHIPS.legendary },
 ];
 
 /** «Как заработать чипы»: за что и сколько (числа — CHIP_REWARD из economy.ts, решение #105). */
@@ -192,7 +192,7 @@ export function EarnList() {
             <span className="min-w-0 flex-1 font-extrabold">{t(r.key)}</span>
             <Pill tone="gold" className="py-1 text-sm">
               +<Cpu size={13} />
-              {r.chips}
+              {r.chipsMax ? `${r.chips}–${r.chipsMax}` : r.chips}
             </Pill>
           </li>
         ))}

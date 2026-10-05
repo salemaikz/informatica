@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACHIEVEMENT_CHIPS,
   AI_COST,
   AI_DAILY_CAP,
   AI_UNITS,
@@ -659,7 +660,11 @@ describe("чипы: заработок", () => {
   });
 
   it("CHIP_REWARD: числа решения #105", () => {
-    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, perfect: 5, dailyGoal: 5, unit: 10, exam: 10, achievement: 10 });
+    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, perfect: 5, dailyGoal: 5, unit: 10, exam: 10 });
+  });
+
+  it("ACHIEVEMENT_CHIPS: достижение платит по редкости (5 / 10 / 20 / 40)", () => {
+    expect(ACHIEVEMENT_CHIPS).toEqual({ common: 5, rare: 10, epic: 20, legendary: 40 });
   });
 
   it("lessonChips / perfectChips: урок 3 (повтор 1), идеально 5; множитель тарифа и бустера", () => {

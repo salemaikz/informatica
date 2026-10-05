@@ -16,7 +16,8 @@ import type {
   SchoolDirection,
   Track,
 } from "./types";
-import { bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
+import { achievementById, bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
+import { earnedByState } from "./achievement-rules";
 import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
@@ -48,6 +49,7 @@ import type { GameMode, GameResult } from "@/games/types";
 import { dropRun, putRun, sanitizeLessonRuns, type LessonRun } from "./lesson-run";
 import { putTheoryPaid, sanitizeTheoryPaid, shouldPayTheory, theoryCost, type TheoryPaid } from "./theory-pay";
 import {
+  ACHIEVEMENT_CHIPS,
   addHearts,
   applyAiUsage,
   buyItem,
@@ -526,8 +528,11 @@ function settleChips(prev: AppState, next: AppState, extra: { base: number; reas
   const dayBefore = prev.days[today]?.xp ?? 0;
   const dayAfter = next.days[today]?.xp ?? 0;
   if (goal > 0 && dayBefore < goal && dayAfter >= goal) gains.push({ amount: earnAmount(CHIP_REWARD.dailyGoal, mult), reason: "dailyGoal" });
-  const newAch = Object.keys(next.achievements).length - Object.keys(prev.achievements).length;
-  if (newAch > 0) gains.push({ amount: earnAmount(CHIP_REWARD.achievement * newAch, mult), reason: "achievement" });
+  // Чипы за достижения — по редкости (ACHIEVEMENT_CHIPS, этап 16В): складываем за все новые разом.
+  const achBase = Object.keys(next.achievements)
+    .filter((id) => !prev.achievements[id])
+    .reduce((sum, id) => sum + (ACHIEVEMENT_CHIPS[achievementById(id)?.rarity ?? "common"]), 0);
+  if (achBase > 0) gains.push({ amount: earnAmount(achBase, mult), reason: "achievement" });
   for (const e of extra) gains.push({ amount: earnAmount(e.base, mult), reason: e.reason });
   let wallet = next.wallet;
   let ledger = next.ledger;
@@ -569,6 +574,8 @@ function evaluate(state: AppState): Partial<AppState> {
   if (solid("ns.bin2dec") && solid("ns.dec2bin")) {
     apply("binary_master");
   }
+  // Достижения этапа 16В: уроки, серии, пробники, уровни, код, освоение (lib/achievement-rules.ts).
+  for (const id of earnedByState(s)) apply(id);
   return { achievements: s.achievements, newAchievements: s.newAchievements };
 }
 

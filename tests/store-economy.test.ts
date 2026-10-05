@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp } from "@/lib/store";
-import { MINUTE, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ANSWERS, START_WALLET, CHIP_REWARD, heartsView } from "@/lib/economy";
+import { ACHIEVEMENT_CHIPS, MINUTE, PLAN_FEATURES, PRACTICE_HEART_DAILY, PRACTICE_HEART_MIN_ANSWERS, START_WALLET, CHIP_REWARD, heartsView } from "@/lib/economy";
 import { todayKey } from "@/lib/text";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
 import type { ExamSummary } from "@/lib/store";
@@ -106,30 +106,48 @@ describe("стор: чипы за опыт и бонусы", () => {
     expect(st().ledger.filter((e) => e.reason === "dailyGoal")).toHaveLength(1);
   });
 
-  it("достижение даёт +10 чипов, повторное — нет", () => {
+  it("достижение даёт чипы по редкости, повторное — нет", () => {
+    st().unlock("first_lesson"); // обычное
+    expect(chips()).toBe(START + ACHIEVEMENT_CHIPS.common);
+    expect(st().ledger[0]).toMatchObject({ reason: "achievement", amount: ACHIEVEMENT_CHIPS.common });
     st().unlock("first_lesson");
-    expect(chips()).toBe(START + 10);
-    expect(st().ledger[0]).toMatchObject({ reason: "achievement", amount: 10 });
-    st().unlock("first_lesson");
-    expect(chips()).toBe(START + 10);
+    expect(chips()).toBe(START + ACHIEVEMENT_CHIPS.common);
     st().unlock("gamer");
     st().unlock("drill");
+    expect(chips()).toBe(START + 3 * ACHIEVEMENT_CHIPS.common);
+  });
+
+  it("редкое, эпическое и легендарное достижения платят 10 / 20 / 40", () => {
+    st().unlock("solver"); // редкое
+    expect(chips()).toBe(START + 10);
+    st().unlock("binary_master"); // эпическое
     expect(chips()).toBe(START + 30);
+    st().unlock("level_20"); // легендарное
+    expect(chips()).toBe(START + 70);
+  });
+
+  it("несколько достижений за одно действие складываются в одну строку истории", () => {
+    // Пробный ЕНТ на 96%: «пробный старт» и «высокий балл» приходят вместе
+    st().recordExam(exam({ points: 48, maxPoints: 50 }), { "ns.bin2dec": [1] });
+    const ach = st().ledger.filter((e) => e.reason === "achievement");
+    expect(ach).toHaveLength(1);
+    // exam_first (редкое, 10) + exam_90 (легендарное, 40)
+    expect(ach[0].amount).toBe(ACHIEVEMENT_CHIPS.rare + ACHIEVEMENT_CHIPS.legendary);
   });
 
   it("пробный период (Безлимит ×2) удваивает чипы за награды", () => {
     st().startTrial();
     st().recordAnswer(rec(), 10); // за опыт чипов нет
     expect(chips()).toBe(START);
-    st().unlock("first_lesson"); // 10 × 2
+    st().unlock("solver"); // редкое: 10 × 2
     expect(chips()).toBe(START + 20);
   });
 
-  it("бустер ×2 удваивает награду (достижение 10 → 20)", () => {
+  it("бустер ×2 удваивает награду (редкое достижение 10 → 20)", () => {
     fund(); // бустер за 40 чипов
     expect(st().buy("boost-15")).toEqual({ ok: true });
     const before = chips();
-    st().unlock("first_lesson");
+    st().unlock("solver");
     expect(chips() - before).toBe(20);
   });
 });
@@ -183,7 +201,7 @@ describe("стор: finishSession", () => {
   it("тренировка чипов не даёт", () => {
     useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } });
     st().finishSession(drill(8));
-    expect(chips()).toBe(START + CHIP_REWARD.achievement); // только достижение «Тренер сам себе»
+    expect(chips()).toBe(START + ACHIEVEMENT_CHIPS.common); // только достижение «Тренер сам себе»
     expect(st().ledger.every((e) => e.reason === "achievement")).toBe(true);
   });
 
