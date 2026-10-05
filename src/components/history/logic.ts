@@ -9,7 +9,7 @@ export const HISTORY_FILTERS: readonly HistoryFilter[] = ["all", "lessons", "dri
 
 type Translate = (key: DictKey, params?: Record<string, string | number>) => string;
 
-const DRILL_MODES = new Set(["smart", "mistakes", "history", "skill", "review", "extern", "topic"]);
+const DRILL_MODES = new Set(["smart", "mistakes", "history", "skill", "review", "extern", "topic", "practice", "recap", "minitest", "context"]);
 const EXAM_KINDS = new Set(["mini", "full", "topic"]);
 
 /** Цвет результата: зелёный ≥ 80%, янтарный 50–79%, красный < 50%. */

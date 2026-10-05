@@ -6,6 +6,10 @@ export const course3Dict = {
   "course3.practice.title": { ru: "Практика: {group}", kk: "Практика: {group}" },
   "course3.recap.title": { ru: "Повторение: {unit}", kk: "Қайталау: {unit}" },
   "course3.minitest.title": { ru: "Мини-тест: {group}", kk: "Шағын тест: {group}" },
+  "course3.minitest.empty": {
+    ru: "Для мини-теста по этой теме пока мало заданий в формате ЕНТ — попробуй практику.",
+    kk: "Бұл тақырып бойынша шағын тестке ҰБТ форматындағы тапсырмалар әзірге аз — практиканы байқап көр.",
+  },
   "course3.empty": {
     ru: "Здесь пока нечего тренировать — сначала пройди хотя бы один урок группы.",
     kk: "Мұнда әзірге жаттығатын ештеңе жоқ — алдымен топтың кемінде бір сабағын өт.",
@@ -47,5 +51,4 @@ export const course3Dict = {
   // ---- Итоги мини-теста (P2) ----
   "course3.minitest.points": { ru: "Баллы как на ЕНТ: {points} из {max}", kk: "ҰБТ бойынша балл: {points} / {max}" },
   "course3.minitest.weak": { ru: "Слабое место: {skill}", kk: "Әлсіз тұс: {skill}" },
-  "course3.toMap": { ru: "К карте курса", kk: "Курс картасына" },
 } satisfies Record<string, L>;

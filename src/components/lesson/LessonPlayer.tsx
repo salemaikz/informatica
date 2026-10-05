@@ -201,7 +201,8 @@ export function LessonPlayer({
   // Сохраняем только урок в режиме «Учиться»; «Проверить себя» и тренировка собираются заново каждый раз.
   const persist = saveRun && kind === "lesson" && !!lessonId && (via ?? "learn") === "learn";
   // Экстерн начинают с карты курса — туда и выход; остальные тренировки — в «Практику».
-  const exitHref = kind === "lesson" || mode === "extern" ? "/learn" : "/practice";
+  // Урок, экстерн и узлы курса 3.0 (практика, повторение, мини-тест) начинаются с карты — туда и возвращаемся.
+  const exitHref = kind === "lesson" || mode === "extern" || mode === "practice" || mode === "recap" || mode === "minitest" ? "/learn" : "/practice";
 
   const total = steps.length;
   const [queue, setQueue] = useState<PlayerQueueItem[]>(() => init?.queue ?? freshQueue(steps));
@@ -324,6 +325,7 @@ export function LessonPlayer({
         mode,
         // Плановая длина (заданий в сессии) — награда за прохождение по длине (этап 14).
         planned: steps.filter(isQuestion).length,
+        ...(kind === "lesson" && lessonId && getLesson(lessonId)?.micro ? { micro: true } : {}),
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp, heart } = finishSession(result);
@@ -465,10 +467,11 @@ export function LessonPlayer({
       // Сердечки за ошибки не снимаются (#40): плата — за вход, при первом ответе (ensurePaid).
       noteCombo(newCombo);
       const newMaxCombo = Math.max(maxCombo, newCombo);
-      // Развёрнутое решение засчитываем сразу (оно не повторяется), остальное — верный ответ или повтор ошибки.
-      const newDone = done + (res.correct || item.retry || question.type === "solution" ? 1 : 0);
-      // Ошибку повторяем один раз в конце («работа над ошибками»). Развёрнутые решения не повторяем — это дорого.
-      const needRetry = !res.correct && !item.retry && question.type !== "solution";
+      // Ошибку повторяем один раз в конце («работа над ошибками»). Не повторяем развёрнутое решение (дорого), задачу с кодом
+      // (эталон уже показан) и задания теста (мини-тест — как на ЕНТ, этап 14): они засчитываются сразу.
+      const noRetry = question.type === "solution" || question.type === "code" || testMode;
+      const newDone = done + (res.correct || item.retry || noRetry ? 1 : 0);
+      const needRetry = !res.correct && !item.retry && !noRetry;
       const newQueue = needRetry ? [...queue, retryItem(question)] : queue;
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
@@ -488,7 +491,7 @@ export function LessonPlayer({
       else giveFeedback("wrong");
       if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
-    [question, combo, maxCombo, done, pos, queue, records, xp, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor, persistRun, stableSteps, stepMs],
+    [question, combo, maxCombo, done, pos, queue, records, xp, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor, persistRun, stableSteps, stepMs, testMode],
   );
 
   const check = useCallback(
@@ -674,6 +677,7 @@ export function LessonPlayer({
         via={via}
         xpFactor={xpFactor}
         extra={resultsExtra}
+        doneHref={exitHref}
       />
     );
   }

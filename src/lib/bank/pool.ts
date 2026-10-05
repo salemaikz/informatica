@@ -15,8 +15,18 @@ export interface PoolInput {
   shorts?: ShortQuestion[];
 }
 
-/** Перемешивает варианты choice/multi (вместе с whyWrong и индексами верных). Остальные типы — без изменений. */
+/**
+ * Перемешивает варианты choice/multi (вместе с whyWrong и индексами верных) и описания «соответствия» ЕНТ (entmatch,
+ * с пересчётом answer). Остальные типы — без изменений.
+ */
 export function shuffleOptions(step: QuestionStep, seed: number): QuestionStep {
+  if (step.type === "entmatch") {
+    const order = shuffle(
+      step.choices.map((_, i) => i),
+      seeded(seed),
+    );
+    return { ...step, choices: order.map((i) => step.choices[i]), answer: step.answer.map((a) => order.indexOf(a)) };
+  }
   if (step.type !== "choice" && step.type !== "multi") return step;
   const rand = seeded(seed);
   const order = shuffle(

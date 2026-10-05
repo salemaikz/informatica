@@ -1,5 +1,6 @@
 import "server-only";
 import { LESSONS } from "@/content/course";
+import { withEntBoss } from "@/lib/ent-boss";
 import { GAMES, GAMES_WIP } from "@/games/registry";
 import type { AnalyticsEvent } from "@/lib/analytics";
 import type { DrillMode } from "@/lib/drill";
@@ -15,7 +16,7 @@ import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, SHOP_ITEMS } from "@/lib/economy
 export const OTHER_ID = "other";
 
 /** Режимы тренировки (lib/drill.ts → DrillMode). Тест сверяет список с подписями страницы владельца. */
-export const DRILL_MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history"];
+export const DRILL_MODES: readonly DrillMode[] = ["smart", "mistakes", "skill", "review", "extern", "topic", "history", "practice", "recap", "minitest", "context"];
 /** Шаги короткого онбординга (app/onboarding/page.tsx → StepId). */
 export const ONBOARDING_STEPS: readonly string[] = ["lang", "name", "track", "date", "target", "grade"];
 
@@ -26,8 +27,9 @@ function registries() {
   if (lazy) return lazy;
   const tasks = new Set<string>();
   const bareSteps = new Set<string>();
+  // Шаги урока вместе с «боссом» ЕНТ, который вставляет код (этап 14): клиент шлёт и их id (ent:…).
   for (const lesson of Object.values(LESSONS)) {
-    for (const s of lesson.steps) {
+    for (const s of withEntBoss(lesson).steps) {
       tasks.add(`${lesson.id}:${s.id}`);
       bareSteps.add(s.id);
     }

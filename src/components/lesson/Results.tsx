@@ -104,6 +104,7 @@ export function Results({
   via,
   xpFactor = 1,
   extra,
+  doneHref,
 }: {
   kind: "lesson" | "drill";
   lessonId?: string;
@@ -122,6 +123,8 @@ export function Results({
   xpFactor?: number;
   /** Дополнительный блок под заголовком (например, итог экстерна). */
   extra?: ReactNode;
+  /** Куда ведёт «Продолжить»: по умолчанию урок — на карту, тренировка — в «Практику». */
+  doneHref?: string;
 }) {
   const router = useRouter();
   const { t, l } = useT();
@@ -394,7 +397,7 @@ export function Results({
 
       <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-bg pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <div className="mx-auto flex max-w-xl px-4">
-          <Button size="lg" block disabled={!armed} onClick={() => router.push(kind === "lesson" ? "/learn" : "/practice")}>
+          <Button size="lg" block disabled={!armed} onClick={() => router.push(doneHref ?? (kind === "lesson" ? "/learn" : "/practice"))}>
             {t("common.continue")}
           </Button>
         </div>

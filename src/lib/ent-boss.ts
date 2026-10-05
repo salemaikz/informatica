@@ -1,5 +1,6 @@
 import { ENT_POOL } from "@/content/ent";
 import { entRef, entStepFromRef } from "./ent-steps";
+import { shuffleEntItem } from "./exam";
 import { isQuestion } from "./evaluate";
 import { hashString } from "./text";
 import type { EntItem, EntMatch, EntMulti, Lesson, Step } from "./types";
@@ -15,15 +16,31 @@ const byId = (a: EntItem, b: EntItem): number => (a.id < b.id ? -1 : a.id > b.id
 
 /**
  * Задание из кандидатов одного вида: сначала собственные задания урока (id «<урок>:…»), иначе любое с навыком урока.
- * Выбор детерминирован по id урока; уже стоящие в уроке (по ссылке ent:<id>) пропускаем.
+ * Выбор детерминирован: задание с наименьшим hash(урок + задание) — новые задания в банке почти никогда не меняют выбор,
+ * и незаконченные прохождения не сбрасываются с каждым пополнением банка. Уже стоящие в уроке (ent:<id>) пропускаем.
  */
 function pickFor<T extends EntMatch | EntMulti>(lesson: Lesson, items: readonly T[], taken: ReadonlySet<string>): T | undefined {
   const free = items.filter((i) => !taken.has(entRef(i.id)));
   const own = free.filter((i) => i.id.startsWith(`${lesson.id}:`));
   const bySkill = free.filter((i) => lesson.skills.includes(i.skill));
-  const from = (own.length ? own : bySkill).sort(byId);
-  return from.length ? from[hashString(lesson.id) % from.length] : undefined;
+  const from = own.length ? own : bySkill;
+  let best: T | undefined;
+  let bestKey = Infinity;
+  for (const i of [...from].sort(byId)) {
+    const key = hashString(`${lesson.id}|${i.id}`);
+    if (key < bestKey) {
+      best = i;
+      bestKey = key;
+    }
+  }
+  return best;
 }
+
+/**
+ * Шаг из задания с перемешанными вариантами: в банке ЕНТ верный ответ чаще стоит первым (у «соответствия» A — 1, B — 2
+ * в 39% заданий) — без перемешивания ответ угадывается по шаблону. Порядок постоянный для урока (seed — id урока).
+ */
+const bossStep = (lesson: Lesson, item: EntMatch | EntMulti) => entStepFromRef(entRef(item.id), [shuffleEntItem(item, hashString(lesson.id))]);
 
 /** Куда вставлять: сразу после последнего задания ЕНТ, а если таких нет — перед хвостом из шагов без ответа. */
 export function entBossIndex(steps: readonly Step[]): number {
@@ -50,12 +67,12 @@ export function withEntBoss(lesson: Lesson, pool: readonly EntItem[] = ENT_POOL)
 
   if (!lesson.steps.some((s) => s.type === "entmatch")) {
     const item = pickFor(lesson, pool.filter((i): i is EntMatch => i.kind === "match"), taken);
-    const step = item && entStepFromRef(entRef(item.id), pool);
+    const step = item && bossStep(lesson, item);
     if (step) add.push(step);
   }
   if (!lesson.steps.some(isEntMulti)) {
     const item = pickFor(lesson, pool.filter((i): i is EntMulti => i.kind === "multi"), taken);
-    const step = item && item.options.length === 6 ? entStepFromRef(entRef(item.id), pool) : undefined;
+    const step = item && item.options.length === 6 ? bossStep(lesson, item) : undefined;
     if (step) add.push(step);
   }
   if (!add.length) return lesson;

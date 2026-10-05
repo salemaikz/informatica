@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp } from "@/lib/store";
-import { XP, lengthFactor } from "@/lib/gamification";
+import { XP, lengthFactor, rewardFactor } from "@/lib/gamification";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
 import type { GameResult } from "@/games/types";
 
@@ -31,8 +31,19 @@ describe("награда по длине (этап 14, #46)", () => {
     expect([1, 5, 6, 9, 10, 15].map(lengthFactor)).toEqual([0.6, 0.6, 1, 1, 1.5, 1.5]);
   });
 
-  it("микроурок — меньше, обычный урок — как раньше, без planned — как раньше", () => {
-    expect(st().finishSession(session({ planned: 5, answers: [rec(1), rec(2), { ...rec(3), correct: false, score: 0 }] })).bonusXp).toBe(Math.round(XP.lessonComplete * 0.6));
+  it("rewardFactor: урок — по флагу микроурока; 1,5 — только практике и повторению", () => {
+    expect(rewardFactor({ kind: "lesson", planned: 11 })).toBe(1);
+    expect(rewardFactor({ kind: "lesson", planned: 6, micro: true })).toBe(0.6);
+    expect(rewardFactor({ kind: "drill", mode: "extern", planned: 12 })).toBe(1);
+    expect(rewardFactor({ kind: "drill", mode: "history", planned: 25 })).toBe(1);
+    expect(rewardFactor({ kind: "drill", mode: "mistakes", planned: 3 })).toBe(0.6);
+    expect(rewardFactor({ kind: "drill", mode: "recap", planned: 15 })).toBe(1.5);
+    expect(rewardFactor({ kind: "drill", mode: "smart" })).toBe(1);
+  });
+
+  it("микроурок — меньше, обычный урок (даже 10+ заданий с боссом и кодом) — как раньше", () => {
+    expect(st().finishSession(session({ planned: 6, micro: true, answers: [rec(1), rec(2), { ...rec(3), correct: false, score: 0 }] })).bonusXp).toBe(Math.round(XP.lessonComplete * 0.6));
+    expect(st().finishSession(session({ lessonId: "py-3b-for", planned: 11, answers: [rec(1), { ...rec(2), correct: false, score: 0 }] })).bonusXp).toBe(XP.lessonComplete);
     expect(st().finishSession(session({ lessonId: "py-2-if", planned: 8, answers: [rec(1), { ...rec(2), correct: false, score: 0 }] })).bonusXp).toBe(XP.lessonComplete);
     expect(st().finishSession(session({ lessonId: "py-2b-logic", answers: [rec(1), { ...rec(2), correct: false, score: 0 }] })).bonusXp).toBe(XP.lessonComplete);
   });

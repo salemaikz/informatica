@@ -98,7 +98,7 @@ describe("канонические id событий", () => {
 
 describe("списки сверены с приложением", () => {
   it("режимы тренировки — настоящие режимы lib/drill.ts и все подписаны на странице владельца", () => {
-    expect(DRILL_MODES).toHaveLength(7);
+    expect(DRILL_MODES).toHaveLength(11);
     for (const m of DRILL_MODES) {
       expect(parseDrillMode(m), m).toBe(m);
       expect(label.drillMode(m), m).not.toBe(m);

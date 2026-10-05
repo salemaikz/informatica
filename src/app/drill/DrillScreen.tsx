@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
-import { Check, Flag, Map as MapIcon, Target } from "lucide-react";
+import { Check, Flag, Target } from "lucide-react";
 import type { EntTopicId, QuestionStep, SessionResult } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -127,9 +127,13 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
   const onSessionFinish = useCallback(
     (result: SessionResult) => {
       // Узлы курса 3.0 (этап 14): прохождение практики, повторения и мини-теста — на карту.
-      if ((mode === "practice" || mode === "minitest") && node && groupOfPracticeNode(node)) recordCourseNode(node, mode, result.accuracy);
+      // Мини-тест — по баллам как на ЕНТ (multi и «соответствие» весят 2), практика и повторение — по точности.
+      const points = mode === "minitest" ? miniTestPoints(session.steps, result.answers) : null;
+      const groupNode = node && groupOfPracticeNode(node) ? node : undefined;
+      if (mode === "practice" && groupNode) recordCourseNode(groupNode, "practice", result.accuracy);
+      if (mode === "minitest" && groupNode && points) recordCourseNode(groupNode, "minitest", points.max > 0 ? points.points / points.max : 0);
       if (mode === "recap" && unitById(unit)) recordCourseNode(recapNodeId(unit!), "recap", result.accuracy);
-      if (mode === "minitest") setMini({ ...miniTestPoints(session.steps, result.answers), weak: weakestSkill(result.answers) });
+      if (points) setMini({ ...points, weak: weakestSkill(result.answers) });
       if (mode === "review" && session.reviewLessons?.length) {
         // Точность считаем по заданиям навыков каждого урока: стор сдвинет расписание повторения.
         for (const [id, acc] of Object.entries(lessonAccuracies(result.answers, session.reviewLessons))) markReviewed([id], acc);
@@ -183,9 +187,11 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
                 : t("history.redo.none")
               : mode === "extern"
                 ? t("modes.extern.none")
-                : mode === "practice" || mode === "minitest" || mode === "recap"
-                  ? t("course3.empty")
-                  : t("modes.empty")}
+                : mode === "minitest"
+                  ? t("course3.minitest.empty")
+                  : mode === "practice" || mode === "recap"
+                    ? t("course3.empty")
+                    : t("modes.empty")}
         </p>
         <ButtonLink
           href={mode === "extern" || mode === "practice" || mode === "minitest" || mode === "recap" ? "/learn" : mode === "history" ? "/history" : mode === "context" ? "/code/context" : "/practice"}
@@ -223,17 +229,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item }: { m
             <span>{t("course3.minitest.weak", { skill: l(weak.title) })}</span>
           </p>
         )}
-        <ButtonLink href="/learn" variant="secondary" icon={<MapIcon size={18} />}>
-          {t("course3.toMap")}
-        </ButtonLink>
       </div>
-    );
-  } else if (mode === "practice" || mode === "recap") {
-    // Практика и повторение начинаются с карты — на карту и ведёт кнопка (итог узла записан в onSessionFinish).
-    extra = (
-      <ButtonLink href="/learn" variant="secondary" block icon={<MapIcon size={18} />}>
-        {t("course3.toMap")}
-      </ButtonLink>
     );
   } else if (outcome) {
     const lesson = outcome.lessonId ? getLesson(outcome.lessonId) : undefined;

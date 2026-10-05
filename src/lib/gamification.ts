@@ -24,6 +24,17 @@ export function lengthFactor(questions: number): number {
   return 1;
 }
 
+/**
+ * Множитель награды за прохождение (#83). Урок: микроурок — 0,6, остальные — 1 (вставленные задания ЕНТ и задача
+ * с кодом урок «длинным» не делают). Тренировка: короткая — 0,6; 1,5 — только практика и повторение курса 3.0.
+ */
+export function rewardFactor(r: { kind: "lesson" | "drill"; mode?: string; planned?: number; micro?: boolean }): number {
+  if (r.kind === "lesson") return r.micro ? lengthFactor(1) : 1;
+  if (!r.planned) return 1;
+  const f = lengthFactor(r.planned);
+  return r.mode === "practice" || r.mode === "recap" ? f : Math.min(1, f);
+}
+
 export function xpForAnswer(correct: boolean, retry: boolean, combo: number): number {
   if (!correct) return 0;
   if (retry) return XP.retryCorrect;

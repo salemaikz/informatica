@@ -15,7 +15,7 @@ import type {
   Theme,
   Track,
 } from "./types";
-import { bumpStreak, lengthFactor, levelInfo, XP, type Streak } from "./gamification";
+import { bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
 import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
@@ -763,8 +763,8 @@ export const useApp = create<AppState & AppActions>()(
         const prev = isLesson ? s.lessons[result.lessonId!] : undefined;
         // Повтор урока даёт меньше XP (плановое повторение — почти полный). Бонус «без ошибок» — за первый раз.
         const factor = isLesson ? lessonXpFactor(prev, now) : 1;
-        // Награда за прохождение — по длине (этап 14, #46): микроурок меньше, практика и повторение больше.
-        const size = result.planned ? lengthFactor(result.planned) : 1;
+        // Награда за прохождение — по длине (этап 14, #83): микроурок меньше, практика и повторение больше.
+        const size = rewardFactor(result);
         let bonusXp = result.kind === "lesson" ? scaleXp(Math.round(XP.lessonComplete * size), factor) : Math.round(XP.drillComplete * size);
         if (result.kind === "lesson" && perfect && !prev) bonusXp += XP.perfectLesson;
         // «Проверить себя» — короче урока: бонус за прохождение вдвое меньше.

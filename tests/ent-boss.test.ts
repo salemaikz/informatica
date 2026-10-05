@@ -85,9 +85,15 @@ describe("withEntBoss: вставка и место", () => {
     expect(types).toEqual(["theory", "choice", "choice", "choice", "choice", "entmatch", "multi", "theory"]);
     const entmatch = out.steps[5] as EntMatchStep;
     const m = out.steps[6] as MultiStep;
-    expect(entmatch).toMatchObject({ ent: true, skill: "ns.base", level: 2, answer: [2, 0] });
-    expect(m).toMatchObject({ ent: true, correct: [1, 4] });
+    expect(entmatch).toMatchObject({ ent: true, skill: "ns.base", level: 2 });
+    expect(m).toMatchObject({ ent: true });
     expect(m.options).toHaveLength(6);
+    // Варианты перемешаны (постоянно для урока), но верные описания и варианты — те же, что в банке.
+    const srcMatch = POOL.find((i) => `ent:${i.id}` === entmatch.id) as EntMatch;
+    expect(entmatch.answer.map((a) => entmatch.choices[a])).toEqual(srcMatch.answer.map((a) => srcMatch.choices[a]));
+    const srcMulti = POOL.find((i) => `ent:${i.id}` === m.id) as EntMulti;
+    expect(m.correct.map((c) => m.options[c]).sort()).toEqual(srcMulti.correct.map((c) => srcMulti.options[c]).sort());
+    expect(withEntBoss(lessonOf("demo", baseSteps()), POOL).steps[5]).toEqual(entmatch);
     expect(entmatch.id).toMatch(/^ent:demo:m[12]$/);
     expect(m.id).toBe("ent:demo:x1");
   });
@@ -197,11 +203,13 @@ describe("withEntBoss: вставленные шаги проверяются к
   it("«соответствие» из банка оценивается 2 / 1 / 0 (частично — 0,5)", () => {
     const out = withEntBoss(lessonOf("demo", baseSteps()), POOL);
     const em = out.steps.find((s) => s.type === "entmatch") as EntMatchStep;
-    expect(evaluate(em, { type: "entmatch", picks: [2, 0] }, "ru")).toMatchObject({ correct: true, score: 1 });
-    expect(evaluate(em, { type: "entmatch", picks: [2, 3] }, "ru")).toMatchObject({ correct: false, score: 0.5, partial: true });
-    expect(evaluate(em, { type: "entmatch", picks: [1, 3] }, "ru")).toMatchObject({ correct: false, score: 0 });
+    const [a0, a1] = em.answer;
+    const wrong = (x: number, not: number[]) => [0, 1, 2, 3].find((i) => !not.includes(i) && i !== x)!;
+    expect(evaluate(em, { type: "entmatch", picks: [a0, a1] }, "ru")).toMatchObject({ correct: true, score: 1 });
+    expect(evaluate(em, { type: "entmatch", picks: [a0, wrong(a1, [a0])] }, "ru")).toMatchObject({ correct: false, score: 0.5, partial: true });
+    expect(evaluate(em, { type: "entmatch", picks: [wrong(a0, [a1]), wrong(a1, [a0])] }, "ru")).toMatchObject({ correct: false, score: 0 });
     // Один номер у обоих пунктов — допустимо, как на ЕНТ.
-    expect(evaluate(em, { type: "entmatch", picks: [2, 2] }, "ru")).toMatchObject({ score: 0.5, partial: true });
+    expect(evaluate(em, { type: "entmatch", picks: [a0, a0] }, "ru")).toMatchObject({ score: 0.5, partial: true });
   });
 });
 
@@ -293,5 +301,27 @@ describe("lessonStepCount — подпись «N шагов» на карте б
       .filter((l) => !!l && lessonStepCount(l) !== withEntBoss(l).steps.length)
       .map((l) => l.id);
     expect(off).toEqual(["ent-1-strategy"]);
+  });
+});
+
+describe("shuffleOptions: «соответствие» в работе над ошибками перемешивается с пересчётом ключа", () => {
+  it("описания переставлены, верные описания пунктов — те же", async () => {
+    const { shuffleOptions } = await import("@/lib/bank/pool");
+    const step: EntMatchStep = {
+      id: "ent:x:m",
+      type: "entmatch",
+      prompt: { ru: "?", kk: "?" },
+      items: ["A", "B"],
+      choices: ["c0", "c1", "c2", "c3"],
+      answer: [0, 1],
+      explanation: { ru: "x", kk: "x" },
+    };
+    const seen = new Set<string>();
+    for (let seed = 1; seed < 40; seed++) {
+      const out = shuffleOptions(step, seed) as EntMatchStep;
+      expect(out.answer.map((a) => out.choices[a])).toEqual(["c0", "c1"]);
+      seen.add(out.answer.join(","));
+    }
+    expect(seen.size).toBeGreaterThan(3);
   });
 });

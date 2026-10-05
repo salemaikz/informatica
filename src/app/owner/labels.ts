@@ -32,6 +32,10 @@ const DRILL_MODE: Dict = {
   extern: "экстерн",
   topic: "по теме ЕНТ",
   history: "из истории",
+  practice: "практика после группы (курс 3.0)",
+  recap: "повторение раздела (курс 3.0)",
+  minitest: "мини-тест группы",
+  context: "контекстное задание практикума",
 };
 const EXAM_KIND: Dict = { full: "полный пробник", mini: "мини-пробник", topic: "по теме", unit: "по разделу" };
 const BREAK: Dict = {
