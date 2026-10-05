@@ -1,11 +1,11 @@
 "use client";
 
-import { Zap } from "lucide-react";
 import { m } from "motion/react";
 import { cn } from "@/lib/cn";
+import { XpIcon } from "@/components/economy/XpIcon";
 
 /**
- * «+10» с молнией: всплывает вверх и растворяется. Золотые токены (XP = золото).
+ * «+10» со значком XP: всплывает вверх и растворяется. Золотые токены (XP = золото).
  * Показывается заново при каждом новом `id` (счётчик событий); при `id = 0` или `amount <= 0` ничего не рисует.
  * Родитель должен быть `relative`; элемент не ловит клики.
  */
@@ -23,7 +23,8 @@ export function XpBurst({ id, amount, delay = 0, className }: { id: number; amou
       animate={{ opacity: [0, 1, 1, 0], y: [6, -8, -22, -40], scale: [0.6, 1.12, 1, 1] }}
       transition={{ duration: 0.95, times: [0, 0.2, 0.7, 1], ease: "easeOut", delay }}
     >
-      <Zap size={14} className="text-gold" fill="currentColor" />+{amount}
+      +{amount}
+      <XpIcon size={14} />
     </m.span>
   );
 }

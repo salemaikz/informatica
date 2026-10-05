@@ -33,6 +33,7 @@ import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, rati
 import { ReviewList } from "./ReviewList";
 import { examTitle } from "./checkpoint";
 import { StarRow } from "./StarRow";
+import { StreakIgnite } from "@/components/motion/StreakIgnite";
 
 const TONE_COLOR: Record<Tone, string> = {
   danger: "var(--danger)",
@@ -276,6 +277,8 @@ export function ExamResult({ id }: { id: string }) {
           </Pill>
         )}
       </Card>
+
+      <StreakIgnite />
 
       {/* Вызов друга (#73): больше / столько же / меньше. Меньше — не ошибка, поэтому не красным. */}
       {attempt?.challenge && kind !== "unit" && (

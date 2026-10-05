@@ -1,12 +1,13 @@
 "use client";
 
-import { Play, RotateCcw, Zap } from "lucide-react";
+import { Play, RotateCcw } from "lucide-react";
 import { m } from "motion/react";
 import type { LessonRun } from "@/lib/lesson-run";
 import { runPaid } from "@/lib/lesson-run";
 import { useT } from "@/i18n/useT";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { XpIcon } from "@/components/economy/XpIcon";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -67,7 +68,7 @@ export function ResumeLesson({
           <div className="flex items-center justify-between gap-3">
             <span className="font-extrabold">{t("hearts.resume.step", { n, m: all })}</span>
             {run.xp > 0 && (
-              <Pill tone="gold" icon={<Zap size={12} aria-hidden />}>
+              <Pill tone="gold" icon={<XpIcon size={12} />}>
                 {t("hearts.resume.xp", { n: run.xp })}
               </Pill>
             )}

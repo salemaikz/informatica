@@ -1,11 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { Flame, Target, Zap } from "lucide-react";
+import { Flame, Target } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useDaily, useLevel, useStreak } from "@/lib/hooks";
 import { levelTitle } from "@/lib/gamification";
 import { useT } from "@/i18n/useT";
+import { XpIcon } from "@/components/economy/XpIcon";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 
@@ -23,7 +24,7 @@ export function XpChip() {
   const { xp } = useLevel();
   return (
     <span title="XP" className="flex items-center gap-1 font-extrabold text-warning-strong">
-      <Zap size={20} className="text-gold" fill="currentColor" /> {xp}
+      <XpIcon size={18} /> {xp}
     </span>
   );
 }

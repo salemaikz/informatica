@@ -28,10 +28,10 @@ import {
   Trophy,
   Undo2,
   Wand2,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { XpIcon } from "./XpIcon";
 import { useApp } from "@/lib/store";
 import { AI_COST, CHIP_BONUS, ENTRY_COST, PLAN_FEATURES, SHOP_ITEMS, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { shortDate } from "@/lib/date";
@@ -188,7 +188,7 @@ export function EarnList() {
       <ul className="divide-y-2 divide-border">
         <li className="flex items-center gap-3 p-3.5">
           <IconTile tone="gold">
-            <Zap size={22} />
+            <XpIcon size={20} />
           </IconTile>
           <span className="min-w-0 flex-1 font-extrabold">{t("shop.earn.xp", { xp: rate.xp, n: rate.n })}</span>
         </li>

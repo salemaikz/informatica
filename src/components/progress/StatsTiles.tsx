@@ -1,6 +1,7 @@
 "use client";
 
-import { BookCheck, Clock, Flame, Gamepad2, Share2, Target, Trophy, Zap } from "lucide-react";
+import { XpIcon } from "@/components/economy/XpIcon";
+import { BookCheck, Clock, Flame, Gamepad2, Share2, Target, Trophy } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { levelTitle } from "@/lib/gamification";
@@ -55,7 +56,7 @@ export function StatsTiles({ className }: { className?: string }) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile icon={<Zap size={14} className="text-gold" aria-hidden />} label={t("stats.totalXp")} value={xp} />
+        <Tile icon={<XpIcon size={14} />} label={t("stats.totalXp")} value={xp} />
         <Tile icon={<Trophy size={14} className="text-primary" aria-hidden />} label={t("stats.level")} value={level} sub={l(levelTitle(level))} />
         <Tile icon={<Flame size={14} className="text-streak" aria-hidden />} label={t("stats.streak")} value={current}
           sub={t("stats.best", { n: best })}

@@ -1,10 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { Flame, Zap } from "lucide-react";
+import { Flame } from "lucide-react";
 import { m } from "motion/react";
 import { useEffect, useState } from "react";
 import { useLevel, useStreak } from "@/lib/hooks";
+import { todayKey } from "@/lib/text";
+import { XpIcon } from "@/components/economy/XpIcon";
 import { useT } from "@/i18n/useT";
 import { CountUp } from "./CountUp";
 import { XpBurst } from "./XpBurst";
@@ -13,6 +15,17 @@ import { XpBurst } from "./XpBurst";
 // он увидит, как XP и серия выросли (счётчик докручивается, всплывает «+N», пламя качается).
 let seenXp: number | null = null;
 let seenStreak: number | null = null;
+// Горел ли огонь сегодня, когда ученик в последний раз видел шапку (для анимации «огонь загорелся» на итогах).
+let seenLit: { day: string; lit: boolean } | null = null;
+
+/** Огонь был погашен в последний раз, когда ученик видел шапку сегодня (значит, этим занятием серия засчитана). */
+export function streakJustLit(): boolean {
+  return !!seenLit && seenLit.day === todayKey() && !seenLit.lit;
+}
+/** После показа анимации — чтобы не повторять. */
+export function markStreakLitSeen() {
+  seenLit = { day: todayKey(), lit: true };
+}
 
 const BUMP_DELAY = 0.3;
 
@@ -38,7 +51,7 @@ export function XpChipAnimated() {
 
   return (
     <span data-tour="hdr-xp" title="XP" className="relative flex items-center gap-1 font-extrabold text-warning-strong">
-      <Zap size={20} className="text-gold" fill="currentColor" />
+      <XpIcon size={18} />
       <m.span
         className="inline-block"
         animate={bumping ? { scale: [1, 1.4, 1] } : { scale: 1 }}
@@ -65,7 +78,8 @@ export function StreakChipAnimated() {
   }
   useEffect(() => {
     seenStreak = current;
-  }, [current]);
+    seenLit = { day: todayKey(), lit: activeToday };
+  }, [current, activeToday]);
 
   return (
     <span data-tour="hdr-streak" title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
