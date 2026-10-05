@@ -57,4 +57,4 @@ write("src/content/ent/generated.ts", ent, "ITEMS", "EntItem", "@/lib/types", "G
 console.log(`уроков: ${lessons.length}, банков: ${banks.length}, файлов ЕНТ: ${ent.length}`);
 
 // Лёгкий каталог (карта, профиль, меню — этап 16) пересобирается вслед за реестрами: npm run catalog.
-execFileSync("npx", ["tsx", "scripts/catalog.ts"], { cwd: root, stdio: "inherit" });
+execFileSync(process.execPath, ["--import", "tsx", "scripts/catalog.ts"], { cwd: root, stdio: "inherit" });

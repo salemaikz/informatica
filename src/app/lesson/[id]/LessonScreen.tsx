@@ -1,15 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
-import { getLesson } from "@/content/course";
+import { useState, type ReactNode } from "react";
 import { useT } from "@/i18n/useT";
 import { track } from "@/lib/analytics";
-import { buildCheck } from "@/lib/drill";
 import { ENTRY_COST, canAfford, lessonCost } from "@/lib/economy";
-import { withEntBoss } from "@/lib/ent-boss";
 import { runPaid, usableRun } from "@/lib/lesson-run";
 import { useApp } from "@/lib/store";
+import type { Lesson, QuestionStep } from "@/lib/types";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResumeLesson } from "@/components/lesson/ResumeLesson";
 import { questionsAhead } from "@/components/lesson/run-snapshot";
@@ -23,15 +21,14 @@ import { OutOfHearts } from "@/components/economy/OutOfHearts";
  * при возврате — «Продолжить / Начать заново» (#41); «Проверить себя» (check) — вход 1, без сохранения.
  * Сердечки списывает плеер, когда урок начался: первый переход «дальше», первый ответ или «Пропустить» (#40, этап 15);
  * здесь — проверка на входе (EntryGate) и выбор продолжения. Открыть и сразу закрыть — бесплатно.
+ *
+ * Урок уже с «боссом» (#84) и набор «Проверить себя» собирает сервер (page.tsx): клиент не грузит все уроки,
+ * банки навыков и банк ЕНТ (этап 16).
  */
-export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check" }) {
+export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "learn" | "check"; check: QuestionStep[] }) {
   const router = useRouter();
   const { l } = useT();
-  const base = getLesson(id)!;
-  // «Босс урока» (#84): настоящее ЕНТ-«соответствие» и «несколько верных» из банка ЕНТ — и в «Учиться», и в «Проверить себя».
-  const lesson = useMemo(() => withEntBoss(base), [base]);
-  // «Проверить себя»: только задания (A → B → C), недостающее добираем из банка. Набор собираем один раз при входе.
-  const [check] = useState(() => (mode === "check" ? buildCheck(lesson, Date.now()) : []));
+  const id = lesson.id;
   const asCheck = mode === "check" && check.length > 0;
   // Сохранённое прохождение читаем один раз при входе (только «Учиться»): подходит ли оно, оплачен ли вход, остались ли задания.
   const [entry] = useState(() => {
@@ -104,13 +101,14 @@ export function LessonScreen({ id, mode }: { id: string; mode: "learn" | "check"
       </>
     );
   } else if (asCheck) {
-    body = <LessonPlayer key="check" kind="lesson" via="check" lessonId={lesson.id} title={l(lesson.title)} steps={check} entryCost={ENTRY_COST.check} />;
+    body = <LessonPlayer key="check" kind="lesson" via="check" lessonId={lesson.id} lesson={lesson} title={l(lesson.title)} steps={check} entryCost={ENTRY_COST.check} />;
   } else {
     body = (
       <LessonPlayer
         key={choice}
         kind="lesson"
         lessonId={lesson.id}
+        lesson={lesson}
         title={l(lesson.title)}
         steps={lesson.steps}
         entryCost={cost}

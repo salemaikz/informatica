@@ -1,6 +1,6 @@
 import type { AnswerRecord, EntTopicId, LessonMeta, SkillId, Unit } from "./types";
 import type { LessonStat } from "./review";
-import { LESSON_META, hasBank, hasShape, skillsWithShape, skillsWithWorked } from "@/content/catalog";
+import { LESSON_META, hasBank, hasShape, lessonMeta, skillsWithShape, skillsWithWorked } from "@/content/catalog";
 import { UNITS } from "@/content/course-map";
 import { isSchoolSkill, SKILLS } from "@/content/skills";
 import type { GameMeta } from "@/games/types";
@@ -172,7 +172,7 @@ const MAX_CONTEXT_SKILLS = 12;
  * Урок задаёт навыки сам; список навыков без урока — тренировка по теме (без зачёта урока).
  */
 export function resolveGameContext(p: { lesson?: string; skills?: string }): GameContext {
-  const lesson = p.lesson && LESSON_META[p.lesson] ? LESSON_META[p.lesson] : undefined;
+  const lesson = p.lesson ? lessonMeta(p.lesson) : undefined;
   if (lesson) return { lessonId: lesson.id, skills: lesson.skills.slice(0, MAX_CONTEXT_SKILLS) };
   const known = new Set(SKILLS.map((s) => s.id));
   const skills = uniq((p.skills ?? "").split(",").map((s) => s.trim()).filter((s) => known.has(s))).slice(0, MAX_CONTEXT_SKILLS);

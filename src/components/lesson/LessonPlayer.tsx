@@ -5,7 +5,7 @@ import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Li
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { AnswerRecord, Lang, LessonVia, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
+import type { AnswerRecord, Lang, Lesson, LessonVia, QuestionStep, Scene, SessionResult, Step } from "@/lib/types";
 import type { TaskContext } from "@/lib/ai-types";
 import { evaluate, expectedText, isQuestion, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { levelInfo, xpForAnswer } from "@/lib/gamification";
@@ -14,10 +14,9 @@ import { lessonXpFactorNow, useApp } from "@/lib/store";
 import { activeMs } from "@/lib/active-clock";
 import { track } from "@/lib/analytics";
 import { finishEvent, playerHeartsWhere, quitEvent, sessionTotals, skipRecord, startEvent, taskEvent } from "@/lib/player-events";
-import { getLesson } from "@/content/course";
-import { isEntRef } from "@/lib/ent-steps";
+import { isEntRef } from "@/lib/ent-ref";
 import { scaleXp } from "@/lib/review";
-import { formatFactor } from "@/lib/drill";
+import { formatFactor } from "@/lib/drill-meta";
 // В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { ignoreKey } from "@/lib/keys";
@@ -66,6 +65,8 @@ import { activeElapsed, buildRun, freshQueue, graceText, restoreRun, retryItem, 
 export interface PlayerProps {
   kind: "lesson" | "drill";
   lessonId?: string;
+  /** Урок (kind="lesson"): его шаги — «стабильные» для событий, конспект — для итогов. Приходит с сервера (этап 16). */
+  lesson?: Pick<Lesson, "steps" | "micro" | "title" | "conspect">;
   title: string;
   steps: Step[];
   /** Для работы над ошибками: id шага → id задания-ошибки, которую закрыть при верном ответе. */
@@ -180,6 +181,7 @@ const firstWords = (text: string, n = 8) => text.split(" ").slice(0, n).join(" "
 export function LessonPlayer({
   kind,
   lessonId,
+  lesson,
   title,
   steps,
   mistakeMap,
@@ -316,9 +318,9 @@ export function LessonPlayer({
   // Шаги самого урока: события `task` ставим только по ним (у заданий банка id разные при каждом запуске).
   // Задания ЕНТ, вставленные в урок кодом (ссылки ent:…, этап 14), тоже стабильны — их считаем вместе с шагами урока.
   const stableSteps = useMemo(() => {
-    const lesson = kind === "lesson" && lessonId ? getLesson(lessonId) : undefined;
-    return lesson ? new Set([...lesson.steps.map((x) => x.id), ...steps.filter((x) => isEntRef(x.id)).map((x) => x.id)]) : null;
-  }, [kind, lessonId, steps]);
+    const own = kind === "lesson" ? lesson : undefined;
+    return own ? new Set([...own.steps.map((x) => x.id), ...steps.filter((x) => isEntRef(x.id)).map((x) => x.id)]) : null;
+  }, [kind, lesson, steps]);
 
   const finish = useCallback(
     (finalRecords: AnswerRecord[], finalXp: number, finalMaxCombo: number) => {
@@ -337,7 +339,7 @@ export function LessonPlayer({
         mode,
         // Плановая длина (заданий в сессии) — награда за прохождение по длине (этап 14).
         planned: steps.filter(isQuestion).length,
-        ...(kind === "lesson" && lessonId && getLesson(lessonId)?.micro ? { micro: true } : {}),
+        ...(kind === "lesson" && lesson?.micro ? { micro: true } : {}),
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
       const { bonusXp, heart } = finishSession(result);
@@ -350,7 +352,7 @@ export function LessonPlayer({
       setSession({ result, bonusXp, achievements, chips, heart });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
+    [finishSession, kind, lessonId, lesson, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
   );
 
   // Снимок прохождения в стор (#41). Вызывается из обработчиков с уже посчитанными значениями: setState асинхронный.
@@ -684,6 +686,7 @@ export function LessonPlayer({
       <Results
         kind={kind}
         lessonId={lessonId}
+        lesson={lesson}
         title={title}
         result={session.result}
         bonusXp={session.bonusXp}

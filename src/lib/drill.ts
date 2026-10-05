@@ -1,23 +1,21 @@
-import type { AnswerRecord, EntTopicId, Level, Lesson, QuestionStep, SkillId, Unit } from "./types";
+import type { EntTopicId, Level, Lesson, QuestionStep, SkillId } from "./types";
 import { weakSkills, type SkillStat } from "./mastery";
 import { levelFromMastery } from "./ent";
-import { bankFor, hasShape, skillsWithShape } from "./bank";
+import { bankFor } from "./bank";
 import { dueLessons, type LessonStat } from "./review";
 import { isQuestion } from "./evaluate";
 import { entStepFromRef, isEntRef } from "./ent-steps";
 import { MAX_WRONG_PER_ENTRY, openWrong, type HistoryEntry } from "./history";
 import { hashString, seeded } from "./text";
 import { shuffleOptions } from "./bank/pool";
-import { LESSONS, UNITS, findStep } from "@/content/course";
+import { LESSONS, findStep } from "@/content/course";
 import {
   CHECK_MIN,
   DRILL_COUNT,
   EXTERN_MAX,
   EXTERN_MIN,
-  bankSkillIds,
   externLessons,
   hasBank,
-  readyLessons,
   skillsOfLessons,
   skillsOfTopic,
   smartSkills,

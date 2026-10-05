@@ -43,7 +43,9 @@ export function NotesHome() {
   // Поиск — с двух символов; на одной букве показываем обычный экран, а не «ничего не найдено».
   const searching = q.length >= 2;
   // Шпаргалки уроков грузятся отдельным куском, когда ученик начал искать.
-  const conspects = useConspects(searching);
+  const { value: conspects, failed: conspectsFailed, retry: retryConspects } = useConspects(searching);
+  // Шпаргалки ещё грузятся: «ничего не найдено» показывать рано.
+  const conspectsLoading = searching && !conspects && !conspectsFailed;
 
   // Индекс поиска: записи ученика + шпаргалки готовых уроков. Пересобирается при смене записей, языка и после загрузки шпаргалок.
   const index = useMemo(() => {
@@ -114,7 +116,16 @@ export function NotesHome() {
 
       {searching ? (
         <div className="flex flex-col gap-5" aria-live="polite">
-          {results.length === 0 && (
+          {conspectsFailed && (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning-soft px-4 py-3 text-sm font-bold text-warning-strong">
+              <span>{t("common.loadFailed")}</span>
+              <Button size="sm" variant="secondary" onClick={retryConspects}>
+                {t("common.retry")}
+              </Button>
+            </div>
+          )}
+          {conspectsLoading && <p className="font-semibold text-muted">{t("common.loading")}</p>}
+          {results.length === 0 && !conspectsLoading && (
             <Card className="py-8 text-center">
               <p className="font-extrabold">{t("notes2.search.empty")}</p>
               <p className="text-sm font-semibold text-muted">{t("notes2.search.emptyHint")}</p>

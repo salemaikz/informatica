@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LESSON_META } from "@/content/catalog";
+import { UNITS } from "@/content/course-map";
 import type { ReadyLesson } from "@/lib/diagnostic";
 import type { EntItem } from "@/lib/types";
 
-// Данные диагностики грузятся отдельным куском после показа экрана: банк заданий ЕНТ (тяжёлый) и карта курса
-// (нужна только итогу — ссылкам «Начать с неё»). Статически их не импортируем: первый экран после онбординга должен открываться сразу.
+// Банк заданий ЕНТ (тяжёлый) грузится отдельным куском после показа экрана: первый экран после онбординга должен
+// открываться сразу. Готовые уроки карты (итогу — ссылки «Начать с неё») — из лёгкого каталога (этап 16).
 
 export interface DiagnosticData {
   pool: readonly EntItem[];
@@ -17,11 +19,11 @@ let cached: DiagnosticData | null = null;
 let loading: Promise<DiagnosticData> | null = null;
 
 function load(): Promise<DiagnosticData> {
-  loading ??= Promise.all([import("@/content/ent"), import("@/content/course")])
-    .then(([ent, course]) => {
-      const ready = course.UNITS.flatMap((u) =>
+  loading ??= import("@/content/ent")
+    .then((ent) => {
+      const ready = UNITS.flatMap((u) =>
         u.lessons.flatMap((r) => {
-          const lesson = r.status === "available" ? course.getLesson(r.id) : undefined;
+          const lesson = r.status === "available" ? LESSON_META[r.id] : undefined;
           return lesson ? [{ id: lesson.id, skills: lesson.skills, entTopics: lesson.entTopics, unit: u.id }] : [];
         }),
       );

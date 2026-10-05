@@ -22,8 +22,15 @@ import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
 import { QuizCard } from "./QuizCard";
 
-// «Дай задачи» собирает задания из банка навыков — тяжёлый кусок, грузится только когда ученик открыл задачи (этап 16).
-const ChatQuiz = dynamic(() => import("./quiz/ChatQuiz").then((m) => m.ChatQuiz), { ssr: false });
+// «Дай задачи» собирает задания из банка навыков — тяжёлый кусок, грузится только в чате «Дай задачи» (этап 16):
+// заранее при открытии такого чата, пока кусок качается — «Загрузка…» на месте задач.
+const loadQuiz = () => import("./quiz/ChatQuiz");
+const ChatQuiz = dynamic(() => loadQuiz().then((m) => m.ChatQuiz), { ssr: false, loading: () => <QuizLoading /> });
+
+function QuizLoading() {
+  const { t } = useT();
+  return <p className="px-1 font-semibold text-muted">{t("common.loading")}</p>;
+}
 
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -78,6 +85,11 @@ export function ChatScreen({ id, initialDraft }: { id: string; initialDraft?: st
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [messages?.length, pending, quizShown]);
+
+  // Чат «Дай задачи»: кусок с задачами качаем заранее, чтобы «Ещё задачи» открывались сразу.
+  useEffect(() => {
+    if (chat?.mode === "tasks") void loadQuiz();
+  }, [chat?.mode]);
 
   if (!chat) {
     return (

@@ -10,7 +10,8 @@ export { ENT_TOPIC_COUNTS, LESSON_META } from "./catalog.generated";
 
 /** Урок без шагов и конспекта: название, навыки, длительность, число шагов. */
 export function lessonMeta(id: string): LessonMeta | undefined {
-  return LESSON_META[id];
+  // Только свои ключи: «constructor» из адреса — не урок.
+  return Object.hasOwn(LESSON_META, id) ? LESSON_META[id] : undefined;
 }
 
 /** У навыка есть банк заданий (его можно тренировать). */

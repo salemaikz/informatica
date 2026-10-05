@@ -6,13 +6,13 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { LESSONS } from "../src/content/course";
+import { LESSONS } from "../src/content/lessons/all";
 import { SKILLS } from "../src/content/skills";
 import { bankSkills, hasShape } from "../src/lib/bank";
 import type { Shape } from "../src/lib/bank/types";
 import { lessonStepCount } from "../src/lib/lesson-size";
 import { readingStats } from "../src/lib/theory";
-import type { EntTopicId, LessonMeta, SkillId } from "../src/lib/types";
+import type { EntTopicId, Lesson, LessonMeta, SkillId } from "../src/lib/types";
 import { collectWorked } from "../src/games/build/logic";
 import { ENT_POOL } from "../src/content/ent";
 import { ENT_TOPICS } from "../src/content/ent-topics";
@@ -35,9 +35,11 @@ export interface Catalog {
 export function buildCatalog(): Catalog {
   const lessons: Record<string, LessonMeta> = {};
   for (const lesson of Object.values(LESSONS)) {
-    const { steps: _steps, conspect: _conspect, ...rest } = lesson;
+    const rest: Partial<Lesson> = { ...lesson };
+    delete rest.steps;
+    delete rest.conspect;
     const reading = { ru: readingStats(lesson, "ru"), kk: readingStats(lesson, "kk") };
-    lessons[lesson.id] = { ...rest, stepCount: lessonStepCount(lesson), reading };
+    lessons[lesson.id] = { ...(rest as Omit<Lesson, "steps" | "conspect">), stepCount: lessonStepCount(lesson), reading };
   }
   const bankShapes: Record<SkillId, Shape[]> = {};
   for (const skill of bankSkills().sort()) bankShapes[skill] = SHAPES.filter((sh) => hasShape(skill, sh));

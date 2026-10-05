@@ -1,4 +1,4 @@
-import { LESSONS } from "@/content/course";
+import { LESSONS } from "@/content/lessons/all";
 import type { GameAttempt, GameMode, GameResult } from "@/games/types";
 import { hashString, plainText, seeded, shuffle } from "@/lib/text";
 import type { L, OrderStep, SkillId } from "@/lib/types";

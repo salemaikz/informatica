@@ -12,7 +12,8 @@
     "voiceover": "node --experimental-strip-types --no-warnings scripts/generate-voiceover.mts",
     "e2e": "playwright test",
     "review:kk": "tsx scripts/review-kk.mts",
-    "catalog": "tsx scripts/catalog.ts"
+    "catalog": "tsx scripts/catalog.ts",
+    "size": "node scripts/bundle-size.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

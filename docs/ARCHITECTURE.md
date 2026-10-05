@@ -158,7 +158,7 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 ## Этап 3 (v0.5): курс ЕНТ, навигация, пробный ЕНТ, конспекты 2.0
 
 ### Контент
-- Курс — `src/content/course.ts` (`UNITS`: у раздела `icon`, `theme`, `entTopics`). Урок «готов», если он есть в `LESSONS`; название берётся из урока.
+- Курс — карта `src/content/course-map.ts` (`UNITS`: у раздела `icon`, `theme`, `entTopics`; с этапа 16 — отдельно от содержимого), уроки целиком — `src/content/lessons/all.ts` (`LESSONS`, реэкспорт из `content/course.ts`). Урок «готов», если он есть в каталоге (`content/catalog.generated.ts`, повторяет `LESSONS`); название берётся из урока.
 - Урок = три файла: `src/content/lessons/<id>.ts` (`export const lesson`), `src/lib/bank/<id>.ts` (`export const BANKS: SkillBank[]`), `src/content/ent/<id>.ts` (`export const ITEMS: EntItem[]`). Подключение — `node scripts/register-content.mjs` (пишет `generated.ts` в трёх папках). Проверка одного урока — `npx tsx scripts/check-content.ts <id>`; общие тесты — `tests/content.test.ts`, `tests/content-pool.test.ts`.
 - Темы ЕНТ и их веса — `src/content/ent-topics.ts`; навык → тема — `SKILLS[].ent`.
 - Задания: у вопроса может быть `scene` (код/таблица/схема под условием), `hint` (бесплатная подсказка), `whyWrong` (разбор каждого неверного варианта).
@@ -409,3 +409,24 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 
 ### Напоминания: окно с первого входа (`lib/push-ask.ts`, решение #92)
 - `pushAsk {lastAt, count}` в сторе, `notePushAsked()`; `shouldAskPush(permission, state, createdAt, now, pushOn)` → `ask` · `blocked-help` · `install-help` · null: первый раз — сразу, потом 3 дня в первую неделю и 7 дней дальше. `PushAskAgent` (в `Providers`) — нижняя шторка на главных экранах, запрос разрешения — только по нажатию.
+
+## v0.15: этап 16 — скорость (решение #93)
+
+### Лёгкое и тяжёлое
+- **Тяжёлое** (содержимое, ~20 МБ JS): `content/course.ts` (`LESSONS`, `getLesson`, `findStep`), `lib/bank` (банки навыков), `content/ent` (банк ЕНТ), `lib/drill.ts` (сборка заданий), `lib/course-mix.ts`, `lib/ent-steps.ts`, `lib/ent-boss.ts`. В клиентских модулях — только там, где содержимое нужно (список — `HEAVY_CLIENT_OK` в `tests/bundle-guard.test.ts`), остальное — в серверных `page.tsx` или через `import()`.
+- **Лёгкое:** `content/catalog.ts` (`LESSON_META`, `lessonMeta`, `hasBank`, `hasShape`, `skillsWithShape`, `skillsWithWorked`, `entUnitPaperSize`, `entPlainCount`, `ENT_TOPIC_COUNTS`), `content/course-map.ts` (`UNITS`, `lessonNumber`, `unlockedSkills`), `lib/drill-meta.ts` (режимы и параметры адреса, пороги, навыки уроков и разделов, `nextLessonId`, правила игр), `lib/course-mix-meta.ts` (числа «Практики»/«Повторения», `miniTestSize`), `lib/ent-ref.ts` (`entRef`, `isEntRef`). Тяжёлые модули реэкспортируют лёгкие.
+- Тип `LessonInfo` = урок без `steps` и `conspect` (подходит и `Lesson`, и `LessonMeta`); `LessonMeta` = `LessonInfo` + `stepCount` (как `lessonStepCount`) + `reading` (как `readingStats` на ru и kk).
+
+### Каталог (`scripts/catalog.ts` → `content/catalog.generated.ts`, `content/conspects.generated.ts`)
+- `npm run catalog` (и сам `register-content.mjs`): уроки из `LESSONS`, банки из `lib/bank` (`bankSkills`), навыки с разборами (`collectWorked`), задания ЕНТ по навыкам `[обычные, контекстные с вопросами]` и по темам; шпаргалки — отдельным файлом для поиска в «Конспектах».
+- `tests/catalog.test.ts` сравнивает файлы с тем, что сгенерировалось бы сейчас, и каждую лёгкую функцию — с тяжёлым оригиналом (`unitPaperSize`, `miniTestPool`, `readingStats`, `lessonStepCount`, `hasShape`, `collectWorked`).
+- Статус урока на карте («готов» / «скоро») и его название `course-map.ts` берёт из каталога (раньше `course.ts` правил `UNITS` по `LESSONS`).
+
+### Урок с сервера
+- `/lesson/[id]`: `page.tsx` → `withEntBoss(getLesson(id))` и для `?mode=check` — `buildCheck(…, Date.now())` → `LessonScreen({ lesson, mode, check })` → `LessonPlayer`/`Results` получают урок пропсом (`lesson`). `tests/lesson-props.test.ts` — урок и набор «Проверить себя» простые данные.
+- `/theory/[id]` → `TheoryReader({ lesson })`; `/notes/lesson/[id]` → `LessonNotesScreen({ id, lesson: { title, conspect } | null })`.
+
+### По требованию
+- Поиск `/search`: `useCourseIndex(lang)` грузит `components/theory/course-search-index.ts` после показа (до загрузки — «Загрузка…»). «Конспекты»: `useConspects(searching)` грузит шпаргалки при поиске. Чат: `ChatQuiz` — `next/dynamic`. Игры — реестр (`games/registry.ts`).
+- Вес страниц после сборки — `npm run size` (`scripts/bundle-size.mjs`, `--over=1.5` — только тяжелее 1,5 МБ).
+

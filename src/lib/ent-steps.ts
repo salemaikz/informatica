@@ -3,6 +3,7 @@ import { contextQuestionOf, isAnswered, scoreQuestion, type ExamAnswers, type Ex
 import type { WrongItem } from "./history";
 import { plain, tx } from "./text";
 import type { ChoiceStep, EntItem, EntMatch, EntMatchStep, Lang, L, MultiStep, QuestionStep, Text } from "./types";
+import { ENT_REF_PREFIX, entRef, isEntRef } from "./ent-ref";
 
 // Задания ЕНТ как шаги плеера: по ссылке «ent:<id>» / «ent:<id>:<n>» собираем задание для LessonPlayer,
 // чтобы ошибки пробного ЕНТ попадали в общую «работу над ошибками» и в историю тестов.
@@ -15,12 +16,7 @@ import type { ChoiceStep, EntItem, EntMatch, EntMatchStep, Lang, L, MultiStep, Q
 //                   (context, n — номер вопроса с нуля) → choice
 // id шага в плеере = сама ссылка, поэтому верный ответ в плеере закрывает ошибку с тем же stepId.
 
-export const ENT_REF_PREFIX = "ent:";
-
-/** Ссылка на задание ЕНТ (n — пункт соответствия или номер вопроса контекста, с нуля). */
-export const entRef = (id: string, n?: number): string => `${ENT_REF_PREFIX}${id}${n === undefined ? "" : `:${n}`}`;
-
-export const isEntRef = (stepId: string): boolean => stepId.startsWith(ENT_REF_PREFIX);
+export { ENT_REF_PREFIX, entRef, isEntRef } from "./ent-ref";
 
 /** Длинные условия и ответы обрезаем: в историю не нужно больше. */
 const TEXT_LIMIT = 300;

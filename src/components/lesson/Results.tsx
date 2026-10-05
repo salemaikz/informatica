@@ -6,7 +6,7 @@ import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import type { LessonVia, SessionResult } from "@/lib/types";
+import type { Lesson, LessonVia, SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
 import { feedback as giveFeedback } from "@/lib/feedback";
@@ -14,8 +14,7 @@ import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById } from "@/lib/gamification";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
-import { formatFactor, nextLessonId } from "@/lib/drill";
-import { getLesson } from "@/content/course";
+import { formatFactor, nextLessonId } from "@/lib/drill-meta";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
 import { decaySkills, masteryLevel } from "@/lib/mastery";
 import { breakdownOf } from "@/lib/player-events";
@@ -88,6 +87,7 @@ export function requestLessonFeedback(result: SessionResult, onState: (s: Feedba
 export function Results({
   kind,
   lessonId,
+  lesson,
   title,
   result,
   bonusXp,
@@ -102,6 +102,8 @@ export function Results({
 }: {
   kind: "lesson" | "drill";
   lessonId?: string;
+  /** Урок (для «В конспект»): название и шпаргалка. */
+  lesson?: Pick<Lesson, "title" | "conspect">;
   title: string;
   result: SessionResult;
   bonusXp: number;
@@ -129,7 +131,6 @@ export function Results({
   const [shownAt] = useState(() => Date.now());
   const nextDays = dueAt !== undefined ? Math.max(1, Math.round((dueAt - shownAt) / DAY_MS)) : null;
   const next = kind === "lesson" && lessonId ? nextLessonId(lessonId, lessons) : null;
-  const lesson = lessonId ? getLesson(lessonId) : undefined;
 
   const accuracy = Math.round(result.accuracy * 100);
   const totalXp = result.xp + bonusXp;

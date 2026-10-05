@@ -69,7 +69,7 @@ async function main() {
   // Школьный урок (этап 15): не на карте ЕНТ, без заданий ЕНТ; навыки — без темы ЕНТ, банк — свой.
   const school = !!lesson?.school;
   const unit = UNITS.find((u) => u.lessons.some((l) => l.id === id));
-  if (!unit && !school) err(`урока ${id} нет в UNITS (src/content/course.ts)`);
+  if (!unit && !school) err(`урока ${id} нет в UNITS (src/content/course-map.ts)`);
   if (unit && school) err(`школьный урок ${id} не должен стоять на карте ЕНТ (UNITS)`);
   const ref = unit?.lessons.find((l) => l.id === id);
   if (!lesson) {

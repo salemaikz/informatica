@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Mascot } from "@/components/mascot/Mascot";
-import { ButtonLink } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Highlight } from "./Highlight";
 import { SearchField } from "./SearchField";
 import { useCourseIndex } from "./useCourseIndex";
@@ -91,7 +91,7 @@ export function SearchScreen() {
 
   // Индекс курса строится один раз на язык (грузится отдельным куском, null — ещё грузится);
   // записи ученика — отдельный маленький индекс (меняется при правках).
-  const courseIndex = useCourseIndex(lang);
+  const { index: courseIndex, failed: courseFailed, retry: retryCourse } = useCourseIndex(lang);
   const noteIndex = useMemo(
     () =>
       buildIndex(
@@ -136,7 +136,7 @@ export function SearchScreen() {
   }, [query]);
 
   const typed = query.trim().length > 0;
-  const courseLoading = !courseIndex;
+  const courseLoading = !courseIndex && !courseFailed;
   const toggle = (g: SearchGroup) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -190,6 +190,15 @@ export function SearchScreen() {
       {typed && tokens.length === 0 && <p className="font-semibold text-muted">{t("search.short")}</p>}
 
       {tokens.length > 0 && total === 0 && courseLoading && <p className="font-semibold text-muted">{t("common.loading")}</p>}
+
+      {typed && courseFailed && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning-soft px-4 py-3 text-sm font-bold text-warning-strong">
+          <span>{t("common.loadFailed")}</span>
+          <Button size="sm" variant="secondary" onClick={retryCourse}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      )}
 
       {tokens.length > 0 && total === 0 && !courseLoading && (
         <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-border px-4 py-8 text-center">

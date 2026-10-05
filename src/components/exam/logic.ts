@@ -23,7 +23,7 @@ import { ENT_TOPICS } from "@/content/ent-topics";
 import { decodeChallenge, withChallenge, type Challenge } from "@/lib/challenge";
 import type { ExamSummary } from "@/lib/store";
 import { plain, tx } from "@/lib/text";
-import type { EntTopicId, Lang, Lesson, LessonInfo, Text } from "@/lib/types";
+import type { EntTopicId, Lang, LessonInfo, Text } from "@/lib/types";
 
 const KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
 const UNIT_ID = /^[a-z][a-z0-9]{0,15}$/;
