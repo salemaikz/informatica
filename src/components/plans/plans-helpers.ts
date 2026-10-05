@@ -25,9 +25,9 @@ export function subtitleKey(from: PlansFrom | undefined): DictKey {
   return "plans.sub.default";
 }
 
-/** Параметры текста «Ограничения ИИ»: суточный потолок (общий для тарифов) и вес фото и голоса — из economy.ts, не из словаря. */
-export function aiLimitParams(): { n: number; photo: number; voice: number } {
-  return { n: Math.max(...Object.values(AI_DAILY_CAP)), photo: AI_UNITS.photo, voice: AI_UNITS.voice };
+/** Параметры текста «Ограничения ИИ»: суточный потолок (общий для тарифов) и вес фото, расшифровки голоса и «Разбора от Бита» — из economy.ts, не из словаря. */
+export function aiLimitParams(): { n: number; photo: number; voice: number; review: number } {
+  return { n: Math.max(...Object.values(AI_DAILY_CAP)), photo: AI_UNITS.photo, voice: AI_UNITS.voice, review: AI_UNITS.review };
 }
 
 /** Скидка за год для переключателя: гарантированная для обоих тарифов (меньший процент). */

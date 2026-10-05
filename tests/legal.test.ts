@@ -8,6 +8,7 @@ import { BACKUP_STATE_KEYS } from "@/lib/backup";
 import { AI_DAILY_CAP, AI_UNITS, TRIAL_DAYS } from "@/lib/economy";
 import { detectLang, GUEST_LANG_KEY, guestLangToApply, markLangChosen } from "@/lib/guest-lang";
 import { ISSUE_CHANNELS, ISSUE_LIMITS } from "@/lib/issue";
+import { kkSuffix } from "@/lib/kk";
 import { isPublicPath } from "@/lib/public-paths";
 import { MAX_RECORD_SEC } from "@/lib/voice";
 
@@ -258,13 +259,21 @@ describe("правовые документы", () => {
 
   it("«ИИ без ограничений» нигде не обещаем: у «Безлимита» — потолок в день (AI_DAILY_CAP)", () => {
     expect(AI_DAILY_CAP.unlimited).toBeGreaterThan(0);
+    // Потолок один на всех тарифах (правка v0.9.1): в «Условиях» — это число, без «у Лайта — N, у Безлимита — M».
+    expect(new Set(Object.values(AI_DAILY_CAP)).size).toBe(1);
     for (const doc of docs) {
       expect(fullText(doc, "ru"), doc.id).not.toMatch(/без ограничений|без лимита|безгранично|неограниченн/i);
       expect(fullText(doc, "kk"), doc.id).not.toMatch(/шектеусіз|лимитсіз|шексіз ЖИ/i);
     }
     const terms = fullText(LEGAL.terms, "ru");
-    expect(terms).toContain(`у «Лайта» — до ${AI_DAILY_CAP.lite}, у «Безлимита» — до ${AI_DAILY_CAP.unlimited}`);
-    expect(fullText(LEGAL.terms, "kk")).toContain(`«Лайтта» күніне ең көбі ${AI_DAILY_CAP.lite}, «Шексізде» — ${AI_DAILY_CAP.unlimited} жүгіну`);
+    const cap = AI_DAILY_CAP.unlimited;
+    expect(terms).toContain(`не больше ${cap} обращений к ИИ в день на любом тарифе`);
+    expect(terms).toContain(`на любом тарифе — не больше ${cap}`);
+    expect(terms).not.toContain("зависит от тарифа");
+    const termsKk = fullText(LEGAL.terms, "kk");
+    expect(termsKk).toContain(`кез келген тарифте күніне ЖИ-ге ең көбі ${cap} жүгіну`);
+    expect(termsKk).toContain(`кез келген тарифте ${kkSuffix(cap, "abl")} аспайды`);
+    expect(termsKk).not.toContain("тарифке және жалпы жүктемеге байланысты");
     // Вес обращений: фото и «Разбор от Бита» — одинаково, голос — дороже.
     expect(AI_UNITS.review).toBe(AI_UNITS.photo);
     expect(terms).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${AI_UNITS.voice}`);
