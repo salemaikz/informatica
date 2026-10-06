@@ -7,6 +7,7 @@ import { BitChatPanel } from "@/components/guide/BitChatPanel";
 import { useGuideSpots } from "@/components/guide/GuideSpot";
 import { useGuideUi } from "@/components/guide/guide-state";
 import { foreignModal } from "@/components/guide/targets";
+import { SCROLL_BACK_MS } from "@/lib/dock";
 import { useTutor } from "@/components/ai/useTutor";
 import { TIP_IDS } from "@/lib/tips";
 import { useApp } from "@/lib/store";
@@ -129,6 +130,70 @@ describe("кнопка Бита и проводник", () => {
     open.remove();
     await act(async () => {});
     expect(dock()).not.toBeNull();
+  });
+});
+
+describe("кнопка Бита: прокрутка страницы, стрелка «›», язычок", () => {
+  const wrap = () => dock()!.parentElement!;
+  const away = () => wrap().hasAttribute("data-away");
+  const scrollY = (y: number) =>
+    act(async () => {
+      Object.defineProperty(window, "scrollY", { value: y, configurable: true });
+      window.dispatchEvent(new Event("scroll"));
+    });
+  const arrow = () => wrap().querySelector(":scope > span[aria-hidden='true']");
+
+  beforeEach(() => {
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+  });
+
+  it("прокрутка вниз на 24+ px — кнопка уходит в тень, прокрутка вверх возвращает сразу", async () => {
+    await render(createElement(BitDock));
+    expect(away()).toBe(false);
+    await scrollY(10);
+    expect(away()).toBe(false); // мелкая прокрутка — не в счёт
+    await scrollY(40);
+    expect(away()).toBe(true);
+    await scrollY(30); // вверх
+    expect(away()).toBe(false);
+  });
+
+  it("остановилась прокрутка — кнопка возвращается сама; горизонтальная лента (сдвиг по вертикали 0) её не трогает", async () => {
+    await render(createElement(BitDock));
+    await scrollY(60);
+    expect(away()).toBe(true);
+    await act(async () => {
+      vi.advanceTimersByTime(SCROLL_BACK_MS + 50);
+    });
+    expect(away()).toBe(false);
+    // Событие прокрутки без сдвига по вертикали (лента вкладок) — ничего не меняет.
+    await scrollY(60);
+    expect(away()).toBe(false);
+  });
+
+  it("стрелка «›» справа от кнопки — только пока проводник не показал обзор панели; потом её нет, а свайп и подпись для чтеца экрана остаются", async () => {
+    h.pathname = "/shop";
+    // Обзор панели («nav») ещё не показан, остальные сцены уже сыграны — кнопка на странице есть.
+    useApp.setState({ tips: Object.fromEntries(TIP_IDS.filter((id) => id !== "nav").map((id) => [id, 1])) });
+    await render(createElement(BitDock));
+    expect(arrow()).not.toBeNull();
+    await act(async () => useApp.getState().noteTip("nav"));
+    expect(arrow()).toBeNull();
+    expect(dock()!.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(dock()!.getAttribute("aria-describedby")!)!.textContent).toMatch(/Смахни вправо/);
+  });
+
+  it("язычок спрятанной кнопки — значок ИИ (как на кнопке), а не голый шеврон «‹»", async () => {
+    useApp.getState().updateProfile({ bitHidden: true });
+    await render(createElement(BitDock));
+    const cls = tab()!.querySelector("svg")!.getAttribute("class") ?? "";
+    expect(cls).toContain("lucide-sparkles");
+    expect(cls).not.toContain("chevron");
   });
 });
 

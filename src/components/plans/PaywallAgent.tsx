@@ -6,6 +6,7 @@ import { shouldShowPaywall } from "@/lib/economy";
 import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useNow, usePlanTier } from "@/components/economy/useEconomy";
+import { useGuideUi } from "@/components/guide/guide-state";
 
 /**
  * Невидимый «агент»: на главной карте (/learn) бесплатному ученику, прошедшему онбординг, раз в несколько дней
@@ -31,6 +32,8 @@ export function PaywallAgent() {
     if (touring) sawTour.current = true;
     if (fired.current || sawTour.current || pathname !== "/learn" || !onboarded || touring || casePending || now <= 0) return;
     if (!shouldShowPaywall(tier, paywall, now)) return;
+    // Открыта чат-панель Бита (или только открывается): переход на /plans закрыл бы её и сбил ответ — не сейчас, в следующий заход.
+    if (useGuideUi.getState().chatOpen) return;
     fired.current = true;
     notePaywallShown();
     router.push("/plans?from=auto");

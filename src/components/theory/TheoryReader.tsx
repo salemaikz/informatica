@@ -34,8 +34,8 @@ import { CARD_PARAM, paramValue } from "@/lib/theory-href";
 import { useApp } from "@/lib/store";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { useOpenLessonChat } from "@/components/chat/useLessonChat";
+import { Segmented } from "@/components/goals/controls";
 import { Button } from "@/components/ui/Button";
-import { Pill } from "@/components/ui/Pill";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
@@ -48,7 +48,7 @@ import { useHashScroll } from "./useHashScroll";
 import { useSwipe } from "./useSwipe";
 import { useTheoryAccess } from "./useTheoryAccess";
 
-const CARDS_KEY: DictKey[] = ["theory.cards.one", "theory.cards.few", "theory.cards.many"];
+const CARDS_KEY: DictKey[] = ["theory16c.cards.one", "theory16c.cards.few", "theory16c.cards.many"];
 const SUGGESTIONS: DictKey[] = ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"];
 const ORDER = readableLessonIds(UNITS);
 
@@ -181,9 +181,25 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
       <InfoBlock step={steps[index]} onAsk={() => setAskId(steps[index].id)} />
     );
 
+  // Переключатель «По карточкам / Всё сразу»: компактный, стоит в строке подписи «Карточка 1 из 7» (в режиме «Всё сразу» — один справа).
+  const modeSwitch = (
+    <Segmented
+      size="sm"
+      label={t("theory16c.mode.label")}
+      value={mode}
+      onChange={setMode}
+      options={[
+        { id: "cards", label: t("theory16c.mode.cards") },
+        { id: "all", label: t("theory16c.mode.all") },
+      ]}
+    />
+  );
+
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
+      {/* Шапка компактная: крошки и «Урок K из M» в одной строке, лента уроков низкая, заголовок меньше, сводка — одной мелкой строкой
+          рядом с кнопкой «Спросить Бита»: первая карточка начинается выше середины экрана 360×760. */}
+      <header className="flex flex-col gap-2">
         {place ? (
           <TheoryCrumbs place={place} lessonId={id} statusOf={statusOf} />
         ) : (
@@ -191,47 +207,48 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
             <ArrowLeft size={16} /> {t("theory.back")}
           </Link>
         )}
-        <h1 className="text-2xl font-extrabold leading-tight sm:text-3xl">{l(lesson.title)}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill tone="muted">{t(CARDS_KEY[lang === "ru" ? pluralIndex(stats.cards) : 2], { n: stats.cards })}</Pill>
-          <Pill tone="muted">{t("theory.readMin", { n: stats.minutes })}</Pill>
-          {status === "done" && (
-            <Pill tone="success" icon={<Check size={12} strokeWidth={3.5} />}>
-              {t("theory16c.status.done")}
-            </Pill>
+        <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">{l(lesson.title)}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 text-xs font-bold leading-snug text-muted">
+            {status === "done" && (
+              <>
+                <span className="inline-flex items-center gap-1 font-extrabold text-ink-success">
+                  <Check size={12} strokeWidth={3.5} aria-hidden />
+                  {t("theory16c.status.done")}
+                </span>
+                {" · "}
+              </>
+            )}
+            {status === "read" && (
+              <>
+                <span className="font-extrabold text-ink-primary">{t("theory16c.status.read")}</span>
+                {" · "}
+              </>
+            )}
+            {t(CARDS_KEY[lang === "ru" ? pluralIndex(stats.cards) : 2], { n: stats.cards })} · {t("theory.readMin", { n: stats.minutes })}
+          </p>
+          {open && (
+            <Button
+              variant="ai"
+              size="sm"
+              icon={<Sparkles size={16} aria-hidden />}
+              onClick={() => openChat(lesson)}
+              aria-label={t("theory16c.ask.button")}
+              className="relative shrink-0 after:absolute after:-inset-1.5 after:content-['']"
+              data-tour="theory-ask"
+            >
+              {t("theory16c.ask.short")}
+            </Button>
           )}
-          {status === "read" && <Pill tone="primary">{t("theory16c.status.read")}</Pill>}
         </div>
-        {open && (
-          <Button variant="ai" block icon={<Sparkles size={20} aria-hidden />} onClick={() => openChat(lesson)} data-tour="theory-ask">
-            {t("theory16c.ask.button")}
-          </Button>
-        )}
       </header>
 
       {/* Текст темы — только когда она открыта: пока идёт списание или нет сердечек, ни одной карточки на странице нет. */}
-      {open && <div className="flex flex-col gap-4">
-        <div role="group" aria-label={t("theory16c.mode.label")} className="flex self-start rounded-2xl bg-surface-2 p-1">
-          {(["cards", "all"] as const).map((m2) => (
-            <button
-              key={m2}
-              type="button"
-              aria-pressed={mode === m2}
-              onClick={() => setMode(m2)}
-              className={cn(
-                "h-10 rounded-xl px-4 text-sm font-extrabold transition-colors",
-                mode === m2 ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text",
-              )}
-            >
-              {t(m2 === "cards" ? "theory16c.mode.cards" : "theory16c.mode.all")}
-            </button>
-          ))}
-        </div>
-
+      {open && <div className="flex flex-col gap-3">
         {mode === "cards" ? (
           <>
             <div ref={areaRef} className="scroll-mt-20">
-              <CardProgress index={index} total={total} onGo={go} />
+              <CardProgress index={index} total={total} onGo={go} aside={modeSwitch} />
             </div>
             <div {...swipe}>
               <m.div
@@ -258,6 +275,7 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
           </>
         ) : (
           <>
+            <div className="flex justify-end">{modeSwitch}</div>
             {cardIds.map((cid, i) =>
               cid === CONSPECT_ID ? (
                 <div key={cid} ref={conspectRef} className="flex flex-col gap-4">

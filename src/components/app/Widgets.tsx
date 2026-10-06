@@ -79,7 +79,7 @@ export function LevelCard() {
           <p className="text-xs font-bold text-muted">{t("stats.best", { n: best })}</p>
         </div>
       </div>
-      <ProgressBar value={progress} color="var(--primary)" height={10} />
+      <ProgressBar value={progress} color="var(--gold)" height={10} />
     </Card>
   );
 }

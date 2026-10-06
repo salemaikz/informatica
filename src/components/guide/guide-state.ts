@@ -14,15 +14,24 @@ interface GuideUi {
   active: boolean;
   /** Шаг сцены, где цель — сама кнопка Бита: кнопка видна, что бы ни решали остальные флаги. */
   dockStep: boolean;
+  /**
+   * Чат-панель Бита открыта или открывается: ставится синхронно в обработчике нажатия на кнопку Бита (панель грузится
+   * отдельным куском и ещё не стала `[role=dialog]`), снимается при закрытии. Окна «Включить напоминания», тарифов
+   * и кейса за уровень пока флаг поднят не открываются (иначе ложатся поверх только что открытой панели).
+   */
+  chatOpen: boolean;
   setActive: (active: boolean) => void;
   setDockStep: (dockStep: boolean) => void;
+  setChatOpen: (chatOpen: boolean) => void;
 }
 
 export const useGuideUi = create<GuideUi>((set) => ({
   active: false,
   dockStep: false,
+  chatOpen: false,
   setActive: (active) => set({ active }),
   setDockStep: (dockStep) => set({ dockStep }),
+  setChatOpen: (chatOpen) => set({ chatOpen }),
 }));
 
 /**

@@ -10,9 +10,6 @@ export const theoryDict = {
   },
   "theory.searchPlaceholder": { ru: "Найти тему…", kk: "Тақырып іздеу…" },
   "theory.units": { ru: "Разделы курса", kk: "Курс бөлімдері" },
-  "theory.cards.one": { ru: "{n} карточка теории", kk: "{n} теория картасы" },
-  "theory.cards.few": { ru: "{n} карточки теории", kk: "{n} теория картасы" },
-  "theory.cards.many": { ru: "{n} карточек теории", kk: "{n} теория картасы" },
   "theory.readMin": { ru: "{n} мин чтения", kk: "{n} мин оқу" },
 
   // ---------- Теория: чтение урока ----------

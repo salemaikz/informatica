@@ -102,7 +102,7 @@ export function SectionTabs() {
               active={active}
               className={cn(
                 "flex h-10 shrink-0 items-center gap-2 rounded-full border-2 px-4 text-sm font-extrabold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                active ? "border-primary/40 bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
+                active ? "border-primary/40 bg-primary-soft text-ink-primary" : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
               )}
             />
           );

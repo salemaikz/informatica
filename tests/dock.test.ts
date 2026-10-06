@@ -8,6 +8,8 @@ import {
   pickDockChat,
   releaseVelocity,
   REVEAL_SWIPE_PX,
+  SCROLL_AWAY_PX,
+  scrollAwayStep,
   swipeClosesSheet,
   swipeHidesDock,
   swipeRevealsDock,
@@ -185,5 +187,21 @@ describe("строки dock.*", () => {
       expect(v.ru + v.kk, key).not.toMatch(/\p{Extended_Pictographic}/u);
       expect((dict as Record<string, { ru: string; kk: string }>)[key], key).toEqual(v);
     }
+  });
+});
+
+describe("scrollAwayStep: кнопка уходит в тень при прокрутке вниз", () => {
+  it("мелкие сдвиги копятся до порога; от порога кнопка «ушла»", () => {
+    let st = scrollAwayStep(0, 10);
+    expect(st).toEqual({ acc: 10, away: false });
+    st = scrollAwayStep(st.acc, SCROLL_AWAY_PX - 10);
+    expect(st.away).toBe(true);
+    st = scrollAwayStep(st.acc, 5);
+    expect(st.away).toBe(true);
+  });
+
+  it("прокрутка вверх сбрасывает счёт и возвращает кнопку сразу", () => {
+    expect(scrollAwayStep(100, -1)).toEqual({ acc: 0, away: false });
+    expect(scrollAwayStep(scrollAwayStep(100, -3).acc, 10).away).toBe(false); // после «вверх» счёт с нуля
   });
 });

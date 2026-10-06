@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { LevelCaseRoll } from "@/lib/level-case";
 import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
+import { useGuideUi } from "@/components/guide/guide-state";
 import { LevelCase } from "./LevelCase";
 
 /**
@@ -31,6 +32,8 @@ export function CaseAgent() {
   const pending = useApp((s) => s.pendingCases);
   // Пока идёт проводник первого входа (#104), кейс не перебивает его.
   const touring = useApp((s) => tourBlocking(s.tips));
+  // Открыта чат-панель Бита: кейс не ложится поверх неё и выходит, когда панель закрыли (пока кейс на экране, кнопка Бита спрятана).
+  const chatOpen = useGuideUi((s) => s.chatOpen);
   const [later, setLater] = useState<number[]>([]);
   // Уже открытый кейс (приз выдан, кейса нет в очереди): хранится выданный бросок, чтобы после перемонтирования окна
   // (кнопка «назад», смена страницы) показать приз, а не закрытый кейс заново.
@@ -39,6 +42,8 @@ export function CaseAgent() {
   if (!onboarded || touring || !caseAllowedPath(pathname)) return null;
   const level = opened?.level ?? pending.find((l) => !later.includes(l));
   if (level === undefined) return null;
+  // Приз уже выдан (`opened`) — окно не прячем, пока ученик его не закроет.
+  if (chatOpen && !opened) return null;
   return (
     <LevelCase
       key={level}

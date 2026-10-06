@@ -237,6 +237,58 @@ describe("страница чтения (TheoryReader)", () => {
     expect(hearts()).toBe(5);
   });
 
+  it("компактная шапка: «Спросить Бита» — короткая кнопка с меткой тура, переключатель режима — в строке «Карточка 1 из N», метки тура на месте", async () => {
+    await render(createElement(StrictMode, null, reader()));
+    await frame();
+    const ask = host.querySelector<HTMLElement>("[data-tour=theory-ask]")!;
+    expect(ask.textContent).toBe("Спросить Бита");
+    expect(ask.getAttribute("aria-label")).toBe("Спросить Бита об этой теме");
+    expect(ask.className).toContain("bg-ai");
+    // Сводка «N карточек · M мин чтения» — одна строка текста, без пилюль.
+    expect(host.querySelector("h1")!.nextElementSibling!.textContent).toMatch(/\d+ карточ\S* · \d+ мин чтения/);
+    // Переключатель и подпись «Карточка 1 из N» — в одной строке; под ней сегменты.
+    const label = [...host.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Карточка 1 из"))!;
+    const row = label.parentElement!;
+    const toggle = row.querySelector('[role="group"]')!;
+    expect(toggle.getAttribute("aria-label")).toBe("Как читать");
+    expect([...toggle.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["По карточкам", "Всё сразу"]);
+    expect(host.querySelector("[data-tour=theory-next]")).not.toBeNull();
+    // «Всё сразу»: переключатель остаётся (справа), подписи «Карточка 1 из» нет.
+    await act(async () => ([...toggle.querySelectorAll("button")].find((b) => b.textContent === "Всё сразу") as HTMLElement).click());
+    expect(body()).not.toContain("Карточка 1 из");
+    expect(host.querySelector('[role="group"][aria-label="Как читать"]')).not.toBeNull();
+  });
+
+  it("зоны касания ≥ 44 px: «Спросить Бита», кружки ленты, сегменты карточек; название раздела в крошках не обрезается", async () => {
+    await render(createElement(StrictMode, null, reader()));
+    await frame();
+    // «Спросить Бита»: кнопка 36 px + невидимая кромка 6 px со всех сторон.
+    const ask = host.querySelector<HTMLElement>("[data-tour=theory-ask]")!;
+    expect(ask.className).toContain("after:-inset-1.5");
+    expect(ask.className).toContain("relative");
+    // Кружки ленты уроков: 32 px + 6 px; лента с отступом 6 px (зону не обрезает прокрутка), между кружками — 12 px.
+    const strip = host.querySelector<HTMLElement>("[data-strip]");
+    if (strip) {
+      expect(strip.className).toContain("py-1.5");
+      const dots = [...strip.querySelectorAll("a")];
+      expect(dots.length).toBeGreaterThan(1);
+      for (const a of dots) expect(a.className).toContain("after:-inset-1.5");
+    }
+    // Сегменты прогресса: полоска 24 px + невидимые 10 px сверху и снизу; переключатель режима выше их зон.
+    const seg = [...host.querySelectorAll<HTMLElement>("ol button")].filter((b) => /^Карточка \d+$|^Конспект/.test(b.getAttribute("aria-label") ?? ""));
+    expect(seg.length).toBeGreaterThan(2);
+    for (const b of seg) {
+      expect(b.className).toContain("h-6");
+      expect(b.className).toContain("after:-inset-y-2.5");
+    }
+    expect(host.querySelector('[role="group"][aria-label="Как читать"]')!.parentElement!.className).toContain("z-10");
+    // Крошки: ссылка на раздел переносит длинное название, а не обрезает его многоточием.
+    const crumb = host.querySelector<HTMLElement>("header nav a")!;
+    expect(crumb.className).not.toMatch(/truncate|text-ellipsis|line-clamp/);
+    expect(crumb.querySelector("span")!.className).toContain("break-words");
+    expect(crumb.querySelector("span")!.className).not.toContain("truncate");
+  });
+
   it("P3: сердечек нет — окно «Сердечки закончились», текста темы нет, выход — к списку теории", async () => {
     useApp.setState({ hearts: { count: 0, updatedAt: Date.now(), day: todayKey() } });
     await render(reader());

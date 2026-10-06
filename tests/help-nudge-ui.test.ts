@@ -199,6 +199,56 @@ describe("когда выходит плашка", () => {
   });
 });
 
+describe("вёрстка плашки: ничего не срезано панелью (360 px)", () => {
+  /** Колонка плашки: пузырь, над ним — ничего, под ним — Бит. */
+  const column = () => nudge()!.parentElement!;
+  const bit = () => document.querySelector<HTMLElement>("[data-help-bit]");
+
+  it("есть пузырь с текстом и обе кнопки, и они внутри одного пузыря над Битом", async () => {
+    await render(step(1));
+    await wait(21_000);
+    const bubble = nudge()!;
+    expect(bubble.textContent).toContain("Долго думаешь? Могу дать подсказку.");
+    const names = [...bubble.querySelectorAll("button")].map((b) => b.textContent);
+    expect(names.some((n) => n?.includes("Подсказка"))).toBe(true);
+    expect(names.some((n) => n?.includes("Нет, спасибо"))).toBe(true);
+    // Порядок в колонке: пузырь, затем Бит (Бит — на кромке панели, пузырь над ним).
+    const kids = [...column().children];
+    expect(kids.indexOf(bubble)).toBe(0);
+    expect(kids.indexOf(bit()!)).toBe(kids.length - 1);
+  });
+
+  it("Бит стоит на кромке панели целиком: у него нет отрицательного нижнего отступа, который прятал нижнюю часть под панель", async () => {
+    await render(step(1));
+    await wait(21_000);
+    const cls = bit()!.className;
+    expect(cls).not.toMatch(/(^|\s)-m[by]?-/);
+    // Колонка прижата к верху панели (`bottom-full`) и не шире экрана 360 px с полями.
+    const wrap = column().parentElement!.parentElement!;
+    expect(wrap.className).toContain("bottom-full");
+    expect(column().className).toContain("max-w-[344px]");
+  });
+
+  it("при «Меньше анимаций» пузырь и обе кнопки тоже на месте", async () => {
+    useApp.setState((s) => ({ profile: { ...s.profile, reduceMotion: true } }));
+    await render(step(1));
+    await wait(21_000);
+    expect(nudge()).not.toBeNull();
+    expect(button("Подсказка")).toBeDefined();
+    expect(button("Нет, спасибо")).toBeDefined();
+  });
+
+  it("по-казахски пузырь и кнопки тоже на месте", async () => {
+    useApp.setState((s) => ({ profile: { ...s.profile, lang: "kk" } }));
+    await render({ ...step(1), kind: "simpler" });
+    await wait(21_000);
+    expect(say()).toContain("Қарапайымырақ түсіндірейін бе?");
+    expect(button("Биттен сұрау")).toBeDefined();
+    expect(button("Жоқ, рахмет")).toBeDefined();
+    expect(bit()).not.toBeNull();
+  });
+});
+
 describe("считается только активное время", () => {
   it("открытая шторка или окно ([role=dialog][aria-modal]) — пауза, после закрытия счёт продолжается", async () => {
     await render(step(1));

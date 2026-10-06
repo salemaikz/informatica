@@ -8,6 +8,7 @@ import { NoteImage } from "@/components/notes/NoteImage";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { noteImageId, remarkNoteMark, type MarkColor } from "@/lib/note-markdown";
+import { glueQuestionTail } from "@/lib/text";
 
 const REMARK_PLUGINS = [remarkGfm, remarkNoteMark];
 
@@ -122,11 +123,12 @@ const INLINE_COMPONENTS: Components = {
 /**
  * Строчный markdown для условий и разборов заданий: **жирный**, *курсив*, `код`, ==маркер==.
  * Без блоков (абзацы разворачиваются), поэтому можно вставлять внутрь заголовка или <p>.
+ * Хвост «число = ?» склеен неразрывными пробелами (`glueQuestionTail`): знак вопроса не повисает один на второй строке.
  */
 export function InlineMarkdown({ children }: { children: string }) {
   return (
     <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={INLINE_COMPONENTS} allowedElements={INLINE_ALLOWED} unwrapDisallowed urlTransform={urlTransform}>
-      {children}
+      {glueQuestionTail(children)}
     </ReactMarkdown>
   );
 }

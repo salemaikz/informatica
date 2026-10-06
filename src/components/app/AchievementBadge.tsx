@@ -87,7 +87,8 @@ export function AchievementBadge({ icon, rarity, got = true, size = 48, classNam
     <span
       className={cn(
         "relative flex shrink-0 items-center justify-center rounded-full border-solid",
-        got ? [RARITY_SOFT[rarity], RARITY_BORDER[rarity], RARITY_TEXT[rarity]] : "border-border bg-surface-2 text-muted",
+        // Полученный обычный — иконка цвета текста (читается как награда, а не как серая заглушка); закрытые — бледнее.
+        got ? [RARITY_SOFT[rarity], RARITY_BORDER[rarity], rarity === "common" ? "text-text" : RARITY_TEXT[rarity]] : "border-border bg-surface-2 text-muted opacity-60",
         className,
       )}
       style={{

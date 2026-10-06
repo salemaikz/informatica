@@ -69,8 +69,12 @@ function Sparks({ box, animated, count }: { box: number; animated: boolean; coun
   );
 }
 
-/** Круглый бейдж с номером уровня; вид — по ступени. */
-export function LevelBadge({ level, size = "md", className }: { level: number; size?: LevelBadgeSize; className?: string }) {
+/**
+ * Круглый бейдж с номером уровня; вид — по ступени.
+ * `plate` — бейдж на цветном фоне (золотое свечение кейса): золотое кольцо и тень, а у обычной ступени вместо бледно-серой заливки —
+ * цвет карточки (`surface`), чтобы число не терялось ни в светлой, ни в тёмной теме.
+ */
+export function LevelBadge({ level, size = "md", className, plate }: { level: number; size?: LevelBadgeSize; className?: string; plate?: boolean }) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const { box, ring } = SIZE[size];
@@ -90,7 +94,7 @@ export function LevelBadge({ level, size = "md", className }: { level: number; s
     <span
       role="img"
       aria-label={`${t("stats.level")} ${level}`}
-      className={cn("relative inline-grid shrink-0 place-items-center align-middle", className)}
+      className={cn("relative inline-grid shrink-0 place-items-center align-middle", plate && "rounded-full bg-surface shadow-md ring-[3px] ring-gold", className)}
       style={{ width: box, height: box }}
     >
       {shadow && <span aria-hidden className="absolute inset-0 rounded-full" style={{ boxShadow: shadow }} />}
@@ -114,7 +118,7 @@ export function LevelBadge({ level, size = "md", className }: { level: number; s
         <span
           className={cn(
             "relative grid size-full place-items-center overflow-hidden rounded-full",
-            RARITY_SOFT[tier],
+            plate && tier === "common" ? "bg-surface" : RARITY_SOFT[tier],
             tier !== "common" && cn("border-solid", RARITY_BORDER[tier]),
           )}
           style={tier === "common" ? undefined : { borderWidth: ring }}

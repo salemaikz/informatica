@@ -333,31 +333,54 @@ describe("«Контекстные задания»: вход — трениро
 });
 
 describe("профиль: достижения (E10–E12)", () => {
-  it("сводка: у каждой из четырёх мини-полосок подпись — точка, название редкости и «N из M»", async () => {
+  it("сводка: у каждой из четырёх мини-полосок подпись — точка, название редкости и короткое «N/M»", async () => {
     useApp.setState({ achievements: { first_lesson: 1, level_20: 2 } });
     await render(createElement(AchievementsSection));
     const summary = host.querySelector("div.grid")!;
     const cells = [...summary.children];
     expect(cells).toHaveLength(4);
-    expect(cells.map((c) => c.querySelector("span.truncate")?.textContent)).toEqual(["Легендарные", "Эпические", "Редкие", "Обычные"]);
+    // Название — первый текстовый элемент подписи (после точки), второй — счётчик.
+    const nameOf = (c: Element) => c.querySelector("span.break-words")?.textContent;
+    expect(cells.map(nameOf)).toEqual(["Легендарные", "Эпические", "Редкие", "Обычные"]);
     for (const cell of cells) {
       expect(cell.querySelector('[role="progressbar"]')).not.toBeNull();
-      expect(cell.textContent).toMatch(/\d+ из \d+/);
+      expect(cell.textContent).toMatch(/\d+\/\d+/);
       expect(cell.querySelector("span[aria-hidden].rounded-full")).not.toBeNull();
     }
     // полоски — в цвете своей редкости (токены), а не одним цветом
     const colors = cells.map((c) => (c.querySelector('[role="progressbar"] > div') as HTMLElement).style.background);
     expect(new Set(colors).size).toBe(4);
-    // легендарное «level_20» получено: 1 из N в первой ячейке
-    expect(cells[0].textContent).toMatch(/1 из \d+/);
+    // легендарное «level_20» получено: 1/N в первой ячейке
+    expect(cells[0].textContent).toMatch(/1\/\d+/);
+  });
+
+  it("подписи сводки не обрезаются на 360 px: у названия нет truncate/ellipsis, счётчик короткий («0/5», а не «0 из 5»), в обоих языках", async () => {
+    for (const lang of ["ru", "kk"] as const) {
+      useApp.setState((s) => ({ profile: { ...s.profile, lang } }));
+      await render(createElement(AchievementsSection));
+      const cells = [...host.querySelector("div.grid")!.children];
+      for (const cell of cells) {
+        const label = cell.firstElementChild!;
+        // Ни одного элемента подписи с обрезкой многоточием.
+        expect(label.querySelectorAll(".truncate, .text-ellipsis, [class*='line-clamp']")).toHaveLength(0);
+        const count = label.lastElementChild!.textContent!;
+        expect(count, lang).toMatch(/^\d+\/\d+$/);
+        // Оценка ширины (≈ 6,5 px на знак при 12 px extrabold): точка + название + счётчик помещаются в колонку ≈ 138 px.
+        const name = label.querySelector("span.break-words")!.textContent!;
+        const width = 10 + 6 + name.length * 6.5 + 6 + count.length * 6.5;
+        expect(width, `${lang}: ${name} ${count}`).toBeLessThanOrEqual(138);
+      }
+      // Полные формулировки «N из M» остаются в заголовках групп ниже.
+      if (lang === "ru") expect(host.textContent).toMatch(/Легендарные · 0 из \d+/);
+    }
   });
 
   it("на казахском подписи сводки на месте", async () => {
     useApp.setState((s) => ({ profile: { ...s.profile, lang: "kk" } }));
     await render(createElement(AchievementsSection));
     const summary = host.querySelector("div.grid")!;
-    expect([...summary.children].map((c) => c.querySelector("span.truncate")?.textContent)).toEqual(["Аңыздық", "Эпикалық", "Сирек", "Қарапайым"]);
-    expect(summary.textContent).toMatch(/\d+ \/ \d+/);
+    expect([...summary.children].map((c) => c.querySelector("span.break-words")?.textContent)).toEqual(["Аңыздық", "Эпикалық", "Сирек", "Қарапайым"]);
+    expect(summary.textContent).toMatch(/\d+\/\d+/);
   });
 
   it("подзаголовок магазина упоминает украшения профиля (ru и kk)", () => {

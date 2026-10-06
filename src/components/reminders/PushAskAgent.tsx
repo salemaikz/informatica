@@ -8,6 +8,7 @@ import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { enablePush, pushPermission } from "@/components/goals/push";
+import { useGuideUi } from "@/components/guide/guide-state";
 import { MascotSays } from "@/components/mascot/Mascot";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -43,6 +44,9 @@ export function PushAskAgent() {
       if (!s.profile.reminder.enabled) return;
       // Уже открыто другое окно (кейс за уровень, проводник) — не кладём окно поверх окна; спросим в следующий заход.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      // Ученик нажал на Бита: панель чата ещё грузится и окном не считается (на компьютере она и вовсе не `aria-modal`) —
+      // ждём по флагу. Показ не засчитываем (notePushAsked ниже не вызывается): спросим в следующий заход.
+      if (useGuideUi.getState().chatOpen) return;
       const permission = pushPermission();
       const pushOn = s.profile.reminder.push && permission === "granted";
       const action = shouldAskPush(permission, s.pushAsk, s.profile.createdAt, Date.now(), pushOn);
