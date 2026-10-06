@@ -144,11 +144,13 @@ export function BitChatPanel({ open, chatId, onClose, onNewChat }: { open: boole
         transition={{ duration: 0.2 }}
         className={cn("absolute inset-0 bg-black/40 lg:hidden", open ? "pointer-events-auto" : "pointer-events-none")}
       />
+      {/* Закрытая панель остаётся смонтированной (inert, невидима), но окном не считается: без role="dialog" и aria-modal —
+          иначе проводник Бита и окно напоминаний ждали бы, пока её «закроют». */}
       <m.section
         ref={panelRef}
         data-bit-panel
-        role="dialog"
-        aria-modal={!desktop}
+        role={open ? "dialog" : undefined}
+        aria-modal={open && !desktop ? true : undefined}
         aria-label={t("dock.panel")}
         tabIndex={-1}
         initial={{ ...closedPos, opacity: 0 }}

@@ -19,6 +19,8 @@ export interface GuideStep {
   textNoName?: DictKey;
   /** `{n}` ≠ 1 — этот вариант («сердечка» вместо «сердечко»). */
   textMany?: DictKey;
+  /** Сердечки не списывались («Безлимит», пробный) — этот вариант. */
+  textFree?: DictKey;
   mood?: Mood;
   /** next — кнопка «Дальше»/«Понятно»; tap — ждём нажатия на цель (кнопки «Дальше» нет). */
   action: GuideAction;
@@ -76,7 +78,15 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
   "lesson-first": {
     id: "lesson-first",
     steps: [
-      { id: "hearts", targets: ["lesson-hearts"], text: "guide.lesson.hearts", textMany: "guide.lesson.heartsMany", mood: "happy", action: "next" },
+      {
+        id: "hearts",
+        targets: ["lesson-hearts"],
+        text: "guide.lesson.hearts",
+        textMany: "guide.lesson.heartsMany",
+        textFree: "guide.lesson.heartsFree",
+        mood: "happy",
+        action: "next",
+      },
       { id: "progress", targets: ["lesson-progress"], text: "guide.lesson.progress", action: "next" },
       { id: "options", targets: ["lesson-options"], text: "guide.lesson.options", action: "tap", waitMs: LESSON_WAIT_MS },
       { id: "check", targets: ["lesson-check"], text: "guide.lesson.check", action: "tap", chain: true },
@@ -163,11 +173,15 @@ export function sceneSteps(scene: GuideScene, ent: boolean): GuideStep[] {
   return scene.steps.filter((s) => ent || !s.ent);
 }
 
-/** Какой текст сказать на шаге: имя есть/нет, школьный трек, число сердечек, запасная реплика (`orElse`). */
-export function stepText(step: GuideStep, o: { name?: string; school?: boolean; n?: number; fallback?: boolean }): DictKey {
+/**
+ * Какой текст сказать на шаге: имя есть/нет, школьный трек, сердечки не списывались (`free`: «Безлимит», пробный),
+ * число сердечек, запасная реплика (`orElse`).
+ */
+export function stepText(step: GuideStep, o: { name?: string; school?: boolean; n?: number; free?: boolean; fallback?: boolean }): DictKey {
   if (o.fallback && step.orElse) return step.orElse.text;
   if (step.textNoName && !o.name?.trim()) return step.textNoName;
   if (step.textSchool && o.school) return step.textSchool;
+  if (step.textFree && o.free) return step.textFree;
   if (step.textMany && o.n !== undefined && o.n !== 1) return step.textMany;
   return step.text;
 }
@@ -302,10 +316,23 @@ export function placementRects(p: BitPlacement, vh: number, textLen: number): { 
   };
 }
 
+/** Пересечение прямоугольников, px² (0 — не пересекаются). */
+export function overlapArea(a: Rect, b: Rect): number {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/** Верх пузыря не выше этого поля: текст реплики виден целиком. */
+const TOP_MARGIN = 4;
+
 /**
  * Где Бит и пузырь: Бит в правом нижнем углу (над нижней панелью); если цель в правой нижней четверти или Бит её закрыл бы —
  * в левом нижнем. Пузырь — над Битом, а если цель в нижней половине — сбоку от Бита. Закрыли бы цель и так — пробуем
- * остальные сочетания, а если цель у самого низа (кнопка внизу экрана), Бит поднимается над ней.
+ * остальные сочетания. Варианты, где пузырь вылез бы за верх окна, отбрасываются.
+ * Бит поднимается над целью, только если под ней ему нет места (кнопка у самого низа экрана: «Проверить», «Продолжить»);
+ * иначе он сел бы на соседние кнопки. Чисто не помещается ничего — Бит и пузырь остаются внизу, там, где меньше всего
+ * закрыто цели (пузырь растёт вверх от низа экрана — его кнопки видны всегда).
  * `textLen` — длина реплики: по ней оценивается высота пузыря.
  */
 export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90): BitPlacement {
@@ -318,6 +345,11 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90): 
     const r = placementRects(p, vh, textLen);
     return overlaps(r.bit, target, CLEAR) || overlaps(r.bubble, target, CLEAR);
   };
+  const fits = (p: BitPlacement) => {
+    const r = placementRects(p, vh, textLen);
+    return r.bubble.y >= TOP_MARGIN && r.bit.y >= 0;
+  };
+  const clean = (p: BitPlacement) => fits(p) && !hits(p);
   const cx = target.x + target.w / 2;
   const cy = target.y + target.h / 2;
   const brBit = placementRects(layout("br", "above", base, vw), vh, textLen).bit;
@@ -331,23 +363,45 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90): 
     [corner, otherBubble],
     [other, otherBubble],
   ];
-  for (const [c, b] of order) {
-    const p = layout(c, b, base, vw);
-    if (!hits(p)) return p;
+  const atBase = order.map(([c, b]) => layout(c, b, base, vw));
+  for (const p of atBase) if (clean(p)) return p;
+
+  // Под целью Биту нет места (цель у самого низа экрана) — он встаёт над ней.
+  const roomBelow = target.y + target.h + CLEAR <= vh - base - BIT_SIZE;
+  if (!roomBelow) {
+    const lifted = Math.max(base, vh - target.y + LIFT_GAP);
+    const liftedOrder: [BitPlacement["corner"], BitPlacement["bubble"]][] = [
+      ["br", "above"],
+      ["bl", "above"],
+      ["br", "side"],
+      ["bl", "side"],
+    ];
+    for (const [c, b] of liftedOrder) {
+      const p = layout(c, b, lifted, vw);
+      if (clean(p)) return p;
+    }
   }
-  // Цель у низа экрана и шириной во весь экран: Бит встаёт над ней.
-  const lifted = Math.min(Math.max(base, vh - target.y + LIFT_GAP), Math.max(base, vh - BIT_SIZE - edge));
-  const liftedOrder: [BitPlacement["corner"], BitPlacement["bubble"]][] = [
-    ["br", "above"],
-    ["bl", "above"],
-    ["br", "side"],
-    ["bl", "side"],
-  ];
-  for (const [c, b] of liftedOrder) {
-    const p = layout(c, b, lifted, vw);
-    if (!hits(p)) return p;
+
+  // Ничего не помещается чисто: внизу, где закрыто меньше всего цели (Бит поверх цели — вдвое хуже пузыря).
+  const pool = atBase.filter(fits);
+  let best = (pool.length ? pool : atBase)[0];
+  let bestScore = Infinity;
+  for (const p of pool.length ? pool : atBase) {
+    const r = placementRects(p, vh, textLen);
+    const score = overlapArea(r.bubble, target) + 2 * overlapArea(r.bit, target);
+    if (score < bestScore) {
+      best = p;
+      bestScore = score;
+    }
   }
-  return layout(corner, bubble, base, vw);
+  return best;
+}
+
+/** Палец-указатель: кончик (x; y) и поворот `angle` в градусах по часовой стрелке от «пальцем вверх». */
+export interface FingerPose {
+  x: number;
+  y: number;
+  angle: number;
 }
 
 /**
@@ -355,7 +409,7 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90): 
  * треть меньшей стороны, не больше 14), палец смотрит на центр цели. `angle` — поворот в градусах по часовой стрелке
  * от «пальцем вверх».
  */
-export function fingerPose(target: Rect, from: { x: number; y: number }, depth?: number): { x: number; y: number; angle: number } {
+export function fingerPose(target: Rect, from: { x: number; y: number }, depth?: number): FingerPose {
   const cx = target.x + target.w / 2;
   const cy = target.y + target.h / 2;
   let dx = from.x - cx;
@@ -374,4 +428,60 @@ export function fingerPose(target: Rect, from: { x: number; y: number }, depth?:
   const t = Math.max(0, Math.min(tx, ty) - d);
   const angle = (Math.atan2(-ux, uy) * 180) / Math.PI;
   return { x: cx + ux * t, y: cy + uy * t, angle: Math.abs(angle) < 1e-9 ? 0 : angle };
+}
+
+/**
+ * Где лежит палец (в системе «пальцем вверх», кончик в 0; 0): иконка 40 px (`GuidePointer`) с белой обводкой — поперёк
+ * оси от −14 до 28 px (кисть справа), вдоль — до 56 px от кончика с учётом «тычка».
+ */
+const FINGER_BOX = { x1: -14, x2: 28, y1: -2, y2: 56 } as const;
+
+/** Прямоугольник, который закрывает палец на экране (рамка повёрнутого пальца). */
+export function fingerRect(f: FingerPose): Rect {
+  const a = (f.angle * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  let x1 = Infinity;
+  let y1 = Infinity;
+  let x2 = -Infinity;
+  let y2 = -Infinity;
+  for (const px of [FINGER_BOX.x1, FINGER_BOX.x2]) {
+    for (const py of [FINGER_BOX.y1, FINGER_BOX.y2]) {
+      const x = f.x + px * cos - py * sin;
+      const y = f.y + px * sin + py * cos;
+      x1 = Math.min(x1, x);
+      y1 = Math.min(y1, y);
+      x2 = Math.max(x2, x);
+      y2 = Math.max(y2, y);
+    }
+  }
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+
+/**
+ * Откуда палец показывает на цель: со стороны Бита (`from` — его центр), а если там палец лёг бы на Бита или пузырь
+ * (`avoid`) или вылез за окно — сверху, снизу, сбоку или по диагонали, где свободно. Свободно нигде — со стороны Бита.
+ */
+export function aimFinger(target: Rect, from: { x: number; y: number }, avoid: readonly Rect[], vw: number, vh: number): FingerPose {
+  const cx = target.x + target.w / 2;
+  const cy = target.y + target.h / 2;
+  const far = 10_000;
+  const sources = [
+    from,
+    { x: cx, y: cy - far },
+    { x: cx, y: cy + far },
+    { x: cx - far, y: cy },
+    { x: cx + far, y: cy },
+    { x: cx - far, y: cy - far },
+    { x: cx + far, y: cy - far },
+    { x: cx - far, y: cy + far },
+    { x: cx + far, y: cy + far },
+  ];
+  for (const s of sources) {
+    const pose = fingerPose(target, s);
+    const r = fingerRect(pose);
+    const inside = r.x >= 0 && r.y >= 0 && r.x + r.w <= vw && r.y + r.h <= vh;
+    if (inside && !avoid.some((a) => overlaps(r, a))) return pose;
+  }
+  return fingerPose(target, from);
 }

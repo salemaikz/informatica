@@ -2,9 +2,9 @@
 
 import { Pointer } from "lucide-react";
 import { m } from "motion/react";
-import type { Rect } from "@/lib/guide";
+import type { FingerPose, Rect } from "@/lib/guide";
 
-/** Размер пальца-указателя, px; кончик пальца у иконки Pointer — в точке (8; 2) из 24. */
+/** Размер пальца-указателя, px; кончик пальца у иконки Pointer — в точке (8; 2) из 24. Сколько места он занимает с «тычком» — `fingerRect` в lib/guide.ts. */
 export const FINGER = 40;
 const TIP_X = (8 / 24) * FINGER;
 const TIP_Y = (2 / 24) * FINGER;
@@ -79,10 +79,11 @@ export function GuideDim({
  * Палец-указатель: обёртка стоит кончиком на цели и повёрнута к ней (`fingerPose`), внутри — «тычок» вдоль пальца.
  * Рисуется поверх пузыря: короткий палец не прячется за ним, когда цель близко к Биту.
  */
-export function GuideFinger({ stepKey, finger, reduce }: { stepKey: string; finger: { x: number; y: number; angle: number }; reduce: boolean }) {
+export function GuideFinger({ stepKey, finger, reduce }: { stepKey: string; finger: FingerPose; reduce: boolean }) {
   return (
     <m.div
       aria-hidden
+      data-guide-finger=""
       className="pointer-events-none absolute left-0 top-0"
       style={{ x: finger.x, y: finger.y, rotate: finger.angle, originX: 0, originY: 0 }}
       initial={{ opacity: 0 }}

@@ -12,7 +12,8 @@ import { useT } from "@/i18n/useT";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useToolbox } from "@/components/tools/useToolbox";
-import { useGuideUi } from "./guide-state";
+import { useGuideUi, useWantedScene } from "./guide-state";
+import { liveModal } from "./targets";
 
 // Панель с чатом тянет весь чат (ленту, поле ввода, голос) — грузится при первом касании кнопки.
 const loadPanel = () => import("./BitChatPanel");
@@ -24,13 +25,16 @@ const SPRING = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 function subscribeOverlay(cb: () => void): () => void {
   const mo = new MutationObserver(cb);
-  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-modal"] });
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-modal", "role", "inert", "hidden"] });
   return () => mo.disconnect();
 }
 
-/** Есть ли поверх страницы окно или шторка (`aria-modal`), не считая саму панель Бита. */
+/**
+ * Есть ли поверх страницы окно или шторка (`aria-modal`), не считая саму панель Бита, пузырь Бита-проводника
+ * (на шаге «А это я!» он модальный, а кнопка — его цель) и окна, которые смонтированы, но не на экране (`inert`, скрыты).
+ */
 function overlayOpen(): boolean {
-  return Array.from(document.querySelectorAll('[aria-modal="true"]')).some((el) => !el.closest("[data-bit-panel]"));
+  return Array.from(document.querySelectorAll('[aria-modal="true"]')).some((el) => !el.closest("[data-bit-panel]") && liveModal(el));
 }
 
 /** Следит за окнами и шторками поверх страницы, пока `enabled` (иначе — не слушает DOM и отвечает «нет»). */
@@ -113,12 +117,21 @@ function useSwipeX(x: MotionValue<number>, dir: 1 | -1, decide: (dx: number, vx:
 // ---------- кнопка ----------
 
 /** Круглая кнопка Бита и стрелка «›» справа («смахни вправо»). */
-function DockButton({ onOpen, onHide, onWarm }: { onOpen: () => void; onHide: () => void; onWarm: () => void }) {
+function DockButton({
+  onOpen,
+  onHide,
+  onWarm,
+}: {
+  onOpen: () => void;
+  /** keyboard — спрятали стрелкой с клавиатуры: фокус перейдёт на язычок. */
+  onHide: (keyboard: boolean) => void;
+  onWarm: () => void;
+}) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const hintId = useId();
   const x = useMotionValue(0);
-  const swipe = useSwipeX(x, 1, swipeHidesDock, onHide);
+  const swipe = useSwipeX(x, 1, swipeHidesDock, () => onHide(false));
 
   // Раз в ~40 с Бит слегка подпрыгивает (настроение «радость» у маскота — его собственный прыжок). «Меньше анимаций» — без этого.
   const [hop, setHop] = useState(false);
@@ -143,10 +156,10 @@ function DockButton({ onOpen, onHide, onWarm }: { onOpen: () => void; onHide: ()
   }, [reduce]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    // Без свайпа: стрелка вправо на кнопке тоже прячет Бита.
+    // Без свайпа: стрелка вправо на кнопке тоже прячет Бита (фокус — на язычок).
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      onHide();
+      onHide(true);
     }
   };
 
@@ -201,16 +214,21 @@ function DockButton({ onOpen, onHide, onWarm }: { onOpen: () => void; onHide: ()
 // ---------- язычок у края ----------
 
 /** Кнопка спрятана: у правого края остался язычок со стрелкой «‹». Касание или свайп влево возвращают кнопку. */
-function DockTab({ onShow }: { onShow: () => void }) {
+function DockTab({
+  onShow,
+}: {
+  /** focus — на язычке был фокус (клавиатура): он перейдёт на вернувшуюся кнопку. */
+  onShow: (focus: boolean) => void;
+}) {
   const { t } = useT();
   const hintId = useId();
   const x = useMotionValue(0);
-  const swipe = useSwipeX(x, -1, swipeRevealsDock, onShow);
+  const swipe = useSwipeX(x, -1, swipeRevealsDock, () => onShow(false));
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      onShow();
+      onShow(true);
     }
   };
 
@@ -227,9 +245,10 @@ function DockTab({ onShow }: { onShow: () => void }) {
     >
       <button
         type="button"
+        data-dock-tab=""
         aria-label={t("dock.show")}
         aria-describedby={hintId}
-        onClick={onShow}
+        onClick={(e) => onShow(e.currentTarget === document.activeElement)}
         onKeyDown={onKeyDown}
         className={cn(
           "relative flex h-12 w-6 items-center justify-center rounded-l-2xl border-2 border-r-0 border-ai bg-ai-soft text-ai shadow-md",
@@ -252,13 +271,17 @@ function DockTab({ onShow }: { onShow: () => void }) {
 /**
  * Плавающая кнопка Бита (ИИ-чат вместо вкладки в нижней панели). Монтируется в AppShell.
  * Круг в правом нижнем углу открывает чат-панель; свайп вправо прячет кнопку за край (остаётся язычок), свайп влево/касание возвращают.
- * Прячется на `/tutor*`, пока играет сцена проводника, пока открыты «Инструменты» или шторка поверх (и пока открыта сама панель).
+ * Прячется на `/tutor*`, пока проводник хочет сыграть или играет сцену на этой странице (кроме шага про саму кнопку),
+ * пока открыты «Инструменты» или шторка поверх (и пока открыта сама панель).
  */
 export function BitDock() {
   const pathname = usePathname();
   const hidden = useApp((s) => s.profile.bitHidden);
   const updateProfile = useApp((s) => s.updateProfile);
   const guideActive = useGuideUi((s) => s.active);
+  const dockStep = useGuideUi((s) => s.dockStep);
+  // Сцена ещё в паузе перед выходом Бита — кнопка уже не показывается (иначе выехала бы и тут же спряталась).
+  const sceneWanted = useWantedScene() !== null;
   const toolboxOpen = useToolbox((s) => s.open);
   const onPage = dockVisible(pathname);
 
@@ -271,7 +294,27 @@ export function BitDock() {
   const [chatId, setChatId] = useState<string | null>(null);
 
   const overlay = useOverlayOpen(onPage && !open);
-  const show = onPage && !open && !guideActive && !toolboxOpen && !overlay;
+  // На шаге «А это я!» кнопка — цель проводника: видна (модальный пузырь проводника — не «чужое окно», см. overlayOpen).
+  const guideHolds = !dockStep && (guideActive || sceneWanted);
+  const show = onPage && !open && !guideHolds && !toolboxOpen && !overlay;
+
+  // Фокус после «спрятать» стрелкой с клавиатуры (→ язычок) и «вернуть» с язычка, на котором был фокус (→ кнопка).
+  // Ищем элемент после перерисовки, а не в его эффекте монтирования: AnimatePresence может «оживить» уходящий элемент
+  // (быстрое «спрятать — вернуть»), и тогда он не монтируется заново.
+  const moveFocus = useRef(false);
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    document.querySelector<HTMLElement>(hidden ? "[data-dock-tab]" : '[data-tour="bit-dock"]')?.focus({ preventScroll: true });
+  }, [hidden]);
+  const hide = (keyboard: boolean) => {
+    moveFocus.current = keyboard;
+    updateProfile({ bitHidden: true });
+  };
+  const reveal = (focus: boolean) => {
+    moveFocus.current = focus;
+    updateProfile({ bitHidden: false });
+  };
 
   // «Инструменты» открылись (кнопка в боковом меню компьютера) — панель Бита уступает место.
   useEffect(() => useToolbox.subscribe((s) => s.open && setOpenPath(null)), []);
@@ -300,8 +343,8 @@ export function BitDock() {
   return (
     <>
       <AnimatePresence>
-        {show && !hidden && <DockButton key="dock" onOpen={openPanel} onHide={() => updateProfile({ bitHidden: true })} onWarm={() => void loadPanel()} />}
-        {show && hidden && <DockTab key="tab" onShow={() => updateProfile({ bitHidden: false })} />}
+        {show && !hidden && <DockButton key="dock" onOpen={openPanel} onHide={hide} onWarm={() => void loadPanel()} />}
+        {show && hidden && <DockTab key="tab" onShow={reveal} />}
       </AnimatePresence>
       {onPage && mounted && chatId && (
         <BitChatPanel
