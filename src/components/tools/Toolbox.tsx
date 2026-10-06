@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } 
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
+import { MusicToggle } from "@/components/music/MusicToggle";
 import { Calculator } from "./Calculator";
 import { tabsFor, TOOL_TABS, useToolbox, type ToolTab } from "./useToolbox";
 
@@ -338,6 +339,8 @@ export function Toolbox() {
               </div>
             ))}
           </div>
+          {/* Музыка урока и тренировки: выключатель живёт здесь, чтобы не трогать шапку (метки проводника). Нет музыки у экрана — пусто. */}
+          <MusicToggle variant="row" className="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" />
         </m.div>
       </div>
     </div>

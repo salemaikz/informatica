@@ -32,6 +32,7 @@ import { TipsReset } from "@/components/profile/TipsReset";
 import { CaseWaiting } from "@/components/rewards/CaseWaiting";
 import { FeedbackLink } from "@/components/issue/FeedbackLink";
 import { ReportEntry } from "@/components/report/ReportShareSheet";
+import { MusicRow } from "@/components/music/MusicRow";
 
 const NAME_MAX = 30;
 /** Клавиши, которыми двигают ползунок: только они подтверждают цель (Tab на ползунок — нет). */
@@ -294,6 +295,7 @@ export default function ProfilePage() {
             <OnOff label={t("prof.sound")} value={profile.sound} onChange={(sound) => update({ sound })} />
           </Row>
         </div>
+        <MusicRow />
         <Row label={t("prof.goal")}>
           <Segmented<Goal>
             label={t("prof.goal")}

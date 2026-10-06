@@ -9,6 +9,7 @@ import { goalsDict } from "./parts/goals";
 import { remindersDict } from "./parts/reminders";
 import { canvasDict } from "./parts/canvas";
 import { videoDict } from "./parts/video";
+import { media16dDict } from "./parts/media16d";
 import { aiDict } from "./parts/ai";
 import { gamesDict } from "./parts/games";
 import { scenesDict } from "./parts/scenes";
@@ -516,6 +517,7 @@ export const dict = {
   ...remindersDict,
   ...canvasDict,
   ...videoDict,
+  ...media16dDict,
   ...aiDict,
   ...gamesDict,
   ...scenesDict,

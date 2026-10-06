@@ -44,6 +44,7 @@ import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
 import { ToolboxButton } from "@/components/tools/Toolbox";
+import { ActivityMusic } from "@/components/music/ActivityMusic";
 import { ComboBadge, StreakFlame } from "@/components/motion/ComboFlame";
 import { snapshotStreakStart } from "@/components/motion/streak-snapshot";
 import { XpIcon } from "@/components/economy/XpIcon";
@@ -784,6 +785,8 @@ export function LessonPlayer({
 
   return (
     <div className="flex min-h-dvh flex-col overflow-x-clip">
+      {/* Фоновая музыка (Quiet Focus; выключатель — в панели инструментов): в тестах и мини-тесте — тишина, как на экзамене. */}
+      <ActivityMusic mode="focus" active={!testMode && mode !== "minitest"} />
       {/* Верхняя панель */}
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-2 px-4 sm:gap-3">
