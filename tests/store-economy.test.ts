@@ -169,6 +169,38 @@ describe("стор: чипы за опыт и бонусы", () => {
   });
 });
 
+describe("бустер ×2: все места начисления опыта", () => {
+  beforeEach(fullReset);
+  const task = (id: string) => ({ id, lang: "python", level: "A", title: { ru: "x", kk: "x" }, prompt: { ru: "x", kk: "x" }, starter: "", solution: "", check: {} }) as never;
+  const boostOn = () => useApp.setState({ boost: { mult: 2, until: Date.now() + 15 * MINUTE } as never });
+
+  it("бонус урока, задача практикума и игра удваиваются, ответ плеера = дельте стора", () => {
+    const xp0 = st().xp;
+    const plain = st().finishSession(lesson({ lessonId: "ns-2-read", answers: [rec({ stepId: "p1" })], xp: 10 }));
+    const plainDelta = st().xp - xp0;
+    expect(plainDelta).toBe(plain.bonusXp);
+    const t1 = st().recordCodeTask(task("py-1-a"), true);
+    const g1 = st().recordGame("bit-rush", { score: 5, correct: 4, total: 5, attempts: [] }, "normal");
+    fullReset();
+    boostOn();
+    const xp1 = st().xp;
+    const boosted = st().finishSession(lesson({ lessonId: "ns-2-read", answers: [rec({ stepId: "p1" })], xp: 10 }));
+    expect(boosted.bonusXp).toBe(plain.bonusXp * 2);
+    expect(st().xp - xp1).toBe(boosted.bonusXp);
+    const t2 = st().recordCodeTask(task("py-1-a"), true);
+    expect(t2.xp).toBe(t1.xp * 2);
+    const g2 = st().recordGame("bit-rush", { score: 5, correct: 4, total: 5, attempts: [] }, "normal");
+    expect(g2.xp).toBe(g1.xp * 2);
+  });
+
+  it("mergeState отбрасывает записи истории чипов старше недели", () => {
+    const now = Date.now();
+    const old = { id: "o", at: now - 8 * 24 * 3600_000, amount: 2, reason: "lesson" };
+    const fresh = { id: "f", at: now - 24 * 3600_000, amount: 2, reason: "lesson" };
+    expect(mergeState({ ledger: [fresh, old] }, st()).ledger.map((e) => e.id)).toEqual(["f"]);
+  });
+});
+
 describe("стор: finishSession", () => {
   beforeEach(fullReset);
 

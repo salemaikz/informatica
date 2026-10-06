@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mergeState, useApp } from "@/lib/store";
+import { bumpMissLog, mergeState, useApp } from "@/lib/store";
 import { dropRandom } from "@/lib/perfect";
 import { repeatedMistakes } from "@/lib/progress";
 import { fullExamChipsAllowed, lessonCounted } from "@/lib/exam-pass";
@@ -88,19 +88,38 @@ describe("правило ЕНТ +5", () => {
     expect(fullExamChipsAllowed([e({ answered: 3 })], cur)).toBe(true); // меньше половины
     expect(fullExamChipsAllowed([e({ kind: "mini", seed: 2 })], cur)).toBe(true);
     expect(fullExamChipsAllowed([e({ id: "n", seed: 2 })], cur)).toBe(true); // это же попытка
+    // Сегодня +5 не выдавали (повтор чужого варианта) — новый вариант в тот же день награждается.
+    const today = { id: "n", seed: 3, at: new Date(2027, 0, 15, 20).getTime() };
+    expect(fullExamChipsAllowed([e({ chips: false })], today)).toBe(true);
+    expect(fullExamChipsAllowed([e({ chips: true })], today)).toBe(false);
+    expect(fullExamChipsAllowed([e({})], today)).toBe(false); // старая попытка без поля — выдано
+    expect(fullExamChipsAllowed([e({ chips: false, seed: 3 })], today)).toBe(false); // вариант тот же
   });
 });
 
 describe("повторяющиеся ошибки", () => {
-  it("misses растёт при новой ошибке и сбрасывается верным ответом", () => {
+  it("missLog: ошибка → верный повтор → ошибка в другой сессии даёт n = 2", () => {
     st().recordAnswer(rec({ stepId: "q", correct: false, score: 0, given: "1" }), 0);
-    expect(st().mistakes[0].misses).toBe(1);
+    expect(st().missLog.q.n).toBe(1);
+    st().recordAnswer(rec({ stepId: "q", correct: true, retry: true }), 5); // верный повтор закрывает запись ошибки
+    expect(st().mistakes).toHaveLength(0);
+    expect(st().missLog.q.n).toBe(1);
     st().recordAnswer(rec({ stepId: "q", correct: false, score: 0, given: "2" }), 0);
+    expect(st().missLog.q.n).toBe(2);
     expect(st().mistakes[0].misses).toBe(2);
     st().recordAnswer(rec({ stepId: "q", correct: false, score: 0, retry: true }), 0); // повтор внутри урока не считается
-    expect(st().mistakes[0].misses).toBe(2);
-    st().recordAnswer(rec({ stepId: "q" }), 5);
-    expect(st().mistakes).toHaveLength(0);
+    expect(st().missLog.q.n).toBe(2);
+  });
+
+  it("missLog: не больше 300 записей, вытесняется старейшая; mergeState чистит мусор", () => {
+    let log = {};
+    for (let i = 0; i < 305; i++) log = bumpMissLog(log, `s${i}`, "p", undefined, i + 1);
+    expect(Object.keys(log)).toHaveLength(300);
+    expect(log).not.toHaveProperty("s0");
+    expect(log).toHaveProperty("s304");
+    const m = mergeState({ missLog: { a: { n: 2, prompt: "p", at: 1 }, b: { n: 0, prompt: "p", at: 1 }, c: "x" } }, st());
+    expect(Object.keys(m.missLog)).toEqual(["a"]);
+    expect(mergeState({}, st()).missLog).toEqual({});
   });
 
   it("mergeState: старые записи получают misses = 1", () => {

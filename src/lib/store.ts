@@ -232,6 +232,14 @@ export interface MistakeRecord {
   misses?: number;
 }
 
+/** Постоянный счётчик ошибок по заданию: верный ответ его не сбрасывает («Повторяющиеся ошибки», #122). */
+export interface MissLogEntry {
+  n: number;
+  prompt: string;
+  lessonId?: string;
+  at: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -276,6 +284,8 @@ export interface ExamSummary {
   dropSeen?: true;
   /** Сколько заданий отвечено (ставит recordExam): по нему полный пробный ЕНТ засчитывается в достижения («не меньше половины»). */
   answered?: number;
+  /** +5 чипов за эту попытку выдано (ставит recordExam): суточный запрет считает только такие. */
+  chips?: boolean;
 }
 
 export interface AppState {
@@ -287,6 +297,8 @@ export interface AppState {
   skills: Record<string, SkillStat>;
   lessons: Record<string, LessonStat>;
   mistakes: MistakeRecord[];
+  /** Сколько раз ошибся в каждом задании (по stepId; до MAX_MISS_LOG, старые вытесняются). */
+  missLog: Record<string, MissLogEntry>;
   achievements: Record<string, number>;
   newAchievements: string[];
   /** Версия правил достижений (этап 16В, E1): у сохранения старше — выполненное молча записывается при загрузке (mergeState). */
@@ -511,6 +523,35 @@ export interface AppActions {
 }
 
 const MAX_MISTAKES = 60;
+const MAX_MISS_LOG = 300;
+
+/** +1 к счётчику ошибок задания; при переполнении вытесняется самая старая запись. */
+export function bumpMissLog(log: Record<string, MissLogEntry>, stepId: string, prompt: string, lessonId: string | undefined, at: number): Record<string, MissLogEntry> {
+  const prev = log[stepId];
+  const next = { ...log, [stepId]: { n: (prev?.n ?? 0) + 1, prompt, lessonId: lessonId ?? prev?.lessonId, at } };
+  const keys = Object.keys(next);
+  if (keys.length > MAX_MISS_LOG) {
+    keys.sort((a, b) => next[a].at - next[b].at);
+    for (const k of keys.slice(0, keys.length - MAX_MISS_LOG)) delete next[k];
+  }
+  return next;
+}
+
+function sanitizeMissLog(raw: unknown): Record<string, MissLogEntry> {
+  const out: Record<string, MissLogEntry> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const e = v as Partial<MissLogEntry> | null;
+    if (!e || typeof e !== "object" || !isNum(e.n) || e.n < 1 || typeof e.prompt !== "string") continue;
+    out[k] = { n: Math.floor(e.n), prompt: e.prompt, ...(typeof e.lessonId === "string" ? { lessonId: e.lessonId } : {}), at: isNum(e.at) ? e.at : 0 };
+  }
+  const keys = Object.keys(out);
+  if (keys.length > MAX_MISS_LOG) {
+    keys.sort((a, b) => out[a].at - out[b].at);
+    for (const k of keys.slice(0, keys.length - MAX_MISS_LOG)) delete out[k];
+  }
+  return out;
+}
 const MAX_CHAT = 60;
 const MAX_EXAMS = 50;
 
@@ -550,6 +591,7 @@ const initialState: AppState = {
   skills: {},
   lessons: {},
   mistakes: [],
+  missLog: {},
   achievements: {},
   newAchievements: [],
   achRules: ACH_RULES_VERSION,
@@ -878,6 +920,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     mistakes: Array.isArray(p.mistakes)
       ? p.mistakes.filter((m): m is MistakeRecord => !!m && typeof m === "object").map((m) => ({ ...m, misses: isNum(m.misses) && m.misses >= 1 ? Math.floor(m.misses) : 1 }))
       : current.mistakes,
+    missLog: sanitizeMissLog(p.missLog),
     achievements: p.achievements === undefined ? current.achievements : cleanAchievements(p.achievements),
     newAchievements: Array.isArray(p.newAchievements) ? p.newAchievements.filter((id): id is string => typeof id === "string").slice(0, 60) : current.newAchievements,
     // Нет поля (сохранение до правил 2) — 0: миграция выполнится один раз (backfillAchievements).
@@ -969,8 +1012,10 @@ export const useApp = create<AppState & AppActions>()(
           // Одна запись на задание: повторная ошибка обновляет запись (и сохраняет урок),
           // верный ответ закрывает её.
           let mistakes = s.mistakes;
+          let missLog = s.missLog;
           const existing = s.mistakes.find((m) => m.stepId === rec.stepId);
           if (!rec.correct && !rec.retry) {
+            missLog = bumpMissLog(missLog, rec.stepId, rec.prompt, lessonId ?? existing?.lessonId, Date.now());
             mistakes = [
               {
                 id: existing?.id ?? uid(),
@@ -981,7 +1026,7 @@ export const useApp = create<AppState & AppActions>()(
                 given: rec.given,
                 expected: rec.expected,
                 at: Date.now(),
-                misses: (existing?.misses ?? (existing ? 1 : 0)) + 1,
+                misses: missLog[rec.stepId].n,
               },
               ...s.mistakes.filter((m) => m.stepId !== rec.stepId),
             ].slice(0, MAX_MISTAKES);
@@ -995,6 +1040,7 @@ export const useApp = create<AppState & AppActions>()(
             xp: s.xp + xp,
             skills,
             mistakes,
+            missLog,
             history,
             days: {
               ...s.days,
@@ -1577,8 +1623,10 @@ export const useApp = create<AppState & AppActions>()(
           const asked = Math.max(answered, typeof summary.questions === "number" && summary.questions > 0 ? Math.floor(summary.questions) : 0);
           // Ошибки пробного ЕНТ попадают в общую работу над ошибками (id вида «ent:…», см. lib/ent-steps.ts).
           let mistakes = s.mistakes;
+          let missLog = s.missLog;
           for (const w of [...wrong].reverse()) {
             const existing = mistakes.find((m) => m.stepId === w.stepId);
+            if (isNew) missLog = bumpMissLog(missLog, w.stepId, w.prompt, w.lessonId, summary.at);
             mistakes = [
               {
                 id: existing?.id ?? uid(),
@@ -1589,7 +1637,7 @@ export const useApp = create<AppState & AppActions>()(
                 given: w.given,
                 expected: w.expected,
                 at: summary.at,
-                misses: isNew ? (existing?.misses ?? (existing ? 1 : 0)) + 1 : (existing?.misses ?? 1),
+                misses: missLog[w.stepId]?.n ?? existing?.misses ?? 1,
               },
               ...mistakes.filter((m) => m.stepId !== w.stepId),
             ];
@@ -1617,6 +1665,7 @@ export const useApp = create<AppState & AppActions>()(
             ...s,
             skills,
             mistakes,
+            missLog,
             history: pushHistory(s.history, entry),
             // answered (E2): сколько заданий отвечено — по нему полный пробный ЕНТ идёт в достижение «Пять пробников».
             exams: [{ ...summary, answered }, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
@@ -1671,6 +1720,10 @@ export const useApp = create<AppState & AppActions>()(
               const passedBefore = s.exams.some((e) => e.id !== summary.id && e.kind === "unit" && e.unit === summary.unit && unitPassed(e.points, e.maxPoints));
               if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
             }
+          }
+          if (summary.kind === "full") {
+            const paidExam = isNew ? examChips.some((c) => c.reason === "exam") : prevExam?.chips;
+            if (paidExam !== undefined) withDrop = { ...withDrop, exams: withDrop.exams.map((e) => (e.id === summary.id ? { ...e, chips: paidExam } : e)) };
           }
           return settleChips(s, { ...withDrop, ...evaluate(withDrop) }, examChips);
         }),

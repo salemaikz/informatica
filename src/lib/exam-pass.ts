@@ -21,6 +21,8 @@ export interface FullExamFacts {
   points: number;
   answered?: number;
   questions?: number;
+  /** +5 за эту попытку выдано; у старых попыток поля нет — считаем выданным, если попытка засчитана. */
+  chips?: boolean;
 }
 
 const sameDay = (a: number, b: number): boolean => {
@@ -40,7 +42,7 @@ export function fullExamChipsAllowed(before: FullExamFacts[], cur: Pick<FullExam
       e.id !== cur.id &&
       (typeof e.answered === "number" ? fullExamCounts(e.answered, Math.max(e.answered, e.questions ?? 0)) : e.points > 0),
   );
-  return !done.some((e) => e.seed === cur.seed || sameDay(e.at, cur.at));
+  return !done.some((e) => e.seed === cur.seed || (e.chips !== false && sameDay(e.at, cur.at)));
 }
 
 /** Урок засчитывается, если отвечено не меньше 70% предъявленных заданий (пропуск — не ответ; повторы ошибок не считаются). */

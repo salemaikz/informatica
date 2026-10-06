@@ -26,7 +26,11 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 export default function StatsPage() {
   const { t } = useT();
   const mistakes = useApp((s) => s.mistakes);
-  const repeats = useMemo(() => repeatedMistakes(mistakes), [mistakes]);
+  const missLog = useApp((s) => s.missLog);
+  const repeats = useMemo(
+    () => repeatedMistakes(Object.entries(missLog ?? {}).map(([stepId, e]) => ({ id: stepId, stepId, prompt: e.prompt, misses: e.n, at: e.at }))),
+    [missLog],
+  );
   const freezes = useApp((s) => s.streak.freezes ?? 0);
   // Темы ЕНТ, цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
   const ent = useEntVisible();

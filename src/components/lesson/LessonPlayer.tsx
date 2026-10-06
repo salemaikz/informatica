@@ -533,8 +533,11 @@ export function LessonPlayer({
         // Подсказка или вопрос Биту до ответа (#66): ответ не самостоятельный, оценка освоения сдвигается слабее.
         ...(hintedRef.current ? { hinted: true } : {}),
       };
-      const levelBefore = levelInfo(useApp.getState().xp).level;
+      const xpBefore = useApp.getState().xp;
+      const levelBefore = levelInfo(xpBefore).level;
       recordAnswer(rec, gained, lessonId);
+      // Сколько опыта реально зачислено (с бустером ×2 — вдвое больше): его же показываем и копим в итоге урока.
+      const credited = useApp.getState().xp - xpBefore;
       const taskEv = taskEvent(rec, stableSteps, lessonId);
       if (taskEv) track(taskEv);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
@@ -551,20 +554,20 @@ export function LessonPlayer({
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
       setMaxCombo(newMaxCombo);
-      setXp((x) => x + gained);
-      setGain(gained);
+      setXp((x) => x + credited);
+      setGain(credited);
       setResult(res);
       setPhase("feedback");
       setPraise((prev) => pickPraise(newCombo, prev, Math.random()));
       setDone(newDone);
       if (needRetry) setQueue(newQueue);
       // Шаг пройден — сохраняем прохождение со следующей позиции (повтор ошибки уже в очереди).
-      persistRun({ queue: newQueue, pos: pos + 1, done: newDone, records: [...records, rec], xp: xp + gained, combo: newCombo, maxCombo: newMaxCombo });
+      persistRun({ queue: newQueue, pos: pos + 1, done: newDone, records: [...records, rec], xp: xp + credited, combo: newCombo, maxCombo: newMaxCombo });
       // Отклик: звук + вибрация. Комбо с 3-го ответа, новый уровень — фанфара; «монетка» XP чуть позже.
       if (leveledUp) giveFeedback("levelUp");
       else if (res.correct) giveFeedback(newCombo >= 3 ? "combo" : "correct", { combo: newCombo });
       else giveFeedback("wrong");
-      if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
+      if (credited > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
     [question, combo, maxCombo, done, pos, queue, records, xp, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor, persistRun, stableSteps, stepMs, testMode],
   );

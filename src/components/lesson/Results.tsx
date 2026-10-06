@@ -204,6 +204,7 @@ export function Results({
 
   useEffect(() => {
     // «Меньше анимаций» (настройка или система) — без конфетти.
+    if (kind === "lesson" && !counted) return; // урок не засчитан — без праздника
     if (useApp.getState().profile.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const colors = ["#1a91d6", "#21b26f", "#f0b400", "#7656f5"];
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -242,9 +243,9 @@ export function Results({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={springBouncy}
       >
-        <Mascot mood="celebrate" size={112} />
+        <Mascot mood={kind === "lesson" && !counted ? "neutral" : "celebrate"} size={112} />
         <h1 className="text-3xl font-extrabold">
-          {perfect ? t("perfect.title") : via === "check" ? t("modes.check.title") : kind === "lesson" ? t("res.lesson") : t("res.drill")}
+          {kind === "lesson" && !counted ? t("econ16d.notCounted.title") : perfect ? t("perfect.title") : via === "check" ? t("modes.check.title") : kind === "lesson" ? t("res.lesson") : t("res.drill")}
         </h1>
         <p className="font-semibold text-muted">{title}</p>
         {kind === "lesson" && (xpFactor < 1 || nextDays !== null) && (
@@ -304,7 +305,7 @@ export function Results({
 
       {/* Сколько чипов дала сессия — с разбивкой (урок · прочее). У тренировки без чипов плитки нет. */}
       <div className="flex flex-wrap items-start justify-center gap-2">
-        {(kind === "lesson" || sessionChips > 0) && (
+        {(sessionChips > 0 || (kind === "lesson" && firstPass)) && (
           <m.div
             data-tour="res-chips"
             className="relative flex flex-col items-center rounded-2xl border-2 border-gold bg-gold-soft px-4 py-2 text-warning-strong"
@@ -349,7 +350,7 @@ export function Results({
       </div>
 
       {/* Бит-проводник: метка «итоги урока» — на первом пройденном уроке Бит покажет опыт, чипы и серию. */}
-      {kind === "lesson" && via !== "check" && <GuideSpot kind="results" />}
+      {kind === "lesson" && counted && via !== "check" && <GuideSpot kind="results" />}
 
       {/* Новый уровень: бейдж уровня по ступени; при переходе на новую ступень (5, 10, 20, 30) — строка в её цвете. */}
       {levels.to > levels.from && (
@@ -454,7 +455,11 @@ export function Results({
         <Card appear>
           <p className="mb-3 font-extrabold">{t("modes.next.title")}</p>
           <div className="flex flex-col gap-3">
-            {next ? (
+            {!counted ? (
+              <ButtonLink href={`/lesson/${lessonId}`} size="lg" block icon={<RotateCcw size={20} />}>
+                {t("econ16d.notCounted.retry")}
+              </ButtonLink>
+            ) : next ? (
               <ButtonLink href={`/lesson/${next}`} size="lg" block icon={<StepForward size={20} />}>
                 {t("modes.next.lesson")}
               </ButtonLink>
