@@ -56,16 +56,16 @@ describe("DrillScreen: сердечки на входе", () => {
   });
 
   it("сердечек нет, но та же тренировка оплачена минуту назад (перезагрузка) — тренировка открывается", async () => {
-    useApp.setState({ drillPaid: { key: drillPaidKey("skill", { skill: SKILL }), at: Date.now() - 60_000 } });
+    useApp.setState({ entryPaid: { [drillPaidKey("skill", { skill: SKILL })]: Date.now() - 60_000 } });
     await render(createElement(DrillScreen, { mode: "skill", skill: SKILL }));
     expect(text()).not.toContain("Сердечки закончились");
   });
 
   it("оплата другой тренировки не открывает эту; просроченная оплата (больше 20 минут) — тоже", async () => {
-    useApp.setState({ drillPaid: { key: drillPaidKey("skill", { skill: "ns.dec2bin" }), at: Date.now() - 60_000 } });
+    useApp.setState({ entryPaid: { [drillPaidKey("skill", { skill: "ns.dec2bin" })]: Date.now() - 60_000 } });
     await render(createElement(DrillScreen, { mode: "skill", skill: SKILL }));
     expect(text()).toContain("Сердечки закончились");
-    useApp.setState({ drillPaid: { key: drillPaidKey("skill", { skill: SKILL }), at: Date.now() - 21 * 60_000 } });
+    useApp.setState({ entryPaid: { [drillPaidKey("skill", { skill: SKILL })]: Date.now() - 21 * 60_000 } });
     await act(async () => root.unmount());
     root = createRoot(host);
     await render(createElement(DrillScreen, { mode: "skill", skill: SKILL }));

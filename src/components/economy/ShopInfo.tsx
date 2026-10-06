@@ -16,7 +16,6 @@ import {
   GraduationCap,
   Heart,
   Infinity as InfinityIcon,
-  Layers,
   Lightbulb,
   MessageCircle,
   Mic,
@@ -49,17 +48,16 @@ import { useAiQuote, useNow } from "./useEconomy";
 
 const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
   lesson: BookOpen,
-  bigLesson: Layers,
   drill: Dumbbell,
   check: ClipboardCheck,
   exam: GraduationCap,
   checkpoint: Flag,
   game: Gamepad2,
   theory: BookText,
+  code: Code2,
 };
 
 const FREE_ICONS: Record<FreeEntryId, LucideIcon> = {
-  code: Code2,
   cheatsheet: ScrollText,
   chat: MessageCircle,
 };

@@ -239,7 +239,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
           icon={Play}
           title={t("learn2.mode.learn")}
           hint={t("learn2.mode.learnHint")}
-          cost={lessonCost(lesson)}
+          cost={lessonCost()}
           note={unlimited ? undefined : t("hearts15.sheet.startNote")}
         />
         <ModeCard

@@ -1,21 +1,13 @@
-// Оплаченный вход в тренировку (этап 16В, E7): перезагрузка страницы или случайный выход не списывают сердечко второй раз.
-// Чистые функции без React; поле стора `drillPaid` меняет только payDrill / finishSession (store.ts), экран — app/drill/DrillScreen.tsx.
-//
-// Правило как у урока (lib/lesson-run.ts): вернулся в ту же тренировку не позже RUN_GRACE_MS после оплаты — вход бесплатный.
+// Ключ тренировки (этап 16В, E7): под ним запоминается оплаченный вход (lib/entry-paid.ts, поле стора `entryPaid`, этап 16Г) —
+// перезагрузка страницы или случайный выход в течение 20 минут не списывают сердечко второй раз. Экран — app/drill/DrillScreen.tsx.
 // Тренировка закончена (finishSession) — отметка снимается: следующая такая же тренировка снова платная.
 
-import { RUN_GRACE_MS } from "./lesson-run";
+import { ENTRY_PAID_GRACE_MS } from "./entry-paid";
 
 /** Сколько после оплаты та же тренировка открывается бесплатно, мс (20 минут — как продолжение урока). */
-export const DRILL_PAID_GRACE_MS = RUN_GRACE_MS;
+export const DRILL_PAID_GRACE_MS = ENTRY_PAID_GRACE_MS;
 
 const KEY_MAX = 160;
-
-/** Запомненная оплата: ключ тренировки и когда оплачена. */
-export interface DrillPaid {
-  key: string;
-  at: number;
-}
 
 /** Параметры тренировки, как их передаёт страница /drill в DrillScreen. */
 export interface DrillKeyParams {
@@ -34,19 +26,4 @@ export interface DrillKeyParams {
  */
 export function drillPaidKey(mode: string, p: DrillKeyParams = {}): string {
   return [mode, p.skill, p.unit, p.topic, p.entry, p.node, p.item, p.area].map((x) => (typeof x === "string" ? x : "")).join("|").slice(0, KEY_MAX);
-}
-
-/** Вход в тренировку с этим ключом уже оплачен и срок не вышел. */
-export function drillPaidActive(paid: DrillPaid | null | undefined, key: string, now: number): boolean {
-  return !!paid && paid.key === key && now - paid.at >= 0 && now - paid.at <= DRILL_PAID_GRACE_MS;
-}
-
-/** Из хранилища: только корректная и не просроченная отметка (данные недоверенные). */
-export function sanitizeDrillPaid(raw: unknown, now: number): DrillPaid | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const r = raw as { key?: unknown; at?: unknown };
-  if (typeof r.key !== "string" || !r.key || r.key.length > KEY_MAX) return null;
-  if (typeof r.at !== "number" || !Number.isFinite(r.at)) return null;
-  if (now - r.at < 0 || now - r.at > DRILL_PAID_GRACE_MS) return null;
-  return { key: r.key, at: r.at };
 }

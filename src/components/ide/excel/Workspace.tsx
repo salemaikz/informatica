@@ -91,7 +91,7 @@ const freshUi = (owner: string, task: WorkspaceProps["task"]): Ui => ({ owner, s
  * Рабочая область Excel: строка формул, сетка A–H × 1–15, быстрый ввод знаков и функций, «Протянуть» и проверка.
  * Код задачи — JSON ячеек; значения считает движок src/lib/sheet (правильность решает код, а не ИИ).
  */
-export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: WorkspaceProps) {
+export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t, lang } = useT();
   const owner = task?.id ?? "sandbox";
   const [ui, setUi] = useState<Ui>(() => freshUi(owner, task));
@@ -227,6 +227,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   const onCheckClick = () => {
     if (task?.check.kind !== "excel") return;
+    if (beforeRun && !beforeRun()) return;
     const base = commit();
     patch({ draft: null });
     onCheck(checkExcel(task.check, serializeSheet(base)));

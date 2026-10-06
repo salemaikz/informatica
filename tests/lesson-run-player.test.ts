@@ -92,14 +92,14 @@ describe("buildRun", () => {
     expect(buildRun(afterFirstAnswer({ cost: 0 })).cost).toBe(1);
   });
 
-  it("вход ещё не оплачен — paidAt null (платить при первом ответе)", () => {
+  it("вход не списан — paidAt null («Безлимит» или сохранение до этапа 16Г; «Продолжить» платит по нажатию)", () => {
     const run = buildRun(afterFirstAnswer({ paidAt: null, records: [], pos: 2, done: 1 }));
     expect(run.paidAt).toBeNull();
     expect(usableRun(run, lesson, T0)).not.toBeNull();
   });
 
-  it("вход оплачен на первом «дальше», до всяких ответов: снимок пригоден, возврат в окне бесплатен (этап 15)", () => {
-    // ensurePaid плеера пишет снимок на текущем шаге (pos 0) с paidAt, затем переход сохраняет pos 1 — оба пригодны для продолжения
+  it("вход оплачен при открытии урока (#120), до всяких ответов: снимок пригоден, возврат в окне бесплатен", () => {
+    // Плеер получает paidAt от экрана и пишет его в каждый снимок: и pos 0 (шаг не пройден), и pos 1 пригодны для продолжения
     for (const pos of [0, 1]) {
       const run = buildRun(afterFirstAnswer({ queue: freshQueue(steps), pos, done: pos, records: [], paidAt: T0 - 10_000 }));
       expect(usableRun(run, lesson, T0)).not.toBeNull();
@@ -138,7 +138,7 @@ describe("restoreRun", () => {
     expect(r.paidAt).toBe(run.paidAt);
   });
 
-  it("вернулся позже окна — снова платить при первом ответе", () => {
+  it("возврат позже окна — «Продолжить» снова платное", () => {
     const run = buildRun(afterFirstAnswer());
     const r = restoreRun(run, steps, T0 + RUN_GRACE_MS + 1)!;
     expect(r.paid).toBe(false);
@@ -147,7 +147,7 @@ describe("restoreRun", () => {
     expect(r.pos).toBe(run.pos);
   });
 
-  it("вход не был оплачен — платить при первом ответе", () => {
+  it("вход не был оплачен — «Продолжить» платное", () => {
     const r = restoreRun(buildRun(afterFirstAnswer({ paidAt: null })), steps, T0)!;
     expect(r.paid).toBe(false);
     expect(r.paidAt).toBeNull();

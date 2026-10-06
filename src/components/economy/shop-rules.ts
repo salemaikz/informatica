@@ -1,7 +1,6 @@
 import {
   ENTRY_COST,
   PLAN_FEATURES,
-  lessonCost,
   itemPrice,
   refillPrice,
   type HeartsView,
@@ -14,39 +13,41 @@ import { heartsGain } from "./shop-helpers";
 // Чистые помощники магазина про сердечки (без React): блок «Как работают сердечки» и цена «Полного запаса».
 // Все числа — из lib/economy.ts: в текстах и разметке они не вписываются.
 
-export type EntryRuleId = "lesson" | "bigLesson" | "drill" | "check" | "exam" | "checkpoint" | "game" | "theory";
+export type EntryRuleId = "lesson" | "drill" | "check" | "exam" | "checkpoint" | "game" | "theory" | "code";
 
-/** За что платятся сердечки и сколько (#40, #60; теория — этап 15; тренировка — этап 16В): строки списка «Вход стоит сердечко». */
+/**
+ * За что платятся сердечки и сколько (#40, #60; теория — этап 15; тренировка — этап 16В; практикум кода, без «большого урока» — этап 16Г):
+ * строки списка «Вход стоит сердечко».
+ */
 export function entryRules(): { id: EntryRuleId; cost: number }[] {
   return [
     { id: "lesson", cost: ENTRY_COST.lesson },
-    { id: "bigLesson", cost: lessonCost({ hearts: 2 }) },
     { id: "drill", cost: ENTRY_COST.drill },
     { id: "check", cost: ENTRY_COST.check },
     { id: "exam", cost: ENTRY_COST.exam },
     { id: "checkpoint", cost: ENTRY_COST.checkpoint },
     { id: "game", cost: ENTRY_COST.game },
     { id: "theory", cost: ENTRY_COST.theory },
+    { id: "code", cost: ENTRY_COST.code },
   ];
 }
 
-/** Что бесплатно: задачи практикума в редакторе кода, шпаргалка и формулы, чат с Битом (теория урока — за 0,5, тренировка любого вида, в том числе «Чтение кода» и контекстные задания, — за 1). */
-export const FREE_ENTRIES = ["code", "cheatsheet", "chat"] as const;
+/** Что бесплатно: шпаргалка и формулы, чат с Битом (теория урока — за 0,5; тренировка любого вида и задача практикума кода — за 1, этап 16Г). */
+export const FREE_ENTRIES = ["cheatsheet", "chat"] as const;
 export type FreeEntryId = (typeof FREE_ENTRIES)[number];
 
 /** Подписи строк правил в словаре. */
 export const ENTRY_RULE_KEYS: Record<EntryRuleId, DictKey> = {
   lesson: "shop.rules.lesson",
-  bigLesson: "shop.rules.bigLesson",
   drill: "econ16c.rules.drill",
   check: "shop.rules.check",
   exam: "shop.rules.exam",
   checkpoint: "shop.rules.checkpoint",
   game: "shop.rules.game",
   theory: "hearts15.rules.theory",
+  code: "hearts16d.rules.code",
 };
 export const FREE_ENTRY_KEYS: Record<FreeEntryId, DictKey> = {
-  code: "shop.rules.free.code",
   cheatsheet: "hearts15.rules.free.cheatsheet",
   chat: "shop.rules.free.chat",
 };

@@ -38,7 +38,7 @@ import {
   type DropDay,
   type PerfectDrop,
 } from "./perfect";
-import { drillPaidActive, sanitizeDrillPaid, type DrillPaid } from "./drill-paid";
+import { checkEntryKey, dropEntryPaid, entryPaidActive, lessonEntryKey, putEntryPaid, sanitizeEntryPaid, type EntryPaid } from "./entry-paid";
 import { fullExamCounts, unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
@@ -334,8 +334,11 @@ export interface AppState {
   perfectRun: PerfectRun;
   /** Неоткрытые кейсы за уровень — номера уровней (волна 1Б, R3). Меняет только пакет R3. */
   pendingCases: number[];
-  /** Оплаченный вход в тренировку (этап 16В, E7; lib/drill-paid.ts): та же тренировка в течение 20 минут — бесплатно. */
-  drillPaid: DrillPaid | null;
+  /**
+   * Оплаченные входы в занятия (этап 16Г, #120; lib/entry-paid.ts): ключ занятия → когда оплачен. То же занятие в течение 20 минут —
+   * бесплатно. Обобщает `drillPaid` этапа 16В (старое поле переносится при загрузке).
+   */
+  entryPaid: EntryPaid;
   /** Сколько раз за день тесты бросали «сюрприз» (этап 16В, E8): не больше PERFECT_DROP.testsPerDay; уроки не считаются. */
   dropDay: DropDay;
 
@@ -425,9 +428,14 @@ export interface AppActions {
    */
   payEntry: (cost: number) => { ok: boolean; paid: number; view: HeartsView };
   /**
-   * Плата за вход в тренировку (этап 16В, E7): как payEntry, но запоминает оплату под ключом тренировки (lib/drill-paid.ts) —
-   * та же тренировка в течение 20 минут (перезагрузка, случайный выход) бесплатна (paid 0). Закончилась тренировка — отметка снимается.
+   * Плата за вход в занятие (этап 16Г, #120): как payEntry, но запоминает оплату под ключом занятия (lib/entry-paid.ts) —
+   * то же занятие в течение 20 минут (перезагрузка, случайный выход, двойной вызов) бесплатно (paid 0). Закончилось — отметка снимается.
+   * Ключ пишется, только если списано (paid > 0): «Безлимит» и цена 0 ничего не запоминают.
    */
+  payEntryOnce: (key: string, cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /** Новый платный вход в то же занятие («Начать заново»): списывает всегда (без проверки ключа) и обновляет отметку. */
+  payEntryFresh: (key: string, cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /** Синоним payEntryOnce (этап 16В, E7: тренировка). */
   payDrill: (key: string, cost: number) => { ok: boolean; paid: number; view: HeartsView };
   /** Капсула сюрприза за тест показана на итогах: при следующем открытии итогов из истории — сразу результат, без анимации и звука. */
   markDropSeen: (examId: string) => void;
@@ -571,7 +579,7 @@ const initialState: AppState = {
   tips: {},
   perfectRun: { ...EMPTY_PERFECT_RUN },
   pendingCases: [],
-  drillPaid: null,
+  entryPaid: {},
   dropDay: { ...EMPTY_DROP_DAY },
   history: [],
   chats: [],
@@ -865,6 +873,9 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
   const p = { ...((persisted ?? {}) as Partial<AppState>) };
   // Этап 16В: возврата сердечка за тренировку больше нет — поле старых сохранений молча отбрасываем.
   delete (p as Record<string, unknown>).practiceHearts;
+  // Этап 16Г: `drillPaid` ({ key, at }) обобщён в `entryPaid` — старую отметку переносим ниже, само поле отбрасываем.
+  const legacyDrillPaid = (p as Record<string, unknown>).drillPaid;
+  delete (p as Record<string, unknown>).drillPaid;
   const merged: AppState & AppActions = {
     ...current,
     ...p,
@@ -872,7 +883,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     newAchievements: Array.isArray(p.newAchievements) ? p.newAchievements.filter((id): id is string => typeof id === "string").slice(0, 60) : current.newAchievements,
     // Нет поля (сохранение до правил 2) — 0: миграция выполнится один раз (backfillAchievements).
     achRules: isNum(p.achRules) ? p.achRules : 0,
-    drillPaid: sanitizeDrillPaid(p.drillPaid, Date.now()),
+    entryPaid: sanitizeEntryPaid(p.entryPaid, Date.now(), legacyDrillPaid),
     dropDay: sanitizeDropDay(p.dropDay),
     // «Память ИИ» убрана (этап 16В, L): старый текст из сохранения не оставляем.
     memory: "",
@@ -1050,9 +1061,13 @@ export const useApp = create<AppState & AppActions>()(
           next = { ...next, perfectRun: nextPerfectRun(s.perfectRun, { perfect, first: !prev }) };
         }
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
-        // Отметка оплаты (E7) снимается, только когда закончена именно оплаченная тренировка с экрана /drill (ключ совпал):
-        // квиз в чате тоже kind "drill", но ключа у него нет — выход из оплаченной тренировки и квиз её отметку не трогают.
-        if (result.drillKey && next.drillPaid?.key === result.drillKey) next = { ...next, drillPaid: null };
+        // Отметка оплаты (#120) снимается за законченное занятие: ключ из итога (тренировка /drill, мини-тест, квиз в чате)
+        // и ключ урока в его режиме — повтор после итогов снова платный. Другие занятия свои отметки сохраняют.
+        const paidKeys: string[] = [];
+        if (result.drillKey) paidKeys.push(result.drillKey);
+        if (isLesson && (result.via ?? "learn") === "learn") paidKeys.push(lessonEntryKey(result.lessonId!));
+        if (isLesson && result.via === "check") paidKeys.push(checkEntryKey(result.lessonId!));
+        next = { ...next, entryPaid: dropEntryPaid(next.entryPaid, paidKeys) };
         next = { ...next, ...evaluate(next) };
 
         // История тестов.
@@ -1273,18 +1288,24 @@ export const useApp = create<AppState & AppActions>()(
         return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
       },
 
-      payDrill: (key, cost) => {
+      payEntryOnce: (key, cost) => {
         const s = get();
         const now = Date.now();
-        // Та же тренировка уже оплачена не больше 20 минут назад (перезагрузка, случайный выход) — вход бесплатный.
-        if (drillPaidActive(s.drillPaid, key, now)) {
+        // То же занятие уже оплачено не больше 20 минут назад (перезагрузка, случайный выход, двойной вызов) — вход бесплатный.
+        if (entryPaidActive(s.entryPaid, key, now)) {
           return { ok: true, paid: 0, view: heartsView(s.hearts, tierOf(s, now), now, todayKey()) };
         }
+        return get().payEntryFresh(key, cost);
+      },
+
+      payEntryFresh: (key, cost) => {
         const res = get().payEntry(cost);
         // Безлимит и нулевая цена ничего не списывают — запоминать нечего.
-        if (res.ok && res.paid > 0) set({ drillPaid: { key, at: now } });
+        if (res.ok && res.paid > 0) set((s) => ({ entryPaid: putEntryPaid(s.entryPaid, key, Date.now()) }));
         return res;
       },
+
+      payDrill: (key, cost) => get().payEntryOnce(key, cost),
 
       markDropSeen: (examId) =>
         set((s) => {

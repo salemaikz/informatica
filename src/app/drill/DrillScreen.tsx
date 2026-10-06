@@ -9,7 +9,8 @@ import { cn } from "@/lib/cn";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import { ENTRY_COST } from "@/lib/economy";
-import { drillPaidActive, drillPaidKey } from "@/lib/drill-paid";
+import { drillPaidKey } from "@/lib/drill-paid";
+import { entryPaidActive } from "@/lib/entry-paid";
 import { useT } from "@/i18n/useT";
 import {
   buildHistoryRedo,
@@ -35,6 +36,7 @@ import { EntryGate } from "@/components/economy/EntryGate";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { HeartsBar } from "@/components/economy/HeartsBar";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { useEntryAccess } from "@/components/economy/useEntryAccess";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 
@@ -118,7 +120,7 @@ function drillExitHref(mode: DrillMode): string {
   return "/practice";
 }
 
-/** Экран старта мини-теста (#95): сердечко списывается по «Начать», а не при первом ответе. */
+/** Экран старта мини-теста (#95): сердечко списывается по «Начать». */
 function MiniStart({ title, count, free, onStart }: { title: string; count: number; free: boolean; onStart: () => boolean }) {
   const { t } = useT();
   const router = useRouter();
@@ -158,7 +160,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item, area }));
   // Ключ тренировки (E7): оплата запоминается под ним — перезагрузка и случайный выход в течение 20 минут не списывают сердечко снова.
   const payKey = drillPaidKey(mode, { skill, unit, topic, entry, node, item, area });
-  const [alreadyPaid] = useState(() => drillPaidActive(useApp.getState().drillPaid, payKey, Date.now()));
+  const [alreadyPaid] = useState(() => entryPaidActive(useApp.getState().entryPaid, payKey, Date.now()));
   const recordCourseNode = useApp((s) => s.recordCourseNode);
   // Мини-тест: вход оплачен кнопкой «Начать» (плеер дальше не списывает).
   const [started, setStarted] = useState(false);
@@ -168,9 +170,12 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   const [mini, setMini] = useState<{ points: number; max: number; weak?: string } | null>(null);
   const markReviewed = useApp((s) => s.markReviewed);
   // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14), списывается по «Начать» (#95).
-  // Любая другая тренировка (этап 16В, решение F) — тоже 1 сердечко, но при первом ответе, как у урока: плеер списывает сам.
-  const entryNeed = !session.steps.length || alreadyPaid ? 0 : mode === "minitest" ? ENTRY_COST.check : ENTRY_COST.drill;
-  useHeartsOutOnEntry(entryNeed, mode === "minitest" ? "check" : "drill");
+  const miniNeed = mode !== "minitest" || !session.steps.length || alreadyPaid ? 0 : ENTRY_COST.check;
+  useHeartsOutOnEntry(miniNeed, "check");
+  // Любая другая тренировка (этап 16В, решение F) — тоже 1 сердечко, списывается при открытии (этап 16Г, #120): повторный вход
+  // в ту же тренировку 20 минут бесплатный (ключ payKey). Не хватает — «Сердечки закончились» вместо заданий.
+  const { access, payment, resume } = useEntryAccess(payKey, ENTRY_COST.drill, mode !== "minitest" && session.steps.length > 0, "drill");
+  const router = useRouter();
 
   const onSessionFinish = useCallback(
     (result: SessionResult) => {
@@ -260,8 +265,8 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
     );
   }
 
-  // Мини-тест (#95): до «Начать» — экран старта; вход (1 сердечко) списывается кнопкой, плеер дальше не списывает (entryCost 0).
-  // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — вход списывает плеер при первом ответе.
+  // Мини-тест (#95): до «Начать» — экран старта; вход (1 сердечко) списывается кнопкой.
+  // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — вход списан при открытии (useEntryAccess).
   if (mode === "minitest" && !started) {
     return (
       <EntryGate need={alreadyPaid ? 0 : ENTRY_COST.check} exitHref="/learn">
@@ -270,7 +275,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
           count={session.steps.length}
           free={alreadyPaid}
           onStart={() => {
-            const res = useApp.getState().payDrill(payKey, ENTRY_COST.check);
+            const res = useApp.getState().payEntryOnce(payKey, ENTRY_COST.check);
             if (!res.ok) return false;
             setPrepaid(res.paid);
             setStarted(true);
@@ -280,7 +285,12 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       </EntryGate>
     );
   }
-  const player = (
+  // Остальные режимы: нет сердечек на входе — «Сердечки закончились»; пока идёт оплата (следующий кадр) — пустой экран.
+  if (mode !== "minitest" && access === "locked") {
+    return <OutOfHearts layout="screen" need={ENTRY_COST.drill} onResume={resume} onExit={() => router.push(drillExitHref(mode))} />;
+  }
+  if (mode !== "minitest" && access !== "open") return <main className="min-h-dvh" aria-busy />;
+  return (
     <LessonPlayer
       kind="drill"
       title={title}
@@ -290,16 +300,9 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       onSessionFinish={onSessionFinish}
       resultsExtra={extra}
       testMode={mode === "minitest"}
-      entryCost={mode === "minitest" ? undefined : ENTRY_COST.drill}
       drillKey={payKey}
-      prepaid={mode === "minitest" ? prepaid : undefined}
+      prepaid={mode === "minitest" ? prepaid : (payment?.paid ?? 0)}
+      paidAt={mode === "minitest" ? undefined : payment?.paidAt}
     />
-  );
-  // Минитест оплачен «Начать» (плеер не списывает); остальные режимы — нет сердечек на входе: «Сердечки закончились» (EntryGate).
-  if (mode === "minitest") return player;
-  return (
-    <EntryGate need={alreadyPaid ? 0 : ENTRY_COST.drill} exitHref={drillExitHref(mode)}>
-      {player}
-    </EntryGate>
   );
 }

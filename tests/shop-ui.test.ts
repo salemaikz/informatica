@@ -276,16 +276,17 @@ describe("цены и «Полный запас» в магазине (#60)", ()
 });
 
 describe("«Как работают сердечки»: числа из констант", () => {
-  it("цены входа: урок 1, большой урок 2, тренировка 1, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 2, игра 1, теория 0,5 (экстерна в правилах больше нет)", () => {
+  it("цены входа: урок 1, тренировка 1, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 1, игра 1, теория 0,5, задача практикума кода 1 (без «большого урока» и экстерна)", () => {
     const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
-    expect(rules).toEqual({ lesson: 1, bigLesson: 2, drill: 1, check: 1, exam: 1, checkpoint: 2, game: 1, theory: 0.5 });
+    expect(rules).toEqual({ lesson: 1, drill: 1, check: 1, exam: 1, checkpoint: 1, game: 1, theory: 0.5, code: 1 });
+    expect(rules.code).toBe(ENTRY_COST.code);
     expect(rules.drill).toBe(ENTRY_COST.drill);
     expect(rules.theory).toBe(ENTRY_COST.theory);
     // теория платная: в бесплатных её больше нет, зато есть шпаргалка
     expect(FREE_ENTRIES).not.toContain("theory");
     expect(FREE_ENTRIES).toContain("cheatsheet");
-    // этап 16В: бесплатной тренировки нет — тренировка, повторение и работа над ошибками из «бесплатного» ушли
-    expect([...FREE_ENTRIES]).toEqual(["code", "cheatsheet", "chat"]);
+    // этап 16В: бесплатной тренировки нет; этап 16Г: задача практикума кода тоже платная
+    expect([...FREE_ENTRIES]).toEqual(["cheatsheet", "chat"]);
     expect(rules.lesson).toBe(ENTRY_COST.lesson);
     expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
   });

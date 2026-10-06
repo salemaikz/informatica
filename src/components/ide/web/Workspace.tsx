@@ -19,7 +19,7 @@ type Tab = "code" | "page";
 /** Пауза после последнего нажатия клавиши до обновления страницы, мс. */
 const PREVIEW_DELAY_MS = 300;
 
-export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps) {
+export function Workspace({ task, code, onCodeChange, onCheck, beforeRun }: WorkspaceProps) {
   const { t } = useT();
   const webCheck = task?.check.kind === "web" ? task.check : null;
   const [tab, setTab] = useState<Tab>("code");
@@ -39,6 +39,7 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
   // Ключ: «Запустить скрипты» перезагружает страницу, даже если код не менялся.
   const [runKey, setRunKey] = useState(0);
   function runScripts() {
+    if (beforeRun && !beforeRun()) return;
     setPreviewCode(code);
     setScriptsFor(code);
     setRunKey((k) => k + 1);
@@ -54,6 +55,7 @@ export function Workspace({ task, code, onCodeChange, onCheck }: WorkspaceProps)
 
   async function check() {
     if (!webCheck || checking) return;
+    if (beforeRun && !beforeRun()) return;
     setChecking(true);
     const res = await checkWeb(webCheck, code, runDomRules);
     if (!mounted.current) return;

@@ -508,7 +508,8 @@ export function Results({
 
       <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-bg pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <div className="mx-auto flex max-w-xl px-4">
-          <Button size="lg" block data-tour="res-continue" disabled={!armed} onClick={() => router.push(doneHref ?? (kind === "lesson" ? "/learn" : "/practice"))}>
+          {/* replace: «Назад» в браузере после итогов не открывает пройденное занятие заново — новый вход стоит сердечко (#120). */}
+          <Button size="lg" block data-tour="res-continue" disabled={!armed} onClick={() => router.replace(doneHref ?? (kind === "lesson" ? "/learn" : "/practice"))}>
             {t("common.continue")}
           </Button>
         </div>

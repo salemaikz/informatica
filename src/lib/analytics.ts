@@ -8,7 +8,7 @@
 /** Откуда открыли окно тарифов (как PlansFrom). */
 export type PaywallFrom = "onboarding" | "auto" | "shop" | "profile" | "hearts" | "ai" | "other";
 /** Где закончились сердечки. */
-export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill";
+export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill" | "code";
 /** Ответ на «Что помешало?» после перерыва. */
 export type BreakReason = "time" | "hard" | "boring" | "forgot" | "other_prep" | "other";
 /** Чем поделились (#72): результат пробника, % курса, серия, вызов другу, отчёт родителю. */

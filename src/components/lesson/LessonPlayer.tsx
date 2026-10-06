@@ -15,7 +15,7 @@ import type { LessonRun } from "@/lib/lesson-run";
 import { lessonXpFactorNow, useApp } from "@/lib/store";
 import { activeMs } from "@/lib/active-clock";
 import { track } from "@/lib/analytics";
-import { finishEvent, playerHeartsWhere, quitEvent, sessionTotals, skipRecord, startEvent, taskEvent } from "@/lib/player-events";
+import { finishEvent, quitEvent, sessionTotals, skipRecord, startEvent, taskEvent } from "@/lib/player-events";
 import { isEntRef } from "@/lib/ent-ref";
 import { scaleXp } from "@/lib/review";
 import { formatFactor } from "@/lib/drill-meta";
@@ -38,7 +38,6 @@ import { comboTier, pickPraise } from "@/lib/praise";
 import { AiCost, AiFreeDot, useAiQuotaText } from "@/components/economy/AiCost";
 import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
-import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
@@ -87,20 +86,23 @@ export interface PlayerProps {
   onSessionFinish?: (result: SessionResult) => void;
   /** Блок на экране итогов (например, «Раздел засчитан»). */
   resultsExtra?: ReactNode;
-  /** Цена входа в сердечках (#40): списывается, когда урок начался — первый переход «дальше», первый ответ или «Пропустить». Нет или 0 — бесплатно (тренировка). */
+  /**
+   * Цена входа в сердечках (#40): для подписи «Продолжить» в сохранении и счётчика сердечек в шапке. Плеер сам не списывает —
+   * вход оплачивает экран при открытии (этап 16Г, #120: LessonScreen, DrillScreen → useEntryAccess; мини-тест — «Начать»).
+   */
   entryCost?: number;
   /**
-   * Ключ тренировки (lib/drill-paid.ts → drillPaidKey): плата за вход запоминается под ним, и та же тренировка в течение 20 минут
-   * (перезагрузка, случайный выход) открывается бесплатно — как продолжение урока. Только для kind="drill".
-   * Уходит и в итог (SessionResult.drillKey): finishSession снимает отметку оплаты за эту тренировку. У мини-теста вход оплачен
-   * кнопкой «Начать» (entryCost не задан) — ключ нужен только для снятия отметки.
+   * Ключ тренировки (lib/drill-paid.ts → drillPaidKey): под ним экран запомнил оплату входа (lib/entry-paid.ts). Только для kind="drill".
+   * Уходит в итог (SessionResult.drillKey): finishSession снимает отметку оплаты за эту тренировку.
    */
   drillKey?: string;
   /**
-   * Вход уже оплачен до плеера (мини-тест: «Начать» на экране старта) — сколько сердечек списано (0 — безлимит).
-   * Плеер не списывает, показывает счётчик с «−N», а окно выхода предупреждает, что плата не вернётся.
+   * Вход оплачен до плеера — сколько сердечек списано сейчас (0 — «Безлимит» или вход уже был оплачен в течение 20 минут).
+   * Плеер показывает счётчик с «−N», а окно выхода предупреждает, что плата не вернётся.
    */
   prepaid?: number;
+  /** Когда оплачен вход (null или нет — не оплачен: «Безлимит», бесплатный вход). Сохраняется в прохождение урока (#41). */
+  paidAt?: number | null;
   /** Продолжить сохранённое прохождение (#41) — только урок в режиме «Учиться». */
   resume?: LessonRun;
   /** Сохранять прохождение после каждого шага (#41) — только урок в режиме «Учиться». */
@@ -213,6 +215,7 @@ export function LessonPlayer({
   entryCost = 0,
   drillKey,
   prepaid,
+  paidAt,
   resume,
   saveRun = false,
   testMode = false,
@@ -253,10 +256,8 @@ export function LessonPlayer({
   const [checkError, setCheckError] = useState<DictKey | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
-  // Шторка «Не хватает сердечек» при первом ответе (#40); плата за вход — ensurePaid.
-  const [outOpen, setOutOpen] = useState(false);
-  // Вход оплачен (сердечки списаны): для подсказки в окне выхода. Сам учёт — paidAtRef.
-  const [paid, setPaid] = useState(!!init?.paid || (prepaid ?? 0) > 0);
+  // Вход оплачен (сердечки списаны): для подсказки в окне выхода. Оплачивает экран до плеера (этап 16Г, #120).
+  const [paid] = useState(() => !!init?.paid || (prepaid ?? 0) > 0 || typeof paidAt === "number");
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
   // Вопрос, который шторка Бита задаёт сама при открытии: «Объясни проще» после «Спросить Бита» на плашке «Нужна помощь?» (P8).
   const [autoAsk, setAutoAsk] = useState<string | null>(null);
@@ -284,8 +285,8 @@ export function LessonPlayer({
   const clockAtMount = useRef(0);
   // Когда начато прохождение (первый вход) — для сохранения.
   const runStartedAt = useRef(0);
-  // Когда оплачен вход; null — платить при первом ответе. Ref, а не state: ответ проверяется в том же обработчике, что и плата.
-  const paidAtRef = useRef<number | null>(init?.paidAt ?? null);
+  // Когда оплачен вход (из пропса или сохранения); null — не оплачен («Безлимит», бесплатный вход). Пишется в каждое сохранение.
+  const paidAtRef = useRef<number | null>(paidAt ?? init?.paidAt ?? null);
   const skippedRef = useRef(init?.skipped ?? 0);
   // Показание часов в момент показа шага: время ответа — активные миллисекунды с него.
   const stepClockAt = useRef(0);
@@ -357,7 +358,7 @@ export function LessonPlayer({
     offerKey: step?.id ?? "",
     afterMs: helpAfter,
     touch: question ? answer : step?.type === "worked" ? revealed : goalReached,
-    paused: exitOpen || outOpen || !!ai,
+    paused: exitOpen || !!ai,
   });
   const markHelped = nudge.markHelped;
 
@@ -432,27 +433,6 @@ export function LessonPlayer({
     [persist, lessonId, steps, xpFactor, earnedAtStart, entryCost, lessonMs],
   );
 
-  // Плата за вход (#40, этап 15) — когда урок начался: первый переход «дальше» на любом шаге, первый ответ или «Пропустить»; один раз.
-  // Открыл и сразу закрыл — бесплатно. Только из обработчиков: в эффектах двойной вызов спишет дважды.
-  // Не хватает сердечек — шторка «Не хватает сердечек», шаг не двигаем (после покупки ученик нажмёт кнопку снова).
-  const ensurePaid = useCallback((): boolean => {
-    if (entryCost <= 0 || paidAtRef.current !== null) return true;
-    // Тренировка платит через payDrill: он помнит оплату 20 минут, и перезагрузка не списывает сердечко второй раз (E7).
-    const app = useApp.getState();
-    const res = kind === "drill" && drillKey ? app.payDrill(drillKey, entryCost) : app.payEntry(entryCost);
-    if (!res.ok) {
-      setOutOpen(true);
-      track({ e: "hearts_out", where: playerHeartsWhere({ via, mode }) });
-      return false;
-    }
-    paidAtRef.current = Date.now();
-    setPaid(res.paid > 0);
-    // Оплату сохраняем сразу, на текущем шаге: если проверка фото не дойдёт до ответа (не читается, сбой ИИ) и ученик выйдет,
-    // возврат в течение RUN_GRACE_MS не спишет вход второй раз. Ответ потом перезапишет снимок шагом дальше.
-    persistRun({ queue, pos, done, records, xp, combo, maxCombo });
-    return true;
-  }, [entryCost, kind, drillKey, persistRun, queue, pos, done, records, xp, combo, maxCombo, via, mode]);
-
   // Переход к следующему шагу: doneNow — сколько шагов пройдено после него (теория засчитывается здесь, задание — при ответе).
   // recs — ответы с учётом только что записанного пропуска (state обновится позже, чем нужен итог).
   const advance = useCallback(
@@ -503,16 +483,13 @@ export function LessonPlayer({
   const advanceInfo = useCallback(() => {
     if (!step) return;
     if (step.type === "worked" && revealed < step.steps.length) {
-      if (!ensurePaid()) return;
       giveFeedback("tap");
       setRevealed(revealed + 1);
       return;
     }
     if (infoBlocked) return;
-    // Первое «дальше» — урок начался: вход оплачен (как при первом ответе).
-    if (!ensurePaid()) return;
     next();
-  }, [step, revealed, infoBlocked, next, ensurePaid]);
+  }, [step, revealed, infoBlocked, next]);
 
   const apply = useCallback(
     (res: StepResult) => {
@@ -538,7 +515,7 @@ export function LessonPlayer({
       if (taskEv) track(taskEv);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
-      // Сердечки за ошибки не снимаются (#40): плата — за вход, при первом ответе (ensurePaid).
+      // Сердечки за ошибки не снимаются (#40): плата — за вход, при открытии (этап 16Г, #120).
       noteCombo(newCombo);
       const newMaxCombo = Math.max(maxCombo, newCombo);
       // Ошибку повторяем один раз в конце («работа над ошибками»). Не повторяем развёрнутое решение (дорого), задачу с кодом
@@ -571,8 +548,6 @@ export function LessonPlayer({
   const check = useCallback(
     async (a: Answer | null = answer) => {
       if (!question || !a || !isReady(question, a) || phase !== "answering") return;
-      // Первый ответ сессии платный (#40): до проверки и до оплаты ИИ-проверки по фото.
-      if (!ensurePaid()) return;
       if (question.type === "solution" && a.type === "solution" && a.image) {
         setPhase("checking");
         setCheckError(null);
@@ -624,7 +599,7 @@ export function LessonPlayer({
       const res = evaluate(question, a, lang);
       apply(question.type === "solution" ? { ...res, offline: false } : res);
     },
-    [answer, question, phase, lang, apply, t, ensurePaid],
+    [answer, question, phase, lang, apply, t],
   );
 
   const onAnswer = useCallback(
@@ -637,8 +612,6 @@ export function LessonPlayer({
 
   const skip = () => {
     if (!question) return;
-    // «Пропустить» — тоже первый ответ: вход платный и здесь (иначе урок можно пройти, пропуская всё).
-    if (!ensurePaid()) return;
     skippedRef.current += 1;
     // Пропуск — предъявленное задание со счётом 0 (#66): в итог, историю и статистику, но не в ошибки и не в освоение (стор следит сам).
     const rec = skipRecord({
@@ -660,7 +633,8 @@ export function LessonPlayer({
   const quit = () => {
     const ev = quitEvent({ kind, lessonId, via, mode, done, total });
     if (ev) track(ev);
-    router.push(exitHref);
+    // replace: «Назад» в браузере после выхода не открывает урок заново (новый вход стоит сердечко).
+    router.replace(exitHref);
   };
 
   // Enter — проверить / продолжить.
@@ -673,7 +647,7 @@ export function LessonPlayer({
       // Исключение — поле ответа самого задания (внутри main): там Enter, как и раньше, проверяет ответ.
       const taskInput = el instanceof HTMLInputElement && !el.closest("[data-toolbox]") && !!el.closest("main");
       if (ignoreKey(e) && !taskInput) return;
-      if (e.key !== "Enter" || e.repeat || exitOpen || outOpen || ai || session) return;
+      if (e.key !== "Enter" || e.repeat || exitOpen || ai || session) return;
       // Любой открытый диалог (шторка «Сообщить об ошибке», калькулятор и т. п.): Enter при фокусе на body не листает шаг под ним.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (el instanceof HTMLTextAreaElement) return;
@@ -690,7 +664,7 @@ export function LessonPlayer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, outOpen, ai, session]);
+  }, [phase, step, next, advanceInfo, infoBlocked, check, exitOpen, ai, session]);
 
   // Разбор выбранного неверного варианта (choice/multi) — показываем бесплатно, до ИИ.
   const whyWrongText = useMemo(
@@ -1161,17 +1135,6 @@ export function LessonPlayer({
           </div>
         </div>
       </Modal>
-
-      {/* Не хватило сердечек на вход при первом ответе: купить, вернуть тренировкой или выйти. «Продолжить» закрывает шторку — «Проверить» нажимается снова. */}
-      {entryCost > 0 && (
-        <OutOfHearts
-          open={outOpen}
-          need={entryCost}
-          onClose={() => setOutOpen(false)}
-          onResume={() => setOutOpen(false)}
-          onExit={() => router.push(exitHref)}
-        />
-      )}
 
       {ai && taskCtx && (
         <AiPanel

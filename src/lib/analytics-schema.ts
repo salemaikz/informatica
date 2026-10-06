@@ -36,7 +36,7 @@ export const isSafeId = (v: unknown): v is string => typeof v === "string" && ID
 // ---------- Допустимые значения ----------
 
 export const PAYWALL_FROMS: readonly PaywallFrom[] = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "other"];
-export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game", "drill"];
+export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game", "drill", "code"];
 export const BREAK_REASONS: readonly BreakReason[] = ["time", "hard", "boring", "forgot", "other_prep", "other"];
 export const SHARE_WHATS: readonly ShareWhat[] = ["exam", "course", "streak", "lesson", "challenge", "report"];
 export const SHARE_HOWS: readonly ShareHow[] = ["native", "copy", "wa", "tg", "save", "manual"];
