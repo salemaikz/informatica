@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
+import { tabRowScroll } from "@/lib/tab-row";
 import { useT } from "@/i18n/useT";
 import { useToolbox } from "@/components/tools/useToolbox";
 import { hubGroup, subOf, type NavSub } from "./nav";
@@ -40,7 +41,10 @@ export function SubLink({ sub, active, className, iconSize = 18 }: { sub: NavSub
   );
 }
 
-/** Затухание по краям ряда — с той стороны, где есть что прокрутить (иначе обрезанная «таблетка» похожа на ошибку). */
+/**
+ * Затухание по краям ряда — с той стороны, где есть что прокрутить (иначе обрезанная «таблетка» похожа на ошибку).
+ * Ширина 24 px — TAB_FADE в lib/tab-row.ts (по ней ряд прокручивается так, чтобы затухание не съедало буквы).
+ */
 const FADE = cn(
   "data-[fade=left]:[mask-image:linear-gradient(to_right,transparent,black_24px)]",
   "data-[fade=right]:[mask-image:linear-gradient(to_left,transparent,black_24px)]",
@@ -54,18 +58,29 @@ const FADE = cn(
  */
 export function SectionTabs() {
   const pathname = usePathname();
-  const { t } = useT();
+  const { t, lang } = useT();
   const group = hubGroup(pathname, useEntVisible());
   const current = subOf(pathname);
   const scroller = useRef<HTMLDivElement>(null);
 
-  // Активную таблетку подвозим в видимую область (без setState, прокрутка только по горизонтали).
+  // При показе ряд — в начале, если активная таблетка видна и так; иначе ряд начинается с целой таблетки, а активная
+  // видна целиком (tabRowScroll). Без setState: поле справа (если до нужного места не докрутить) — прямо в стиле ряда.
   useEffect(() => {
     const box = scroller.current;
-    const el = box?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!box || !el) return;
-    box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: "auto" });
-  }, [pathname]);
+    if (!box) return;
+    box.style.paddingRight = "";
+    const items = Array.from(box.children) as HTMLElement[];
+    const active = items.findIndex((el) => el.getAttribute("aria-current") === "page");
+    const max = box.scrollWidth - box.clientWidth;
+    const { left, extra } = tabRowScroll(
+      items.map((el) => ({ left: el.offsetLeft, width: el.offsetWidth })),
+      active,
+      box.clientWidth,
+      max,
+    );
+    if (extra > 0) box.style.paddingRight = `${parseFloat(getComputedStyle(box).paddingRight) + extra}px`;
+    box.scrollTo({ left, behavior: "auto" });
+  }, [pathname, lang]);
 
   // С какой стороны ряд обрезан: data-fade на самом ряду (без setState) — по нему CSS рисует затухание.
   const groupId = group?.id;
@@ -95,6 +110,7 @@ export function SectionTabs() {
       <div ref={scroller} className={cn("relative flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden", FADE)}>
         {group.subs.map((sub) => {
           const active = sub.id === current;
+          // Рамка, поле, иконка 18 и промежуток до букв — TAB_LEAD / TAB_TRAIL в lib/tab-row.ts (меняются вместе).
           return (
             <SubLink
               key={sub.id}

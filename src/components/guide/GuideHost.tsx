@@ -10,12 +10,14 @@ import {
   GUIDE_DELAY_MS,
   GUIDE_SCENES,
   aimFinger,
+  bubbleTextW,
+  bubbleWidths,
   guideScroll,
+  keepDash,
   padRect,
   placeBit,
   placeFromDock,
   placementRects,
-  roomBelow,
   sameRect,
   sceneSteps,
   stepText,
@@ -26,6 +28,7 @@ import {
   type GuideScene,
   type GuideViewport,
   type Rect,
+  type Say,
   type SceneId,
 } from "@/lib/guide";
 import { PLAN_FEATURES, formatHearts } from "@/lib/economy";
@@ -38,10 +41,27 @@ import { BitPopup } from "./BitPopup";
 import { GuideDim, GuideFinger } from "./GuidePointer";
 import { useGuideSpots } from "./GuideSpot";
 import { useGuideUi, useWantedScene } from "./guide-state";
-import { bottomInset, findTour, focusableIn, foreignModal, obstacles, pinned, radiusOf, rectOf, safeBottom, scrollPage, topBar, tourSel } from "./targets";
+import {
+  bareHeading,
+  bottomInset,
+  findTour,
+  focusableIn,
+  foreignModal,
+  obstacles,
+  pinned,
+  radiusOf,
+  rectOf,
+  safeBottom,
+  scrollPage,
+  textHeight,
+  topBar,
+  tourSel,
+} from "./targets";
 
 /** Зазор вокруг подсвеченного элемента, px. */
 const HOLE_PAD = 6;
+/** Зазор вокруг «голого» заголовка (без своей карточки): от букв до рамки (3 px) — не меньше 10 px. */
+const BARE_PAD = 13;
 /** Рамка не ближе к краям окна: цель выше экрана — всё равно рамка, а не обводка по краям экрана. */
 const FRAME_INSET = 3;
 /**
@@ -91,6 +111,7 @@ interface View {
   hideBit: boolean;
   /** Вырез с рамкой: цель с зазором, в пределах окна. Шаг без цели — null. */
   hole: Rect | null;
+  /** Скругление рамки (с зазором). */
   radius: number;
   vw: number;
   vh: number;
@@ -100,9 +121,27 @@ interface View {
   place: BitPlacement | null;
   /** Угол, где Бит стоял в последний раз (шаг про кнопку Бита его не меняет): между шагами Бит остаётся в нём. */
   corner: BitPlacement["corner"] | null;
+  /** Шаг «нажми»: палец-указатель (ложится там, где не закроет Бита и пузырь). */
+  finger: FingerPose | null;
 }
 
-const START: View = { idx: -1, fallback: false, found: false, hideBit: true, hole: null, radius: 16, vw: 0, vh: 0, partial: false, place: null, corner: null };
+const START: View = {
+  idx: -1,
+  fallback: false,
+  found: false,
+  hideBit: true,
+  hole: null,
+  radius: 16 + HOLE_PAD,
+  vw: 0,
+  vh: 0,
+  partial: false,
+  place: null,
+  corner: null,
+  finger: null,
+};
+
+const sameFinger = (a: FingerPose | null, b: FingerPose | null) =>
+  a === b || (!!a && !!b && Math.round(a.x) === Math.round(b.x) && Math.round(a.y) === Math.round(b.y) && Math.round(a.angle) === Math.round(b.angle) && !!a.flip === !!b.flip);
 
 const samePlace = (a: BitPlacement | null, b: BitPlacement | null) =>
   a === b ||
@@ -128,7 +167,8 @@ const sameView = (a: View, b: View) =>
   a.vh === b.vh &&
   a.partial === b.partial &&
   samePlace(a.place, b.place) &&
-  a.corner === b.corner;
+  a.corner === b.corner &&
+  sameFinger(a.finger, b.finger);
 
 /**
  * Одна сцена: ведёт шаги, ждёт цели, ставит Бита, пузырь, затемнение и палец. Шаг «нажми» ждёт нажатия в элемент
@@ -168,10 +208,10 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
   };
   const sayFull = sayFor(false);
   const sayPartial = sayFor(true);
-  const lens = useRef({ full: 90, partial: 90 });
-  // Объявлен до эффекта замера: к первому замеру шага длины уже его.
+  const says = useRef({ full: "", partial: "" });
+  // Объявлен до эффекта замера: к первому замеру шага реплики уже его.
   useEffect(() => {
-    lens.current = { full: sayFull?.length ?? 90, partial: sayPartial?.length ?? 90 };
+    says.current = { full: sayFull ?? "", partial: sayPartial ?? "" };
   });
 
   /** Шаг `from` закончен (или пропущен) — следующий; шагов больше нет — сцена доиграна. */
@@ -227,7 +267,13 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
       }
       const vp: GuideViewport = { vw, vh, bottomInset: bottomInset(vh), safeBottom: safeBottom() };
       const partial = found && els.length < list.length;
-      const len = partial ? lens.current.partial : lens.current.full;
+      // Реплика: высота пузыря — по замеру текста в «линейке» (как в пузыре) при каждой его ширине, а нет вёрстки —
+      // на глаз по длине. Меряем здесь, а не в расчёте места: он идёт внутри setView и должен быть чистым.
+      const line = keepDash(partial ? says.current.partial : says.current.full);
+      const heights = new Map(bubbleWidths(vw).map((w) => [bubbleTextW(w), textHeight(line, bubbleTextW(w))] as const));
+      const say: Say = { len: line.length || 90, tap, textH: (w) => heights.get(w) ?? null };
+      // «Голый» заголовок — рамка дальше от букв.
+      const pad = els.some(bareHeading) ? BARE_PAD : HOLE_PAD;
       if (found) {
         lastFound = now;
         // Цель была и пропала (её нажали, страница перерисовалась) — шаг ждёт её ещё обычное время, потом идёт дальше.
@@ -236,7 +282,7 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
           scrolled = true;
           // Под целью — место Биту с пузырём (на шаге «нажми» — и пальцу); приколотые к экрану цели не прокручиваются.
           if (!els.some(pinned)) {
-            const dy = guideScroll(grow(unionRect(els.map(rectOf))!, HOLE_PAD, tap ? FINGER_ROOM : 0), vp, topBar(), len);
+            const dy = guideScroll(grow(unionRect(els.map(rectOf))!, pad, tap ? FINGER_ROOM : 0), vp, topBar(), say);
             if (Math.abs(dy) >= 2) {
               left = scrollPage(els[0], dy, !reduce);
               settleUntil = now + SETTLE_MS;
@@ -255,21 +301,31 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
       shownRef.current = !hideBit;
       const rect = found && els.length ? unionRect(els.map(rectOf)) : null;
       // Вырез — где цель сейчас (едет вместе со страницей); место Бита — где она будет.
-      const hole = rect ? padRect(rect, HOLE_PAD, vw, vh, FRAME_INSET) : null;
-      const final = rect && ahead ? padRect({ ...rect, y: rect.y - ahead }, HOLE_PAD, vw, vh, FRAME_INSET) : hole;
+      const hole = rect ? padRect(rect, pad, vw, vh, FRAME_INSET) : null;
+      const final = rect && ahead ? padRect({ ...rect, y: rect.y - ahead }, pad, vw, vh, FRAME_INSET) : hole;
       // Шаг «нажми»: под целью место пальцу — Бит и пузырь его не займут.
       const spot = final && tap ? { ...final, h: final.h + FINGER_ROOM } : final;
-      // Кнопки вокруг нужны, только если Бит встанет над целью или цели нет (пузырь не должен резать кнопки).
-      const avoid = found && (!spot || !roomBelow(spot, vp)) ? obstacles(els, vw, vh, ahead) : undefined;
+      // Кнопки вокруг: край пузыря их не режет, поднятый над целью Бит на них не садится.
+      const avoid = found ? obstacles(els, vw, vh, ahead) : undefined;
       const aimX = dock && els[0] ? centerX(focusableIn(els[0]) ?? els[0]) : undefined;
-      const radius = els.length ? Math.min(...els.map((e) => radiusOf(e))) : 16;
+      const radius = (els.length ? Math.min(...els.map((e) => radiusOf(e))) : 16) + pad;
       setView((prev) => {
         const corner0 = prev.corner ?? undefined;
         // Цель ещё ищется — Бит ждёт, где стоял (после шага про кнопку Бита — в своём углу).
-        const waiting = prev.place?.dock && !dock ? placeBit(null, vp, len, { prev: corner0 }) : prev.place;
-        const place = !found ? waiting : dock && hole ? placeFromDock(hole, vp, aimX) : placeBit(spot, vp, len, { prev: corner0, avoid });
+        const waiting = prev.place?.dock && !dock ? placeBit(null, vp, say, { prev: corner0 }) : prev.place;
+        const place = !found
+          ? waiting
+          : dock && hole
+            ? placeFromDock(hole, vp, aimX, { avoid, say })
+            : placeBit(spot, vp, say, { prev: corner0, avoid });
         const corner = place && !place.dock ? place.corner : prev.corner;
-        const next: View = { idx, fallback, found, hideBit, hole, radius, vw, vh, partial, place, corner };
+        // Шаг «нажми»: палец — со стороны Бита, но не на нём и не на пузыре (у пузыря из кнопки Бита — только не на пузыре).
+        let finger: FingerPose | null = null;
+        if (tap && hole && place) {
+          const r = placementRects(place, vh, say);
+          finger = aimFinger(hole, { x: r.bit.x + BIT_SIZE / 2, y: r.bit.y + BIT_SIZE / 2 }, place.dock ? [r.bubble] : [r.bit, r.bubble], vw, vh);
+        }
+        const next: View = { idx, fallback, found, hideBit, hole, radius, vw, vh, partial, place, corner, finger };
         return sameView(prev, next) ? prev : next;
       });
     };
@@ -374,16 +430,11 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
   );
 
   const text = found ? (view.partial ? sayPartial : sayFull) : null;
-  const textLen = text?.length ?? 90;
   const place = view.place ?? placeBit(null, { vw: view.vw, vh: view.vh, bottomInset: 0 });
   const bitVisible = isPresent && view.vw > 0 && !view.hideBit;
   const action = at.fallback || !targetsKey ? "next" : (step?.action ?? "next");
   // Палец — только на шаге «нажми» (зовёт нажать); ложится там, где не закроет Бита и пузырь.
-  let finger: FingerPose | null = null;
-  if (hole && tapStep) {
-    const r = placementRects(place, view.vh, textLen);
-    finger = aimFinger(hole, { x: r.bit.x + BIT_SIZE / 2, y: r.bit.y + BIT_SIZE / 2 }, place.dock ? [r.bubble] : [r.bit, r.bubble], view.vw, view.vh);
-  }
+  const finger = hole && tapStep ? view.finger : null;
   const stepKey = `${scene.id}:${at.idx}:${at.fallback ? 1 : 0}`;
   // Ждёт цель — задумался; говорит — настроение шага.
   const mood = text === null ? "thinking" : ((at.fallback ? step?.orElse?.mood : undefined) ?? step?.mood ?? "neutral");
@@ -413,7 +464,7 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
             key="dim"
             stepKey={stepKey}
             hole={hole}
-            radius={view.radius + HOLE_PAD}
+            radius={view.radius}
             vw={view.vw}
             vh={view.vh}
             reduce={reduce}

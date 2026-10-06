@@ -310,14 +310,45 @@ export const FINGER_ROOM = 40;
 /** Поле у краёв окна: телефон — 12 px, компьютер — 24 px. */
 export const edgeOf = (vw: number): number => (vw >= 1024 ? 24 : 12);
 
-/**
- * Высота пузыря на глаз (для выбора места — до того, как он нарисован): ~8,4 px на букву 15-го кегля, строка 21 px,
- * поля 24 px и ряд кнопок 46 px. С запасом на переносы слов.
- */
-export function estimateBubbleH(textLen: number, w: number): number {
+// Вёрстка пузыря (BitPopup): по ней считается его высота.
+/** Классы текста реплики — общие у пузыря и «линейки», которой проводник меряет высоту текста. */
+export const BUBBLE_TEXT = "text-[15px] font-semibold leading-snug";
+/** Поля по высоте: pt-3 + pb-2.5 + рамка 2 × 2 px. */
+const BUBBLE_PAD_Y = 26;
+/** Поля по ширине: px-4 и рамка — текст на столько уже пузыря. */
+const BUBBLE_PAD_X = 36;
+/** Ряд кнопок под текстом: mt-2 + «Дальше» (h-11). */
+const ROW_NEXT = 52;
+/** Шаг «нажми»: mt-2 + строка «Нажми, куда показываю» (15) + mt-1 + «Пропустить» (h-9). */
+const ROW_TAP = 63;
+
+/** Реплика — для расчёта высоты пузыря. */
+export interface Say {
+  /** Длина реплики: по ней высота текста оценивается, пока её не измерили. */
+  len: number;
+  /** Шаг «нажми»: над кнопками — строка-подсказка. */
+  tap?: boolean;
+  /** Точная высота текста при ширине текста `w` (замер на странице); null — не измерить, берётся оценка. */
+  textH?: (w: number) => number | null;
+}
+/** Реплика или только её длина. */
+export type SayLike = number | Say;
+const sayOf = (s: SayLike): Say => (typeof s === "number" ? { len: s } : s);
+
+/** Ширина текста в пузыре шириной `w`. */
+export const bubbleTextW = (w: number): number => Math.max(0, w - BUBBLE_PAD_X);
+
+/** Высота пузыря шириной `w`: текст (замер, а нет его — на глаз: ~8,4 px на букву, строка 21 px, с запасом на переносы), поля и ряд кнопок. */
+export function bubbleH(s: SayLike, w: number): number {
+  const say = sayOf(s);
   const perLine = Math.max(8, Math.floor((w - 32) / 8.4));
-  const lines = Math.max(1, Math.ceil((textLen * 1.12) / perLine));
-  return 24 + lines * 21 + 46;
+  const text = say.textH?.(bubbleTextW(w)) ?? Math.max(1, Math.ceil((say.len * 1.12) / perLine)) * 21;
+  return BUBBLE_PAD_Y + text + (say.tap ? ROW_TAP : ROW_NEXT);
+}
+
+/** Высота пузыря на глаз (для выбора места — до того, как он нарисован). */
+export function estimateBubbleH(textLen: number, w: number, tap = false): number {
+  return bubbleH({ len: textLen, tap }, w);
 }
 
 export interface GuideViewport {
@@ -351,7 +382,11 @@ export interface BitPlacement {
 type Corner = BitPlacement["corner"];
 type Combo = [Corner, BitPlacement["bubble"]];
 
-function layout(corner: Corner, bubble: BitPlacement["bubble"], bottom: number, vw: number): BitPlacement {
+/**
+ * Бит в углу на высоте `bottom` и пузырь над ним или сбоку. `sideFloor` — ниже этого (от низа окна) пузырь сбоку не
+ * опускается: Бит стоит на затемнённой нижней панели, а пузырь — над ней (подписи вкладок не торчат из-под него).
+ */
+function layout(corner: Corner, bubble: BitPlacement["bubble"], bottom: number, vw: number, sideFloor = 0): BitPlacement {
   const edge = edgeOf(vw);
   const bitX = corner === "br" ? vw - edge - BIT_SIZE : edge;
   if (bubble === "above") {
@@ -359,12 +394,25 @@ function layout(corner: Corner, bubble: BitPlacement["bubble"], bottom: number, 
     return { corner, bubble, bitX, bitBottom: bottom, bubbleX: corner === "br" ? vw - edge - w : edge, bubbleW: w, bubbleBottom: bottom + BIT_SIZE + ABOVE_GAP };
   }
   const w = Math.min(BUBBLE_MAX_W, Math.max(0, vw - edge * 2 - BIT_SIZE - SIDE_GAP));
-  return { corner, bubble, bitX, bitBottom: bottom, bubbleX: corner === "br" ? bitX - SIDE_GAP - w : bitX + BIT_SIZE + SIDE_GAP, bubbleW: w, bubbleBottom: bottom + SIDE_LIFT };
+  return {
+    corner,
+    bubble,
+    bitX,
+    bitBottom: bottom,
+    bubbleX: corner === "br" ? bitX - SIDE_GAP - w : bitX + BIT_SIZE + SIDE_GAP,
+    bubbleW: w,
+    bubbleBottom: Math.max(bottom + SIDE_LIFT, sideFloor),
+  };
+}
+
+/** Какой ширины бывает пузырь в окне шириной `vw`: над Битом (и из кнопки Бита) и сбоку от него. */
+export function bubbleWidths(vw: number): number[] {
+  return [layout("br", "above", 0, vw).bubbleW, layout("br", "side", 0, vw).bubbleW];
 }
 
 /** Прямоугольники Бита и пузыря (в координатах окна). */
-export function placementRects(p: BitPlacement, vh: number, textLen: number): { bit: Rect; bubble: Rect } {
-  const bh = estimateBubbleH(textLen, p.bubbleW);
+export function placementRects(p: BitPlacement, vh: number, say: SayLike): { bit: Rect; bubble: Rect } {
+  const bh = bubbleH(say, p.bubbleW);
   return {
     bit: { x: p.bitX, y: vh - p.bitBottom - BIT_SIZE, w: BIT_SIZE, h: BIT_SIZE },
     bubble: { x: p.bubbleX, y: vh - p.bubbleBottom - bh, w: p.bubbleW, h: bh },
@@ -374,6 +422,19 @@ export function placementRects(p: BitPlacement, vh: number, textLen: number): { 
 /** Хвостик пузыря над Битом: левый край его квадратика от левого края пузыря — напротив центра Бита (или кнопки Бита). */
 export function tailLeft(p: BitPlacement): number {
   return Math.max(18, Math.min(p.bitX + BIT_SIZE / 2 - p.bubbleX - 8, p.bubbleW - 34));
+}
+
+/** Хвостик пузыря сбоку: обычно — на 22 px выше низа пузыря (напротив лица Бита). */
+const SIDE_TAIL = 22;
+/** Ниже хвостик не опускается: у скруглённого угла пузыря он отрывался бы от края. */
+const SIDE_TAIL_MIN = 10;
+
+/**
+ * Хвостик пузыря сбоку: низ его квадратика от низа пузыря. Пузырь поднят над нижней панелью (Бит стоит на ней) —
+ * хвостик опускается к самому низу пузыря, ближе к Биту.
+ */
+export function sideTail(p: BitPlacement): number {
+  return Math.max(SIDE_TAIL_MIN, Math.min(SIDE_TAIL, p.bitBottom + SIDE_LIFT + SIDE_TAIL - p.bubbleBottom));
 }
 
 /** Пересечение прямоугольников, px² (0 — не пересекаются). */
@@ -399,29 +460,64 @@ const TOP_MARGIN = 4;
 const NEAR = 8;
 /** Кнопка у самого края пузыря — меньшее зло, чем разрезанная: её площадь в полосе NEAR идёт с этим весом. */
 const NEAR_WEIGHT = 0.25;
-/** Шаг без цели: «цена» сдвига Бита на 1 px от обычного места над нижней панелью (в px² разрезанной кнопки). */
+/**
+ * Пузырь закрывает кнопку целиком — терпимо, но хуже, чем не задевать её совсем: «цена» за кнопку (как сдвиг Бита
+ * на 25 px). Разрезать кнопку всё равно дороже.
+ */
+const COVER_COST = 100;
+/** «Цена» сдвига Бита (или пузыря из кнопки Бита) на 1 px от обычного места (в px² разрезанной кнопки). */
 const SHIFT_COST = 4;
-/** Шаг без цели: «цена» другого угла (Бит не прыгает из угла в угол ради пары пикселей). */
+/** «Цена» другого угла (Бит не прыгает из угла в угол ради пары пикселей). */
 const SWITCH_COST = 400;
-/** Шаг без цели: выше обычного места Бит поднимается не больше чем на полроста — остаётся внизу экрана. */
+/** Первый шаг сцены (прошлого угла нет): другой угол почти бесплатен — дешевле, чем другой пузырь. */
+const SWITCH_COST_FREE = 50;
+/** Шаг с целью: «цена» другого пузыря (сбоку вместо над Битом и наоборот). */
+const BUBBLE_COST = 100;
+/** Выше обычного места Бит поднимается не больше чем на полроста — остаётся внизу экрана. */
 const RAISE_MAX = BIT_SIZE / 2;
-/** Шаг без цели: шаг перебора высоты Бита, px. */
+/** Шаг перебора высоты Бита, px. */
 const LEVEL_STEP = 2;
+/** 3D-грань кнопки (тень `shadow-[0_4px_0]`) — вне её getBoundingClientRect: кнопка для пузыря на столько ниже. */
+export const BUTTON_EDGE = 4;
+/** Пузырь сбоку от Бита на затемнённой нижней панели: его низ — над верхом панели на столько. */
+const PANEL_GAP = 6;
+/**
+ * Пузырь из кнопки Бита: на столько он может подняться над кнопкой, чтобы его края не резали кнопки страницы (на
+ * плотной «Учиться» чистое место бывает только ~на 90 px выше). Хвостик по-прежнему смотрит на кнопку.
+ */
+const DOCK_LIFT_MAX = 120;
 
 /** Прямоугольник, раздутый (или при d < 0 — сжатый) на d со всех сторон. */
 const inflate = (r: Rect, d: number): Rect => ({ x: r.x - d, y: r.y - d, w: Math.max(0, r.w + 2 * d), h: Math.max(0, r.h + 2 * d) });
 
+/** Разрез кнопки краем пузыря: за каждый пиксель края поверх кнопки — не меньше, чем стоила бы кнопка в полосе NEAR. */
+const CUT_LINE = 2 * NEAR * NEAR_WEIGHT;
+
+/** Длина границы прямоугольника `r`, что проходит по `a` (край пузыря поверх кнопки), px. */
+function cutLine(r: Rect, a: Rect): number {
+  const ow = Math.min(r.x + r.w, a.x + a.w) - Math.max(r.x, a.x);
+  const oh = Math.min(r.y + r.h, a.y + a.h) - Math.max(r.y, a.y);
+  if (ow <= 0 || oh <= 0) return 0;
+  const inside = (v: number, from: number, size: number) => v > from && v < from + size;
+  return (
+    (inside(r.y, a.y, a.h) ? ow : 0) +
+    (inside(r.y + r.h, a.y, a.h) ? ow : 0) +
+    (inside(r.x, a.x, a.w) ? oh : 0) +
+    (inside(r.x + r.w, a.x, a.w) ? oh : 0)
+  );
+}
+
 /**
- * «Цена» прямоугольника `r` (пузыря или Бита) для кнопок `list` на шаге без цели: разрезанная кнопка — площадь разреза;
- * с `ring` ещё и кнопка у самого края (ближе NEAR снаружи или изнутри) — её площадь в этой полосе с весом NEAR_WEIGHT.
- * Закрытая целиком с запасом или далёкая — 0.
+ * «Цена» прямоугольника `r` для кнопок `list`. Бит: разрезанная кнопка — площадь разреза. Пузырь (`bubble`): разрез —
+ * площадь и длина края поверх кнопки (разрезать хуже, чем липнуть); кнопка у самого края (ближе NEAR снаружи или
+ * изнутри) — её площадь в этой полосе с весом NEAR_WEIGHT; закрытая целиком — ещё и COVER_COST. Далёкая — 0.
  */
-function edgeCost(r: Rect, list: readonly Rect[], ring: boolean): number {
+function edgeCost(r: Rect, list: readonly Rect[], bubble: boolean): number {
   let sum = 0;
   for (const a of list) {
     const o = overlapArea(r, a);
-    if (o > 0 && o < a.w * a.h - 1) sum += o;
-    else if (ring) sum += NEAR_WEIGHT * (overlapArea(inflate(r, NEAR), a) - overlapArea(inflate(r, -NEAR), a));
+    if (o > 0 && o < a.w * a.h - 1) sum += o + (bubble ? CUT_LINE * cutLine(r, a) : 0);
+    else if (bubble) sum += NEAR_WEIGHT * (overlapArea(inflate(r, NEAR), a) - overlapArea(inflate(r, -NEAR), a)) + (o > 0 ? COVER_COST : 0);
   }
   return sum;
 }
@@ -432,17 +528,49 @@ function insets(vp: GuideViewport): { panel: number; safe: number } {
   return { panel, safe: Math.max(0, Math.min(panel, vp.safeBottom ?? panel)) };
 }
 
+/** Ниже этого (от низа окна) пузырь сбоку не опускается: есть нижняя панель, на которую садится Бит, — пузырь над ней. */
+function sideFloorOf(vp: GuideViewport): number {
+  const { panel, safe } = insets(vp);
+  return panel > safe ? panel + PANEL_GAP : 0;
+}
+
+/**
+ * Кнопки, которые пузырь не должен резать: без кнопок затемнённой нижней панели (Бит садится на неё и на шагах
+ * с целью) и с 3D-гранью снизу (иначе пузырь, «закрывший» кнопку, оставлял бы торчать её край).
+ */
+function zoneOf(avoid: readonly Rect[], vp: GuideViewport): Rect[] {
+  const { panel, safe } = insets(vp);
+  const list = panel > safe ? avoid.filter((a) => a.y < vp.vh - panel - 1) : avoid;
+  return list.map((a) => ({ ...a, h: a.h + BUTTON_EDGE }));
+}
+
+/** Высоты Бита для перебора: обычная первой, потом — от `floor` до полроста выше обычной. */
+function levelsFrom(base: number, floor: number): number[] {
+  const out = [base];
+  for (let lvl = floor; lvl <= base + RAISE_MAX; lvl += LEVEL_STEP) if (Math.abs(lvl - base) >= 1) out.push(lvl);
+  return out;
+}
+
 /** Бит может сесть на затемнённую нижнюю панель: панель есть (телефон) и цель не в ней. */
 function panelFree(target: Rect, vp: GuideViewport): boolean {
   const { panel, safe } = insets(vp);
   return panel > safe && target.y + target.h <= vp.vh - panel;
 }
 
+/**
+ * Сколько места (от низа окна) займут Бит на высоте `bottom` и пузырь — сбоку или над Битом, что ниже, — с запасом.
+ * Пузырь сбоку не ниже `sideFloor` (Бит на нижней панели — пузырь над ней).
+ */
+function roomFrom(bottom: number, vw: number, say: SayLike, sideFloor = 0): number {
+  const side = layout("br", "side", bottom, vw, sideFloor);
+  const sideTop = Math.max(bottom + BIT_SIZE, side.bubbleBottom + bubbleH(say, side.bubbleW));
+  const aboveTop = bottom + BIT_SIZE + ABOVE_GAP + bubbleH(say, layout("br", "above", 0, vw).bubbleW);
+  return Math.min(sideTop, aboveTop) - bottom + CLEAR;
+}
+
 /** Сколько места оставить под целью Биту с пузырём (пузырь сбоку или над Битом — что ниже), с запасом. */
-export function roomNeeded(vw: number, textLen = 90): number {
-  const sideH = Math.max(BIT_SIZE, SIDE_LIFT + estimateBubbleH(textLen, layout("br", "side", 0, vw).bubbleW));
-  const aboveH = BIT_SIZE + ABOVE_GAP + estimateBubbleH(textLen, layout("br", "above", 0, vw).bubbleW);
-  return Math.min(sideH, aboveH) + CLEAR;
+export function roomNeeded(vw: number, say: SayLike = 90): number {
+  return roomFrom(0, vw, say);
 }
 
 /** Под целью помещается Бит (над нижней панелью, а если цель не в панели — и на ней). */
@@ -459,7 +587,7 @@ export function roomBelow(target: Rect, vp: GuideViewport): boolean {
  * не должен уезжать под шапку, а Бит там встаёт поверх нижней кнопки.
  * Цель выше, чем помещается: видна целиком — не трогаем, иначе её верх встаёт под шапку. 0 — прокручивать не нужно.
  */
-export function guideScroll(target: Rect, vp: GuideViewport, top: number, textLen = 90): number {
+export function guideScroll(target: Rect, vp: GuideViewport, top: number, say: SayLike = 90): number {
   const { panel, safe } = insets(vp);
   const minY = top + SCROLL_MARGIN;
   const fit = (maxBottom: number): number | null => {
@@ -468,9 +596,10 @@ export function guideScroll(target: Rect, vp: GuideViewport, top: number, textLe
     return target.y < minY ? target.y - minY : 0;
   };
   if (panel > safe) {
-    const need = roomNeeded(vp.vw, textLen) + edgeOf(vp.vw);
+    const edge = edgeOf(vp.vw);
+    const floor = sideFloorOf(vp);
     for (const inset of [panel, safe]) {
-      const dy = fit(vp.vh - inset - need);
+      const dy = fit(vp.vh - inset - edge - roomFrom(inset + edge, vp.vw, say, floor));
       if (dy !== null) return dy;
     }
   } else {
@@ -485,8 +614,8 @@ export interface PlaceOpts {
   /** Угол Бита на прошлом шаге: Бит остаётся там, если он и пузырь не закрывают цель (не прыгает из угла в угол). */
   prev?: Corner;
   /**
-   * Кнопки и ссылки на экране (кроме самой цели): поднятые над целью Бит и пузырь на них не садятся; на шаге без цели
-   * пузырь их по возможности не режет.
+   * Кнопки и ссылки на экране (кроме самой цели): пузырь их по возможности не режет и не липнет к ним (на шаге без
+   * цели — и Бит не режет); поднятые над целью Бит и пузырь на них не садятся.
    */
   avoid?: readonly Rect[];
 }
@@ -495,47 +624,53 @@ export interface PlaceOpts {
  * Где Бит и пузырь. Бит в нижнем углу над нижней панелью — в прошлом углу (`prev`), а на первом шаге — в правом, если
  * цель не в правой нижней четверти и Бит её не закрыл бы. Пузырь — над Битом, а если цель в нижней половине — сбоку.
  * Закрыли бы цель — пробуем другой пузырь, Бита на затемнённой нижней панели (цель не в ней), другой угол.
- * Варианты, где пузырь вылез бы за верх окна, отбрасываются. Бит поднимается над целью, только если под ней ему нет места
- * (кнопка у самого низа экрана: «Проверить», «Продолжить»), и тогда не садится на кнопки вокруг (`avoid`).
- * Чисто не помещается ничего — там, где меньше всего закрыто цели (пузырь растёт вверх — его кнопки видны всегда).
+ * Варианты, где пузырь вылез бы за верх окна, отбрасываются. Есть `avoid` — из вариантов, что не закрывают цель, берётся
+ * тот, где пузырь не режет кнопки вокруг (Бит при этом может чуть подняться или опуститься до затемнённой панели).
+ * Бит поднимается над целью, только если под ней ему нет места (кнопка у самого низа экрана: «Проверить»,
+ * «Продолжить»), и тогда не садится на кнопки вокруг. Чисто не помещается ничего — там, где меньше всего закрыто цели
+ * (пузырь растёт вверх — его кнопки видны всегда).
  * Без цели (экран затемнён целиком) — прошлый угол, пузырь над Битом; есть `avoid` — Бит чуть поднимается или опускается
  * (до затемнённой панели), пока пузырь не перестанет резать кнопки и липнуть к ним (кнопки самой панели не в счёт).
- * `textLen` — длина реплики: по ней оценивается высота пузыря.
+ * Бит на затемнённой панели — пузырь сбоку всё равно над ней. `say` — реплика (или её длина): по ней — высота пузыря.
  */
-export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, opts: PlaceOpts = {}): BitPlacement {
+export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 90, opts: PlaceOpts = {}): BitPlacement {
   const { vw, vh } = vp;
   const edge = edgeOf(vw);
   const { panel, safe } = insets(vp);
   const base = panel + edge;
   const low = safe + edge;
+  const floor = sideFloorOf(vp);
   const avoid = opts.avoid ?? [];
-  const rects = (p: BitPlacement) => placementRects(p, vh, textLen);
+  // Кнопки нижней панели — под затемнением, Бит садится на неё: их не считаем. Кнопки — с 3D-гранью.
+  const zone = zoneOf(avoid, vp);
+  const at = (c: Corner, b: BitPlacement["bubble"], lvl: number) => layout(c, b, lvl, vw, floor);
+  const rects = (p: BitPlacement) => placementRects(p, vh, say);
   const fits = (p: BitPlacement) => {
     const r = rects(p);
     return r.bubble.y >= TOP_MARGIN && r.bit.y >= 0;
   };
+  // Пузырь не режет кнопки и не липнет к ним; с `bit` — и Бит не режет (на шагах с целью Бит может стоять поверх
+  // нижней кнопки урока, как и раньше: там считаются только края пузыря).
+  const edges = (p: BitPlacement, bit = true) => {
+    const r = rects(p);
+    return edgeCost(r.bubble, zone, true) + (bit ? edgeCost(r.bit, zone, false) : 0);
+  };
 
   if (!target) {
     const first = opts.prev ?? "br";
-    const plain = layout(first, "above", base, vw);
-    // Кнопки нижней панели — под затемнением, Бит садится на неё и на шагах с целью: их не считаем.
-    const zone = panel > safe ? avoid.filter((a) => a.y < vh - panel - 1) : avoid;
+    const plain = at(first, "above", base);
     if (!zone.length) return plain;
     // Высота Бита — от затемнённой панели (или от места над ней) до полроста выше обычного места; обычное — первым.
-    const floor = panel > safe ? low : base;
-    const levels = [base];
-    for (let lvl = floor; lvl <= base + RAISE_MAX; lvl += LEVEL_STEP) if (Math.abs(lvl - base) >= 1) levels.push(lvl);
+    const levels = levelsFrom(base, panel > safe ? low : base);
     let best = plain;
     let bestCost = Infinity;
     for (const c of [first, first === "br" ? "bl" : "br"] as const) {
       for (const b of ["above", "side"] as const) {
         for (const lvl of levels) {
-          const p = layout(c, b, lvl, vw);
+          const p = at(c, b, lvl);
           if (!fits(p)) continue;
-          const r = rects(p);
-          // Пузырь не режет кнопки и не липнет к ним, Бит не режет; при прочих равных — ближе к обычному месту и углу.
-          const cost =
-            edgeCost(r.bubble, zone, true) + edgeCost(r.bit, zone, false) + Math.abs(lvl - base) * SHIFT_COST + (c === first ? 0 : SWITCH_COST);
+          // При прочих равных — ближе к обычному месту и углу.
+          const cost = edges(p) + Math.abs(lvl - base) * SHIFT_COST + (c === first ? 0 : SWITCH_COST);
           if (cost < bestCost - 0.5) {
             best = p;
             bestCost = cost;
@@ -556,17 +691,18 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, o
   };
   const cx = target.x + target.w / 2;
   const cy = target.y + target.h / 2;
-  const brBit = rects(layout("br", "above", base, vw)).bit;
+  const brBit = rects(at("br", "above", base)).bit;
   const guess: Corner = (cx > vw / 2 && cy > vh / 2) || overlaps(brBit, target, CLEAR) ? "bl" : "br";
   const first = opts.prev ?? guess;
   const second: Corner = first === "br" ? "bl" : "br";
   const bubble: BitPlacement["bubble"] = cy > vh / 2 ? "side" : "above";
   const otherBubble: BitPlacement["bubble"] = bubble === "side" ? "above" : "side";
-  const levels = panelFree(target, vp) ? [base, low] : [base];
+  const free = panelFree(target, vp);
+  const levels = free ? [base, low] : [base];
   const order: BitPlacement[] = [];
   if (opts.prev) {
     // Сначала прошлый угол (над панелью, потом на ней), и только потом — другой.
-    for (const c of [first, second]) for (const lvl of levels) for (const b of [bubble, otherBubble]) order.push(layout(c, b, lvl, vw));
+    for (const c of [first, second]) for (const lvl of levels) for (const b of [bubble, otherBubble]) order.push(at(c, b, lvl));
   } else {
     const combos: Combo[] = [
       [first, bubble],
@@ -574,9 +710,45 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, o
       [first, otherBubble],
       [second, otherBubble],
     ];
-    for (const lvl of levels) for (const [c, b] of combos) order.push(layout(c, b, lvl, vw));
+    for (const lvl of levels) for (const [c, b] of combos) order.push(at(c, b, lvl));
   }
-  for (const p of order) if (fits(p) && !hits(p)) return p;
+  /**
+   * Место, где цель открыта, с вариантом пузыря `vary`. Кнопок вокруг нет — первое по очереди `order`. Есть — то, где
+   * пузырь не режет кнопки; очерёдность — «ценой»: другой угол, другой пузырь, сдвиг Бита (до затемнённой панели или на
+   * полроста выше обычного места).
+   */
+  const pick = (vary: (p: BitPlacement) => BitPlacement | null): BitPlacement | null => {
+    if (!zone.length) {
+      for (const p0 of order) {
+        const p = vary(p0);
+        if (p && fits(p) && !hits(p)) return p;
+      }
+      return null;
+    }
+    const switchCost = opts.prev ? SWITCH_COST : SWITCH_COST_FREE;
+    let best: BitPlacement | null = null;
+    let bestCost = Infinity;
+    for (const c of [first, second]) {
+      for (const b of [bubble, otherBubble]) {
+        for (const lvl of levelsFrom(base, free ? low : base)) {
+          const p = vary(at(c, b, lvl));
+          if (!p || !fits(p) || hits(p)) continue;
+          const cost = edges(p, false) + Math.abs(lvl - base) * SHIFT_COST + (c === first ? 0 : switchCost) + (b === bubble ? 0 : BUBBLE_COST);
+          if (cost < bestCost - 0.5) {
+            best = p;
+            bestCost = cost;
+          }
+        }
+      }
+    }
+    return best;
+  };
+  // Пузырь сбоку над нижней панелью (Бит стоит на ней) не помещается — он опускается до ног Бита и закрывает полосу
+  // панели целиком, а не наполовину (подписи вкладок не торчат из-под него).
+  const deep = (p: BitPlacement): BitPlacement | null =>
+    p.bubble === "side" && p.bubbleBottom > p.bitBottom + SIDE_LIFT ? { ...p, bubbleBottom: p.bitBottom } : null;
+  const clean = pick((p) => p) ?? pick(deep);
+  if (clean) return clean;
 
   const pool = order.filter(fits);
   // Под целью Биту нет места (цель у самого низа экрана) — он встаёт над ней, но не на соседние кнопки.
@@ -596,7 +768,7 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, o
           ["bl", "side"],
         ];
     for (const [c, b] of liftedOrder) {
-      const p = layout(c, b, lifted, vw);
+      const p = at(c, b, lifted);
       if (!fits(p)) continue;
       if (!hits(p) && !onAvoid(p)) return p;
       pool.push(p);
@@ -621,13 +793,20 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, o
 /**
  * Шаг про плавающую кнопку Бита: говорящий Бит прячется, пузырь выходит из самой кнопки — над её рамкой `anchor`,
  * хвостик смотрит на кнопку (`aimX` — её центр по горизонтали). Пузырь — во всю ширину пузыря, в пределах окна.
+ * Есть `avoid` — пузырь поднимается (не больше DOCK_LIFT_MAX), пока его верхний край не перестанет резать кнопки
+ * страницы и липнуть к ним; `say` — реплика (или её длина): по ней — высота пузыря.
  */
-export function placeFromDock(anchor: Rect, vp: GuideViewport, aimX = anchor.x + anchor.w / 2): BitPlacement {
+export function placeFromDock(
+  anchor: Rect,
+  vp: GuideViewport,
+  aimX = anchor.x + anchor.w / 2,
+  opts: { avoid?: readonly Rect[]; say?: SayLike } = {},
+): BitPlacement {
   const edge = edgeOf(vp.vw);
   const w = Math.min(BUBBLE_MAX_W, Math.max(0, vp.vw - edge * 2));
   const right = aimX > vp.vw / 2;
   const x = right ? anchor.x + anchor.w - w : anchor.x;
-  return {
+  const plain: BitPlacement = {
     corner: right ? "br" : "bl",
     bubble: "above",
     bitX: aimX - BIT_SIZE / 2,
@@ -637,6 +816,22 @@ export function placeFromDock(anchor: Rect, vp: GuideViewport, aimX = anchor.x +
     bubbleBottom: vp.vh - anchor.y + DOCK_GAP,
     dock: true,
   };
+  const zone = zoneOf(opts.avoid ?? [], vp);
+  if (!zone.length) return plain;
+  const say = opts.say ?? 90;
+  let best = plain;
+  let bestCost = Infinity;
+  for (let lift = 0; lift <= DOCK_LIFT_MAX; lift += LEVEL_STEP) {
+    const p = { ...plain, bubbleBottom: plain.bubbleBottom + lift };
+    const r = placementRects(p, vp.vh, say);
+    if (r.bubble.y < TOP_MARGIN) break;
+    const cost = edgeCost(r.bubble, zone, true) + lift * SHIFT_COST;
+    if (cost < bestCost - 0.5) {
+      best = p;
+      bestCost = cost;
+    }
+  }
+  return best;
 }
 
 /** Палец-указатель: кончик (x; y) и поворот `angle` в градусах по часовой стрелке от «пальцем вверх». */

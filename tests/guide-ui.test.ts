@@ -141,6 +141,11 @@ describe("welcome: приветствие и путь к первому урок
     await wait(50);
     expect(say()).toContain("Нажми «Начать»");
     expect(say()).toContain("Нажми, куда показываю");
+    // Подсказка — своей строкой над кнопками, а не в одном ряду с «Пропустить» (в узком пузыре ей там тесно).
+    const hint = bubble()!.querySelector("[data-guide-tap-hint]")!;
+    expect(hint.textContent).toContain("Нажми, куда показываю");
+    expect(hint.querySelector("button")).toBeNull();
+    expect(hint.nextElementSibling?.contains(button("Пропустить")!)).toBe(true);
     expect(button("Дальше")).toBeUndefined();
     expect(tips().welcome).toBeUndefined();
 

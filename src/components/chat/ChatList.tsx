@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Mascot } from "@/components/mascot/Mascot";
+import { useWantedScene } from "@/components/guide/guide-state";
 import { Button } from "@/components/ui/Button";
 import { useMinuteClock } from "@/components/goals/useClock";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
@@ -61,6 +62,8 @@ export function ChatList({ activeId, compact }: { activeId?: string; compact?: b
   const [newMode, setNewMode] = useState<ChatMode | undefined>();
   const startChat = useStartChat();
   const [manage, setManage] = useState<ManageTarget | null>(null);
+  // Проводник играет (или вот-вот сыграет) сцену этой страницы.
+  const guiding = useWantedScene() === "page-tutor";
   useLegacyChatMigration(activeId);
 
   const sorted = useMemo(() => sortChats(chats), [chats]);
@@ -99,7 +102,11 @@ export function ChatList({ activeId, compact }: { activeId?: string; compact?: b
   if (chats.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 py-6 text-center">
-        <Mascot mood="happy" size={compact ? 64 : 96} />
+        {/* Пока Бит-проводник рассказывает про чат (сцена page-tutor), большой Бит пустого списка уходит: третий Бит на
+            экране (рядом с логотипом и говорящим) лишний. Место остаётся — список под рамкой проводника не прыгает. */}
+        <div className={cn("transition-opacity duration-300", guiding && "opacity-0")} aria-hidden={guiding || undefined}>
+          <Mascot mood="happy" size={compact ? 64 : 96} />
+        </div>
         <div>
           <p className="text-lg font-extrabold">{t("chat2.empty.title")}</p>
           <p className="font-semibold text-muted">{t("chat2.empty.text")}</p>
