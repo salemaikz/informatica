@@ -90,6 +90,8 @@ export interface PlayerProps {
   /**
    * Ключ тренировки (lib/drill-paid.ts → drillPaidKey): плата за вход запоминается под ним, и та же тренировка в течение 20 минут
    * (перезагрузка, случайный выход) открывается бесплатно — как продолжение урока. Только для kind="drill".
+   * Уходит и в итог (SessionResult.drillKey): finishSession снимает отметку оплаты за эту тренировку. У мини-теста вход оплачен
+   * кнопкой «Начать» (entryCost не задан) — ключ нужен только для снятия отметки.
    */
   drillKey?: string;
   /**
@@ -361,6 +363,7 @@ export function LessonPlayer({
         durationSec: Math.round(lessonMs() / 1000),
         ...totals,
         mode,
+        ...(kind === "drill" && drillKey ? { drillKey } : {}),
         // Плановая длина (заданий в сессии) — награда за прохождение по длине (этап 14).
         planned: steps.filter(isQuestion).length,
         ...(kind === "lesson" && lesson?.micro ? { micro: true } : {}),
@@ -377,7 +380,7 @@ export function LessonPlayer({
       setSession({ result, bonusXp, achievements, chips, firstPass, lessonChips, perfectDrop });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, lesson, via, mode, title, onSessionFinish, earnedAtStart, lessonMs, steps],
+    [finishSession, kind, lessonId, lesson, via, mode, drillKey, title, onSessionFinish, earnedAtStart, lessonMs, steps],
   );
 
   // Снимок прохождения в стор (#41). Вызывается из обработчиков с уже посчитанными значениями: setState асинхронный.

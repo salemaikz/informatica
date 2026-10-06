@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp } from "@/lib/store";
 import type { ExamSummary } from "@/lib/store";
 import { ACH_RULES_VERSION } from "@/lib/achievement-rules";
+import { quizSession } from "@/lib/chat-quiz";
 import { DRILL_PAID_GRACE_MS, drillPaidActive, drillPaidKey, sanitizeDrillPaid } from "@/lib/drill-paid";
 import { heartsView, MINUTE, PERFECT_DROP } from "@/lib/economy";
 import { dropRandom, noteTestDrop, sanitizeDropDay, testDropsLeft } from "@/lib/perfect";
@@ -331,9 +332,31 @@ describe("E7: тренировка при перезагрузке — серд�
   it("закончили тренировку — отметка снимается: следующая такая же снова платная", () => {
     st().payDrill(key, 1);
     expect(st().drillPaid).not.toBeNull();
-    st().finishSession({ kind: "drill", title: "Т", mode: "skill", answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
+    st().finishSession({ kind: "drill", title: "Т", mode: "skill", drillKey: key, answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
     expect(st().drillPaid).toBeNull();
     expect(st().payDrill(key, 1).paid).toBe(1);
+  });
+
+  it("квиз в чате (kind drill без ключа) и чужая тренировка отметку не снимают: возврат в оплаченную в течение 20 минут бесплатен", () => {
+    st().payDrill(key, 1);
+    expect(heartCount()).toBe(4);
+    // Квиз чата: тот же kind "drill", но ключа тренировки у него нет.
+    st().finishSession(quizSession([rec()], 5, 1, 10, "Квиз"));
+    expect(st().drillPaid).toEqual({ key, at: Date.now() });
+    // Итог без ключа вообще и итог тренировки с другим ключом — тоже не трогают.
+    st().finishSession({ kind: "drill", title: "Т", mode: "skill", answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
+    st().finishSession({ kind: "drill", title: "Т", mode: "smart", drillKey: drillPaidKey("smart"), answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
+    expect(st().drillPaid).toEqual({ key, at: Date.now() });
+    vi.setSystemTime(Date.now() + 10 * MINUTE);
+    expect(st().payDrill(key, 1)).toMatchObject({ ok: true, paid: 0 });
+    expect(heartCount()).toBe(4);
+  });
+
+  it("мини-тест: ключ из итога тоже снимает отметку", () => {
+    const k = drillPaidKey("minitest", { node: "n1" });
+    st().payDrill(k, 1);
+    st().finishSession({ kind: "drill", title: "М", mode: "minitest", drillKey: k, answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
+    expect(st().drillPaid).toBeNull();
   });
 
   it("не хватает сердечек — отказ, ничего не запоминается; «Безлимит» ничего не списывает и не запоминает", () => {

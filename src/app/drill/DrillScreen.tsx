@@ -291,7 +291,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       resultsExtra={extra}
       testMode={mode === "minitest"}
       entryCost={mode === "minitest" ? undefined : ENTRY_COST.drill}
-      drillKey={mode === "minitest" ? undefined : payKey}
+      drillKey={payKey}
       prepaid={mode === "minitest" ? prepaid : undefined}
     />
   );

@@ -1048,7 +1048,10 @@ export const useApp = create<AppState & AppActions>()(
           // Серия идеальных уроков (R2): растёт и сбрасывается только первыми прохождениями; тренировки её не трогают.
           next = { ...next, perfectRun: nextPerfectRun(s.perfectRun, { perfect, first: !prev }) };
         }
-        if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill"), drillPaid: null };
+        if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
+        // Отметка оплаты (E7) снимается, только когда закончена именно оплаченная тренировка с экрана /drill (ключ совпал):
+        // квиз в чате тоже kind "drill", но ключа у него нет — выход из оплаченной тренировки и квиз её отметку не трогают.
+        if (result.drillKey && next.drillPaid?.key === result.drillKey) next = { ...next, drillPaid: null };
         next = { ...next, ...evaluate(next) };
 
         // История тестов.
