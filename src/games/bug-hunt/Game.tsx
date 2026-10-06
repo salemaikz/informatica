@@ -683,7 +683,7 @@ export default function BugHuntGame({ lang, sound, mode, onFinish }: GameProps) 
               type="button"
               disabled={v.phase !== "reveal"}
               onClick={() => apiRef.current?.next()}
-              className="h-14 w-full rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="h-14 w-full rounded-xl bg-action-primary font-semibold text-white transition-colors hover:bg-action-primary-edge focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               {t("common.next")}
             </button>
@@ -703,7 +703,7 @@ export default function BugHuntGame({ lang, sound, mode, onFinish }: GameProps) 
             type="button"
             autoFocus
             onClick={() => apiRef.current?.pause(false)}
-            className="flex h-14 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="flex h-14 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-action-primary font-semibold text-white transition-colors hover:bg-action-primary-edge focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             <Play size={20} fill="currentColor" aria-hidden /> {t("common.continue")}
           </button>
@@ -788,7 +788,7 @@ function FixSheet({
         <button
           type="button"
           onClick={onNext}
-          className="mt-2 h-12 w-full rounded-xl bg-primary font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="mt-2 h-12 w-full rounded-xl bg-action-primary font-semibold text-white transition-colors hover:bg-action-primary-edge focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           {nextLabel}
         </button>

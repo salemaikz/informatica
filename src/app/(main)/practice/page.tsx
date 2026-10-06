@@ -57,7 +57,7 @@ export default function PracticePage() {
         <Link
           href="/drill?mode=smart"
           data-tour="practice-train"
-          className="flex flex-col gap-2 rounded-3xl bg-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
+          className="flex flex-col gap-2 rounded-3xl bg-action-primary p-5 text-white shadow-[0_5px_0_var(--action-primary-edge)] active:translate-y-1 active:shadow-none"
         >
           <Brain size={30} />
           <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
@@ -72,7 +72,7 @@ export default function PracticePage() {
           className={clsx(
             "flex flex-col gap-2 rounded-3xl p-5",
             mistakes.length
-              ? "bg-danger text-white shadow-[0_5px_0_var(--danger-strong)] active:translate-y-1 active:shadow-none"
+              ? "bg-action-danger text-white shadow-[0_5px_0_var(--action-danger-edge)] active:translate-y-1 active:shadow-none"
               : "pointer-events-none border-2 border-border bg-surface text-muted",
           )}
         >
@@ -95,7 +95,7 @@ export default function PracticePage() {
         href="/code"
         className="flex items-center gap-4 rounded-3xl border-2 border-primary/30 bg-primary-soft p-4 active:translate-y-0.5"
       >
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-action-primary text-white shadow-[0_4px_0_var(--action-primary-edge)]">
           <Code2 size={26} strokeWidth={2.4} />
         </span>
         <span className="min-w-0 flex-1">

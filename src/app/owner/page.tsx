@@ -23,7 +23,7 @@ const ERRORS: Record<string, string> = {
 const box = "rounded-3xl border-2 border-border bg-surface p-4";
 const chip = "rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-extrabold text-muted";
 const button =
-  "inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-[15px] font-extrabold text-white shadow-[0_4px_0_var(--primary-strong)] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "inline-flex h-11 items-center justify-center rounded-2xl bg-action-primary px-5 text-[15px] font-extrabold text-white shadow-[0_4px_0_var(--action-primary-edge)] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 export default async function OwnerPage({ searchParams }: { searchParams: Promise<{ days?: string; e?: string }> }) {
   // Сначала запрос: иначе при сборке (без OWNER_SECRET) «404» могла бы запечься в статику навсегда.

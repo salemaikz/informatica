@@ -149,7 +149,7 @@ function PickerBody({ value, name, onChange, onClose }: { value: AvatarConfig; n
                 >
                   <Avatar config={{ kind: "preset", id: p.id }} name={name} size={56} />
                   {on && (
-                    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white">
+                    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-action-primary text-white">
                       <Check size={14} strokeWidth={3.5} />
                     </span>
                   )}

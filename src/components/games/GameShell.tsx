@@ -207,7 +207,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
                       on ? "border-primary bg-primary-soft shadow-[0_3px_0_var(--primary)]" : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
                     )}
                   >
-                    <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", on ? "bg-primary text-white" : "bg-surface-2 text-muted")}>
+                    <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", on ? "bg-action-primary text-white" : "bg-surface-2 text-muted")}>
                       <MIcon size={20} strokeWidth={2.4} />
                     </span>
                     <span className="min-w-0">

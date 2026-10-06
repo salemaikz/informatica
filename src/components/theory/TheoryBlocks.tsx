@@ -63,7 +63,7 @@ function WorkedAll({ step }: { step: WorkedStep }) {
         {step.steps.map((s, i) => (
           <li key={i} className="flex flex-col gap-3 rounded-2xl bg-surface-2/60 px-3 py-3">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-white">{i + 1}</span>
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-action-primary text-sm font-extrabold text-white">{i + 1}</span>
               <Markdown className={cn("min-w-0 flex-1 text-[17px]", MD_WIDE)}>{l(s.text)}</Markdown>
             </div>
             {s.scene && <SceneView scene={s.scene} />}
@@ -78,7 +78,7 @@ function WorkedAll({ step }: { step: WorkedStep }) {
 function WorkedResult({ text }: { text: string }) {
   return (
     <div className="flex items-start gap-3 rounded-2xl border-2 border-success/30 bg-success-soft px-4 py-3 text-success-strong">
-      <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-white">
+      <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-action-success text-white">
         <Check size={16} strokeWidth={3.5} />
       </span>
       <Markdown className="min-w-0 flex-1 text-[17px] font-bold">{text}</Markdown>

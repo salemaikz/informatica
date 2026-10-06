@@ -21,7 +21,7 @@ export function GoalBanner({ text, reached }: { text: string; reached: boolean }
         initial={{ scale: 0.5, rotate: -20 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={springBouncy}
-        className={cn("flex size-9 shrink-0 items-center justify-center rounded-full text-white", reached ? "bg-success" : "bg-primary")}
+        className={cn("flex size-9 shrink-0 items-center justify-center rounded-full text-white", reached ? "bg-action-success" : "bg-action-primary")}
       >
         {reached ? <Check size={20} strokeWidth={3.4} /> : <Target size={20} strokeWidth={2.6} />}
       </m.span>

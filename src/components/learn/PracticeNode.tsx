@@ -19,7 +19,7 @@ const HALF = SIZE / 2;
 const GAP = 12;
 
 const FACE: Record<NodeKindState, string> = {
-  done: "border-b-[6px] border-success-strong bg-success text-white",
+  done: "border-b-[6px] border-action-success-edge bg-action-success text-white",
   recommended: "border-2 border-b-[6px] border-primary bg-primary-soft text-primary",
   available: "border-2 border-b-[6px] border-primary bg-primary-soft text-primary",
 };
@@ -30,6 +30,7 @@ export function PracticeNode({
   item,
   title,
   state,
+  pulse,
   onOpen,
 }: {
   node: PathNode;
@@ -39,6 +40,8 @@ export function PracticeNode({
   /** Название группы («Ветвления») или раздела. */
   title: string;
   state: NodeKindState;
+  /** Анимированный пульс — только когда на карте нет рекомендованного урока (пульсирует один следующий шаг). */
+  pulse: boolean;
   onOpen: () => void;
 }) {
   const { t } = useT();
@@ -68,16 +71,16 @@ export function PracticeNode({
           transition={{ ...springBouncy, delay: (index % 4) * 0.05 }}
         >
           {state === "recommended" &&
-            (reduce ? (
-              // «Меньше анимаций»: вместо пульса — неподвижное кольцо, чтобы подсказка «пора» не пропала.
+            (reduce || !pulse ? (
+              // «Меньше анимаций» или пульс занят уроком: вместо пульса — неподвижное кольцо, чтобы подсказка «пора» не пропала.
               <span aria-hidden className="pointer-events-none absolute -inset-1.5 rounded-full border-4 border-primary/30" />
             ) : (
               <m.span
                 aria-hidden
                 className="absolute inset-0 rounded-full border-4 border-primary"
-                initial={{ scale: 1, opacity: 0.6 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+                initial={{ scale: 1, opacity: 0 }}
+                animate={{ scale: 1.5, opacity: [0, 0.6, 0] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", opacity: { duration: 2.2, times: [0, 0.18, 1], repeat: Infinity, ease: "easeInOut" } }}
               />
             ))}
           <button

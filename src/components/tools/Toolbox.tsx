@@ -90,7 +90,7 @@ export function ToolboxButton({ className, variant = "icon" }: { className?: str
       className={cn(
         "flex items-center justify-center transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
         variant === "fab"
-          ? "fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 h-14 w-14 rounded-full bg-primary text-white shadow-lg hover:brightness-105 active:scale-95"
+          ? "fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 h-14 w-14 rounded-full bg-action-primary text-white shadow-lg hover:brightness-105 active:scale-95"
           : cn("h-10 w-10 rounded-xl hover:bg-surface-2", open ? "bg-primary-soft text-primary" : "text-muted hover:text-text"),
         className,
       )}

@@ -75,7 +75,7 @@ function ModeCard({
   const cls = cn(
     "flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-[translate,box-shadow] duration-75 active:translate-y-[3px] active:shadow-none",
     main
-      ? "bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]"
+      ? "bg-action-primary text-white shadow-[0_4px_0_var(--action-primary-edge)]"
       : "border-2 border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
   );
   const body = (

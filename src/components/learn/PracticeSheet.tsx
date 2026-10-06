@@ -33,7 +33,7 @@ function SheetBody({ item, unit, unitIndex }: { item: NodeItem; unit: Unit; unit
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start gap-3 pr-2">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-b-4 border-primary-strong bg-primary text-white">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-b-4 border-action-primary-edge bg-action-primary text-white">
           <Icon size={24} aria-hidden />
         </span>
         <div className="min-w-0">

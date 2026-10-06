@@ -87,6 +87,15 @@
   --art-gloss: var(--surface);
   --art-shadow: var(--text);
   --on-primary: #ffffff;
+  /* Заливка действий под белый текст (контраст ≥ 4,5:1). -edge — объёмная тень. */
+  --action-primary: #0e6ba3;
+  --action-primary-edge: #094f7a;
+  --action-success: #12804d;
+  --action-success-edge: #0b5e37;
+  --action-danger: #c42f2f;
+  --action-danger-edge: #962020;
+  --action-ai: #6341e6;
+  --action-ai-edge: #4a2ec0;
 
   color-scheme: light;
 }
@@ -161,6 +170,15 @@
   --art-gloss: var(--text);
   --art-shadow: var(--bg);
   --on-primary: #0f1420;
+  /* Заливка действий под белый текст (контраст ≥ 4,5:1). -edge — объёмная тень. */
+  --action-primary: #16699f;
+  --action-primary-edge: #0e4d77;
+  --action-success: #14804f;
+  --action-success-edge: #0c5c37;
+  --action-danger: #c43c3c;
+  --action-danger-edge: #962a2a;
+  --action-ai: #6d4de8;
+  --action-ai-edge: #5035c4;
 
   color-scheme: dark;
 }
@@ -235,6 +253,15 @@
     --art-gloss: var(--text);
     --art-shadow: var(--bg);
     --on-primary: #0f1420;
+    /* Заливка действий под белый текст (контраст ≥ 4,5:1). -edge — объёмная тень. */
+    --action-primary: #16699f;
+    --action-primary-edge: #0e4d77;
+    --action-success: #14804f;
+    --action-success-edge: #0c5c37;
+    --action-danger: #c43c3c;
+    --action-danger-edge: #962a2a;
+    --action-ai: #6d4de8;
+    --action-ai-edge: #5035c4;
 
     color-scheme: dark;
   }
@@ -287,6 +314,14 @@
   --color-ink-gold: var(--ink-gold);
   --color-ink-streak: var(--ink-streak);
   --color-on-primary: var(--on-primary);
+  --color-action-primary: var(--action-primary);
+  --color-action-primary-edge: var(--action-primary-edge);
+  --color-action-success: var(--action-success);
+  --color-action-success-edge: var(--action-success-edge);
+  --color-action-danger: var(--action-danger);
+  --color-action-danger-edge: var(--action-danger-edge);
+  --color-action-ai: var(--action-ai);
+  --color-action-ai-edge: var(--action-ai-edge);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -295,7 +330,7 @@
   --animate-shake: shake 0.4s ease-in-out;
   --animate-slide-up: slide-up 0.25s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;
-  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-pulse-ring: pulse-ring 2.2s ease-in-out infinite;
   --animate-rise-in: rise-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   --animate-ring-out: ring-out 0.5s ease-out forwards;
 }
@@ -321,9 +356,9 @@
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
-  70% { box-shadow: 0 0 0 14px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  18% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 45%, transparent); }
+  75% { box-shadow: 0 0 0 14px transparent; }
 }
 
 /* Появление снизу с лесенкой (animation-delay задаёт компонент). Через opacity + translate — не конфликтует с transform у motion. */

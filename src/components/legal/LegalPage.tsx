@@ -48,7 +48,7 @@ export function LegalPage({ doc }: { doc: LegalId }) {
               onClick={() => updateProfile({ lang: o.id })}
               className={cn(
                 "h-11 min-w-12 rounded-xl px-3 text-sm font-extrabold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                lang === o.id ? "bg-primary text-white" : "text-muted hover:bg-surface-2",
+                lang === o.id ? "bg-action-primary text-white" : "text-muted hover:bg-surface-2",
               )}
             >
               {o.label}

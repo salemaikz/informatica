@@ -407,7 +407,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
             type="button"
             autoFocus
             onClick={() => api.current?.next()}
-            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-extrabold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none active:scale-[0.98]"
+            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-action-primary text-lg font-extrabold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none active:scale-[0.98]"
           >
             {t("common.next")}
             <ArrowRight size={20} aria-hidden />

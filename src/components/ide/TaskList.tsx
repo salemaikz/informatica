@@ -29,7 +29,7 @@ function TaskRow({ lang, task, n, stat, showLevel }: { lang: IdeLang; task: IdeT
           aria-label={t(solved ? "ide.list.solved" : "ide.list.todo")}
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold",
-            solved ? "bg-success text-white" : "bg-surface-2 text-muted",
+            solved ? "bg-action-success text-white" : "bg-surface-2 text-muted",
           )}
         >
           {solved ? <Check size={20} strokeWidth={3} /> : n}

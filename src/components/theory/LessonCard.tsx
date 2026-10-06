@@ -14,7 +14,7 @@ const CARDS_KEY: DictKey[] = ["theory16c.cards.one", "theory16c.cards.few", "the
 
 /** Кружок с номером: пройден — зелёный с галочкой, прочитан — синий, не начат — пустой. */
 const NUMBER_CLASS: Record<LessonReadStatus, string> = {
-  done: "border-success bg-success text-white",
+  done: "border-success bg-action-success text-white",
   read: "border-primary/40 bg-primary-soft text-primary",
   new: "border-border bg-surface text-muted",
 };

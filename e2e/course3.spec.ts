@@ -160,9 +160,9 @@ test("мини-тест: открывается из листа практики
   await page.locator("main button[aria-pressed]").first().click();
   await page.getByRole("button", { name: "Проверить", exact: true }).click();
   await expect(hearts(page, 4)).toBeVisible();
-  // Выход: окно предупреждает, что плата за вход уже списана.
+  // Выход: окно предупреждает, что вход уже оплачен.
   await page.getByRole("button", { name: "Выйти" }).first().click();
-  await expect(page.getByText(/Плата за вход уже списана/)).toBeVisible();
+  await expect(page.getByText(/Вход уже оплачен/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 

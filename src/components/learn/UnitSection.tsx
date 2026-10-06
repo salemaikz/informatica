@@ -154,6 +154,7 @@ function UnitSectionImpl({
               item={it}
               title={l(it.kind === "practice" ? it.group.title : unit.title)}
               state={nodeStates.get(pathItemNodeId(it)!) ?? "available"}
+              pulse={!recommendedId}
               onOpen={() => setSheet(it)}
             />
           ),

@@ -38,7 +38,7 @@ export const Navigator = memo(function Navigator({
               aria-label={`${t("exam.q.number", { n: i + 1 })}${done ? `, ${t("exam.nav.answered")}` : ""}${flagged ? `, ${t("exam.nav.flagged")}` : ""}`}
               className={cn(
                 "relative flex h-11 items-center justify-center rounded-xl border-2 text-sm font-extrabold transition-colors",
-                done ? "border-primary bg-primary text-white" : flagged ? "border-warning bg-warning-soft text-warning-strong" : "border-border bg-surface text-text hover:bg-surface-2",
+                done ? "border-action-primary bg-action-primary text-white" : flagged ? "border-warning bg-warning-soft text-warning-strong" : "border-border bg-surface text-text hover:bg-surface-2",
                 flagged && done && "border-warning",
                 i === current && "outline-3 outline-offset-2 outline-text",
               )}
@@ -55,7 +55,7 @@ export const Navigator = memo(function Navigator({
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-bold text-muted">
         <li className="flex items-center gap-1.5">
-          <span className="h-3.5 w-3.5 rounded bg-primary" aria-hidden /> {t("exam.nav.answered")}
+          <span className="h-3.5 w-3.5 rounded bg-action-primary" aria-hidden /> {t("exam.nav.answered")}
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-3.5 w-3.5 rounded border-2 border-warning bg-warning-soft" aria-hidden /> {t("exam.nav.flagged")}

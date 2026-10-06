@@ -120,7 +120,7 @@ describe("итоги урока: кнопка «Поделиться»", () => {
     const btn = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Поделиться"))!;
     expect(btn).toBeTruthy();
     // не крупная: «призрачная» кнопка, не основная
-    expect(btn.className).not.toContain("bg-primary");
+    expect(btn.className).not.toMatch(/bg-(action-)?primary(\s|$)/);
     await act(async () => btn.click());
     expect(document.body.textContent).toContain("Поделиться уроком");
     // ссылка уходит в кнопки WhatsApp и Telegram

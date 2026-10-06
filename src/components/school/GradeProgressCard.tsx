@@ -20,7 +20,7 @@ export function GradeProgressCard({ grade, progress, nextLessonId, resume }: { g
   return (
     <section className="flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4">
       <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-action-primary text-white shadow-[0_4px_0_var(--action-primary-edge)]">
           <GraduationCap size={24} />
         </span>
         <div className="min-w-0 flex-1">

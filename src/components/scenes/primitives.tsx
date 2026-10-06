@@ -321,7 +321,7 @@ function XBadge({ delay }: { delay: number }) {
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       transition={{ ...springBouncy, delay }}
-      className="inline-flex size-6 items-center justify-center rounded-full bg-danger text-white"
+      className="inline-flex size-6 items-center justify-center rounded-full bg-action-danger text-white"
     >
       <X size={14} strokeWidth={3.6} />
     </m.span>

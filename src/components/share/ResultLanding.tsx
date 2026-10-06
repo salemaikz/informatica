@@ -60,7 +60,7 @@ export function ResultLanding({ result }: { result: ShareResult | null }) {
               className={cn(
                 "h-11 min-w-11 rounded-xl px-2.5 text-sm font-extrabold",
                 "focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary",
-                lang === l ? "bg-primary text-white" : "text-muted hover:bg-surface-2",
+                lang === l ? "bg-action-primary text-white" : "text-muted hover:bg-surface-2",
               )}
             >
               {LANG_NAME[l]}

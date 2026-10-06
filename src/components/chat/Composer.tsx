@@ -108,7 +108,7 @@ export function Composer({
           <button
             type="submit"
             disabled={!draft.trim() && !image}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-ai text-white transition-opacity disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-action-ai text-white transition-opacity disabled:opacity-40"
             aria-label={t("chat2.send")}
           >
             <Send size={18} />

@@ -490,7 +490,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
             type="button"
             autoFocus
             onClick={() => api.current?.setPause(false)}
-            className="flex min-h-12 items-center gap-2 rounded-2xl bg-primary px-6 py-2 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
+            className="flex min-h-12 items-center gap-2 rounded-2xl bg-action-primary px-6 py-2 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
           >
             <Play size={18} aria-hidden /> {t("common.continue")}
           </button>
@@ -596,7 +596,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                       e.stopPropagation();
                       api.current?.startRule();
                     }}
-                    className="mt-3 min-h-12 rounded-2xl bg-primary px-6 py-2 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
+                    className="mt-3 min-h-12 rounded-2xl bg-action-primary px-6 py-2 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
                   >
                     {tx(S.gotIt, lang)}
                   </button>
@@ -637,7 +637,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                 <button
                   type="button"
                   onClick={() => api.current?.advance()}
-                  className="min-h-11 min-w-11 shrink-0 rounded-xl bg-primary px-3 py-1.5 text-sm font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
+                  className="min-h-11 min-w-11 shrink-0 rounded-xl bg-action-primary px-3 py-1.5 text-sm font-bold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none"
                 >
                   {t("common.next")}
                 </button>

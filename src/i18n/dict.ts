@@ -9,6 +9,7 @@ import { goalsDict } from "./parts/goals";
 import { remindersDict } from "./parts/reminders";
 import { canvasDict } from "./parts/canvas";
 import { videoDict } from "./parts/video";
+import { ui16dDict } from "./parts/ui16d";
 import { aiDict } from "./parts/ai";
 import { gamesDict } from "./parts/games";
 import { scenesDict } from "./parts/scenes";
@@ -181,13 +182,13 @@ const core = {
 
   // ---------- Урок ----------
   "lesson.exitTitle": { ru: "Выйти из урока?", kk: "Сабақтан шығасың ба?" },
-  "lesson.exitText": { ru: "Прогресс этого урока не сохранится.", kk: "Осы сабақтың барысы сақталмайды." },
+  "lesson.exitText": { ru: "Ответы и XP уже засчитаны, но занятие не будет завершено.", kk: "Жауаптар мен XP есепке алынды, бірақ сабақ аяқталған болып саналмайды." },
   // Урок в режиме «Учиться» сохраняется (#41); у «Проверить себя» и экстерна вход уже оплачен и не вернётся
   "lesson.exitSaved": {
     ru: "Прогресс сохранится — урок можно продолжить позже.",
     kk: "Сабақтың барысы сақталады — кейін жалғастыруға болады.",
   },
-  "lesson.exitPaid": { ru: "Плата за вход уже списана и не вернётся.", kk: "Кіру ақысы алынды, ол қайтарылмайды." },
+  "lesson.exitPaid": { ru: "Вход уже оплачен: сердечко не возвращается.", kk: "Кіру ақысы төленген: жүрек қайтарылмайды." },
   "lesson.exit": { ru: "Выйти", kk: "Шығу" },
   "lesson.stay": { ru: "Остаться", kk: "Қалу" },
   "lesson.review": { ru: "Работа над ошибками", kk: "Қателермен жұмыс" },
@@ -590,6 +591,7 @@ export const dict = {
   ...theory16cDict,
   ...help16cDict,
   ...shortfall16dDict,
+  ...ui16dDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

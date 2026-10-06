@@ -31,7 +31,7 @@ export function WeekSection({ week, open, onToggle }: { week: PlanWeek; open: bo
             aria-hidden="true"
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold",
-              complete ? "bg-success text-white" : current ? "bg-primary text-white" : "bg-surface-2 text-muted",
+              complete ? "bg-action-success text-white" : current ? "bg-action-primary text-white" : "bg-surface-2 text-muted",
             )}
           >
             {complete ? <Check size={20} strokeWidth={3} /> : week.n}

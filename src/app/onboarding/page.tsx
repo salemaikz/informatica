@@ -40,7 +40,7 @@ const TRACKS: { id: Track; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
 
 function ChoiceIcon({ icon: Icon, selected }: { icon: LucideIcon; selected: boolean }) {
   return (
-    <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", selected ? "bg-primary text-white" : "bg-primary-soft text-primary")}>
+    <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", selected ? "bg-action-primary text-white" : "bg-primary-soft text-primary")}>
       <Icon size={22} strokeWidth={2.4} />
     </span>
   );

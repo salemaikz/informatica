@@ -94,7 +94,7 @@ export function FeedbackScreen() {
               >
                 <span
                   aria-hidden
-                  className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border-2", picked ? "border-primary bg-primary text-white" : "border-border")}
+                  className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border-2", picked ? "border-action-primary bg-action-primary text-white" : "border-border")}
                 >
                   {picked && <Check size={12} strokeWidth={4} />}
                 </span>
