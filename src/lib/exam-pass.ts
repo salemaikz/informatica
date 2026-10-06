@@ -45,12 +45,17 @@ export function fullExamChipsAllowed(before: FullExamFacts[], cur: Pick<FullExam
   return !done.some((e) => e.seed === cur.seed || (e.chips !== false && sameDay(e.at, cur.at)));
 }
 
-/** Урок засчитывается, если отвечено не меньше 70% предъявленных заданий (пропуск — не ответ; повторы ошибок не считаются). */
+/**
+ * Урок засчитывается, если отвечено не меньше 70% предъявленных заданий (пропуск — не ответ; повторы ошибок не считаются).
+ * Один пропуск зачёт не снимает: пропустить можно только решение по фото и задачу с кодом — по уважительной причине
+ * (нет камеры, Python не загрузился), а в коротком уроке из трёх заданий один пропуск — уже 67%.
+ */
 export const LESSON_COUNT_RATIO = 0.7;
 export function lessonCounted(r: { asked?: number; skipped?: number; answers: { retry?: boolean; skipped?: boolean }[] }): boolean {
   const first = r.answers.filter((a) => !a.retry);
   const asked = r.asked ?? first.length;
   if (asked <= 0) return true;
   const skipped = r.skipped ?? first.filter((a) => a.skipped).length;
+  if (skipped <= 1) return true;
   return (asked - skipped) / asked >= LESSON_COUNT_RATIO - 1e-9;
 }

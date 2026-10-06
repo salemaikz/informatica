@@ -73,7 +73,7 @@ test("магазин: полный запас — цена за недостаю
   await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(7);
   await expect(page.getByText("Чат с Битом")).toBeVisible();
   await expect(page.getByText("запас 5, +1 за 6 ч")).toBeVisible();
-  await expect(page.getByText("запас 10, +1 за 3 ч")).toBeVisible();
+  await expect(page.getByText("запас 6, +1 за 3 ч")).toBeVisible();
   // Возврата за тренировку нет: при нуле — подождать, купить за чипы или «Безлимит».
   await expect(page.getByText(/Бесплатной тренировки нет/)).toBeVisible();
   await expect(page.getByText(/Тренировка возвращает сердечко/)).toHaveCount(0);

@@ -49,6 +49,9 @@ describe("урок засчитывается при ответах на 70% з�
     expect(lessonCounted({ answers: ten(3), asked: 10, skipped: 3 })).toBe(true); // ровно 70%
     expect(lessonCounted({ answers: ten(4), asked: 10, skipped: 4 })).toBe(false);
     expect(lessonCounted({ answers: [] })).toBe(true);
+    // Один пропуск зачёт не снимает (решение по фото без камеры в коротком уроке: 2 из 3 = 67%).
+    expect(lessonCounted({ answers: ten(1).slice(0, 3), asked: 3, skipped: 1 })).toBe(true);
+    expect(lessonCounted({ answers: ten(2).slice(0, 3), asked: 3, skipped: 2 })).toBe(false);
     expect(lessonCounted({ answers: [rec(), rec({ retry: true }), rec({ retry: true })] })).toBe(true);
   });
 

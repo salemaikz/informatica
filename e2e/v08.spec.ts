@@ -143,7 +143,7 @@ test("магазин: строка сердечек «5 из 5», карточк
   await seed(page);
   await page.goto("/shop");
   await expect(page.getByRole("heading", { name: "Магазин" })).toBeVisible();
-  const status = page.getByRole("group", { name: "Сердечки и множитель чипов" });
+  const status = page.getByRole("group", { name: "Сердечки и бустер опыта" });
   await expect(status).toBeVisible();
   await expect(status).toContainText("5 из 5");
   await expect(page.getByText("Твой баланс")).toHaveCount(0);
@@ -204,7 +204,7 @@ test("тест по разделу на карте: шторка и запуск
   await expect(sheet.getByRole("heading", { name: /^Тест по разделу: / })).toBeVisible();
   await expect(sheet.getByText(/Заданий: \d+/)).toBeVisible();
   // Тест по разделу стоит 2 сердечка (#40): значок цены в шторке.
-  await expect(sheet.getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
+  await expect(sheet.getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
   await sheet.getByRole("button", { name: "Начать" }).click();
 
   await page.waitForURL(/\/exam\/run\?.*kind=unit/);
@@ -215,7 +215,7 @@ test("тест по разделу на карте: шторка и запуск
   const n = Number((await pill.textContent())!.match(/\d+/)![0]);
   expect(n).toBeGreaterThan(0);
   expect(n).toBeLessThanOrEqual(20);
-  await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 2/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
   await page.getByRole("button", { name: "Начать" }).click();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
   // Списано ровно две цены входа: было 5, стало 3.
