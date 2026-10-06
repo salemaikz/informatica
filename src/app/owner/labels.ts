@@ -13,6 +13,7 @@ const FROM: Dict = {
   profile: "из профиля",
   hearts: "сердечки закончились",
   ai: "лимит ИИ",
+  chips: "не хватило чипов",
   other: "другое",
 };
 const HEARTS_WHERE: Dict = {
@@ -23,6 +24,20 @@ const HEARTS_WHERE: Dict = {
   checkpoint: "контрольная точка",
   game: "игра",
   drill: "тренировка",
+  theory: "теория",
+  code: "практикум кода",
+};
+const CHIP_OUT_WHERE: Dict = { ai: "ответ ИИ", shop: "магазин", cosmetic: "косметика", hearts: "пополнение сердечек" };
+const SHORT_NEED: Dict = { chips: "не хватало чипов", hearts: "не хватало сердечек" };
+const SHORT_PICK: Dict = {
+  heart: "купили сердечко",
+  pack: "набор чипов",
+  refill: "пополнили все сердечки",
+  all: "все наборы чипов",
+  plan: "тариф «Безлимит»",
+  trial: "пробный период",
+  earn: "заработать чипы",
+  exit: "закрыли окно",
 };
 const DRILL_MODE: Dict = {
   other: "другое (неизвестный режим)",
@@ -81,6 +96,12 @@ const CHALLENGE_STEP: Dict = { accept: "приняли вызов на стра�
 export const label = {
   from: (c: string) => pick(FROM, c),
   heartsWhere: (c: string) => pick(HEARTS_WHERE, c),
+  chipOutWhere: (c: string) => pick(CHIP_OUT_WHERE, c),
+  /** `chips:pack` → «не хватало чипов — набор чипов». */
+  shortPick: (c: string) => {
+    const [need = "", p = ""] = c.split(":");
+    return `${pick(SHORT_NEED, need)} — ${pick(SHORT_PICK, p)}`;
+  },
   drillMode: (c: string) => pick(DRILL_MODE, c),
   examKind: (c: string) => pick(EXAM_KIND, c),
   breakReason: (c: string) => pick(BREAK, c),

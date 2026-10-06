@@ -45,7 +45,7 @@ export function MusicToggle({ variant = "icon", className }: { variant?: "icon" 
         data-testid="music-toggle"
         className={cn(
           "flex h-11 w-11 items-center justify-center rounded-xl transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-          on ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-text",
+          on ? "bg-primary-soft text-ink-primary" : "text-muted hover:bg-surface-2 hover:text-text",
           className,
         )}
       >
@@ -62,7 +62,7 @@ export function MusicToggle({ variant = "icon", className }: { variant?: "icon" 
         data-testid="music-toggle"
         className={cn(
           "flex min-h-11 w-full items-center gap-3 rounded-2xl border-2 px-3 text-left text-sm font-extrabold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-          on ? "border-primary/30 bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:bg-surface-2",
+          on ? "border-primary/30 bg-primary-soft text-ink-primary" : "border-border bg-surface text-muted hover:bg-surface-2",
         )}
       >
         <Icon size={20} className="shrink-0" aria-hidden />

@@ -240,6 +240,9 @@ describe("сводка целиком", () => {
     ...ev({ e: "shop_click", item: "chips-750" }, 4),
     ...ev({ e: "hearts_out", where: "lesson" }, 6),
     { e: "hearts_out", where: "game" },
+    ...ev({ e: "chips_out", where: "ai" }, 3),
+    { e: "chips_out", where: "hearts" },
+    ...ev({ e: "short_pick", need: "chips", pick: "pack" }, 2),
     ...ev({ e: "onb_step", step: "name" }, 10),
     ...ev({ e: "onb_step", step: "goal" }, 7),
     ...ev({ e: "onb_done", track: "ent" }, 5),
@@ -280,6 +283,11 @@ describe("сводка целиком", () => {
       { key: "lesson", n: 6 },
       { key: "game", n: 1 },
     ]);
+    expect(r.chipsOut).toEqual([
+      { key: "ai", n: 3 },
+      { key: "hearts", n: 1 },
+    ]);
+    expect(r.shortPick).toEqual([{ key: "chips:pack", n: 2 }]);
     expect(r.onboarding.steps).toEqual([
       { key: "name", n: 10 },
       { key: "goal", n: 7 },

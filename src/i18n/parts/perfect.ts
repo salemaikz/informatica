@@ -14,7 +14,6 @@ export const perfectDict = {
   "perfect.break.other": { ru: "бонусы +{n}", kk: "бонустар +{n}" },
   // Таблица «как заработать чипы» (числа — CHIP_REWARD в lib/economy.ts)
   "economy.earn.lessonFirst": { ru: "Урок пройден впервые", kk: "Сабақ алғаш рет өтілді" },
-  "economy.earn.lessonRepeat": { ru: "Урок пройден повторно", kk: "Сабақ қайта өтілді" },
   "economy.earn.dailyGoal": { ru: "Цель дня выполнена", kk: "Күндік мақсат орындалды" },
   "economy.earn.unit": { ru: "Тест по разделу сдан", kk: "Бөлім бойынша тест тапсырылды" },
   "economy.earn.exam": { ru: "Пробный ЕНТ завершён", kk: "Сынақ ҰБТ аяқталды" },

@@ -99,7 +99,7 @@ function BuyRow({
           <span className="block font-extrabold leading-tight">{t(nameKey)}</span>
           <span className="block text-[13px] font-semibold leading-snug text-muted">{t(descKey)}</span>
         </span>
-        <span className={cn("flex shrink-0 flex-col items-end text-right font-extrabold", av.ok ? "text-warning-strong" : "text-muted")}>
+        <span className={cn("flex shrink-0 flex-col items-end text-right font-extrabold", av.ok ? "text-ink-gold" : "text-muted")}>
           <span className="flex items-center gap-1">
             <Cpu size={16} className={av.ok ? "text-gold" : undefined} aria-hidden />
             <span className="tabular-nums">{formatNum(itemPrice(item, hearts))}</span>
@@ -140,7 +140,7 @@ function PayRow({
       )}
     >
       {badge && (
-        <span className="absolute -top-2.5 left-3 rounded-full bg-success px-2 py-0.5 text-[11px] font-extrabold leading-none text-white">{badge}</span>
+        <span className="absolute -top-2.5 left-3 rounded-full bg-action-success px-2 py-0.5 text-[11px] font-extrabold leading-none text-white">{badge}</span>
       )}
       <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface", tone === "gold" ? "text-gold" : "text-heart")} aria-hidden>
         {icon}
@@ -149,7 +149,7 @@ function PayRow({
         <span className="block font-extrabold leading-tight">{title}</span>
         <span className="block text-[13px] font-semibold leading-snug text-muted">{desc}</span>
       </span>
-      <span className="shrink-0 whitespace-nowrap font-extrabold text-warning-strong">{price}</span>
+      <span className="shrink-0 whitespace-nowrap font-extrabold text-ink-gold">{price}</span>
     </button>
   );
 }
@@ -179,11 +179,11 @@ function LinkCard({
         tone === "gold" ? "border-gold bg-gold-soft" : "border-primary/40 bg-primary-soft",
       )}
     >
-      <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface", tone === "gold" ? "text-gold" : "text-primary")} aria-hidden>
+      <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface", tone === "gold" ? "text-gold" : "text-ink-primary")} aria-hidden>
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn("block font-extrabold leading-tight", tone === "gold" ? "text-warning-strong" : "text-primary")}>{title}</span>
+        <span className={cn("block font-extrabold leading-tight", tone === "gold" ? "text-ink-gold" : "text-ink-primary")}>{title}</span>
         <span className="block text-sm font-semibold text-muted">{desc}</span>
       </span>
       <ArrowRight size={20} className="shrink-0 text-muted" aria-hidden />
@@ -311,7 +311,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
   if (layout === "inline" && !isHearts && !opts.plan) {
     // Пробный «Безлимит» включён: ИИ теперь без чипов — просим спросить ещё раз.
     return (
-      <p className="flex items-center gap-2 font-extrabold text-success-strong">
+      <p className="flex items-center gap-2 font-extrabold text-ink-success">
         <Crown size={18} className="shrink-0" aria-hidden /> {t("short.unlimitedOn")}
       </p>
     );
@@ -324,7 +324,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
             <Cpu size={20} />
           </span>
           <div className="min-w-0">
-            <p className="font-extrabold text-warning-strong">{t("aicost.need.title")}</p>
+            <p className="font-extrabold text-ink-gold">{t("aicost.need.title")}</p>
             <p className="font-bold text-text">{t("aicost.need.text", { need: cost, have: chips })}</p>
           </div>
         </div>
@@ -367,14 +367,14 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
         ) : (
           <>
             <p className="font-bold">{t("aicost.need.text", { need: formatNum(cost), have: formatNum(chips) })}</p>
-            {opts.missingChips > 0 && <p className="text-sm font-extrabold text-warning-strong">{t("short.chips.missing", { n: formatNum(opts.missingChips) })}</p>}
+            {opts.missingChips > 0 && <p className="text-sm font-extrabold text-ink-gold">{t("short.chips.missing", { n: formatNum(opts.missingChips) })}</p>}
           </>
         )}
         {isHearts && !back && cost !== 1 && (
-          <p className="text-sm font-extrabold text-heart-strong">{t("hearts.out.need", { need: formatHearts(cost), have: formatHearts(hearts.count) })}</p>
+          <p className="text-sm font-extrabold text-ink-heart">{t("hearts.out.need", { need: formatHearts(cost), have: formatHearts(hearts.count) })}</p>
         )}
         {!back && remaining && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-heart-soft px-3 py-1 text-sm font-extrabold text-heart-strong">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-heart-soft px-3 py-1 text-sm font-extrabold text-ink-heart">
             <Clock size={15} aria-hidden /> {t("hearts.out.next", { time: remaining })}
           </span>
         )}
@@ -388,7 +388,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
         <m.div className="flex flex-col gap-2.5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.08 }}>
           <div className="flex items-center justify-between px-1 text-sm font-extrabold text-muted">
             <span>{t("hearts.out.balance")}</span>
-            <span className="flex items-center gap-1 text-warning-strong">
+            <span className="flex items-center gap-1 text-ink-gold">
               <Cpu size={16} className="text-gold" aria-hidden />
               <span className="tabular-nums">{formatNum(chips)}</span>
             </span>
@@ -405,7 +405,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
           {showPack && (
             <>
               {packRow}
-              <Link href="/shop#shop-chips" onClick={() => leave("all")} className="self-center px-2 py-1 text-sm font-extrabold text-primary underline underline-offset-2">
+              <Link href="/shop#shop-chips" onClick={() => leave("all")} className="inline-flex min-h-11 items-center self-center px-2 text-sm font-extrabold text-ink-primary underline underline-offset-2">
                 {t("short.allPacks")}
               </Link>
             </>
