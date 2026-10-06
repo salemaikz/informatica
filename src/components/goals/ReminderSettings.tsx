@@ -83,7 +83,6 @@ export function ReminderSettings() {
           </Button>
         </div>
       )}
-      <p className="py-3 text-sm font-semibold text-muted">{t("remind.honest")}</p>
       <div className="flex flex-col gap-1 py-3">
         <Button variant="secondary" onClick={downloadIcs} icon={<CalendarPlus size={18} />} className="h-auto min-h-11 self-stretch py-2 text-center sm:self-start">
           {t("remind.ics")}
