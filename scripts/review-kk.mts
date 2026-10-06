@@ -45,8 +45,6 @@ const scopeArgument = args.find((arg) => arg.startsWith("--scope="))?.slice(8) ?
 const scope = (args.includes("--scope") || args.some((arg) => arg.startsWith("--scope=")) ? scopeArgument : "all") as Scope;
 if (!["all", "media", "curriculum", "ui"].includes(scope)) throw new Error("Scope: all, media, curriculum или ui");
 const candidates: [string, string, Exclude<Scope, "all">][] = [
-  ["ui", "src/i18n/dict.ts", "ui"],
-  ["course", "src/content/course.ts", "curriculum"],
   ["skills", "src/content/skills.ts", "curriculum"],
   ["course-map", "src/content/course-map.ts", "curriculum"],
   ["school-program", "src/content/school-program.ts", "curriculum"],
@@ -64,9 +62,14 @@ const candidates: [string, string, Exclude<Scope, "all">][] = [
   ["music", "src/components/music/strings.ts", "media"],
   ["video-player", "src/videos/player-strings.ts", "media"],
 ];
-for (const f of existsSync(path.join(root, "src/content/lessons")) ? readdirSync(path.join(root, "src/content/lessons")) : []) if (/\.(ts|tsx)$/.test(f)) candidates.push([`lesson:${f}`, `src/content/lessons/${f}`, "curriculum"]);
+// Порядок важен: сначала листовые файлы, агрегаторы (реэкспорт чужих строк) — в самом конце; пары дедуплицируются глобально.
+if (existsSync(path.join(root, "src/i18n/parts"))) {
+  for (const f of readdirSync(path.join(root, "src/i18n/parts"))) if (/\.ts$/.test(f)) candidates.push([`ui-part:${f}`, `src/i18n/parts/${f}`, "ui"]);
+}
+const AGGREGATORS = new Set(["lessons/all.ts", "lessons/generated.ts", "ent/index.ts", "ent/generated.ts"]);
+for (const f of existsSync(path.join(root, "src/content/lessons")) ? readdirSync(path.join(root, "src/content/lessons")) : []) if (/\.(ts|tsx)$/.test(f) && !AGGREGATORS.has(`lessons/${f}`)) candidates.push([`lesson:${f}`, `src/content/lessons/${f}`, "curriculum"]);
 if (existsSync(path.join(root, "src/content/ent"))) {
-  for (const f of readdirSync(path.join(root, "src/content/ent"))) if (/\.(ts|tsx)$/.test(f)) candidates.push([`ent:${f}`, `src/content/ent/${f}`, "curriculum"]);
+  for (const f of readdirSync(path.join(root, "src/content/ent"))) if (/\.(ts|tsx)$/.test(f) && !AGGREGATORS.has(`ent/${f}`)) candidates.push([`ent:${f}`, `src/content/ent/${f}`, "curriculum"]);
 }
 if (existsSync(path.join(root, "src/lib/bank"))) {
   for (const f of readdirSync(path.join(root, "src/lib/bank"))) if (/\.(ts|tsx)$/.test(f)) candidates.push([`bank:${f}`, `src/lib/bank/${f}`, "curriculum"]);
@@ -79,19 +82,46 @@ if (existsSync(path.join(root, "src/games"))) {
     if (d.isDirectory() && existsSync(path.join(root, "src/games", d.name, "strings.ts"))) candidates.push([`game:${d.name}`, `src/games/${d.name}/strings.ts`, "ui"]);
   }
 }
+// Агрегаторы — последними: их строки уже собраны из листовых файлов.
+candidates.push(
+  ["lesson:aggregators", "src/content/lessons/all.ts", "curriculum"],
+  ["lesson:generated", "src/content/lessons/generated.ts", "curriculum"],
+  ["ent:index", "src/content/ent/index.ts", "curriculum"],
+  ["ent:generated", "src/content/ent/generated.ts", "curriculum"],
+  ["course", "src/content/course.ts", "curriculum"],
+  ["ui", "src/i18n/dict.ts", "ui"],
+);
 const sources = candidates.filter(([, file, group]) => (scope === "all" || group === scope) && existsSync(path.join(root, file)));
+const globalSeen = new Set<string>();
+const keyOf = (l: L) => `${l.ru}\u0000${l.kk}`;
 for (const [name, file] of sources) {
   const mod = await import(path.join(root, file));
-  collect(name, mod, pairs);
+  const fromExports: { id: string; l: L }[] = [];
+  collect(name, mod, fromExports);
+  for (const pair of fromExports) {
+    if (globalSeen.has(keyOf(pair.l))) continue;
+    globalSeen.add(keyOf(pair.l));
+    pairs.push(pair);
+  }
   // Функции генераторов и приватные справочники не входят в exports.
   // Читаем также исходные пары и шаблоны; вычисления и код не исполняем.
   const code = readFileSync(path.join(root, file), "utf8");
   const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
-  const seen = new Set(pairs.filter((pair) => pair.id.startsWith(`${name}.`)).map((pair) => JSON.stringify(pair.l)));
   const value = (node: ts.Expression): string | undefined => ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
     ? node.text
     : ts.isTemplateExpression(node) ? node.getText(source).slice(1, -1) : undefined;
+  const add = (node: ts.Node, l: L) => {
+    if (globalSeen.has(keyOf(l))) return;
+    globalSeen.add(keyOf(l));
+    pairs.push({ id: `${name}.source:${node.getStart(source)}`, l });
+  };
   function visit(node: ts.Node) {
+    // Генераторы банка: l("ru", "kk") внутри функций.
+    if (ts.isCallExpression(node) && node.expression.getText(source) === "l" && node.arguments.length >= 2) {
+      const ruText = value(node.arguments[0]);
+      const kkText = value(node.arguments[1]);
+      if (ruText !== undefined && kkText !== undefined) add(node, { ru: ruText, kk: kkText });
+    }
     if (ts.isObjectLiteralExpression(node)) {
       const props = node.properties.filter(ts.isPropertyAssignment);
       const ru = props.find((prop) => prop.name.getText(source).replace(/^["']|["']$/g, "") === "ru");
@@ -99,18 +129,16 @@ for (const [name, file] of sources) {
       const ruText = ru && value(ru.initializer);
       const kkText = kk && value(kk.initializer);
       if (ruText !== undefined && kkText !== undefined) {
-        const l = { ru: ruText, kk: kkText };
-        if (!seen.has(JSON.stringify(l))) {
-          pairs.push({ id: `${name}.source:${node.getStart(source)}`, l });
-          seen.add(JSON.stringify(l));
-        }
+        add(node, { ru: ruText, kk: kkText });
       }
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
 }
-console.log(`Scope ${scope}: ${sources.length} источников, ${pairs.length} строк для вычитки`);
+const CHUNK = 1500;
+const chunkCount = Math.ceil(pairs.length / CHUNK);
+console.log(`Scope ${scope}: ${sources.length} источников, ${pairs.length} уникальных строк для вычитки, запросов: ${chunkCount} (по ${CHUNK})`);
 if (args.includes("--dry-run")) process.exit(0);
 if (!process.env.OPENAI_API_KEY) {
   console.error("OPENAI_API_KEY не задан: строки собраны, модельная вычитка не выполнена.");
@@ -136,54 +164,87 @@ const SCHEMA = {
   },
 } as const;
 
-const prompt = `Ты — редактор-носитель казахского языка и учитель информатики в казахстанской школе. Ниже строки образовательного приложения для подготовки к ҰБТ: id, русский оригинал, казахский перевод.
+const header = `Ты — редактор-носитель казахского языка и учитель информатики в казахстанской школе. Ниже строки образовательного приложения для подготовки к ҰБТ: id, русский оригинал, казахский перевод.
 Найди в казахских переводах: грамматические и орфографические ошибки, неестественные кальки с русского, неверные термины информатики (как в казахстанских учебниках), расхождения по смыслу с русским.
 Верни только проблемные строки. kk_old — точная копия исходного казахского текста. Не меняй числа, формулы, markdown и фрагменты кода, включая подстановки вида \${...}. Стилистику «на вкус» не трогай.
 
-${pairs.map((p) => `${p.id}\tRU: ${p.l.ru.replace(/\n/g, "⏎")}\tKK: ${p.l.kk.replace(/\n/g, "⏎")}`).join("\n")}`;
-
-const res = await client.chat.completions.create({
-  model,
-  reasoning_effort: "medium",
-  response_format: { type: "json_schema", json_schema: { name: "kk_review", strict: true, schema: SCHEMA } },
-  messages: [{ role: "user", content: prompt }],
-});
-const fixes = (JSON.parse(res.choices[0]?.message?.content ?? "{}") as { fixes: { id: string; kk_old: string; kk_new: string; why: string }[] }).fixes.map((f) => ({
-  ...f,
-  kk_old: f.kk_old.replace(/⏎/g, "\n"),
-  kk_new: f.kk_new.replace(/⏎/g, "\n"),
-}));
-console.log(`Модель ${model}: правок ${fixes.length}, токены ${res.usage?.prompt_tokens}/${res.usage?.completion_tokens}`);
+`;
+type Fix = { id: string; kk_old: string; kk_new: string; why: string };
+const fixes: Fix[] = [];
+const usage = { prompt_tokens: 0, completion_tokens: 0 };
+for (let i = 0; i < pairs.length; i += CHUNK) {
+  const chunk = pairs.slice(i, i + CHUNK);
+  const prompt = header + chunk.map((p) => `${p.id}\tRU: ${p.l.ru.replace(/\n/g, "⏎")}\tKK: ${p.l.kk.replace(/\n/g, "⏎")}`).join("\n");
+  const res = await client.chat.completions.create({
+    model,
+    reasoning_effort: "medium",
+    response_format: { type: "json_schema", json_schema: { name: "kk_review", strict: true, schema: SCHEMA } },
+    messages: [{ role: "user", content: prompt }],
+  });
+  usage.prompt_tokens += res.usage?.prompt_tokens ?? 0;
+  usage.completion_tokens += res.usage?.completion_tokens ?? 0;
+  const part = (JSON.parse(res.choices[0]?.message?.content ?? "{}") as { fixes?: Fix[] }).fixes ?? [];
+  for (const f of part) fixes.push({ ...f, kk_old: f.kk_old.replace(/⏎/g, "\n"), kk_new: f.kk_new.replace(/⏎/g, "\n") });
+  console.log(`Запрос ${i / CHUNK + 1}/${chunkCount}: правок ${part.length}`);
+}
+console.log(`Модель ${model}: правок ${fixes.length}, токены ${usage.prompt_tokens}/${usage.completion_tokens}`);
 mkdirSync(path.join(root, "scripts/out"), { recursive: true });
 const reportFile = `scripts/out/kk-review${scope === "all" ? "" : `-${scope}`}.json`;
 writeFileSync(path.join(root, reportFile), JSON.stringify(fixes, null, 2));
-writeFileSync(path.join(root, reportFile.replace(/\.json$/, "-meta.json")), JSON.stringify({ scope, model, sourceCount: sources.length, pairCount: pairs.length, fixCount: fixes.length, usage: res.usage, checkedAt: new Date().toISOString(), reviewedByNativeSpeaker: false }, null, 2));
+writeFileSync(path.join(root, reportFile.replace(/\.json$/, "-meta.json")), JSON.stringify({ scope, model, sourceCount: sources.length, pairCount: pairs.length, chunkCount, fixCount: fixes.length, usage, checkedAt: new Date().toISOString(), reviewedByNativeSpeaker: false }, null, 2));
 for (const f of fixes) console.log(`• ${f.id}\n  было:  ${f.kk_old}\n  стало: ${f.kk_new}\n  почему: ${f.why}`);
 
 if (process.argv.includes("--apply")) {
+  // Ищем kk-литерал (свойство kk или 2-й аргумент l()) во всех собранных файлах; ru рядом должен совпасть.
+  const files = [...new Set(sources.map(([, file]) => file))];
+  const asts = new Map(files.map((file) => [file, { src: readFileSync(path.join(root, file), "utf8"), edits: [] as { start: number; end: number; text: string }[] }]));
+  const strText = (n: ts.Node): string | undefined => (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) ? n.text : undefined);
+  const propName = (p: ts.PropertyAssignment, ast: ts.SourceFile) => p.name.getText(ast).replace(/^["']|["']$/g, "");
   let applied = 0;
+  const notFound: string[] = [];
   for (const f of fixes) {
-    const source = sources.find(([prefix]) => f.id.startsWith(`${prefix}.`));
     const original = pairs.find((pair) => pair.id === f.id);
-    if (!source || original?.l.kk !== f.kk_old) continue;
-    for (const file of [source[1]]) {
-      const p = path.join(root, file);
-      const src = readFileSync(p, "utf8");
-      const ast = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true);
-      let literal: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | undefined;
+    if (original?.l.kk !== f.kk_old) {
+      notFound.push(f.id);
+      continue;
+    }
+    let hits = 0;
+    for (const file of files) {
+      const entry = asts.get(file)!;
+      const ast = ts.createSourceFile(file, entry.src, ts.ScriptTarget.Latest, true);
       const find = (node: ts.Node) => {
-        if (literal) return;
-        if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === f.kk_old && ts.isPropertyAssignment(node.parent) && node.parent.name.getText(ast).replace(/^["']|["']$/g, "") === "kk") literal = node;
+        let kkNode: ts.Node | undefined;
+        let ruText: string | undefined;
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+          const parent = node.parent;
+          if (ts.isPropertyAssignment(parent) && parent.initializer === node && propName(parent, ast) === "kk") {
+            kkNode = node;
+            const ru = (parent.parent as ts.ObjectLiteralExpression).properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && propName(p, ast) === "ru");
+            ruText = ru && strText(ru.initializer);
+          } else if (ts.isCallExpression(parent) && parent.expression.getText(ast) === "l" && parent.arguments[1] === node) {
+            kkNode = node;
+            ruText = strText(parent.arguments[0]);
+          }
+        }
+        if (kkNode && (kkNode as ts.StringLiteral).text === f.kk_old && ruText === original.l.ru) {
+          entry.edits.push({ start: kkNode.getStart(ast), end: kkNode.end, text: JSON.stringify(f.kk_new) });
+          hits++;
+        }
         ts.forEachChild(node, find);
       };
       find(ast);
-      if (literal) {
-        // Заменяем весь литерал корректно экранированной строкой. Шаблоны — вручную.
-        writeFileSync(p, `${src.slice(0, literal.getStart(ast))}${JSON.stringify(f.kk_new)}${src.slice(literal.end)}`);
-        applied++;
-        break;
-      }
     }
+    if (hits > 0) applied++;
+    else notFound.push(f.id);
+  }
+  for (const [file, { src, edits }] of asts) {
+    if (!edits.length) continue;
+    // Правки с конца файла, чтобы смещения не поплыли; одинаковые позиции не дублируем.
+    const uniq = [...new Map(edits.map((e) => [e.start, e])).values()].sort((a, b) => b.start - a.start);
+    let out = src;
+    for (const e of uniq) out = `${out.slice(0, e.start)}${e.text}${out.slice(e.end)}`;
+    writeFileSync(path.join(root, file), out);
   }
   console.log(`Применено: ${applied}/${fixes.length} (остальные — вручную, см. ${reportFile})`);
+  if (notFound.length) console.log(`Не найдены в исходниках (шаблоны, вычисляемые строки или изменённый ru):\n  ${notFound.join("\n  ")}`);
 }
