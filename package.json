@@ -13,6 +13,7 @@
     "e2e": "playwright test",
     "review:kk": "tsx scripts/review-kk.mts",
     "catalog": "tsx scripts/catalog.ts",
+    "step-times": "tsx scripts/step-times.ts",
     "size": "node scripts/bundle-size.mjs"
   },
   "dependencies": {

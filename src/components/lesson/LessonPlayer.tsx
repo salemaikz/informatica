@@ -19,6 +19,7 @@ import { finishEvent, playerHeartsWhere, quitEvent, sessionTotals, skipRecord, s
 import { isEntRef } from "@/lib/ent-ref";
 import { scaleXp } from "@/lib/review";
 import { formatFactor } from "@/lib/drill-meta";
+import { helpKindIn, stepHelpAfterMs } from "@/lib/help-timer";
 // В компоненте есть состояние `feedback` (отзыв ИИ), поэтому отклик звуком/вибрацией импортируем под другим именем.
 import { feedback as giveFeedback } from "@/lib/feedback";
 import { ignoreKey } from "@/lib/keys";
@@ -65,6 +66,7 @@ import { ExploreView } from "./steps/ExploreView";
 import { StoryView } from "./steps/StoryView";
 import { WorkedView } from "./steps/WorkedView";
 import type { StepProps } from "./steps/types";
+import { HELP_NUDGE_PAD, HelpNudge, useHelpNudge } from "./HelpNudge";
 import { Results, requestLessonFeedback, type FeedbackState } from "./Results";
 import { activeElapsed, buildRun, freshQueue, graceText, restoreRun, retryItem, type PlayerQueueItem } from "./run-snapshot";
 
@@ -109,6 +111,9 @@ export interface PlayerProps {
    */
   testMode?: boolean;
 }
+
+/** Запасной нижний отступ контента (класс pb-48), пока высота панели не измерена, px. */
+const FOOTER_FALLBACK_PAD = 192;
 
 /** Цвета панели ответа (токены, работают и в тёмной теме). */
 const TONE_PANEL = {
@@ -253,6 +258,8 @@ export function LessonPlayer({
   // Вход оплачен (сердечки списаны): для подсказки в окне выхода. Сам учёт — paidAtRef.
   const [paid, setPaid] = useState(!!init?.paid || (prepaid ?? 0) > 0);
   const [ai, setAi] = useState<"hint" | "explain" | "ask" | null>(null);
+  // Вопрос, который шторка Бита задаёт сама при открытии: «Объясни проще» после «Спросить Бита» на плашке «Нужна помощь?» (P8).
+  const [autoAsk, setAutoAsk] = useState<string | null>(null);
   // Разбор: сколько шагов уже открыто. Песочница: достигнута ли цель. Сбрасываются при переходе к следующему шагу.
   const [revealed, setRevealed] = useState(1);
   const [goalReached, setGoalReached] = useState(false);
@@ -336,6 +343,23 @@ export function LessonPlayer({
   const step = item?.step;
   const question = step && isQuestion(step) ? step : null;
   const noteKey = lessonId ?? "general";
+
+  // «Нужна помощь?» (этап 16В, P8): Бит выглядывает у «Проверить», когда ученик долго думает или читает (порог — lib/help-timer.ts).
+  // Не в тесте (мини-тест: до ответа ИИ-помощи нет, как на ЕНТ). Пробный ЕНТ, тесты по теме и разделу и игры плеер не используют.
+  const helpKind = helpKindIn(step, { testMode });
+  const helpAfter = useMemo(() => (step ? stepHelpAfterMs(step, lang) : 0), [step, lang]);
+  const nudge = useHelpNudge({
+    enabled: !!item && phase === "answering" && !session,
+    kind: helpKind,
+    // Подшаги разбора открываются по нажатию: у каждого свой счёт, но «один раз на шаг» — по ключу шага.
+    stepKey: `${item?.key ?? ""}:${step?.type === "worked" ? revealed : 0}`,
+    // Повтор задания после ошибки (`…:retry`) — тот же шаг: по нему плашка уже была.
+    offerKey: step?.id ?? "",
+    afterMs: helpAfter,
+    touch: question ? answer : step?.type === "worked" ? revealed : goalReached,
+    paused: exitOpen || outOpen || !!ai,
+  });
+  const markHelped = nudge.markHelped;
 
   // Активное время урока, мс: при продолжении — плюс сохранённое (#68).
   const lessonMs = useCallback(() => activeElapsed(init?.activeMs ?? 0, clockAtMount.current, activeMs()), [init]);
@@ -462,9 +486,11 @@ export function LessonPlayer({
   const openAi = useCallback(
     (mode: "hint" | "explain" | "ask") => {
       if (question && phase === "answering" && mode !== "explain") hintedRef.current = true;
+      // Помощь на этом шаге уже взята: плашка «Нужна помощь?» не нужна.
+      markHelped();
       setAi(mode);
     },
-    [question, phase],
+    [question, phase, markHelped],
   );
 
   // Песочница сообщает о достижении цели; достигнутую цель не «отзываем».
@@ -826,8 +852,13 @@ export function LessonPlayer({
       <m.main
         key={item.key}
         className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2"
-        // 24px запаса сверх панели; пока высота не измерена (или нет ResizeObserver) — запасной pb-48.
-        style={footerH > 0 ? { paddingBottom: footerH + 24 } : undefined}
+        // 24px запаса сверх панели; пока высота не измерена (или нет ResizeObserver) — запасной pb-48 (192px).
+        // Пока на экране плашка «Нужна помощь?», запас растёт и в запасном случае тоже.
+        style={
+          footerH > 0 || nudge.kind
+            ? { paddingBottom: (footerH > 0 ? footerH + 24 : FOOTER_FALLBACK_PAD) + (nudge.kind ? HELP_NUDGE_PAD : 0) }
+            : undefined
+        }
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.25, ease: easeOut }}
@@ -946,6 +977,22 @@ export function LessonPlayer({
       {/* Нижняя панель: кнопка проверки или карточка обратной связи.
           Цветной фон выезжает пружиной отдельным слоем (transform), содержимое проявляется следом. */}
       <footer ref={footerRef} className="fixed inset-x-0 bottom-0 z-30 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+        {/* «Нужна помощь?»: Бит выглядывает из-за панели. Первым ребёнком — чтобы фон панели закрывал его нижнюю часть. */}
+        <AnimatePresence>
+          {nudge.kind && (
+            <HelpNudge
+              key="help"
+              kind={nudge.kind}
+              freeHint={!!question?.hint}
+              onHint={() => openAi("hint")}
+              onAsk={() => {
+                setAutoAsk(t("tutor.q.simpler"));
+                openAi("ask");
+              }}
+              onNo={nudge.dismiss}
+            />
+          )}
+        </AnimatePresence>
         <div aria-hidden className="absolute inset-x-0 -bottom-6 top-0 border-t-2 border-border bg-bg" />
         <AnimatePresence initial={false}>
           {tone && (
@@ -1130,11 +1177,15 @@ export function LessonPlayer({
         <AiPanel
           key={`${item.key}:${ai}`}
           open
-          onClose={() => setAi(null)}
+          onClose={() => {
+            setAi(null);
+            setAutoAsk(null);
+          }}
           mode={ai}
           task={taskCtx}
           noteKey={noteKey}
           suggestions={ai === "ask" ? askSuggestions : []}
+          autoAsk={ai === "ask" ? (autoAsk ?? undefined) : undefined}
         />
       )}
     </div>

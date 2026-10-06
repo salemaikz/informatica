@@ -38,6 +38,7 @@ export function AiPanel({
   task,
   noteKey,
   suggestions = [],
+  autoAsk,
 }: {
   open: boolean;
   onClose: () => void;
@@ -46,6 +47,11 @@ export function AiPanel({
   noteKey: string;
   /** Быстрые вопросы (режим «вопрос»). */
   suggestions?: DictKey[];
+  /**
+   * Вопрос, который шторка задаёт сама сразу после открытия (режим «вопрос»): ученик уже нажал кнопку с ценой
+   * («Спросить Бита» на плашке «Нужна помощь?»), вторая кнопка не нужна. Тот же путь, что у быстрого вопроса.
+   */
+  autoAsk?: string;
 }) {
   const { t } = useT();
   // Идущий запрос обрывается при закрытии шторки (размонтировании) внутри useTutor.
@@ -98,6 +104,17 @@ export function AiPanel({
     setTurns([...history, { role: "assistant", content: "" }]);
     void stream(history, () => id === runId.current);
   };
+
+  // Вопрос при открытии — через таймер: двойной монтаж React в разработке (размонтирование → монтирование) не отправит его дважды.
+  const autoRef = useRef(send);
+  useEffect(() => {
+    autoRef.current = send;
+  });
+  useEffect(() => {
+    if (!autoAsk) return;
+    const id = window.setTimeout(() => autoRef.current(autoAsk), 0);
+    return () => window.clearTimeout(id);
+  }, [autoAsk]);
 
   return (
     <Modal open={open} onClose={onClose} label={t(TITLE[mode])} className="sm:max-w-lg">
