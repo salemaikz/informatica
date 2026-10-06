@@ -214,6 +214,66 @@ describe("урок: экран «Урок не закончен»", () => {
   });
 });
 
+describe("урок: выход — «вернуться в течение 20 минут бесплатно» отсчитывается от выхода", () => {
+  const quit = async () => {
+    await act(async () => host.querySelector<HTMLButtonElement>('header button[aria-label="Выйти"]')!.click());
+    const exit = [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === "Выйти")!;
+    expect(document.body.textContent).toContain("Вернуться в течение");
+    await act(async () => exit.click());
+  };
+
+  it("на первом шаге 25 минут, потом выход — сохранение с шага 0 и временем выхода; возврат через 10 минут бесплатный", async () => {
+    await render(lessonEl());
+    expect(hearts()).toBe(4);
+    expect(useApp.getState().lessonRuns[lesson.id]).toBeUndefined();
+    vi.setSystemTime(Date.now() + 25 * 60_000);
+    await quit();
+    const run = useApp.getState().lessonRuns[lesson.id];
+    expect(run).toMatchObject({ pos: 0, updatedAt: Date.now() });
+    expect(run.paidAt).not.toBeNull();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    await remount(lessonEl());
+    expect(text()).not.toContain("Урок не закончен");
+    expect(host.querySelector('[data-tour="lesson-hearts"]')).not.toBeNull();
+    expect(hearts()).toBe(4);
+  });
+
+  it("есть сохранение — выход обновляет его время, шаг тот же; «Продолжить» через 10 минут бесплатно", async () => {
+    const at = Date.now();
+    useApp.getState().saveLessonRun(
+      buildRun({
+        lessonId: lesson.id,
+        steps: lesson.steps,
+        queue: freshQueue(lesson.steps),
+        pos: 1,
+        done: 1,
+        records: [],
+        xp: 0,
+        combo: 0,
+        maxCombo: 0,
+        skipped: 0,
+        activeMs: 0,
+        xpFactor: 1,
+        chipsEarned: 0,
+        cost: 1,
+        startedAt: at,
+        paidAt: at,
+        now: at,
+      }),
+    );
+    await render(lessonEl());
+    await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith("Продолжить"))!.click());
+    expect(hearts()).toBe(5);
+    vi.setSystemTime(Date.now() + 25 * 60_000);
+    await quit();
+    expect(useApp.getState().lessonRuns[lesson.id]).toMatchObject({ pos: 1, updatedAt: Date.now(), paidAt: at });
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    await remount(lessonEl());
+    await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith("Продолжить"))!.click());
+    expect(hearts()).toBe(5);
+  });
+});
+
 describe("«Дай задачи» в чате: сердечко при выборе числа заданий", () => {
   const quizButton = (n: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith(n));
 

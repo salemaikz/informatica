@@ -96,6 +96,11 @@
   --action-danger-edge: #962020;
   --action-ai: #6341e6;
   --action-ai-edge: #4a2ec0;
+  /* Награда (XP) и «частично» под белым текстом: белый — 4,83:1 и 4,76:1. */
+  --action-gold: #916c00;
+  --action-gold-edge: #6b5000;
+  --action-warning: #a86200;
+  --action-warning-edge: #7a4800;
 
   color-scheme: light;
 }
@@ -179,6 +184,11 @@
   --action-danger-edge: #962a2a;
   --action-ai: #6d4de8;
   --action-ai-edge: #5035c4;
+  /* Белый текст — 5,06:1 и 4,93:1. */
+  --action-gold: #8d6900;
+  --action-gold-edge: #634a00;
+  --action-warning: #a65f00;
+  --action-warning-edge: #744300;
 
   color-scheme: dark;
 }
@@ -262,6 +272,10 @@
     --action-danger-edge: #962a2a;
     --action-ai: #6d4de8;
     --action-ai-edge: #5035c4;
+    --action-gold: #8d6900;
+    --action-gold-edge: #634a00;
+    --action-warning: #a65f00;
+    --action-warning-edge: #744300;
 
     color-scheme: dark;
   }
@@ -322,6 +336,10 @@
   --color-action-danger-edge: var(--action-danger-edge);
   --color-action-ai: var(--action-ai);
   --color-action-ai-edge: var(--action-ai-edge);
+  --color-action-gold: var(--action-gold);
+  --color-action-gold-edge: var(--action-gold-edge);
+  --color-action-warning: var(--action-warning);
+  --color-action-warning-edge: var(--action-warning-edge);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;

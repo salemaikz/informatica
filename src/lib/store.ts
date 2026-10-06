@@ -478,6 +478,8 @@ export interface AppActions {
   recordCourseNode: (nodeId: string, run: CourseNodeRun, accuracy: number) => void;
   /** Забыть незаконченный урок («Начать заново»; пройденный урок забывается сам в finishSession). */
   clearLessonRun: (lessonId: string) => void;
+  /** Обновить время сохранения урока (выход из оплаченного урока, #120): 20 минут бесплатного возврата — от выхода. */
+  touchLessonRun: (lessonId: string) => void;
   /**
    * Активное время учёбы (#68) — единственный источник DayStat.seconds: пишет трекер (lib/active-clock.ts) каждые 15 с.
    * Не больше 60 с за вызов; game — время игры (ещё и в gameSeconds). Серию, XP и чипы не трогает.
@@ -1133,11 +1135,12 @@ export const useApp = create<AppState & AppActions>()(
         if (rawLesson && !counted && (result.via ?? "learn") === "learn") next.lessonRuns = dropRun(next.lessonRuns, result.lessonId!);
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
         // Отметка оплаты (#120) снимается за законченное занятие: ключ из итога (тренировка /drill, мини-тест, квиз в чате)
-        // и ключ урока в его режиме — повтор после итогов снова платный. Другие занятия свои отметки сохраняют.
+        // и ключ урока в его режиме — повтор после итогов снова платный, даже если урок не засчитан (#122).
+        // Другие занятия свои отметки сохраняют.
         const paidKeys: string[] = [];
         if (result.drillKey) paidKeys.push(result.drillKey);
-        if (isLesson && (result.via ?? "learn") === "learn") paidKeys.push(lessonEntryKey(result.lessonId!));
-        if (isLesson && result.via === "check") paidKeys.push(checkEntryKey(result.lessonId!));
+        if (rawLesson && (result.via ?? "learn") === "learn") paidKeys.push(lessonEntryKey(result.lessonId!));
+        if (rawLesson && result.via === "check") paidKeys.push(checkEntryKey(result.lessonId!));
         next = { ...next, entryPaid: dropEntryPaid(next.entryPaid, paidKeys) };
         next = { ...next, ...evaluate(next) };
 
@@ -1147,7 +1150,7 @@ export const useApp = create<AppState & AppActions>()(
 
         const tier = tierOf(next, now);
 
-        // Чипы (#105): урок 3 (повтор 1). Тренировка и игры чипов не дают.
+        // Чипы (#105, #120): урок — lessonChipBase (первое прохождение 2, повтор 0); незасчитанный урок, тренировка и игры чипов не дают.
         const extra: { base: number; reason: ChipReason }[] = [];
         const chipMult = chipMultiplier(tier);
         let lessonGain = 0;
@@ -1427,6 +1430,12 @@ export const useApp = create<AppState & AppActions>()(
         set((s) => {
           const lessonRuns = dropRun(s.lessonRuns, lessonId);
           return lessonRuns === s.lessonRuns ? {} : { lessonRuns };
+        }),
+
+      touchLessonRun: (lessonId) =>
+        set((s) => {
+          const run = s.lessonRuns[lessonId];
+          return run ? { lessonRuns: { ...s.lessonRuns, [lessonId]: { ...run, updatedAt: Date.now() } } } : {};
         }),
 
       addActiveSeconds: (sec, game) =>
@@ -1737,8 +1746,9 @@ export const useApp = create<AppState & AppActions>()(
               exams: withDrop.exams.map((e) => (e.id === summary.id ? { ...e, drop, ...(prevExam?.dropSeen ? { dropSeen: true as const } : {}) } : e)),
             };
           }
-          // Чипы (#105): 10 за завершённый пробный ЕНТ (отвечено не меньше половины заданий) и 10 за сданный тест раздела
-          // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
+          // Чипы (#105, #122): +5 (CHIP_REWARD.exam) за засчитанный пробный ЕНТ (отвечено не меньше половины заданий) —
+          // один раз за вариант (seed) и не чаще раза в сутки (fullExamChipsAllowed, exam-pass.ts); +5 (CHIP_REWARD.unit)
+          // за сданный тест раздела (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают.
           const examChips: { base: number; reason: ChipReason }[] = [];
           if (isNew && answered > 0) {
             if (summary.kind === "full" && fullExamCounts(answered, asked) && fullExamChipsAllowed(s.exams, summary)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });

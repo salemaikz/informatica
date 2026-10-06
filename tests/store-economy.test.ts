@@ -6,6 +6,7 @@ import { todayKey } from "@/lib/text";
 import type { AnswerRecord, SessionResult } from "@/lib/types";
 import type { ExamSummary } from "@/lib/store";
 import type { LessonRun } from "@/lib/lesson-run";
+import { checkEntryKey, lessonEntryKey } from "@/lib/entry-paid";
 
 const rec = (over: Partial<AnswerRecord> = {}): AnswerRecord => ({
   stepId: "q1",
@@ -283,6 +284,87 @@ describe("стор: finishSession", () => {
     expect(examChips()).toBe(0);
     st().recordExam(exam({ id: "f2", kind: "full", questions: 40 }), { "ns.bin2dec": Array(20).fill(1) });
     expect(examChips()).toBe(1);
+  });
+
+  describe("пробный ЕНТ: +5 один раз за вариант и не чаще раза в сутки (#122, проводка recordExam)", () => {
+    const examChips = () => st().ledger.filter((e) => e.reason === "exam").reduce((a, e) => a + e.amount, 0) / CHIP_REWARD.exam;
+    const answers = { "ns.bin2dec": Array(20).fill(1) };
+    const chipsOf = (id: string) => st().exams.find((e) => e.id === id)?.chips;
+    const nextDay = () => vi.setSystemTime(Date.now() + 24 * 3600_000);
+    beforeEach(() => useApp.setState({ profile: { ...st().profile, dailyGoalXp: 0 } }));
+
+    it("тот же вариант (seed) в разные дни — +5 один раз", () => {
+      st().recordExam(exam({ id: "f1", kind: "full", seed: 11, questions: 40, at: Date.now() }), answers);
+      nextDay();
+      st().recordExam(exam({ id: "f2", kind: "full", seed: 11, questions: 40, at: Date.now() }), answers);
+      expect(examChips()).toBe(1);
+      expect(chipsOf("f1")).toBe(true);
+      expect(chipsOf("f2")).toBe(false);
+    });
+
+    it("разные варианты в один день — +5 один раз; на следующий день новый вариант — снова +5", () => {
+      st().recordExam(exam({ id: "f1", kind: "full", seed: 11, questions: 40, at: Date.now() }), answers);
+      vi.setSystemTime(Date.now() + 3600_000);
+      st().recordExam(exam({ id: "f2", kind: "full", seed: 12, questions: 40, at: Date.now() }), answers);
+      expect(examChips()).toBe(1);
+      expect(chipsOf("f2")).toBe(false);
+      nextDay();
+      st().recordExam(exam({ id: "f3", kind: "full", seed: 13, questions: 40, at: Date.now() }), answers);
+      expect(examChips()).toBe(2);
+      expect(chipsOf("f3")).toBe(true);
+    });
+
+    it("попытка без чипов (тот же вариант) не закрывает день для нового варианта", () => {
+      vi.setSystemTime(new Date(2027, 0, 14, 12, 0, 0));
+      st().recordExam(exam({ id: "f1", kind: "full", seed: 11, questions: 40, at: Date.now() }), answers);
+      nextDay();
+      st().recordExam(exam({ id: "f2", kind: "full", seed: 11, questions: 40, at: Date.now() }), answers);
+      expect(chipsOf("f2")).toBe(false);
+      vi.setSystemTime(Date.now() + 3600_000);
+      st().recordExam(exam({ id: "f3", kind: "full", seed: 12, questions: 40, at: Date.now() }), answers);
+      expect(chipsOf("f3")).toBe(true);
+      expect(examChips()).toBe(2);
+    });
+
+    it("повторная запись той же попытки (isNew = false) ничего не платит и сохраняет отметку chips", () => {
+      const at = Date.now();
+      st().recordExam(exam({ id: "f1", kind: "full", seed: 11, questions: 40, at }), answers);
+      st().recordExam(exam({ id: "f2", kind: "full", seed: 12, questions: 40, at: at + 60_000 }), answers);
+      expect(examChips()).toBe(1);
+      st().recordExam(exam({ id: "f1", kind: "full", seed: 11, questions: 40, at }), answers);
+      st().recordExam(exam({ id: "f2", kind: "full", seed: 12, questions: 40, at: at + 60_000 }), answers);
+      expect(examChips()).toBe(1);
+      expect(chipsOf("f1")).toBe(true);
+      expect(chipsOf("f2")).toBe(false);
+    });
+  });
+
+  it("незасчитанный урок (#122) тоже снимает отметку оплаты входа: «Пройти урок заново» — новый платный вход", () => {
+    const key = lessonEntryKey("ns-2-read");
+    st().payEntryOnce(key, 1);
+    expect(st().entryPaid[key]).toBe(Date.now());
+    const skipped = (id: string) => rec({ stepId: id, correct: false, score: 0, skipped: true });
+    const out = st().finishSession(lesson({ answers: [rec({ stepId: "a" }), skipped("b"), skipped("c")], accuracy: 1 / 3 }));
+    expect(out.counted).toBe(false);
+    expect(st().entryPaid[key]).toBeUndefined();
+    const before = heartCount();
+    expect(st().payEntryOnce(key, 1).paid).toBe(1);
+    expect(heartCount()).toBe(before - 1);
+    // «Проверить себя»: ключ своего режима.
+    const ck = checkEntryKey("ns-2-read");
+    st().payEntryOnce(ck, 1);
+    st().finishSession(lesson({ via: "check", answers: [rec({ stepId: "a" }), skipped("b"), skipped("c")], accuracy: 1 / 3 }));
+    expect(st().entryPaid[ck]).toBeUndefined();
+  });
+
+  it("touchLessonRun обновляет время сохранения (20 минут бесплатного возврата — от выхода), без сохранения — ничего", () => {
+    const run = { lessonId: "ns-2-read", updatedAt: Date.now() - 30 * 60_000 } as unknown as LessonRun;
+    useApp.setState({ lessonRuns: { "ns-2-read": run } });
+    st().touchLessonRun("ns-2-read");
+    expect(st().lessonRuns["ns-2-read"].updatedAt).toBe(Date.now());
+    const runs = st().lessonRuns;
+    st().touchLessonRun("nope");
+    expect(st().lessonRuns).toBe(runs);
   });
 
   it("игра, практикум и комбо без новых достижений и без цели дня чипов не дают", () => {

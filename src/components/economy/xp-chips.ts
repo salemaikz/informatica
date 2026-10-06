@@ -9,14 +9,15 @@ const QUESTION_SHARE = 0.5;
 /**
  * Оценка максимума XP за урок: все задания верно с первой попытки + комбо-бонус + бонусы за прохождение.
  * `hasStat` — урок уже проходили: «идеально» не даётся, прохождение — по множителю повтора.
+ * `xpMult` — бустер опыта (xpMultiplier, #122): стор умножает на него и ответы, и бонусы.
  */
-export function lessonXpMax(stepCount: number, factor: number, hasStat = false): number {
+export function lessonXpMax(stepCount: number, factor: number, hasStat = false, xpMult = 1): number {
   const questions = Math.max(1, Math.round(stepCount * QUESTION_SHARE));
   const answers = scaleXp(questions * XP.correct, factor);
   const combo = scaleXp(Math.max(0, questions - 2) * XP.comboBonus, factor);
   const complete = scaleXp(XP.lessonComplete, factor);
   const perfect = hasStat ? 0 : XP.perfectLesson;
-  return answers + combo + complete + perfect;
+  return Math.round((answers + combo + complete + perfect) * xpMult);
 }
 
 /**

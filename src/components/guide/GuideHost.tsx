@@ -82,6 +82,11 @@ const SETTLE_MS = 1000;
 /** Сцена закончилась — столько времени Бит уезжает вниз, потом сцена снимается. */
 const LEAVE_MS = 450;
 /**
+ * Сцена кончилась нажатием на ссылку (intro «Начать», nav и learn-next — кнопка урока): пока новая страница грузится,
+ * путь ещё старый, и новая сцена на нём не начинается. Переход не случился — через столько мс выбор сцены снова идёт.
+ */
+const LEAVE_HOLD_MS = 5000;
+/**
  * Шаг «нажми» засчитывается только нажатием на сам элемент управления внутри цели (вариант, кнопку, ссылку), а не
  * в промежуток между ними: иначе Бит просил бы «Проверить», когда вариант ещё не выбран.
  */
@@ -181,7 +186,21 @@ const sameView = (a: View, b: View) =>
  * Доиграна — `noteTip(сцена)`. `leaving` — сцена уже закончилась: Бит, пузырь и затемнение уходят (exit-анимации),
  * обработчики сняты.
  */
-function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: number; leaving: boolean }) {
+function SceneRunner({
+  scene,
+  cost,
+  paid,
+  leaving,
+  onLeave,
+}: {
+  scene: GuideScene;
+  cost?: number;
+  /** Сколько сердечек списал этот вход в урок (0 — вход уже был оплачен: «Продолжить», повтор в течение 20 минут). */
+  paid?: number;
+  leaving: boolean;
+  /** Последний шаг сцены — нажатие на ссылку (`to` — её путь): на другую страницу — хозяин не выбирает новую сцену, пока путь не сменится. */
+  onLeave?: (to: string) => void;
+}) {
   const { t } = useT();
   const name = useApp((s) => s.profile.name);
   const ent = useApp((s) => entVisible(s.profile));
@@ -210,7 +229,7 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
   // Реплика шага (и вариант «нашлись не все метки»): по её длине оценивается высота пузыря ещё при замере.
   const sayFor = (partial: boolean): string | null => {
     if (!step) return null;
-    const key = stepText(step, { name, school: !ent, n: cost, free: freeHearts, fallback: at.fallback, partial, again, aiCount });
+    const key = stepText(step, { name, school: !ent, n: cost, free: freeHearts, prepaid: paid === 0, fallback: at.fallback, partial, again, aiCount });
     return t(key, { name: name.trim(), n: formatHearts(cost ?? 1) });
   };
   const sayFull = sayFor(false);
@@ -362,10 +381,14 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
     if (!isPresent || !tapStep) return;
     const sel = targetsKey.split("|").map(tourSel).join(",");
     const idx = at.idx;
+    const last = idx + 1 >= steps.length;
     let timer = 0;
     const onClick = (e: MouseEvent) => {
       const hit = e.target instanceof Element ? e.target.closest(INTERACTIVE) : null;
       if (!hit || !hit.closest(sel)) return;
+      // Сцена кончается переходом на другую страницу: до смены пути новую сцену не выбираем (страница ещё грузится).
+      const link = last ? hit.closest<HTMLAnchorElement>("a[href]") : null;
+      if (link) onLeave?.(new URL(link.href, window.location.href).pathname);
       // После обработчика самого элемента (он мог открыть урок или выбрать вариант).
       timer = window.setTimeout(() => go(idx, false), 0);
     };
@@ -374,7 +397,7 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
       document.removeEventListener("click", onClick, true);
       window.clearTimeout(timer);
     };
-  }, [isPresent, tapStep, targetsKey, at.idx, go]);
+  }, [isPresent, tapStep, targetsKey, at.idx, go, steps.length, onLeave]);
 
   const cur = view.idx === at.idx && view.fallback === at.fallback;
   const found = isPresent && cur && view.found && !!step;
@@ -515,7 +538,21 @@ export function GuideHost() {
   const lesson = useGuideSpots((s) => s.lesson);
   const pathname = usePathname();
 
-  const desired = useWantedScene();
+  // Путь, на котором сцена кончилась нажатием на ссылку (LEAVE_HOLD_MS): пока он на экране, новую сцену не выбираем.
+  const [hold, setHold] = useState<string | null>(null);
+  // Путь сменился — ожидание снято (корректировка состояния при рендере, без эффекта).
+  if (hold !== null && hold !== pathname) setHold(null);
+  useEffect(() => {
+    if (hold === null) return;
+    const id = window.setTimeout(() => setHold(null), LEAVE_HOLD_MS);
+    return () => window.clearTimeout(id);
+  }, [hold]);
+  const onLeave = useCallback((to: string) => {
+    if (to !== pathname) setHold(pathname);
+  }, [pathname]);
+
+  const wanted = useWantedScene();
+  const desired = hold === pathname ? null : wanted;
   const key = desired ? `${desired}@${pathname}` : null;
   // Сцена, для которой пауза прошла. Сменилась сцена или страница — ждём заново.
   const [ready, setReady] = useState<string | null>(null);
@@ -560,5 +597,5 @@ export function GuideHost() {
   const shown = playing && key ? key : leavingKey;
   if (!shown) return null;
   const scene = GUIDE_SCENES[shown.split("@")[0] as SceneId];
-  return <SceneRunner key={shown} scene={scene} cost={lesson?.cost} leaving={!playing} />;
+  return <SceneRunner key={shown} scene={scene} cost={lesson?.cost} paid={lesson?.paid} leaving={!playing} onLeave={onLeave} />;
 }

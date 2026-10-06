@@ -109,6 +109,8 @@ export interface PlayerProps {
   resume?: LessonRun;
   /** Сохранять прохождение после каждого шага (#41) — только урок в режиме «Учиться». */
   saveRun?: boolean;
+  /** «Пройти урок заново» на итогах незасчитанного урока (#122): новый платный вход — оплачивает и перезапускает экран урока. */
+  onRetry?: () => void;
   /**
    * Тест (мини-тест группы, этап 14): до ответа нет подсказки и «Спросить Бита» — как на ЕНТ.
    * Разбор после ответа (объяснение, «Почему?») остаётся.
@@ -220,6 +222,7 @@ export function LessonPlayer({
   paidAt,
   resume,
   saveRun = false,
+  onRetry,
   testMode = false,
 }: PlayerProps) {
   const router = useRouter();
@@ -648,6 +651,14 @@ export function LessonPlayer({
   const quit = () => {
     const ev = quitEvent({ kind, lessonId, via, mode, done, total });
     if (ev) track(ev);
+    // Окно обещает «вернуться в течение 20 минут — бесплатно»: отсчёт — от выхода. Есть сохранение — обновляем его время;
+    // нет (ещё ничего не пройдено) — сохраняем оплаченное прохождение с текущего шага: экран урока продолжит его молча.
+    // Во время разбора ответа сохранение уже записано со следующего шага — его и обновляем, а не пишем текущий.
+    if (persist && lessonId && paidAtRef.current !== null) {
+      const app = useApp.getState();
+      if (app.lessonRuns[lessonId]) app.touchLessonRun(lessonId);
+      else if (phase !== "feedback") persistRun({ queue, pos, done, records, xp, combo, maxCombo });
+    }
     // replace: «Назад» в браузере после выхода не открывает урок заново (новый вход стоит сердечко).
     router.replace(exitHref);
   };
@@ -748,6 +759,7 @@ export function LessonPlayer({
         xpFactor={xpFactor}
         extra={resultsExtra}
         doneHref={exitHref}
+        onRetry={onRetry}
       />
     );
   }

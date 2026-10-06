@@ -48,7 +48,7 @@ import { MASTERY_COLOR } from "@/components/progress/mastery-color";
 /** Плитка точности по смыслу цвета (токены, обе темы). */
 const ACC_TILE = {
   success: { cls: "border-success text-success", bg: "bg-action-success" },
-  warning: { cls: "border-warning text-warning-strong", bg: "bg-warning" },
+  warning: { cls: "border-warning text-warning-strong", bg: "bg-action-warning" },
   danger: { cls: "border-danger text-danger", bg: "bg-action-danger" },
 } as const;
 
@@ -112,6 +112,7 @@ export function Results({
   xpFactor = 1,
   extra,
   doneHref,
+  onRetry,
 }: {
   kind: "lesson" | "drill";
   lessonId?: string;
@@ -139,6 +140,8 @@ export function Results({
   extra?: ReactNode;
   /** Куда ведёт «Продолжить»: по умолчанию урок — на карту, тренировка — в «Практику». */
   doneHref?: string;
+  /** «Пройти урок заново» (урок не засчитан, #122): экран урока платит за новый вход и перезапускает плеер в том же режиме. */
+  onRetry?: () => void;
 }) {
   const router = useRouter();
   const { t, l, lang } = useT();
@@ -264,7 +267,7 @@ export function Results({
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { icon: <XpIcon size={16} className="border-white/70 bg-white/20 text-white" />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
+          { icon: <XpIcon size={16} className="border-white/70 bg-white/20 text-white" />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-action-gold" },
           { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: accTile.cls, bg: accTile.bg },
           { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-action-primary", hint: t("res2.timeHint") },
         ].map((s, i) => (
@@ -298,7 +301,7 @@ export function Results({
       )}
 
       {kind === "lesson" && !counted && (
-        <p role="status" className="-mt-2 flex items-center justify-center gap-2 text-center text-sm font-extrabold text-warning-strong">
+        <p role="status" className="-mt-2 flex items-center justify-center gap-2 text-center text-sm font-extrabold text-ink-warning">
           <AlertTriangle size={16} aria-hidden /> {t("econ16d.notCounted")}
         </p>
       )}
@@ -456,11 +459,12 @@ export function Results({
           <p className="mb-3 font-extrabold">{t("modes.next.title")}</p>
           {/* replace у всех переходов: «Назад» не возвращает в пройденный урок — новый вход стоит сердечко (#120). */}
           <div className="flex flex-col gap-3">
-            {!counted ? (
-              <ButtonLink replace href={`/lesson/${lessonId}`} size="lg" block icon={<RotateCcw size={20} />}>
+            {!counted && onRetry ? (
+              // Не ссылка: адрес тот же, переход ничего бы не перемонтировал. Повтор — новый платный вход (#120).
+              <Button size="lg" block icon={<RotateCcw size={20} />} onClick={onRetry}>
                 {t("econ16d.notCounted.retry")}
-              </ButtonLink>
-            ) : next ? (
+              </Button>
+            ) : counted && next ? (
               <ButtonLink replace href={`/lesson/${next}`} size="lg" block icon={<StepForward size={20} />}>
                 {t("modes.next.lesson")}
               </ButtonLink>

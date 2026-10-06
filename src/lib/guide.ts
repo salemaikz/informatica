@@ -24,6 +24,8 @@ export interface GuideStep {
   textMany?: DictKey;
   /** Сердечки не списывались («Безлимит», пробный) — этот вариант. */
   textFree?: DictKey;
+  /** Вход в урок уже был оплачен — на этом входе ничего не списано (`prepaid`; «Безлимит» — по-прежнему `textFree`). */
+  textPrepaid?: DictKey;
   /** Числа бесплатных обращений на значке ИИ нет (безлимит, тариф без счёта) — этот вариант (без фразы про число). */
   textNoCount?: DictKey;
   /** Уже пройден хотя бы один урок (кнопка урока — не «Начать», а «Продолжить») — этот вариант, без названия кнопки. */
@@ -134,6 +136,7 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
         text: "guide.lesson.hearts",
         textMany: "guide.lesson.heartsMany",
         textFree: "guide.lesson.heartsFree",
+        textPrepaid: "guide.lesson.heartsPrepaid",
         mood: "happy",
         action: "next",
       },
@@ -274,12 +277,12 @@ export function sceneSteps(scene: GuideScene, ent: boolean): GuideStep[] {
 
 /**
  * Какой текст сказать на шаге: имя есть/нет, школьный трек, урок уже был (`again`: кнопка — «Продолжить»), сердечки
- * не списывались (`free`: «Безлимит», пробный), на значке ИИ нет числа (`aiCount: false`), число сердечек, запасная
+ * не списывались (`free`: «Безлимит», пробный), вход уже был оплачен (`prepaid`), на значке ИИ нет числа (`aiCount: false`), число сердечек, запасная
  * реплика (`orElse`), нашлись не все метки (`partial`).
  */
 export function stepText(
   step: GuideStep,
-  o: { name?: string; school?: boolean; n?: number; free?: boolean; fallback?: boolean; partial?: boolean; again?: boolean; aiCount?: boolean },
+  o: { name?: string; school?: boolean; n?: number; free?: boolean; prepaid?: boolean; fallback?: boolean; partial?: boolean; again?: boolean; aiCount?: boolean },
 ): DictKey {
   if (o.fallback && step.orElse) return step.orElse.text;
   if (o.partial && step.textPartial) return step.textPartial;
@@ -287,6 +290,7 @@ export function stepText(
   if (step.textSchool && o.school) return step.textSchool;
   if (step.textAgain && o.again) return step.textAgain;
   if (step.textFree && o.free) return step.textFree;
+  if (step.textPrepaid && o.prepaid) return step.textPrepaid;
   if (step.textNoCount && o.aiCount === false) return step.textNoCount;
   if (step.textMany && o.n !== undefined && o.n !== 1) return step.textMany;
   return step.text;

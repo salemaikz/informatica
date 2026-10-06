@@ -559,6 +559,21 @@ describe("lesson-first: первый урок", () => {
     expect(say()).not.toContain("ЕНТ");
   });
 
+  it("вход уже был оплачен (на этом входе списано 0) — «Вход в этот урок уже оплачен», без «списал»", async () => {
+    useGuideSpots.setState({ lesson: { cost: 1, paid: 0 } });
+    addTarget("lesson-hearts");
+    await start();
+    expect(say()).toContain("Вход в этот урок уже оплачен");
+    expect(say()).not.toContain("списал");
+  });
+
+  it("на этом входе списано 1 — «списал 1 сердечко»", async () => {
+    useGuideSpots.setState({ lesson: { cost: 1, paid: 1 } });
+    addTarget("lesson-hearts");
+    await start();
+    expect(say()).toContain("списал 1 сердечко");
+  });
+
   it("большой урок — «2 сердечка»", async () => {
     useGuideSpots.setState({ lesson: { cost: 2 } });
     addTarget("lesson-hearts");
@@ -748,6 +763,39 @@ describe("learn-next: после первого урока — одна репл
     // Больше на «Учиться» ничего не играет.
     await wait(GUIDE_DELAY_MS + 500);
     expect(bubble()).toBeNull();
+  });
+
+  it("сцена кончилась нажатием на ссылку — пока путь тот же (страница урока грузится), новая сцена не начинается", async () => {
+    doneLesson();
+    // Школьный трек: после learn-next на «Учиться» ждёт page-school — без ожидания она началась бы, пока грузится урок.
+    useApp.setState((s) => ({ tips: { intro: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1 }, profile: { ...s.profile, track: "school" } }));
+    const { cont } = addLessonCard("/lesson/ns-2");
+    addTarget("school-grades", {}, "div");
+    await start();
+    await act(async () => cont.click());
+    await wait(10);
+    expect(tips()["learn-next"]).toBeGreaterThan(0);
+    await wait(GUIDE_DELAY_MS + 1500);
+    expect(bubble()).toBeNull();
+    expect(tips()["page-school"]).toBeUndefined();
+    // Перехода так и не было — через 5 с выбор сцены снова идёт.
+    await wait(5000);
+    await wait(GUIDE_DELAY_MS + 50);
+    expect(bubble()).not.toBeNull();
+  });
+
+  it("ожидание снимается сменой пути: на новой странице сцена выбирается как обычно", async () => {
+    doneLesson();
+    useApp.setState((s) => ({ tips: { intro: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1 }, profile: { ...s.profile, track: "school" } }));
+    const { cont } = addLessonCard("/lesson/ns-2");
+    addTarget("practice-train");
+    await start();
+    await act(async () => cont.click());
+    await wait(10);
+    h.pathname = "/practice";
+    await render();
+    await wait(GUIDE_DELAY_MS + 50);
+    expect(bubble()).not.toBeNull();
   });
 
   it("курс пройден (карточки урока нет) — шаг молча пропускается, обучение закончено", async () => {

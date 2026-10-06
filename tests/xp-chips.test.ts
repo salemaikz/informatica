@@ -14,6 +14,11 @@ describe("xp-chips", () => {
     // повтор: «идеально» не даётся, остальное — по множителю
     expect(lessonXpMax(16, 0.5, true)).toBe(Math.round(80 * 0.5) + Math.round(30 * 0.5) + Math.round(20 * 0.5));
   });
+  it("бустер «Опыт ×2» удваивает оценку «до +N XP» (#122)", () => {
+    expect(lessonXpMax(16, 1, false, 2)).toBe(300);
+    expect(lessonXpMax(16, 0.5, true, 2)).toBe(2 * lessonXpMax(16, 0.5, true));
+    expect(lessonXpMax(16, 1, false, 1)).toBe(lessonXpMax(16, 1));
+  });
   it("склонение ключей чипов", () => {
     expect(chipsKey("xp.chipsPlus", 1)).toBe("xp.chipsPlus.one");
     expect(chipsKey("xp.chipsPlus", 4)).toBe("xp.chipsPlus.few");
