@@ -13,7 +13,8 @@ import { useApp } from "@/lib/store";
 
 // Этап 16Г, пакет C: единое окно «Не хватает» во всех местах, где упираются в сердечки или чипы.
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/shop", useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {} }) }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/shop", useRouter: () => ({ push, replace: () => {}, back: () => {} }) }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: unknown } & Record<string, unknown>) => createElement("a", { href, ...rest }, children as never),
 }));
@@ -38,6 +39,7 @@ const click = (el: Element | undefined) =>
   act(async () => {
     (el as HTMLElement).click();
   });
+const anchor = (href: string) => [...document.body.querySelectorAll("a")].find((a) => a.getAttribute("href") === href);
 const dialogs = () => [...document.body.querySelectorAll('[role="dialog"]')].map((d) => d.getAttribute("aria-label"));
 
 beforeEach(() => {
@@ -82,6 +84,25 @@ describe("«Сердечки закончились» (0 сердечек, 20 ч
     expect(events).toContainEqual({ e: "shop_click", item: "chips-100" });
     expect(events).toContainEqual({ e: "short_pick", need: "hearts", pick: "pack" });
     expect(events).toContainEqual({ e: "chips_out", where: "hearts" });
+  });
+
+  it("«Оплата скоро» поверх окна не показывает свой пробный период: из игры и урока не уводит", async () => {
+    const onResume = vi.fn();
+    push.mockClear();
+    await render(createElement(OutOfHearts, { need: 1, onResume, onExit: () => {} }));
+    await click(byText("100 чипов"));
+    expect(dialogs()).toContain("Оплата скоро появится");
+    const soon = document.body.querySelectorAll('[role="dialog"]')[1];
+    expect([...soon.querySelectorAll("button")].map((b) => b.textContent).filter(Boolean)).toEqual(["Понятно"]);
+    expect(push).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
+  });
+
+  it("ссылка «Все наборы чипов» закрывает шторку (на /shop страница не перезагружается)", async () => {
+    const onClose = vi.fn();
+    await render(createElement(OutOfHearts, { need: 1, onClose, onResume: () => {}, onExit: () => {} }));
+    await click(anchor("/shop#shop-chips"));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("пополнение за ₸ — тоже «Оплата скоро»", async () => {
@@ -155,6 +176,8 @@ describe("«Не хватает чипов» в ИИ (NoChipsNotice)", () => {
     await click(byText("7 дней бесплатно"));
     expect(useApp.getState().plan?.trial).toBe(true);
     expect(events).toContainEqual({ e: "trial_start", from: "ai" });
+    expect(text()).toContain("спроси ещё раз");
+    expect(text()).not.toContain("Нужно");
   });
 });
 
@@ -183,5 +206,15 @@ describe("примерка украшения без чипов", () => {
     expect(dialogs()).toEqual(["Примерка", "Не хватает чипов"]);
     expect(events).toContainEqual({ e: "chips_out", where: "cosmetic" });
     expect(useApp.getState().wallet.chips).toBe(10);
+  });
+
+  it("ссылка из окна закрывает и окно, и примерку", async () => {
+    setChips(10);
+    const onClose = vi.fn();
+    const def = COSMETICS.find((c) => c.price !== null)!;
+    await render(createElement(TryOnSheet, { open: true, id: def.id, onClose }));
+    await click(buttons().find((b) => b.textContent?.includes(`Купить за`)));
+    await click(anchor("/shop#shop-earn"));
+    expect(onClose).toHaveBeenCalled();
   });
 });

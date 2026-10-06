@@ -112,6 +112,10 @@ test("магазин: строка без чипов открывает окно
   await expect(dialog.getByText("Чипов вдвое больше за каждое дело")).toBeVisible();
   await dialog.getByRole("button", { name: /100 чипов/ }).click();
   await expect(page.getByRole("dialog", { name: "Оплата скоро появится" })).toBeVisible();
+  await page.getByRole("button", { name: "Понятно" }).click();
+  await dialog.getByRole("link", { name: "Все наборы чипов" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#shop-chips")).toBeInViewport();
   expect(errors).toEqual([]);
 });
 

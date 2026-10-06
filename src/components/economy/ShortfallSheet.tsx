@@ -208,6 +208,8 @@ export interface ShortfallSheetProps {
   /** Чипы: нехватка снята (пробный «Безлимит»). */
   onEnough?: () => void;
   onExit?: () => void;
+  /** Ссылка из окна (все наборы, заработать, тарифы) нажата: вызывающий закрывает и то, что под окном (например, примерку). */
+  onLeave?: () => void;
   /** Откуда пришли — для окна тарифов и «Оплата скоро». */
   plansFrom: PlansFrom;
   /** Только inline: классы карточки (отступы в ИИ-панели и чате). */
@@ -215,7 +217,7 @@ export interface ShortfallSheetProps {
 }
 
 function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "inline"; onSoon: (what: string, item: string) => void }) {
-  const { need, cost, where, layout, what = "entry", onClose, onResume, onEnough, onExit, plansFrom, onSoon } = props;
+  const { need, cost, where, layout, what = "entry", onClose, onResume, onEnough, onExit, onLeave, plansFrom, onSoon } = props;
   const { t, lang } = useT();
   const hearts = useHearts();
   const { chips } = useChips();
@@ -246,6 +248,12 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
   };
 
   const pick = (p: ShortPick) => track({ e: "short_pick", need, pick: p });
+  // Переход по ссылке: на той же странице (/shop#…) ничего не размонтируется — закрываем окно сами.
+  const leave = (p: ShortPick) => {
+    pick(p);
+    onLeave?.();
+    onClose?.();
+  };
 
   // Статистика: окно с предложением купить чипы показано (один раз за открытие).
   const reported = useRef(false);
@@ -300,6 +308,14 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
   );
 
   // ---------- Встроенная карточка (ИИ-панель, чат): коротко, без ухода со страницы ----------
+  if (layout === "inline" && !isHearts && !opts.plan) {
+    // Пробный «Безлимит» включён: ИИ теперь без чипов — просим спросить ещё раз.
+    return (
+      <p className="flex items-center gap-2 font-extrabold text-success-strong">
+        <Crown size={18} className="shrink-0" aria-hidden /> {t("short.unlimitedOn")}
+      </p>
+    );
+  }
   if (layout === "inline") {
     return (
       <div className="flex flex-col gap-2.5">
@@ -389,7 +405,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
           {showPack && (
             <>
               {packRow}
-              <Link href="/shop#shop-chips" onClick={() => pick("all")} className="self-center px-2 py-1 text-sm font-extrabold text-primary underline underline-offset-2">
+              <Link href="/shop#shop-chips" onClick={() => leave("all")} className="self-center px-2 py-1 text-sm font-extrabold text-primary underline underline-offset-2">
                 {t("short.allPacks")}
               </Link>
             </>
@@ -405,10 +421,10 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
             />
           )}
           {opts.plan && (
-            <LinkCard href={`/plans?from=${plansFrom}`} tone="gold" icon={<Crown size={24} fill="currentColor" />} title={planTitle} desc={planDesc} onClick={() => pick("plan")} />
+            <LinkCard href={`/plans?from=${plansFrom}`} tone="gold" icon={<Crown size={24} fill="currentColor" />} title={planTitle} desc={planDesc} onClick={() => leave("plan")} />
           )}
           {trialBtn}
-          <LinkCard href="/shop#shop-earn" tone="primary" icon={<Sparkles size={22} />} title={t("short.earn")} desc={t("short.earnDesc")} onClick={() => pick("earn")} />
+          <LinkCard href="/shop#shop-earn" tone="primary" icon={<Sparkles size={22} />} title={t("short.earn")} desc={t("short.earnDesc")} onClick={() => leave("earn")} />
         </m.div>
       )}
 
@@ -438,7 +454,7 @@ export function ShortfallSheet(props: ShortfallSheetProps) {
   const content = <Content {...props} layout={layout} onSoon={onSoon} />;
   // Монтируем только после первого открытия: окно тянет роутер и тариф, а нужно оно не каждому.
   const sheet = soon.what ? (
-    <ComingSoonSheet open={soon.open} what={soon.what} from={plansFrom} onClose={() => setSoon((s) => ({ ...s, open: false }))} />
+    <ComingSoonSheet hideTrial open={soon.open} what={soon.what} from={plansFrom} onClose={() => setSoon((s) => ({ ...s, open: false }))} />
   ) : null;
 
   if (layout === "inline") {

@@ -155,7 +155,7 @@ export function TryOnSheet({ open, id, onClose }: { open: boolean; id: CosmeticI
         <TryOnBody id={id} onClose={onClose} onShort={() => setShort(true)} />
       </Modal>
       {/* Рядом с примеркой, а не внутри: у шторки есть transform, и вложенная шторка уехала бы */}
-      <ShortfallSheet need="chips" cost={price} where="cosmetic" plansFrom="chips" open={open && short} onClose={() => setShort(false)} />
+      <ShortfallSheet need="chips" cost={price} where="cosmetic" plansFrom="chips" open={open && short} onClose={() => setShort(false)} onLeave={onClose} />
     </>
   );
 }
