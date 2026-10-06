@@ -9,8 +9,8 @@
 // - сердечки считаются с шагом 0,5 (halfFloor): половинка бывает только после платы за теорию, восстановление и покупки — целые;
 // - потраченное сердечко возвращается само через regenMs (полного запаса «каждый день» нет — решение #34);
 // - возврата сердечка за тренировку больше нет (этап 16В): при нуле — ждать, купить за чипы или «Безлимит»;
-// - чипы дают за дела, а не за опыт (решение #105, CHIP_REWARD): урок 3 (повтор 1), цель дня, тест, ЕНТ,
-//   достижение (по редкости 5–40, ACHIEVEMENT_CHIPS); идеальный урок / тест на 100% — не гарантированная награда, а «сюрприз»
+// - чипы дают за дела, а не за опыт (решение #105, CHIP_REWARD): урок 2 (повтор 0), цель дня 2, тест раздела 5, ЕНТ 5,
+//   достижение (по редкости 2–10, ACHIEVEMENT_CHIPS); идеальный урок / тест на 100% — не гарантированная награда, а «сюрприз»
 //   с шансом 40% (PERFECT_DROP, lib/perfect.ts); тренировка, игры и практикум чипов не дают (опыт и освоение). На чипы покупаются сердечки, бустеры и ИИ сверх бесплатного;
 // - оплата деньгами (тарифы, наборы чипов) пока не подключена — экран «скоро» без имитации платежа.
 
@@ -50,7 +50,7 @@ export interface PlanFeatures {
 
 export const PLAN_FEATURES: Record<PlanTier, PlanFeatures> = {
   free: { maxHearts: 5, regenMs: 6 * HOUR, aiFree: 3, chipMultiplier: 1 },
-  lite: { maxHearts: 10, regenMs: 3 * HOUR, aiFree: 30, chipMultiplier: 1.5 },
+  lite: { maxHearts: 6, regenMs: 3 * HOUR, aiFree: 30, chipMultiplier: 1.5 },
   unlimited: { maxHearts: Infinity, regenMs: 0, aiFree: Infinity, chipMultiplier: 2 },
 };
 
@@ -284,21 +284,21 @@ export const START_WALLET: Wallet = { chips: WELCOME_CHIPS, earned: WELCOME_CHIP
  */
 export const CHIP_REWARD = {
   /** Урок пройден впервые. */
-  lessonFirst: 3,
-  /** Урок пройден повторно (в том числе плановое повторение). */
-  lessonRepeat: 1,
-  dailyGoal: 5,
+  lessonFirst: 2,
+  /** Урок пройден повторно (в том числе плановое повторение): чипов нет. */
+  lessonRepeat: 0,
+  dailyGoal: 2,
   /** Тест по разделу сдан (≥ 80% баллов). */
-  unit: 10,
-  /** Пробный ЕНТ завершён. */
-  exam: 10,
+  unit: 5,
+  /** Пробный ЕНТ завершён: один раз за вариант (seed) и не чаще раза в сутки (#122). */
+  exam: 5,
 } as const;
 
 /**
- * Чипы за новое достижение — по редкости (этап 16В, K): обычное 5, редкое 10, эпическое 20, легендарное 40.
+ * Чипы за новое достижение — по редкости (этап 16В, K): обычное 2, редкое 4, эпическое 7, легендарное 10 (#122).
  * До множителя тарифа и бустера (`earnAmount`), как и CHIP_REWARD.
  */
-export const ACHIEVEMENT_CHIPS: Record<Rarity, number> = { common: 5, rare: 10, epic: 20, legendary: 40 };
+export const ACHIEVEMENT_CHIPS: Record<Rarity, number> = { common: 2, rare: 4, epic: 7, legendary: 10 };
 
 /**
  * «Сюрприз за идеальный урок» (этап 16В, решение B): вместо гарантированных +5 чипов — шанс 40%.
@@ -310,6 +310,8 @@ export const ACHIEVEMENT_CHIPS: Record<Rarity, number> = { common: 5, rare: 10, 
  */
 export const PERFECT_DROP = { heartChance: 0.2, chipsChance: 0.2, chips: 3, heart: 0.5, testsPerDay: 3 } as const;
 export const MAX_LEDGER = 50;
+/** История чипов хранится неделю (#122): старше записи отбрасываются при добавлении и при загрузке. */
+export const LEDGER_KEEP_MS = 7 * 24 * HOUR;
 /** Начисления одной причины в пределах этого окна склеиваются в одну строку истории. */
 export const LEDGER_MERGE_MS = 15 * MINUTE;
 
@@ -319,7 +321,7 @@ export function earnAmount(base: number, multiplier: number): number {
   return Math.floor(base * multiplier + 1e-9);
 }
 
-/** Чипы за прохождение урока (до множителя): первое прохождение — 3, повтор — 1. */
+/** Чипы за прохождение урока (до множителя): первое прохождение — 2, повтор — 0. */
 export function lessonChipBase(first: boolean): number {
   return first ? CHIP_REWARD.lessonFirst : CHIP_REWARD.lessonRepeat;
 }
@@ -329,8 +331,15 @@ export function lessonChips(first: boolean, multiplier: number): number {
   return earnAmount(lessonChipBase(first), multiplier);
 }
 
-/** Добавляет запись в историю чипов: свежие записи той же причины склеиваются. Новые — первыми. */
-export function pushLedger(ledger: LedgerEntry[], entry: LedgerEntry): LedgerEntry[] {
+/** Оставляет записи истории не старше недели (LEDGER_KEEP_MS) и не больше MAX_LEDGER. */
+export function pruneLedger(ledger: LedgerEntry[], now: number): LedgerEntry[] {
+  const kept = ledger.filter((e) => now - e.at <= LEDGER_KEEP_MS);
+  return kept.length === ledger.length && kept.length <= MAX_LEDGER ? ledger : kept.slice(0, MAX_LEDGER);
+}
+
+/** Добавляет запись в историю чипов: свежие записи той же причины склеиваются. Новые — первыми. Старше недели — отбрасываются. */
+export function pushLedger(ledgerIn: LedgerEntry[], entry: LedgerEntry): LedgerEntry[] {
+  const ledger = pruneLedger(ledgerIn, entry.at);
   if (entry.amount === 0) return ledger;
   const top = ledger[0];
   if (
@@ -352,7 +361,7 @@ export function sanitizeWallet(raw: unknown): Wallet {
   return { chips: num(w.chips, START_WALLET.chips), earned: num(w.earned, START_WALLET.earned), spent: num(w.spent, 0) };
 }
 
-// ---------- Бустеры (множитель чипов) ----------
+// ---------- Бустеры (множитель опыта, #122) ----------
 
 export interface Boost {
   mult: number;
@@ -363,9 +372,14 @@ export function boostActive(b: Boost | null | undefined, now: number): b is Boos
   return !!b && b.until > now && b.mult > 1;
 }
 
-/** Итоговый множитель чипов: тариф × активный бустер. */
-export function chipMultiplier(tier: PlanTier, boost: Boost | null | undefined, now: number): number {
-  return PLAN_FEATURES[tier].chipMultiplier * (boostActive(boost, now) ? boost.mult : 1);
+/** Множитель чипов — только тариф: бустер чипы не умножает (#122). */
+export function chipMultiplier(tier: PlanTier): number {
+  return PLAN_FEATURES[tier].chipMultiplier;
+}
+
+/** Множитель опыта: активный бустер (иначе 1). */
+export function xpMultiplier(boost: Boost | null | undefined, now: number): number {
+  return boostActive(boost, now) ? boost.mult : 1;
 }
 
 /** Продлевает бустер: время складывается, множитель — наибольший. */
@@ -397,7 +411,7 @@ export interface ShopItem {
 }
 
 /**
- * За чипы (#65). Вход в урок стоит сердечко, а урок приносит 3–8 чипов (#105). Цены оставлены прежними:
+ * За чипы (#65). Вход в урок стоит сердечко, а урок приносит 2 чипа (#122). Цены оставлены прежними:
  * после недели на новых числах решим, менять ли их.
  * Чем больше берёшь — тем дешевле штука: 1 — 60, 3 — 150 (по 50), полный запас — по 45 за каждое недостающее
  * (продаётся, когда не хватает хотя бы REFILL_MIN_MISSING). Бустер: 15 мин — 40, час — 120.

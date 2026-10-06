@@ -633,3 +633,23 @@ export function weakSpots(input: WeakInput, limit = 5): WeakSpot[] {
   out.sort((a, b) => b.score - a.score || a.mastery - b.mastery || (a.skill < b.skill ? -1 : 1));
   return out.slice(0, limit);
 }
+
+// ---------- Повторяющиеся ошибки (#122) ----------
+
+/** Запись ошибки в минимальном виде: счётчик `misses` у старых записей отсутствует (= 1). */
+export interface RepeatMistake {
+  id: string;
+  stepId: string;
+  prompt: string;
+  misses?: number;
+  at: number;
+}
+
+/** Задания, где ошибались не меньше двух раз: до `limit` штук, сначала с наибольшим числом ошибок, затем свежие. */
+export function repeatedMistakes<T extends RepeatMistake>(mistakes: readonly T[], limit = 3): (T & { misses: number })[] {
+  return mistakes
+    .map((m) => ({ ...m, misses: typeof m.misses === "number" && m.misses >= 1 ? Math.floor(m.misses) : 1 }))
+    .filter((m) => m.misses >= 2)
+    .sort((a, b) => b.misses - a.misses || b.at - a.at || (a.id < b.id ? -1 : 1))
+    .slice(0, limit);
+}

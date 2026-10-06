@@ -11,3 +11,44 @@ export const unitPassed = (points: number, max: number): boolean => max > 0 && N
  * Единое правило: по нему платятся чипы за пробный ЕНТ (recordExam) и считается достижение «Пять пробников».
  */
 export const fullExamCounts = (answered: number, asked: number): boolean => answered > 0 && answered >= Math.ceil(asked / 2);
+
+/** Поля попытки, нужные правилу награды за пробный ЕНТ. */
+export interface FullExamFacts {
+  id: string;
+  kind: string;
+  seed: number;
+  at: number;
+  points: number;
+  answered?: number;
+  questions?: number;
+}
+
+const sameDay = (a: number, b: number): boolean => {
+  const x = new Date(a);
+  const y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
+};
+
+/**
+ * Чипы за пробный ЕНТ (#122): +5 только если такого варианта (seed) ещё нет среди засчитанных полных попыток
+ * и сегодня ещё не было засчитанной полной попытки. `before` — прежние попытки (без текущей).
+ */
+export function fullExamChipsAllowed(before: FullExamFacts[], cur: Pick<FullExamFacts, "id" | "seed" | "at">): boolean {
+  const done = before.filter(
+    (e) =>
+      e.kind === "full" &&
+      e.id !== cur.id &&
+      (typeof e.answered === "number" ? fullExamCounts(e.answered, Math.max(e.answered, e.questions ?? 0)) : e.points > 0),
+  );
+  return !done.some((e) => e.seed === cur.seed || sameDay(e.at, cur.at));
+}
+
+/** Урок засчитывается, если отвечено не меньше 70% предъявленных заданий (пропуск — не ответ; повторы ошибок не считаются). */
+export const LESSON_COUNT_RATIO = 0.7;
+export function lessonCounted(r: { asked?: number; skipped?: number; answers: { retry?: boolean; skipped?: boolean }[] }): boolean {
+  const first = r.answers.filter((a) => !a.retry);
+  const asked = r.asked ?? first.length;
+  if (asked <= 0) return true;
+  const skipped = r.skipped ?? first.filter((a) => a.skipped).length;
+  return (asked - skipped) / asked >= LESSON_COUNT_RATIO - 1e-9;
+}

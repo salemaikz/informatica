@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Library, Clock, Cpu, Flame, Map as MapIcon, Repeat, RotateCcw, Share2, Sparkles, StepForward, Target } from "lucide-react";
+import { AlertTriangle, BookOpen, Library, Clock, Cpu, Flame, Map as MapIcon, Repeat, RotateCcw, Share2, Sparkles, StepForward, Target } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { LevelBadge, TierPill } from "@/components/app/LevelBadge";
@@ -105,6 +105,7 @@ export function Results({
   firstPass = false,
   lessonChips: lessonPart = 0,
   perfectDrop = null,
+  counted = true,
   achievements,
   feedback,
   via,
@@ -126,6 +127,8 @@ export function Results({
   lessonChips?: number;
   /** «Сюрприз за идеальный урок» / мини-тест на 100% (этап 16В): что уже выдано в finishSession; null — броска не было. */
   perfectDrop?: PerfectDrop | null;
+  /** Урок засчитан (отвечено ≥ 70% заданий, #122); false — строка «Урок не засчитан». */
+  counted?: boolean;
   achievements: string[];
   feedback: FeedbackState;
   /** Режим урока (check — «Проверить себя»). */
@@ -291,6 +294,12 @@ export function Results({
           {mix.hinted > 0 && <li>{t("res2.hinted", { n: mix.hinted })}</li>}
           {mix.skipped > 0 && <li>{t("res2.skipped", { n: mix.skipped })}</li>}
         </ul>
+      )}
+
+      {kind === "lesson" && !counted && (
+        <p role="status" className="-mt-2 flex items-center justify-center gap-2 text-center text-sm font-extrabold text-warning-strong">
+          <AlertTriangle size={16} aria-hidden /> {t("econ16d.notCounted")}
+        </p>
       )}
 
       {/* Сколько чипов дала сессия — с разбивкой (урок · прочее). У тренировки без чипов плитки нет. */}

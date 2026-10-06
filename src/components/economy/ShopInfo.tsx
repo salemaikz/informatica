@@ -20,7 +20,6 @@ import {
   Lightbulb,
   MessageCircle,
   Mic,
-  RefreshCw,
   ScrollText,
   Sparkles,
   Target,
@@ -30,6 +29,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
+import { LESSON_COUNT_RATIO } from "@/lib/exam-pass";
 import { ACHIEVEMENT_CHIPS, AI_COST, CHIP_REWARD, ENTRY_COST, PERFECT_DROP, PLAN_FEATURES, SHOP_ITEMS, aiFreeIsLifetime, formatHearts, type AiKind, type ChipReason, type LedgerEntry } from "@/lib/economy";
 import { cosmeticDef } from "@/lib/cosmetics";
 import { shortDate } from "@/lib/date";
@@ -170,7 +170,6 @@ export function HeartRules() {
  */
 const EARN_ROWS: { id: string; icon: LucideIcon; key: DictKey; chips?: number; chipsMax?: number }[] = [
   { id: "lessonFirst", icon: BookOpen, key: "economy.earn.lessonFirst", chips: CHIP_REWARD.lessonFirst },
-  { id: "lessonRepeat", icon: RefreshCw, key: "economy.earn.lessonRepeat", chips: CHIP_REWARD.lessonRepeat },
   { id: "perfect", icon: BadgeCheck, key: "econ16c.earn.perfect" },
   { id: "dailyGoal", icon: Target, key: "economy.earn.dailyGoal", chips: CHIP_REWARD.dailyGoal },
   { id: "unit", icon: ClipboardCheck, key: "economy.earn.unit", chips: CHIP_REWARD.unit },
@@ -218,6 +217,7 @@ export function EarnList() {
         ))}
       </ul>
       <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">{t("econ16c.earn.note")}</p>
+      <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">{t("econ16d.earn.rules", { p: Math.round(LESSON_COUNT_RATIO * 100) })}</p>
       <p className="border-t-2 border-border p-3.5 text-sm font-semibold text-muted">
         {t("shop.earn.mult", {
           lite: formatMult(PLAN_FEATURES.lite.chipMultiplier),

@@ -289,10 +289,10 @@ describe("«Как работают сердечки»: числа из конс
     expect(rules.lesson).toBe(ENTRY_COST.lesson);
     expect(rules.checkpoint).toBe(ENTRY_COST.checkpoint);
   });
-  it("восстановление: бесплатный 5 за 6 ч, «Лайт» 10 за 3 ч, «Безлимит» не тратится", () => {
+  it("восстановление: бесплатный 5 за 6 ч, «Лайт» 6 за 3 ч, «Безлимит» не тратится", () => {
     const [free, lite, unl] = regenRules();
     expect(free).toMatchObject({ tier: "free", max: 5, regenMs: 6 * HOUR, unlimited: false });
-    expect(lite).toMatchObject({ tier: "lite", max: 10, regenMs: 3 * HOUR, unlimited: false });
+    expect(lite).toMatchObject({ tier: "lite", max: 6, regenMs: 3 * HOUR, unlimited: false });
     expect(unl).toMatchObject({ tier: "unlimited", unlimited: true });
     expect(formatRemaining(free.regenMs, "ru")).toBe("6 ч");
     expect(formatRemaining(lite.regenMs, "kk")).toBe("3 сағ");

@@ -202,7 +202,9 @@ function SheetBody({ lessonId }: { lessonId: string }) {
           {t(`learn2.xp.${xp}`)}
         </Pill>
         <Pill tone="gold" icon={<Cpu size={13} />}>
-          {t(chipsKey("xp.reward", chipsEstimate(!!stat, chipMult)), { xp: maxXp, chips: chipsEstimate(!!stat, chipMult) })}
+          {chipsEstimate(!!stat, chipMult) > 0
+            ? t(chipsKey("xp.reward", chipsEstimate(!!stat, chipMult)), { xp: maxXp, chips: chipsEstimate(!!stat, chipMult) })
+            : t("econ16d.reward.xpOnly", { xp: maxXp })}
         </Pill>
       </div>
 

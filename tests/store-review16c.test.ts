@@ -147,7 +147,7 @@ describe("E2: «идеальные уроки» и пробные ЕНТ в до
     expect(st().lessons.p1.perfect).toBe(true);
     st().finishSession(L(2, { accuracy: 0.5, answers: [rec({ correct: false, score: 0 })] }));
     st().finishSession(L(3, { answers: [rec({ hinted: true })] })); // 100% точности, но с подсказкой
-    st().finishSession(L(4, { skipped: 1 }));
+    st().finishSession(L(4, { skipped: 1, asked: 4 })); // пропущено меньше 30% — урок засчитан, но не идеален
     expect(st().lessons.p2.perfect).toBeUndefined();
     expect(st().lessons.p3.perfect).toBeUndefined();
     expect(st().lessons.p4.perfect).toBeUndefined();

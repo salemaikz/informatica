@@ -29,6 +29,9 @@ import {
   canAfford,
   canStartTrial,
   chipMultiplier,
+  xpMultiplier,
+  pruneLedger,
+  LEDGER_KEEP_MS,
   lessonChips,
   earnAmount,
   effectiveTier,
@@ -78,7 +81,7 @@ const TODAY = "2027-01-15";
 describe("тарифы и цены", () => {
   it("PLAN_FEATURES: запас, восстановление, ИИ, множитель", () => {
     expect(PLAN_FEATURES.free).toEqual({ maxHearts: 5, regenMs: 6 * HOUR, aiFree: 3, chipMultiplier: 1 });
-    expect(PLAN_FEATURES.lite).toEqual({ maxHearts: 10, regenMs: 3 * HOUR, aiFree: 30, chipMultiplier: 1.5 });
+    expect(PLAN_FEATURES.lite).toEqual({ maxHearts: 6, regenMs: 3 * HOUR, aiFree: 30, chipMultiplier: 1.5 });
     expect(PLAN_FEATURES.unlimited.maxHearts).toBe(Infinity);
     expect(PLAN_FEATURES.unlimited.aiFree).toBe(Infinity);
     expect(PLAN_FEATURES.unlimited.chipMultiplier).toBe(2);
@@ -198,16 +201,16 @@ describe("сердечки: heartsNow", () => {
     expect(r.updatedAt).toBe(T0 + 12 * HOUR);
   });
 
-  it("у Лайта восстановление быстрее (3 ч) и запас 10", () => {
-    expect(heartsNow(h(5, T0), "lite", T0 + 3 * HOUR - 1, TODAY).count).toBe(5);
-    expect(heartsNow(h(5, T0), "lite", T0 + 3 * HOUR, TODAY).count).toBe(6);
-    expect(heartsNow(h(5, T0), "lite", T0 + 6 * HOUR, TODAY).count).toBe(7);
-    expect(heartsNow(h(5, T0), "lite", T0 + 100 * HOUR, TODAY).count).toBe(10);
+  it("у Лайта восстановление быстрее (3 ч) и запас 6", () => {
+    expect(heartsNow(h(3, T0), "lite", T0 + 3 * HOUR - 1, TODAY).count).toBe(3);
+    expect(heartsNow(h(3, T0), "lite", T0 + 3 * HOUR, TODAY).count).toBe(4);
+    expect(heartsNow(h(3, T0), "lite", T0 + 6 * HOUR, TODAY).count).toBe(5);
+    expect(heartsNow(h(3, T0), "lite", T0 + 100 * HOUR, TODAY).count).toBe(6);
   });
 
-  it("стартовый запас: у бесплатного полный, Лайту при первом чтении докладывается до 10", () => {
+  it("стартовый запас: у бесплатного полный, Лайту при первом чтении докладывается до 6", () => {
     expect(heartsNow(START_HEARTS, "free", T0, TODAY)).toBe(START_HEARTS);
-    expect(heartsNow(START_HEARTS, "lite", T0, TODAY)).toEqual({ count: 10, updatedAt: T0, day: TODAY });
+    expect(heartsNow(START_HEARTS, "lite", T0, TODAY)).toEqual({ count: 6, updatedAt: T0, day: TODAY });
   });
 
   it("не выше запаса; при полном — время обновляется", () => {
@@ -306,7 +309,7 @@ describe("сердечки: spendHearts / addHearts / refill", () => {
 
   it("refillHearts: полный запас по тарифу", () => {
     expect(refillHearts("free", T0, TODAY)).toEqual({ count: 5, updatedAt: T0, day: TODAY });
-    expect(refillHearts("lite", T0, TODAY).count).toBe(10);
+    expect(refillHearts("lite", T0, TODAY).count).toBe(6);
   });
 });
 
@@ -435,10 +438,10 @@ describe("магазин: buyItem", () => {
     expect(z.ok && z.hearts).toEqual({ count: 3, updatedAt: T0, day: TODAY });
   });
 
-  it("hearts-3 у Лайта (запас 10): помещается, пока не хватает хотя бы трёх", () => {
-    const r = buy(base({ hearts: heartsAt(7) }), "hearts-3", "lite");
-    expect(r.ok && r.hearts.count).toBe(10);
-    expect(buy(base({ hearts: heartsAt(8) }), "hearts-3", "lite")).toEqual({ ok: false, reason: "overflow" });
+  it("hearts-3 у Лайта (запас 6): помещается, пока не хватает хотя бы трёх", () => {
+    const r = buy(base({ hearts: heartsAt(3) }), "hearts-3", "lite");
+    expect(r.ok && r.hearts.count).toBe(6);
+    expect(buy(base({ hearts: heartsAt(4) }), "hearts-3", "lite")).toEqual({ ok: false, reason: "overflow" });
   });
 
   it("hearts-3 переполняет запас — отказ overflow, чипы не списываются; поштучно можно", () => {
@@ -469,10 +472,10 @@ describe("магазин: buyItem", () => {
     expect(r.wallet.chips).toBe(500 - 4 * 45);
     const z = buy(base({ hearts: heartsAt(0) }), "hearts-full");
     expect(z.ok && z.wallet.chips).toBe(500 - 5 * 45);
-    // Лайт: 2 из 10 — 8 × 45
+    // Лайт: 2 из 6 — 4 × 45
     const lite = buy(base(), "hearts-full", "lite");
-    expect(lite.ok && lite.hearts.count).toBe(10);
-    expect(lite.ok && lite.wallet.chips).toBe(500 - 8 * 45);
+    expect(lite.ok && lite.hearts.count).toBe(6);
+    expect(lite.ok && lite.wallet.chips).toBe(500 - 4 * 45);
   });
 
   it("refillPrice / itemPrice", () => {
@@ -609,14 +612,14 @@ describe("бустеры и множитель чипов", () => {
     expect(boostActive({ mult: 1, until: T0 + 1000 }, T0)).toBe(false);
   });
 
-  it("chipMultiplier = тариф × бустер", () => {
+  it("chipMultiplier — только тариф (бустер чипы не умножает), xpMultiplier — только бустер", () => {
+    expect(chipMultiplier("free")).toBe(1);
+    expect(chipMultiplier("lite")).toBe(1.5);
+    expect(chipMultiplier("unlimited")).toBe(2);
     const boost = { mult: 2, until: T0 + HOUR };
-    expect(chipMultiplier("free", null, T0)).toBe(1);
-    expect(chipMultiplier("free", boost, T0)).toBe(2);
-    expect(chipMultiplier("lite", boost, T0)).toBe(3);
-    expect(chipMultiplier("unlimited", boost, T0)).toBe(4);
-    expect(chipMultiplier("lite", null, T0)).toBe(1.5);
-    expect(chipMultiplier("lite", { mult: 2, until: T0 - 1 }, T0)).toBe(1.5);
+    expect(xpMultiplier(null, T0)).toBe(1);
+    expect(xpMultiplier(boost, T0)).toBe(2);
+    expect(xpMultiplier({ mult: 2, until: T0 - 1 }, T0)).toBe(1);
   });
 
   it("extendBoost: время складывается, множитель — наибольший", () => {
@@ -654,12 +657,12 @@ describe("чипы: заработок", () => {
   });
 
   it("CHIP_REWARD: числа решения #105 (идеального бонуса +5 больше нет — этап 16В; достижения — по редкости)", () => {
-    expect(CHIP_REWARD).toEqual({ lessonFirst: 3, lessonRepeat: 1, dailyGoal: 5, unit: 10, exam: 10 });
+    expect(CHIP_REWARD).toEqual({ lessonFirst: 2, lessonRepeat: 0, dailyGoal: 2, unit: 5, exam: 5 });
     expect("perfect" in CHIP_REWARD).toBe(false);
   });
 
-  it("ACHIEVEMENT_CHIPS: достижение платит по редкости (5 / 10 / 20 / 40)", () => {
-    expect(ACHIEVEMENT_CHIPS).toEqual({ common: 5, rare: 10, epic: 20, legendary: 40 });
+  it("ACHIEVEMENT_CHIPS: достижение платит по редкости (2 / 4 / 7 / 10)", () => {
+    expect(ACHIEVEMENT_CHIPS).toEqual({ common: 2, rare: 4, epic: 7, legendary: 10 });
   });
 
   it("PERFECT_DROP: шанс 20% на пол-сердечка, 20% на 3 чипа (этап 16В, решение B)", () => {
@@ -669,12 +672,12 @@ describe("чипы: заработок", () => {
     expect(1 - PERFECT_DROP.heartChance - PERFECT_DROP.chipsChance).toBeCloseTo(0.6, 10);
   });
 
-  it("lessonChips: урок 3 (повтор 1); множитель тарифа и бустера", () => {
-    expect(lessonChips(true, 1)).toBe(3);
-    expect(lessonChips(false, 1)).toBe(1);
-    expect(lessonChips(true, 1.5)).toBe(4);
-    expect(lessonChips(false, 1.5)).toBe(1);
-    expect(lessonChips(true, chipMultiplier("unlimited", { mult: 2, until: T0 + 1 }, T0))).toBe(12);
+  it("lessonChips: урок 2 (повтор 0); множитель только тарифа", () => {
+    expect(lessonChips(true, 1)).toBe(2);
+    expect(lessonChips(false, 1)).toBe(0);
+    expect(lessonChips(true, 1.5)).toBe(3);
+    expect(lessonChips(false, 1.5)).toBe(0);
+    expect(lessonChips(true, chipMultiplier("unlimited"))).toBe(4);
     expect(lessonChips(true, 0)).toBe(0);
   });
 });
@@ -708,6 +711,16 @@ describe("pushLedger", () => {
     expect(pushLedger([e({ reason: "ai", note: "hint", amount: -5 })], e({ id: "b", reason: "ai", note: "chat", amount: -10 })).length).toBe(2);
     expect(pushLedger([e({ reason: "ai", amount: -5 })], e({ id: "b", reason: "ai", amount: 5 })).length).toBe(2);
     expect(pushLedger([e()], e({ id: "b", at: T0 - 1 })).length).toBe(2);
+  });
+
+  it("история хранится неделю: старые записи отбрасываются при добавлении и pruneLedger", () => {
+    const old = e({ id: "old", at: T0 - LEDGER_KEEP_MS - 1, reason: "lesson" });
+    const fresh = e({ id: "fresh", at: T0 - LEDGER_KEEP_MS, reason: "lesson" });
+    const r = pushLedger([fresh, old], e({ id: "n", reason: "ai", at: T0 }));
+    expect(r.map((x) => x.id)).toEqual(["n", "fresh"]);
+    expect(pruneLedger([fresh, old], T0).map((x) => x.id)).toEqual(["fresh"]);
+    const same = [fresh];
+    expect(pruneLedger(same, T0)).toBe(same);
   });
 
   it("траты одной причины тоже склеиваются", () => {

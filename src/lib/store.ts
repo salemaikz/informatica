@@ -39,7 +39,7 @@ import {
   type PerfectDrop,
 } from "./perfect";
 import { drillPaidActive, sanitizeDrillPaid, type DrillPaid } from "./drill-paid";
-import { fullExamCounts, unitPassed } from "./exam-pass";
+import { fullExamChipsAllowed, fullExamCounts, lessonCounted, unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -80,6 +80,8 @@ import {
   buyItem,
   CHIP_REWARD,
   chipMultiplier,
+  xpMultiplier,
+  pruneLedger,
   earnAmount,
   lessonChipBase,
   effectiveTier,
@@ -226,6 +228,8 @@ export interface MistakeRecord {
   given: string;
   expected: string;
   at: number;
+  /** Сколько раз ошибся в этом задании (старые записи — 1): «Повторяющиеся ошибки» на «Прогрессе». */
+  misses?: number;
 }
 
 export interface ChatMessage {
@@ -364,6 +368,8 @@ export interface FinishOutcome {
    * в этом же действии (пол-сердечка или чипы), итоги показывают то же. null — броска не было.
    */
   perfectDrop: PerfectDrop | null;
+  /** Урок засчитан (отвечено ≥ 70% заданий, #122); у тренировки всегда true. */
+  counted: boolean;
 }
 
 export type BuyResult = { ok: true } | { ok: false; reason: BuyFail };
@@ -600,7 +606,7 @@ function addLevelCases(prev: AppState, next: AppState): AppState {
  * всё умножается на множитель тарифа и бустера. Вызывается в конце действий, дающих XP.
  */
 function settleChips(prev: AppState, next: AppState, extra: { base: number; reason: ChipReason }[] = [], now = Date.now()): AppState {
-  const mult = chipMultiplier(tierOf(next, now), next.boost, now);
+  const mult = chipMultiplier(tierOf(next, now));
   const today = todayKey();
   const goal = next.profile.dailyGoalXp;
   const gains: { amount: number; reason: ChipReason }[] = [];
@@ -868,6 +874,10 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
   const merged: AppState & AppActions = {
     ...current,
     ...p,
+    // Старые записи ошибок — без счётчика: считаем одну ошибку (#122).
+    mistakes: Array.isArray(p.mistakes)
+      ? p.mistakes.filter((m): m is MistakeRecord => !!m && typeof m === "object").map((m) => ({ ...m, misses: isNum(m.misses) && m.misses >= 1 ? Math.floor(m.misses) : 1 }))
+      : current.mistakes,
     achievements: p.achievements === undefined ? current.achievements : cleanAchievements(p.achievements),
     newAchievements: Array.isArray(p.newAchievements) ? p.newAchievements.filter((id): id is string => typeof id === "string").slice(0, 60) : current.newAchievements,
     // Нет поля (сохранение до правил 2) — 0: миграция выполнится один раз (backfillAchievements).
@@ -888,7 +898,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     plan: sanitizePlan(p.plan),
     hearts: sanitizeHearts(p.hearts),
     wallet: sanitizeWallet(p.wallet),
-    ledger: Array.isArray(p.ledger) ? p.ledger.filter((e) => !!e && typeof e.amount === "number").slice(0, 50) : [],
+    ledger: Array.isArray(p.ledger) ? pruneLedger(p.ledger.filter((e) => !!e && typeof e.amount === "number" && typeof e.at === "number"), Date.now()) : [],
     boost: sanitizeBoost(p.boost),
     cosmetics: sanitizeCosmetics(p.cosmetics),
     lessonRuns: sanitizeLessonRuns(p.lessonRuns),
@@ -929,8 +939,10 @@ export const useApp = create<AppState & AppActions>()(
 
       updateProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
 
-      recordAnswer: (rec, xp, lessonId) =>
+      recordAnswer: (rec, xpBase, lessonId) =>
         set((s) => {
+          // Бустер умножает только опыт (#122).
+          const xp = Math.round(xpBase * xpMultiplier(s.boost, Date.now()));
           const today = todayKey();
           const day = s.days[today] ?? emptyDay();
           const first = !rec.retry;
@@ -969,6 +981,7 @@ export const useApp = create<AppState & AppActions>()(
                 given: rec.given,
                 expected: rec.expected,
                 at: Date.now(),
+                misses: (existing?.misses ?? (existing ? 1 : 0)) + 1,
               },
               ...s.mistakes.filter((m) => m.stepId !== rec.stepId),
             ].slice(0, MAX_MISTAKES);
@@ -1007,16 +1020,21 @@ export const useApp = create<AppState & AppActions>()(
         const now = Date.now();
         // Пропущенное задание (например, решение по фото) — уже не «без ошибок».
         const perfect = isPerfectSession(result);
-        const isLesson = result.kind === "lesson" && !!result.lessonId;
+        const rawLesson = result.kind === "lesson" && !!result.lessonId;
+        // Урок с ответами меньше чем на 70% заданий не засчитывается (#122): без чипов, бонуса, отметки «пройден» и серии идеальных.
+        const counted = !rawLesson || lessonCounted(result);
+        const isLesson = rawLesson && counted;
         const prev = isLesson ? s.lessons[result.lessonId!] : undefined;
         // Повтор урока даёт меньше XP (плановое повторение — почти полный). Бонус «без ошибок» — за первый раз.
         const factor = isLesson ? lessonXpFactor(prev, now) : 1;
         // Награда за прохождение — по длине (этап 14, #83): микроурок меньше, практика и повторение больше.
         const size = rewardFactor(result);
-        let bonusXp = result.kind === "lesson" ? scaleXp(Math.round(XP.lessonComplete * size), factor) : Math.round(XP.drillComplete * size);
+        let bonusXp = !counted ? 0 : result.kind === "lesson" ? scaleXp(Math.round(XP.lessonComplete * size), factor) : Math.round(XP.drillComplete * size);
         if (result.kind === "lesson" && perfect && !prev) bonusXp += XP.perfectLesson;
         // «Проверить себя» — короче урока: бонус за прохождение вдвое меньше.
         if (result.kind === "lesson" && result.via === "check") bonusXp = Math.round(bonusXp / 2);
+        // Бустер умножает только опыт (#122).
+        bonusXp = Math.round(bonusXp * xpMultiplier(s.boost, now));
 
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
@@ -1049,6 +1067,8 @@ export const useApp = create<AppState & AppActions>()(
           // Серия идеальных уроков (R2): растёт и сбрасывается только первыми прохождениями; тренировки её не трогают.
           next = { ...next, perfectRun: nextPerfectRun(s.perfectRun, { perfect, first: !prev }) };
         }
+        // Незасчитанный урок: незаконченное прохождение всё равно закрыто — «Продолжить» не нужен.
+        if (rawLesson && !counted && (result.via ?? "learn") === "learn") next.lessonRuns = dropRun(next.lessonRuns, result.lessonId!);
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
         // Отметка оплаты (E7) снимается, только когда закончена именно оплаченная тренировка с экрана /drill (ключ совпал):
         // квиз в чате тоже kind "drill", но ключа у него нет — выход из оплаченной тренировки и квиз её отметку не трогают.
@@ -1063,10 +1083,10 @@ export const useApp = create<AppState & AppActions>()(
 
         // Чипы (#105): урок 3 (повтор 1). Тренировка и игры чипов не дают.
         const extra: { base: number; reason: ChipReason }[] = [];
-        const chipMult = chipMultiplier(tier, next.boost, now);
+        const chipMult = chipMultiplier(tier);
         let lessonGain = 0;
         if (isLesson) {
-          extra.push({ base: lessonChipBase(!prev), reason: "lesson" });
+          if (lessonChipBase(!prev) > 0) extra.push({ base: lessonChipBase(!prev), reason: "lesson" });
           lessonGain = earnAmount(lessonChipBase(!prev), chipMult);
         }
         // «Сюрприз за идеальный урок» (этап 16В): идеальное первое прохождение урока и мини-тест группы на 100%.
@@ -1083,7 +1103,7 @@ export const useApp = create<AppState & AppActions>()(
         }
         next = settleChips(s, next, extra, now);
         set(next);
-        return { bonusXp, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectDrop };
+        return { bonusXp, perfect: isLesson && perfect, firstPass: isLesson && !prev, lessonChips: lessonGain, perfectDrop, counted };
       },
 
       completeLessons: (lessonIds, via, accuracy) =>
@@ -1466,7 +1486,7 @@ export const useApp = create<AppState & AppActions>()(
         const s = get();
         const prev = s.codeTasks[task.id];
         const first = ok && !prev?.solved;
-        const xp = first ? CODE_XP[task.level] : 0;
+        const xp = first ? Math.round(CODE_XP[task.level] * xpMultiplier(s.boost, Date.now())) : 0;
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
         // #66: в точность — только первая попытка задачи; #67: самостоятельный успех — решена с первой попытки.
@@ -1503,7 +1523,9 @@ export const useApp = create<AppState & AppActions>()(
       recordGame: (gameId, result, mode = "normal") => {
         const s = get();
         const key = gameStatKey(gameId, mode);
-        const reward = gameReward(result, key ? s.games[key]?.best : undefined, mode);
+        const baseReward = gameReward(result, key ? s.games[key]?.best : undefined, mode);
+        // Бустер умножает только опыт (#122).
+        const reward = { ...baseReward, xp: Math.round(baseReward.xp * xpMultiplier(s.boost, Date.now())) };
         const today = todayKey();
         const day = s.days[today] ?? emptyDay();
         let skills = s.skills;
@@ -1558,7 +1580,17 @@ export const useApp = create<AppState & AppActions>()(
           for (const w of [...wrong].reverse()) {
             const existing = mistakes.find((m) => m.stepId === w.stepId);
             mistakes = [
-              { id: existing?.id ?? uid(), stepId: w.stepId, lessonId: w.lessonId, skill: w.skill, prompt: w.prompt, given: w.given, expected: w.expected, at: summary.at },
+              {
+                id: existing?.id ?? uid(),
+                stepId: w.stepId,
+                lessonId: w.lessonId,
+                skill: w.skill,
+                prompt: w.prompt,
+                given: w.given,
+                expected: w.expected,
+                at: summary.at,
+                misses: isNew ? (existing?.misses ?? (existing ? 1 : 0)) + 1 : (existing?.misses ?? 1),
+              },
               ...mistakes.filter((m) => m.stepId !== w.stepId),
             ];
           }
@@ -1634,7 +1666,7 @@ export const useApp = create<AppState & AppActions>()(
           // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
           const examChips: { base: number; reason: ChipReason }[] = [];
           if (isNew && answered > 0) {
-            if (summary.kind === "full" && fullExamCounts(answered, asked)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
+            if (summary.kind === "full" && fullExamCounts(answered, asked) && fullExamChipsAllowed(s.exams, summary)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
             else if (summary.kind === "unit" && unitPassed(summary.points, summary.maxPoints)) {
               const passedBefore = s.exams.some((e) => e.id !== summary.id && e.kind === "unit" && e.unit === summary.unit && unitPassed(e.points, e.maxPoints));
               if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });
