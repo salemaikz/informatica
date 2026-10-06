@@ -11,6 +11,7 @@ export const DOCK_PAGES: readonly string[] = [
   "/learn",
   "/plan",
   "/practice",
+  "/duel",
   "/exam",
   "/code",
   "/history",

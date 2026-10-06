@@ -18,7 +18,8 @@ export function studyKindOf(pathname: string | null | undefined): StudyKind | nu
   const p = pathname ?? "";
   if (p.startsWith("/lesson/")) return "lesson";
   if (p === "/drill" || p.startsWith("/drill/")) return "drill";
-  if (p.startsWith("/game/")) return "game";
+  // Матч дуэли — как игра (этап 16Д).
+  if (p.startsWith("/game/") || p === "/duel/play") return "game";
   if (p.startsWith("/exam/run")) return "exam";
   if (p === "/code" || p.startsWith("/code/")) return "code";
   if (p === "/theory" || p.startsWith("/theory/")) return "theory";

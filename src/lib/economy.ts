@@ -209,16 +209,20 @@ export const canAfford = (v: HeartsView, cost: number): boolean => v.unlimited |
 // ---------- Плата за вход (#40) ----------
 
 /** Что стоит сердечек. Шпаргалка, чат и песочница кода — бесплатно; тренировка (любой режим /drill, в том числе «Чтение кода» и контекстные задания практикума) — drill; задача в редакторе кода (/code/<язык>/<задача>) — code. */
-export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory" | "drill" | "code";
+export type EntryKind = "lesson" | "check" | "exam" | "checkpoint" | "extern" | "game" | "theory" | "drill" | "code" | "duel";
 
 /**
  * Цена входа в сердечках (этап 16Г, #120: одно занятие — одно сердечко): урок 1, «Проверить себя» 1, пробный ЕНТ любого вида 1,
  * тест по разделу 1, экстерн (зачёт раздела тестом) 1, игра 1 — каждый запуск, в том числе «ещё раз»,
  * чтение конспекта урока (`/theory/<id>`) 0,5 — когда платить, решает lib/theory-pay.ts,
  * тренировка (`/drill`: умная, навык, тема, ошибки, повторение, практика и др.) 1 — при открытии,
- * задача практикума кода 1 — при первом «Запустить» или «Проверить» (песочница бесплатна).
+ * задача практикума кода 1 — при первом «Запустить» или «Проверить» (песочница бесплатна),
+ * дуэль 1 — в конце обратного отсчёта, реванш — снова 1 (этап 16Д, docs/specs/duels.md §5).
  */
-export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 1, extern: 1, game: 1, theory: 0.5, drill: 1, code: 1 };
+export const ENTRY_COST: Record<EntryKind, number> = { lesson: 1, check: 1, exam: 1, checkpoint: 1, extern: 1, game: 1, theory: 0.5, drill: 1, code: 1, duel: 1 };
+
+/** Бонус опыта за победу в дуэли (docs/specs/duels.md §8): над человеком +5, над ботом +2 (сверх XP.correct за верные). */
+export const DUEL_WIN_XP = { human: 5, bot: 2 } as const;
 
 /** Вход в урок в режиме «Учиться» — 1 («большой урок за 2» убран, этап 16Г). */
 export function lessonCost(): number {

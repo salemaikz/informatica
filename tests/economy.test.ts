@@ -386,7 +386,7 @@ describe("сердечки с шагом 0,5 (этап 15)", () => {
 
 describe("плата за вход (#40)", () => {
   it("одно занятие — одно сердечко (#120): урок, проверка, пробник, тест по разделу, экстерн, игра, тренировка, задача кода — 1; теория урока — 0,5", () => {
-    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 1, extern: 1, game: 1, theory: 0.5, drill: 1, code: 1 });
+    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 1, extern: 1, game: 1, theory: 0.5, drill: 1, code: 1, duel: 1 });
     expect(entryCost("theory")).toBe(0.5);
     // этап 16В: любая тренировка стоит сердечко (решение F), у «урока игрой» цена урока не меняется
     expect(entryCost("drill")).toBe(1);

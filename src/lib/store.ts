@@ -14,6 +14,7 @@ import type {
   SessionResult,
   Theme,
   SchoolDirection,
+  SkillId,
   Track,
 } from "./types";
 import { achievementById, bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
@@ -38,7 +39,10 @@ import {
   type DropDay,
   type PerfectDrop,
 } from "./perfect";
-import { checkEntryKey, dropEntryPaid, entryPaidActive, lessonEntryKey, putEntryPaid, sanitizeEntryPaid, type EntryPaid } from "./entry-paid";
+import { checkEntryKey, dropEntryPaid, duelEntryKey, entryPaidActive, lessonEntryKey, putEntryPaid, sanitizeEntryPaid, type EntryPaid } from "./entry-paid";
+import { botAdjAfter, duelOutcome, duelXpBase, EMPTY_DUELS, pushDuel, sanitizeDuels, type DuelOppKind, type DuelRecord, type DuelSideStat, type DuelsState } from "./duel/record";
+import type { DuelOutcome } from "./duel/bot";
+import type { DuelModeId } from "./duel/types";
 import { fullExamChipsAllowed, fullExamCounts, lessonCounted, unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
@@ -370,6 +374,27 @@ export interface AppState {
   codeTasks: Record<string, CodeTaskStat>;
   /** Узлы курса 3.0 (этап 14): «practice:<урок>» / «recap:<раздел>» → прохождения и мини-тест (lib/course-nodes.ts). */
   courseNodes: Record<string, CourseNodeStat>;
+  /** Дуэли «Жекпе-жек» (этап 16Д, lib/duel/record.ts): история (до 50) и «резинка» бота. Меняет только recordDuel. */
+  duels: DuelsState;
+}
+
+/** Итог дуэли для стора (recordDuel): обе стороны, попытки по навыкам и ошибки ученика. */
+export interface DuelFinish {
+  /** id записи истории (уникален для каждого сыгранного матча). */
+  id: string;
+  /** id матча: по нему снимается оплаченный вход (duelEntryKey). */
+  matchId?: string;
+  mode: DuelModeId;
+  topic?: string;
+  opp: DuelOppKind;
+  oppName?: string;
+  oppLevel?: number;
+  you: DuelSideStat;
+  rival: DuelSideStat;
+  /** Ответы ученика по навыкам (тайм-аут — неверно): в освоение, как попытки мини-игры. */
+  attempts: { skill: SkillId; correct: boolean }[];
+  /** Неверные ответы — в «Ошибки», как у пробного ЕНТ. */
+  wrong: WrongItem[];
 }
 
 /** Итог урока/тренировки для экрана результатов. */
@@ -532,6 +557,12 @@ export interface AppActions {
    * XP за пробник не начисляется — это проверка, а не тренировка.
    */
   recordExam: (summary: ExamSummary, skillScores: Record<string, number[]>, wrong?: WrongItem[]) => void;
+  /**
+   * Итог дуэли (этап 16Д): XP.correct за верный ответ и бонус за победу (с бустером), освоение — как у мини-игры,
+   * ошибки — в «Ошибки», запись в историю, «резинка» бота, снятие оплаченного входа. Чипов за матч нет (#105).
+   * Повтор того же id ничего не начисляет (duplicate: true).
+   */
+  recordDuel: (finish: DuelFinish) => { xp: number; result: DuelOutcome; record: DuelRecord; duplicate: boolean };
   resetProgress: () => void;
 }
 
@@ -639,6 +670,7 @@ const initialState: AppState = {
   chats: [],
   codeTasks: {},
   courseNodes: {},
+  duels: EMPTY_DUELS,
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -976,6 +1008,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
     perfectRun: sanitizePerfectRun(p.perfectRun),
     pendingCases: sanitizePendingCases(p.pendingCases),
     courseNodes: sanitizeCourseNodes(p.courseNodes),
+    duels: sanitizeDuels(p.duels),
     history: sanitizeHistory(p.history),
     chats: sanitizeChats(p.chats),
     codeTasks:
@@ -1634,6 +1667,58 @@ export const useApp = create<AppState & AppActions>()(
         next = { ...next, ...evaluate(next) };
         set(settleChips(s, next));
         return reward;
+      },
+
+      recordDuel: (f) => {
+        const s = get();
+        const dup = s.duels.history.find((r) => r.id === f.id);
+        if (dup) return { xp: 0, result: dup.result, record: dup, duplicate: true };
+        const now = Date.now();
+        const today = todayKey();
+        const result = duelOutcome(f.you, f.rival);
+        // Бустер умножает только опыт (#122).
+        const xp = Math.round(duelXpBase(f.you.correct, result, f.opp) * xpMultiplier(s.boost, now));
+        // Освоение — как у мини-игры (#67): навык с ≥ 3 ответами, одна запись на навык, не самостоятельный успех.
+        const { skillScores } = gameReward({ score: 0, correct: f.you.correct, total: f.attempts.length, attempts: f.attempts }, undefined, "normal");
+        let skills = s.skills;
+        for (const [skill, score] of Object.entries(skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score, now, { day: today }) };
+        // Ошибки — в общую работу над ошибками (как у пробного ЕНТ): одна запись на задание, счётчик повторов.
+        let mistakes = s.mistakes;
+        let missLog = s.missLog;
+        for (const w of [...f.wrong].reverse()) {
+          const existing = mistakes.find((m) => m.stepId === w.stepId);
+          missLog = bumpMissLog(missLog, w.stepId, w.prompt, w.lessonId, now);
+          mistakes = [
+            { id: existing?.id ?? uid(), stepId: w.stepId, lessonId: w.lessonId, skill: w.skill, prompt: w.prompt, given: w.given, expected: w.expected, at: now, misses: missLog[w.stepId]?.n ?? 1 },
+            ...mistakes.filter((m) => m.stepId !== w.stepId),
+          ];
+        }
+        mistakes = mistakes.slice(0, MAX_MISTAKES);
+        const record: DuelRecord = { id: f.id, at: now, mode: f.mode, opp: f.opp, result, you: f.you, rival: f.rival, xp };
+        if (f.topic) record.topic = f.topic;
+        if (f.opp !== "bot" && f.oppName) record.oppName = f.oppName;
+        if (f.opp !== "bot" && f.oppLevel) record.oppLevel = f.oppLevel;
+        const duels: DuelsState = {
+          history: pushDuel(s.duels.history, record),
+          botAdj: f.opp === "bot" ? botAdjAfter(s.duels, result) : s.duels.botAdj,
+        };
+        const day = s.days[today] ?? emptyDay();
+        const answered = f.you.answered;
+        let next: AppState = {
+          ...s,
+          xp: s.xp + xp,
+          skills,
+          mistakes,
+          missLog,
+          duels,
+          entryPaid: f.matchId ? dropEntryPaid(s.entryPaid, [duelEntryKey(f.matchId)]) : s.entryPaid,
+          streak: answered > 0 ? bumpStreak(s.streak, today) : s.streak,
+          // Дуэль считается как игра (#66): в точность дня не входит.
+          days: { ...s.days, [today]: { ...day, xp: day.xp + xp, games: (day.games ?? 0) + answered, gameCorrect: (day.gameCorrect ?? 0) + f.you.correct } },
+        };
+        next = { ...next, ...evaluate(next) };
+        set(settleChips(s, next));
+        return { xp, result, record, duplicate: false };
       },
 
       recordExam: (summary, skillScores, wrong = []) =>

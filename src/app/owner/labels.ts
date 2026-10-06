@@ -26,6 +26,7 @@ const HEARTS_WHERE: Dict = {
   drill: "тренировка",
   theory: "теория",
   code: "практикум кода",
+  duel: "дуэль",
 };
 const CHIP_OUT_WHERE: Dict = { ai: "ответ ИИ", shop: "магазин", cosmetic: "косметика", hearts: "пополнение сердечек" };
 const SHORT_NEED: Dict = { chips: "не хватало чипов", hearts: "не хватало сердечек" };

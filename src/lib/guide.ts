@@ -208,6 +208,8 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
     steps: [{ id: "hi", targets: ["tutor-free"], text: "guide.tutor.hi", mood: "happy", action: "next", orElse: { text: "guide.tutor.hi", mood: "happy" } }],
   },
   "page-school": { id: "page-school", steps: [{ id: "grades", targets: ["school-grades"], text: "guide.school.grades", mood: "happy", action: "next" }] },
+  // Этап 16Д: хаб дуэлей — что такое дуэль (бот всегда помечен) у кнопки Бита; друзья и живые соперники — скоро.
+  "page-duel": two("page-duel", ["duel-bot", "guide.duel.what"], ["duel-soon", "guide.duel.soon"]),
 };
 
 /** Сцены страниц: точный путь → сцена (подстраницы вроде /tutor/123 — без сцены). */
@@ -218,6 +220,7 @@ const PAGE_SCENES: Readonly<Record<string, SceneId>> = {
   "/shop": "page-shop",
   "/profile": "page-profile",
   "/tutor": "page-tutor",
+  "/duel": "page-duel",
 };
 
 export interface SceneCtx {

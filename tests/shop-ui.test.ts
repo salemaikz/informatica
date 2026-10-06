@@ -277,7 +277,8 @@ describe("цены и «Полный запас» в магазине (#60)", ()
 describe("«Как работают сердечки»: числа из констант", () => {
   it("цены входа: урок 1, тренировка 1, «Проверить себя» 1, пробный ЕНТ 1, тест по разделу 1, игра 1, теория 0,5, задача практикума кода 1 (без «большого урока» и экстерна)", () => {
     const rules = Object.fromEntries(entryRules().map((r) => [r.id, r.cost]));
-    expect(rules).toEqual({ lesson: 1, drill: 1, check: 1, exam: 1, checkpoint: 1, game: 1, theory: 0.5, code: 1 });
+    expect(rules).toEqual({ lesson: 1, drill: 1, check: 1, exam: 1, checkpoint: 1, game: 1, duel: 1, theory: 0.5, code: 1 });
+    expect(rules.duel).toBe(ENTRY_COST.duel);
     expect(rules.code).toBe(ENTRY_COST.code);
     expect(rules.drill).toBe(ENTRY_COST.drill);
     expect(rules.theory).toBe(ENTRY_COST.theory);

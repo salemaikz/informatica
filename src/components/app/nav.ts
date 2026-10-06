@@ -11,6 +11,7 @@ import {
   ScrollText,
   Search,
   Store,
+  Swords,
   Target,
   UserRound,
   type LucideIcon,
@@ -56,9 +57,11 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/practice",
     label: "nav.practice",
     icon: Dumbbell,
-    match: ["/practice", "/drill", "/game", "/exam", "/code", "/history"],
+    match: ["/practice", "/drill", "/game", "/duel", "/exam", "/code", "/history"],
     subs: [
       { id: "train", href: "/practice", label: "nav2.train", icon: Dumbbell, match: ["/practice", "/drill", "/game"] },
+      // Дуэли «Жекпе-жек» (этап 16Д): хаб и экран матча /duel/play (полноэкранный, вне оболочки).
+      { id: "duel", href: "/duel", label: "nav2.duel", icon: Swords, match: ["/duel"] },
       { id: "exam", href: "/exam", label: "nav2.exam", icon: Target, match: ["/exam"], ent: true },
       { id: "code", href: "/code", label: "nav2.code", icon: Code2, match: ["/code"] },
       { id: "history", href: "/history", label: "nav2.history", icon: History, match: ["/history"] },

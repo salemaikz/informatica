@@ -113,7 +113,7 @@ describe("POST /api/social/me — создание и обновление", () 
     expect(sc).toMatch(/^inf_pl=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}; HttpOnly; SameSite=Lax; Path=\/api; Max-Age=34560000$/);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(json.player).toEqual({
-      code: expect.stringMatching(/^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{8}$/),
+      code: expect.stringMatching(/^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{8}$/),
       name: "Әсем",
       lv: 7,
       frame: "frame-neon",

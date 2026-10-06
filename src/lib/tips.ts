@@ -18,6 +18,7 @@ export const TIP_IDS = [
   "page-school",
   "page-shop",
   "page-profile",
+  "page-duel", // этап 16Д: хаб дуэлей — что такое дуэль, бот помечен, друзья скоро
 ] as const;
 
 export type TipId = (typeof TIP_IDS)[number];

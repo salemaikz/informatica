@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, ScanSearch, Timer, Trophy } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Code2, Repeat, RotateCcw, ScanSearch, Swords, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { skillById } from "@/content/skills";
@@ -86,6 +86,24 @@ export default function PracticePage() {
           </span>
         </Link>
       </div>
+
+      {/* Дуэли «Жекпе-жек» (этап 16Д): матч с Битом на одних и тех же заданиях. */}
+      <Link
+        href="/duel"
+        className="flex items-center gap-4 rounded-3xl border-2 border-primary/30 bg-surface p-4 hover:bg-surface-2 active:translate-y-0.5"
+      >
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <Swords size={26} strokeWidth={2.4} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold">
+            {t("duel.title")}
+            <HeartCost n={ENTRY_COST.duel} />
+          </span>
+          <span className="block text-sm font-semibold text-muted">{t("duel.practice.desc")}</span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-muted" />
+      </Link>
 
       {/* История тестов: результаты и ошибки каждого теста. */}
       <HistoryPracticeCard />

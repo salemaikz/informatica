@@ -98,9 +98,13 @@ describe("формат", () => {
   });
 
   it("эмодзи, невидимые, комбинирующие и знаки — chars", () => {
-    for (const s of ["Аня😀", "Ан​я", "Ан‮я", "Аня!", "a.b", "Ann_a", "Ann@", "Аня#1", "Ан́я", "-Аня", "Аня-", "Ан--я", "Ан - я"]) {
+    for (const s of ["Аня😀", "Ан​я", "Ан‮я", "Аня!", "a.b", "Ann_a", "Аня#1", "Ан́я", "-Аня", "Аня-", "Ан--я"]) {
       expect(code(s), s).toBe("chars");
     }
+    // «@» — признак контакта (общий формат, src/lib/moderation/name-format.ts).
+    expect(code("Ann@")).toBe("contact");
+    // Пробелы вокруг дефиса общий формат убирает: «Ан - я» → «Ан-я».
+    expect(checkNameFormat("Ан - я")).toEqual({ ok: true, name: "Ан-я" });
   });
 
   it("не больше 4 цифр (телефон не пройдёт)", () => {
@@ -191,12 +195,18 @@ describe("код друга без стоп-корней", () => {
     }
     expect(seen.size).toBe(300);
     expect(normalizeFriendCode(" k7qf-29xm ")).toBe("K7QF29XM");
-    expect(normalizeFriendCode("K7QF-29X0")).toBeNull(); // 0 нет в алфавите
+    expect(normalizeFriendCode("K7QF-29X!")).toBeNull(); // знака нет в алфавите
     expect(formatFriendCode("K7QF29XM")).toBe("K7QF-29XM");
-    // Код с корнем внутри перевыпускается: подменный источник сначала даёт «FCKZZZZZ», потом «ABCDEFGH».
-    const idx = (s: string) => [...s].map((ch) => FRIEND_CODE_ALPHABET.indexOf(ch));
-    const calls = [idx("FCKZZZZZ22222222"), idx("ABCDEFGH22222222")];
-    const rand = (n: number) => Uint8Array.from(calls.shift() ?? idx("2".repeat(n)));
+    // Код с корнем внутри перевыпускается: подменный источник сначала даёт байты «FCKZZZZZ», потом «ABCDEFGH»
+    // (общий формат — src/lib/friend-code.ts: 5 байтов = 8 знаков по 5 бит).
+    const bytesOf = (code: string) => {
+      let acc = 0;
+      for (const ch of code) acc = acc * 32 + FRIEND_CODE_ALPHABET.indexOf(ch);
+      return Uint8Array.from({ length: 5 }, (_, k) => Math.floor(acc / 256 ** (4 - k)) % 256);
+    };
+    expect(hasBlockedStem("FCKZZZZZ")).toBe(true);
+    const calls = [bytesOf("FCKZZZZZ"), bytesOf("ABCDEFGH")];
+    const rand = () => calls.shift() ?? bytesOf("22222222");
     expect(newFriendCode(rand)).toBe("ABCDEFGH");
   });
 });
