@@ -22,8 +22,11 @@ export function FriendsCard({ home }: { home: HomeData | null }) {
   const { t } = useT();
   const show = useShowName();
   const [top, setTop] = useState<TopRowView[] | null>(null);
-  const [seenAt, setSeenAt] = useState(readInboxSeen);
   const hasPlayer = !!home?.player;
+  // Отметка «просмотрено» — своя у каждого игрока (код друга); профиль пришёл позже — читаем отметку для него.
+  const code = home?.player?.code ?? "";
+  const [seen, setSeen] = useState<{ code: string; at: number } | null>(null);
+  const seenAt = seen && seen.code === code ? seen.at : readInboxSeen(code);
 
   useEffect(() => {
     if (!hasPlayer) return;
@@ -38,8 +41,8 @@ export function FriendsCard({ home }: { home: HomeData | null }) {
   const fresh = unseenCount(inbox, seenAt);
   const markSeen = () => {
     const at = seenAfter(inbox, seenAt);
-    writeInboxSeen(at);
-    setSeenAt(at);
+    writeInboxSeen(code, at);
+    setSeen({ code, at });
   };
   const requests = home?.requests ?? 0;
   return (

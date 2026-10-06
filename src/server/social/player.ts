@@ -7,7 +7,8 @@ import { checkName, type NameFail } from "@/server/moderation/check-name";
 import { kvRateLimit } from "@/server/rate-limit";
 import { cookieHeader, newSignedId, readSignedCookie, signedValue } from "@/server/signed-id";
 import { newFriendCode } from "@/server/social/code";
-import type { KvOp } from "@/server/kv";
+import type { KvOp, ZEntry } from "@/server/kv";
+import { serverNow } from "@/server/clock";
 import { namesEnabled, requireSocialSecret, type CountingKv } from "@/server/social/kv";
 
 // Профиль игрока соцчасти (docs/specs/duels.md §5–§7, Ф2). Личность до аккаунтов — pid в подписанной cookie `inf_pl`
@@ -380,12 +381,26 @@ export interface HomeView {
   requests: number;
 }
 
+/** Входящая заявка в друзья (pl:frq — ZSET pid → время) живёт 14 дней от СВОЕГО времени. */
+export const REQUEST_TTL_SEC = 14 * 86_400;
+
+/** Заявка ещё действует. */
+export const freshRequest = (at: number | null | undefined, now: number): boolean => typeof at === "number" && at > now - REQUEST_TTL_SEC * 1000;
+
+/** Действующие входящие заявки (pid) по записям ZSET, новые первыми. */
+export function freshRequests(entries: readonly ZEntry[], now: number): string[] {
+  return entries
+    .filter((e) => freshRequest(e.score, now))
+    .sort((a, b) => b.score - a.score)
+    .map((e) => e.member);
+}
+
 /** Профиль + входящие + число заявок — одним конвейером из 3 команд. */
 export async function loadHome(kv: CountingKv, pid: string): Promise<HomeView> {
   const [h, inbox, requests] = await kv.pipeline([
     { op: "hgetAllStr", key: keys.profile(pid) },
     { op: "lrange", key: keys.inbox(pid), start: 0, stop: 19 },
-    { op: "scard", key: keys.requests(pid) },
+    { op: "zrange", key: keys.requests(pid), start: 0, stop: -1 },
   ] as const);
   const player = profileFromHash(h);
   if (!player) return { player: null, inbox: [], requests: 0 };
@@ -397,5 +412,5 @@ export async function loadHome(kv: CountingKv, pid: string): Promise<HomeView> {
       return [];
     }
   });
-  return { player, inbox: items, requests };
+  return { player, inbox: items, requests: freshRequests(requests, serverNow()).length };
 }

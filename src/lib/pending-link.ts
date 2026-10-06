@@ -1,10 +1,11 @@
 // Ссылка, ради которой человек пришёл (#73): вызов друга `/exam/run?kind&seed&ch=…`, а с Ф3 дуэлей — приглашение в друзья
-// `/f/<token>` и вызов на дуэль `/duel/c/<id>`. Новый ученик сначала проходит онбординг —
+// `/f/<token>`, вызов на дуэль `/duel/c/<id>` и комната живой дуэли `/duel/r/<код>` (Ф4). Новый ученик сначала проходит онбординг —
 // ссылку запоминаем на час и открываем сразу после него. Адрес из окна недоверенный: принимаем только вызов на пробник
 // с валидными kind, seed и ch и пересобираем его из разобранных полей (защита от открытого редиректа и мусора в адресе).
 // Чистая логика без React: tests/pending-link.test.ts.
 
 import { examLink, parseRunParams } from "@/components/exam/logic";
+import { normalizeRoomCode, roomPath } from "@/lib/duel/live";
 
 /** Ключ в localStorage (отдельно от прогресса: сброс прогресса его не касается, срок жизни — час). */
 export const PENDING_LINK_KEY = "informatica:pending-link";
@@ -14,13 +15,18 @@ export const PENDING_LINK_TTL_MS = 60 * 60 * 1000;
 /** Ссылки соцчасти (Ф3 дуэлей): приглашение в друзья /f/<token> и вызов на дуэль /duel/c/<id> — без query и хвостов. */
 const SOCIAL_LINKS = [/^\/f\/[A-Za-z0-9_-]{22}$/, /^\/duel\/c\/[A-Za-z0-9_-]{10}$/];
 
-/** Каноничный адрес вызова или null, если это не вызов на пробник и не ссылка соцчасти. */
+/** Каноничный адрес вызова или null, если это не вызов на пробник, не ссылка соцчасти и не комната живой дуэли (Ф4). */
 export function pendingLinkOf(href: unknown): string | null {
-  if (typeof href === "string" && href.length <= 300) {
-    const path = href.split(/[?#]/)[0];
-    if (SOCIAL_LINKS.some((re) => re.test(path))) return path;
+  if (typeof href !== "string" || href.length > 300) return null;
+  const path = href.split(/[?#]/)[0];
+  if (SOCIAL_LINKS.some((re) => re.test(path))) return path;
+  // Комната живой дуэли с другом: /duel/r/<код из 6 знаков> — только сам код, без хвостов.
+  const room = /^\/duel\/r\/([A-Za-z0-9-]{1,12})$/.exec(href);
+  if (room) {
+    const code = normalizeRoomCode(room[1]);
+    return code ? roomPath(code) : null;
   }
-  if (typeof href !== "string" || href.length > 300 || !href.startsWith("/exam/run?")) return null;
+  if (!href.startsWith("/exam/run?")) return null;
   let url: URL;
   try {
     url = new URL(href, "http://x.invalid");

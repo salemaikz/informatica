@@ -20,7 +20,9 @@ import { MODE_ICON, MODE_TITLE, bandLabel } from "./mode-meta";
 import { RivalAvatar, RivalChip, useRivalName, type Rival } from "./rival";
 
 // Экран «VS» и отсчёт 3-2-1 перед матчем (этап 16Д): карточка ученика (имя из профиля, уровень, надетые рамка и титул)
-// против Бита (маскот, чип «бот», полоса уровня). Сердечко списывает DuelPlay в конце отсчёта (onGo — из таймера).
+// против соперника (rival.tsx): Бит (маскот, чип «бот», полоса уровня), запись друга (чип «запись»), запись своего вызова
+// или живой игрок (Ф4: карточка с сервера). Сердечко списывает DuelPlay / ChallengePlay / LivePlay в конце отсчёта (onGo — из таймера). Живой матч: отсчёт привязан к серверному старту (goAt — локальное
+// время старта), пока соперник не готов — вместо отсчёта waitText.
 
 /** Сколько показываем «VS» до отсчёта, мс. */
 export const VS_INTRO_MS = 1200;
@@ -35,16 +37,22 @@ export function VsScreen({
   onGo,
   onClose,
   rival,
+  goAt,
+  waitText,
 }: {
   mode: DuelModeId;
   topicLabel?: string;
   band: DuelBand;
-  /** Соперник (Ф3): запись друга или запись своего вызова; по умолчанию — Бит. */
+  /** Соперник: запись друга, запись своего вызова или живой игрок; по умолчанию — Бит. */
   rival?: Rival;
   /** false — отсчёт стоит (например, открыто окно «Сердечки закончились»). */
   running: boolean;
   onGo: () => void;
   onClose: () => void;
+  /** Когда «Старт!» по часам устройства (живой матч); нет — VS 1,2 с и отсчёт 3-2-1 от показа. */
+  goAt?: number;
+  /** Отсчёт ещё не идёт (running=false): что показать вместо него. */
+  waitText?: string;
 }) {
   const { t } = useT();
   const reduce = useReduceMotion();
@@ -65,19 +73,23 @@ export function VsScreen({
   useEffect(() => {
     if (!running) return;
     const timers: number[] = [];
-    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
-    [3, 2, 1].forEach((n, k) =>
-      at(VS_INTRO_MS + k * COUNT_STEP_MS, () => {
+    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, Math.max(0, ms)));
+    // Живой матч: «Старт!» ровно в goAt; опоздали к числу — оно пропускается.
+    const base = goAt != null ? goAt - Date.now() - 3 * COUNT_STEP_MS : VS_INTRO_MS;
+    [3, 2, 1].forEach((n, k) => {
+      const ms = base + k * COUNT_STEP_MS;
+      if (goAt != null && ms < -COUNT_STEP_MS / 2) return;
+      at(ms, () => {
         setCount(n);
         if (sound) playSound("tap");
-      }),
-    );
-    at(VS_INTRO_MS + 3 * COUNT_STEP_MS, () => {
+      });
+    });
+    at(base + 3 * COUNT_STEP_MS, () => {
       setCount(0);
       goRef.current();
     });
     return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [running, sound]);
+  }, [running, sound, goAt]);
 
   const Icon = MODE_ICON[mode];
   return (
@@ -104,14 +116,18 @@ export function VsScreen({
           </div>
           <span className="self-center text-sm font-black uppercase text-muted">{t("duel.vs")}</span>
           {rival && rival.kind !== "bot" ? (
-            <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")} data-testid="duel-vs-rival">
+            <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")}
+              data-testid={rival.kind === "human" ? "duel-opp-card" : "duel-vs-rival"}
+            >
               <span className="flex h-[75px] w-[75px] items-center justify-center">
                 <RivalAvatar rival={rival} size={60} />
               </span>
-              <p className="line-clamp-3 w-full font-extrabold [overflow-wrap:anywhere]">{rivalName(rival)}</p>
+              <p className="line-clamp-3 w-full font-extrabold [overflow-wrap:anywhere]" data-testid={rival.kind === "human" ? "duel-opp-name" : undefined}>
+                {rivalName(rival)}
+              </p>
               <RivalChip rival={rival} />
-              {rival.kind !== "solo" && <LevelBadge level={rival.card.lv} size="sm" />}
-              {rival.kind !== "solo" && <TitleTag title={rival.card.title} size="sm" className="max-w-full" />}
+              {rival.kind !== "solo" && rival.card && <LevelBadge level={rival.card.lv} size="sm" />}
+              {rival.kind !== "solo" && rival.card?.title && <TitleTag title={rival.card.title} size="sm" className="max-w-full" />}
             </div>
           ) : (
             <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")}>
@@ -128,6 +144,11 @@ export function VsScreen({
         </div>
 
         <div className="flex min-h-28 flex-1 items-center justify-center" aria-live="polite">
+          {count === null && !running && waitText && (
+            <p className="font-bold text-muted motion-safe:animate-pulse" role="status" data-testid="duel-vs-wait">
+              {waitText}
+            </p>
+          )}
           {count !== null && (
             <span key={count} className={cn("font-black tabular-nums text-primary", count === 0 ? "text-4xl" : "text-7xl", !reduce && "animate-pop")}>
               {count === 0 ? t("duel.go") : count}
@@ -135,9 +156,11 @@ export function VsScreen({
           )}
         </div>
 
-        <p className="text-center text-xs font-semibold text-muted">
-          {t(rival?.kind === "ghost" ? "duel.ch.ghostNote" : rival?.kind === "solo" ? "duel.rec.note" : "duel.bot.note")}
-        </p>
+        {rival?.kind !== "human" && (
+          <p className="text-center text-xs font-semibold text-muted">
+            {t(rival?.kind === "ghost" ? "duel.ch.ghostNote" : rival?.kind === "solo" ? "duel.rec.note" : "duel.bot.note")}
+          </p>
+        )}
         {!hearts.unlimited && (
           <p className="flex items-center gap-2 rounded-2xl bg-heart-soft px-3 py-2 text-sm font-bold text-ink-heart">
             <Heart size={16} fill="currentColor" className="shrink-0" aria-hidden />

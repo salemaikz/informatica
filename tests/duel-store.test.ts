@@ -342,7 +342,23 @@ describe("Ф3: отметка «просмотрено» входящих (lib/s
     expect(seenAfter(items, 0)).toBe(300);
     expect(seenAfter(items, 500)).toBe(500);
     expect(seenAfter([], 7)).toBe(7);
-    expect(readInboxSeen()).toBe(0);
-    expect(() => writeInboxSeen(1)).not.toThrow();
+    expect(readInboxSeen("K7QF29XM")).toBe(0);
+    expect(() => writeInboxSeen("K7QF29XM", 1)).not.toThrow();
+    expect(readInboxSeen("")).toBe(0);
+  });
+
+  it("отметка своя у каждого игрока (код друга): другой профиль на устройстве её не наследует", async () => {
+    const { readInboxSeen, writeInboxSeen } = await import("@/lib/social/inbox-seen");
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    try {
+      writeInboxSeen("K7QF29XM", 500);
+      expect(readInboxSeen("K7QF29XM")).toBe(500);
+      expect(readInboxSeen("ZZZZ2222")).toBe(0);
+      writeInboxSeen("", 900);
+      expect(store.size).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

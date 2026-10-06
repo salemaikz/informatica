@@ -9,7 +9,7 @@ import { FRIENDS_MAX } from "@/server/social/friends";
 
 // Очки недели и топ друзей (docs/specs/duels.md §5, §8, Ф3).
 // top:w:{kzWeek} — ВНУТРЕННИЙ ZSET (pid → очки недели), 15 дней: в фазе 1 читается только ZMSCORE по списку друзей.
-// Начисляет ТОЛЬКО сервер и только за результаты, которые он сам проверил (вызовы — Ф3, живые матчи — Ф4 через awardWeek).
+// Начисляет ТОЛЬКО сервер и только за результаты, которые он сам проверил (вызовы — Ф3 через awardWeek, живые матчи — Ф4 через planWeekAward).
 // Бот не идёт никогда. Потолки (score.ts → countedFor): 3-й и дальше матч одной пары за сутки — 0, не больше 10 засчитанных
 // в сутки на игрока, 3+ флага честной игры — 0, меньше 5 ответов — 0.
 //   du:pair:{kzDay}:{pidA|pidB} — сколько матчей пары засчитано сегодня, 2 дня
@@ -41,12 +41,20 @@ export interface AwardResult {
   weekPts: number;
 }
 
+/** План начисления: итоги сторон (засчитан, почему нет, очки) и операции записи — ещё НЕ выполненные. */
+export interface WeekAwardPlan {
+  results: AwardResult[];
+  /** INCRBY пары и суток, ZINCRBY недели (+ EXPIRE); пусто — писать нечего. */
+  ops: KvOp[];
+}
+
 /**
- * Начислить очки недели за один матч (общий помощник Ф3 и Ф4). sides — стороны, получающие очки (вызов — одна сторона,
- * живой матч — обе); pair — pid обеих сторон пары (null — нет пары, например бот). Счётчик пары растёт один раз за матч,
- * если засчитан хотя бы один игрок. Читает 1 конвейер (пара + сутки сторон), пишет 1 конвейер (≈ 2–5 команд).
+ * Прочитать счётчики (1 конвейер: пара + сутки сторон) и рассчитать начисление, ничего не записывая. Нужен живому матчу
+ * (Ф4): там замок — HSETNX итога, и операции записи уходят одним конвейером только у победителя гонки (вместе с историей).
+ * sides — стороны, получающие очки (вызов — одна, живой матч — обе); pair — pid обеих сторон пары (null — нет пары, бот).
+ * Счётчик пары растёт один раз за матч, если засчитан хотя бы один игрок.
  */
-export async function awardWeek(kv: CountingKv, sides: readonly AwardSide[], pair: readonly [string, string] | null, now: number): Promise<AwardResult[]> {
+export async function planWeekAward(kv: CountingKv, sides: readonly AwardSide[], pair: readonly [string, string] | null, now: number): Promise<WeekAwardPlan> {
   const humans = sides.filter((s) => s.opponent !== "bot");
   let pairToday = 0;
   const daily = new Map<string, number>();
@@ -62,15 +70,23 @@ export async function awardWeek(kv: CountingKv, sides: readonly AwardSide[], pai
     return { pid: s.pid, counted: c.counted, ...(c.why ? { why: c.why } : {}), weekPts };
   });
   const counted = results.filter((r) => r.counted);
-  if (counted.length) {
-    const week = topKeys.week(now);
-    const writes: KvOp[] = [
-      ...(pair ? [{ op: "incrBy", key: topKeys.pair(now, pair[0], pair[1]), n: 1, ttlSec: COUNTER_TTL_SEC } as KvOp] : []),
-      ...counted.map((r) => ({ op: "incrBy", key: topKeys.daily(now, r.pid), n: 1, ttlSec: COUNTER_TTL_SEC }) as KvOp),
-      ...counted.filter((r) => r.weekPts > 0).map((r) => ({ op: "zincrBy", key: week, n: r.weekPts, member: r.pid, ttlSec: WEEK_TTL_SEC }) as KvOp),
-    ];
-    await kv.pipeline(writes);
-  }
+  if (!counted.length) return { results, ops: [] };
+  const week = topKeys.week(now);
+  const ops: KvOp[] = [
+    ...(pair ? [{ op: "incrBy", key: topKeys.pair(now, pair[0], pair[1]), n: 1, ttlSec: COUNTER_TTL_SEC } as KvOp] : []),
+    ...counted.map((r) => ({ op: "incrBy", key: topKeys.daily(now, r.pid), n: 1, ttlSec: COUNTER_TTL_SEC }) as KvOp),
+    ...counted.filter((r) => r.weekPts > 0).map((r) => ({ op: "zincrBy", key: week, n: r.weekPts, member: r.pid, ttlSec: WEEK_TTL_SEC }) as KvOp),
+  ];
+  return { results, ops };
+}
+
+/**
+ * Начислить очки недели за один матч (общий помощник Ф3 и Ф4): planWeekAward + запись одним конвейером (≈ 2–5 команд).
+ * Вызов (Ф3) зовёт его напрямую; живой матч (Ф4) — planWeekAward, чтобы записать очки после замка итога.
+ */
+export async function awardWeek(kv: CountingKv, sides: readonly AwardSide[], pair: readonly [string, string] | null, now: number): Promise<AwardResult[]> {
+  const { results, ops } = await planWeekAward(kv, sides, pair, now);
+  if (ops.length) await kv.pipeline(ops);
   return results;
 }
 

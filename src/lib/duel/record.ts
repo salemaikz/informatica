@@ -59,7 +59,10 @@ export const EMPTY_DUELS: DuelsState = { history: [], botAdj: 0, hiddenNames: []
 /** Сколько скрытых имён помним (старые вытесняются). */
 export const HIDDEN_NAMES_MAX = 200;
 
-/** Скрыть имя игрока (код друга) у себя: в начало списка, без повторов, не больше HIDDEN_NAMES_MAX. */
+/** Метка игрока на клиенте: код друга (8 знаков) или «~метка» случайного живого соперника (код друга ему не уходит, Ф4). */
+export const PLAYER_REF_RE = /^(?:[0-9A-Z]{8}|~[A-Za-z0-9_-]{10})$/;
+
+/** Скрыть имя игрока (код друга или «~метка») у себя: в начало списка, без повторов, не больше HIDDEN_NAMES_MAX. */
 export function hideName(list: readonly string[], code: string): string[] {
   return [code, ...list.filter((c) => c !== code)].slice(0, HIDDEN_NAMES_MAX);
 }
@@ -192,7 +195,7 @@ function sanitizeRecord(raw: unknown): DuelRecord | null {
   if (person && typeof r.oppName === "string" && r.oppName.trim()) rec.oppName = r.oppName.trim().slice(0, 30);
   const lv = int(r.oppLevel, 1, 999);
   if (lv !== null && person) rec.oppLevel = lv;
-  if (person && typeof r.oppCode === "string" && /^[0-9A-Z]{8}$/.test(r.oppCode)) rec.oppCode = r.oppCode;
+  if (person && typeof r.oppCode === "string" && PLAYER_REF_RE.test(r.oppCode)) rec.oppCode = r.oppCode;
   if (typeof r.chId === "string" && CHALLENGE_ID_RE.test(r.chId)) rec.chId = r.chId;
   return rec;
 }
@@ -214,7 +217,7 @@ export function sanitizeDuels(raw: unknown): DuelsState {
   history.sort((a, b) => b.at - a.at);
   const adj = typeof r.botAdj === "number" && Number.isFinite(r.botAdj) ? Math.min(ADJ_MAX, Math.max(-ADJ_MAX, r.botAdj)) : 0;
   const hiddenNames = Array.isArray(r.hiddenNames)
-    ? [...new Set(r.hiddenNames.filter((c): c is string => typeof c === "string" && /^[0-9A-Z]{8}$/.test(c)))].slice(0, HIDDEN_NAMES_MAX)
+    ? [...new Set(r.hiddenNames.filter((c): c is string => typeof c === "string" && PLAYER_REF_RE.test(c)))].slice(0, HIDDEN_NAMES_MAX)
     : [];
   return { history: history.slice(0, DUEL_HISTORY_MAX), botAdj: Math.round(adj * 100) / 100, hiddenNames };
 }

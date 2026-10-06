@@ -92,6 +92,8 @@ export interface SideView {
   score: number;
   done: boolean;
   idleMs: number;
+  /** Подтвердил готовность (живой матч, до старта). */
+  ready?: boolean;
 }
 
 /** Почему матч не попал в топ (плашка на итогах). */
@@ -105,6 +107,8 @@ export interface MatchView {
   you: SideView;
   opp: SideView | null;
   oppTl: DuelEvent[];
+  /** Свои принятые ответы — только по запросу (?me=1): продолжить матч после перезагрузки вкладки. */
+  youTl?: DuelEvent[];
   result?: {
     winner: "you" | "opp" | "draw";
     reason: "score" | "correct" | "time" | "left" | "idle";
@@ -113,4 +117,8 @@ export interface MatchView {
     why?: NotCountedWhy;
   };
   rematch?: { you: boolean; opp: boolean; next?: MatchJoin };
+  /** Своё место в матче — до старта (хозяин комнаты узнаёт его, когда друг вошёл). */
+  join?: MatchJoin;
+  /** Почему матч отменён: соперник не подтвердил готовность, кто-то ушёл до старта, комната истекла. */
+  cancelled?: "no_ready" | "left" | "expired";
 }

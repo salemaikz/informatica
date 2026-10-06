@@ -1,7 +1,10 @@
 // Отметка «просмотрено» для входящих итогов вызовов (этап 16Д, Ф3): время самого нового итога, который ученик уже открыл.
 // Удобство одного устройства — localStorage (может быть недоступен: тогда все итоги считаются новыми, ничего не ломается).
+// Отметка — своя у каждого игрока (по коду друга): другой профиль на том же устройстве или новый профиль после «Удалить
+// мой профиль соревнований» не наследует чужую отметку.
 
 const KEY = "informatica-duel-inbox-seen";
+const keyOf = (code: string) => `${KEY}:${code}`;
 
 /** Сколько итогов новее отметки. */
 export function unseenCount(items: readonly { at: number }[], seenAt: number): number {
@@ -13,18 +16,20 @@ export function seenAfter(items: readonly { at: number }[], seenAt: number): num
   return items.reduce((m, it) => Math.max(m, it.at), seenAt);
 }
 
-export function readInboxSeen(): number {
+export function readInboxSeen(code: string): number {
+  if (!code) return 0;
   try {
-    const v = Number(localStorage.getItem(KEY));
+    const v = Number(localStorage.getItem(keyOf(code)));
     return Number.isFinite(v) && v > 0 ? v : 0;
   } catch {
     return 0;
   }
 }
 
-export function writeInboxSeen(at: number): void {
+export function writeInboxSeen(code: string, at: number): void {
+  if (!code) return;
   try {
-    localStorage.setItem(KEY, String(at));
+    localStorage.setItem(keyOf(code), String(at));
   } catch {
     // хранилище недоступно — отметка живёт до перезагрузки
   }

@@ -14,6 +14,8 @@ import { useShowName } from "./PlayerCard";
 // «Пожаловаться» на игрока (docs/specs/duels.md §7; 3-safety.md §4): иконка Flag приглушённым цветом (не danger — это не ошибка
 // ученика), шторка с готовыми причинами, без свободного текста. Имя у пожаловавшегося скрывается сразу (стор hiddenNames),
 // затем предлагается «Заблокировать». У бота кнопки нет.
+// Живой матч (Ф4): seat — подписанное место; адресата сервер находит по матчу и месту. Случайному сопернику (метка «~…»)
+// «Заблокировать» не предлагаем: кода друга у него нет, а добавить в друзья или найти его снова нельзя.
 
 const REASONS: { id: ReportReason; key: "social.report.name" | "social.report.cheat" | "social.report.other" }[] = [
   { id: "name", key: "social.report.name" },
@@ -28,6 +30,7 @@ export function ReportPlayerButton({
   label,
   className,
   onBlocked,
+  seat,
 }: {
   card: PublicCard;
   where: ReportWhere;
@@ -36,6 +39,8 @@ export function ReportPlayerButton({
   label?: boolean;
   className?: string;
   onBlocked?: () => void;
+  /** Живой матч: подписанное место ученика (x-duel-seat). */
+  seat?: string;
 }) {
   const { t } = useT();
   const show = useShowName();
@@ -48,7 +53,7 @@ export function ReportPlayerButton({
     // Сразу у себя — без ожидания сервера (ответ сервера ничего не меняет для ученика).
     useApp.getState().hidePlayerName(card.code);
     setDone(true);
-    void reportPlayer(card.code, reason, where, matchId);
+    void reportPlayer(card.code, reason, where, matchId, seat);
   };
 
   const block = async () => {
@@ -87,7 +92,7 @@ export function ReportPlayerButton({
                 <Check size={18} className="mt-0.5 shrink-0" aria-hidden />
                 {t("social.report.done")}
               </p>
-              {!blocked ? (
+              {card.code.startsWith("~") ? null : !blocked ? (
                 <Button variant="secondary" block onClick={block}>
                   {t("social.friend.block")}
                 </Button>

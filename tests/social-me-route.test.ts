@@ -292,7 +292,10 @@ describe("GET /api/social/me и /home", () => {
     await kv().pipeline([
       { op: "lpush", key: `pl:inbox:${pid}`, value: JSON.stringify({ t: "room", code: "ABC123" }) },
       { op: "lpush", key: `pl:inbox:${pid}`, value: "не json" },
-      { op: "sadd", key: `pl:frq:${pid}`, members: ["x", "y"] },
+      { op: "zadd", key: `pl:frq:${pid}`, score: Date.now(), member: "x" },
+      { op: "zadd", key: `pl:frq:${pid}`, score: Date.now() - 1000, member: "y" },
+      // Старше 14 дней — не считается.
+      { op: "zadd", key: `pl:frq:${pid}`, score: Date.now() - 15 * 86_400_000, member: "old" },
     ]);
     info.mockClear();
     const res = await (await home.GET(req("GET", "/api/social/home", { cookie }))).json();
@@ -311,7 +314,7 @@ describe("DELETE /api/social/me — удалить профиль соревно
     await kv().pipeline([
       { op: "sadd", key: `pl:fr:${pa}`, members: [pb] },
       { op: "sadd", key: `pl:fr:${pb}`, members: [pa] },
-      { op: "sadd", key: `pl:frq:${pa}`, members: [pb] },
+      { op: "zadd", key: `pl:frq:${pa}`, score: Date.now(), member: pb },
       { op: "sadd", key: `pl:blk:${pa}`, members: ["zz"] },
       { op: "lpush", key: `pl:inbox:${pa}`, value: "{}" },
       { op: "zincrBy", key: `top:w:${week}`, n: 3, member: pa },
@@ -326,7 +329,7 @@ describe("DELETE /api/social/me — удалить профиль соревно
     expect(await kv().getStr(`pl:code:${a.json.player.code}`)).toBeNull();
     expect(await kv().smembers(`pl:fr:${pa}`)).toEqual([]);
     expect(await kv().smembers(`pl:fr:${pb}`)).toEqual([]);
-    expect(await kv().scard(`pl:frq:${pa}`)).toBe(0);
+    expect(await kv().zcard(`pl:frq:${pa}`)).toBe(0);
     expect(await kv().scard(`pl:blk:${pa}`)).toBe(0);
     expect(await kv().lrange(`pl:inbox:${pa}`, 0, -1)).toEqual([]);
     expect(await kv().zmscore(`top:w:${week}`, [pa, pb])).toEqual([null, 1]);

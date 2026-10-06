@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, UserPlus, Users } from "lucide-react";
+import { Check, ChevronRight, Radio, UserPlus, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -12,6 +12,7 @@ import { DUEL_MODE_IDS } from "@/lib/duel/modes";
 import { duelTopics, isDuelTopic, isEntTopic } from "@/lib/duel/topics";
 import { duelPlayHref, newDuelSeed } from "@/lib/duel/api";
 import { challengePath, recHref } from "@/lib/duel/challenge";
+import { liveHref } from "@/lib/duel/live";
 import type { DuelRecord } from "@/lib/duel/record";
 import type { DuelModeId } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
@@ -27,8 +28,13 @@ import { BotChip } from "./BotChip";
 import { FriendsCard } from "./FriendsCard";
 import { MODE_ICON, MODE_TITLE, modeDesc, topicTitle } from "./mode-meta";
 
-// Хаб дуэлей /duel (этап 16Д, Ф1; docs/specs/duels.md §9): главная кнопка — «Сыграть с Битом» в выбранном режиме,
-// «Найти соперника» и «Вызвать друга» — «Скоро» (Ф3/Ф4), сетка режимов, тема для «По теме», последние 3 дуэли.
+// Хаб дуэлей /duel (этап 16Д; docs/specs/duels.md §9). Иерархия на 360 px:
+//   1) «Сыграть с Битом» — главная кнопка, выбранный режим (Ф1);
+//   2) «Найти соперника» — живой «Блиц» (Ф4), во всю ширину;
+//   3) «Вызвать друга» (запись вызова, Ф3) и «Играть с другом вживую» (комната по ссылке, Ф4) — в два столбца;
+//   4) карточка «Друзья» (входящие, заявки, топ-3; Ф3).
+// Люди — только когда соцчасть включена на сервере (GET /api/social/home), иначе «Скоро» / «временно недоступно».
+// Ниже — сетка режимов, тема для «По теме», последние 3 дуэли.
 
 /** Выбор режима и темы помним на этом устройстве (удобство, не прогресс). */
 const PICK_KEY = "informatica-duel-pick";
@@ -89,6 +95,15 @@ export function DuelHub() {
     router.push(duelPlayHref(pick.mode, newDuelSeed(), pick.topic));
   };
 
+  /** Комната для друга в выбранном режиме (живой бой по ссылке). */
+  const startRoom = () => {
+    if (pick.mode === "topic" && !pick.topic) {
+      setTopicsOpen(true);
+      return;
+    }
+    router.push(liveHref({ room: pick.mode, topic: pick.topic }));
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -121,50 +136,58 @@ export function DuelHub() {
         </span>
       </button>
 
-      {/* Живые соперники — Ф4; «Вызвать друга» (Ф3) — когда соцчасть включена. */}
+      {/* Люди: живой соперник (Ф4), вызов другу (Ф3), комната с другом (Ф4) — когда соцчасть включена; иначе «Скоро». */}
       <section data-tour="duel-soon" className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled
-            aria-disabled
-            className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
-          >
-            <span className="flex items-center gap-1.5 text-sm font-extrabold">
-              <Users size={18} aria-hidden />
-              {t("duel.find")}
-            </span>
-            <Pill>{t("duel.soon")}</Pill>
-          </button>
-          {socialOn ? (
+        {socialOn ? (
+          <>
             <button
               type="button"
-              onClick={() => setInviteOpen(true)}
-              data-testid="duel-invite"
-              className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-primary/40 bg-primary-soft px-3 py-2.5 text-left shadow-[0_3px_0_var(--primary)] transition-transform active:translate-y-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              onClick={() => router.push(liveHref({ find: true }))}
+              data-testid="duel-find"
+              className="flex min-h-16 w-full items-center gap-3 rounded-3xl border-2 border-primary/40 bg-primary-soft px-4 py-3 text-left shadow-[0_4px_0_var(--primary)] transition-transform active:translate-y-0.5 active:shadow-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              <span className="flex items-center gap-1.5 text-sm font-extrabold text-ink-primary">
-                <UserPlus size={18} aria-hidden />
-                {t("duel.invite")}
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-action-primary text-white">
+                <Users size={22} aria-hidden />
               </span>
-              <span className="text-xs font-semibold text-muted">{t("duel.invite.desc")}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-disabled
-              className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
-            >
-              <span className="flex items-center gap-1.5 text-sm font-extrabold">
-                <UserPlus size={18} aria-hidden />
-                {t("duel.invite")}
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold leading-tight text-ink-primary">
+                  {t("duel.find")}
+                  <HeartCost n={ENTRY_COST.duel} />
+                </span>
+                <span className="text-xs font-semibold text-muted">{t("duel.find.desc")}</span>
               </span>
-              <Pill>{t("duel.soon")}</Pill>
+              <ChevronRight size={20} className="shrink-0 text-ink-primary" aria-hidden />
             </button>
-          )}
-        </div>
-        <p className="text-xs font-semibold text-muted">{t(socialOn ? "social.hub.hint" : "duel.soon.hint")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <PeopleButton Icon={UserPlus} title={t("duel.invite")} desc={t("duel.invite.desc")} onClick={() => setInviteOpen(true)} testId="duel-invite" />
+              <PeopleButton Icon={Radio} title={t("duel.live.room")} desc={t("duel.live.room.desc")} onClick={startRoom} testId="duel-room" />
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "duel.find" as const, Icon: Users },
+              { key: "duel.invite" as const, Icon: UserPlus },
+            ].map(({ key, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                disabled
+                aria-disabled
+                className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
+              >
+                <span className="flex items-center gap-1.5 text-sm font-extrabold">
+                  <Icon size={18} aria-hidden />
+                  {t(key)}
+                </span>
+                <Pill>{t("duel.soon")}</Pill>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-xs font-semibold text-muted">
+          {t(socialOn ? "social.hub.hint" : social.state === "down" ? "duel.live.unavailable" : "duel.soon.hint")}
+        </p>
       </section>
 
       {socialOn && <FriendsCard home={social.home} />}
@@ -241,6 +264,24 @@ export function DuelHub() {
         }}
       />
     </div>
+  );
+}
+
+/** Кнопка второго ряда «людей» (вызов другу, комната): меньше «Найти соперника», но тем же голубым действием. */
+function PeopleButton({ Icon, title, desc, onClick, testId }: { Icon: LucideIcon; title: string; desc: string; onClick: () => void; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-border bg-surface px-3 py-2.5 text-left shadow-[0_3px_0_var(--border)] transition-transform hover:bg-surface-2 active:translate-y-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    >
+      <span className="flex items-start gap-1.5 text-sm font-extrabold leading-tight text-ink-primary">
+        <Icon size={18} className="mt-px shrink-0" aria-hidden />
+        {title}
+      </span>
+      <span className="text-xs font-semibold text-muted">{desc}</span>
+    </button>
   );
 }
 

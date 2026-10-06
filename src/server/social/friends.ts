@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { normalizeFriendCode } from "@/lib/friend-code";
 import type { KvOp } from "@/server/kv";
 import type { CountingKv } from "@/server/social/kv";
-import { cardFromJson, keys, PROFILE_TTL_SEC, type PublicCard } from "@/server/social/player";
+import { serverNow } from "@/server/clock";
+import { cardFromJson, freshRequest, freshRequests, keys, PROFILE_TTL_SEC, REQUEST_TTL_SEC, type PublicCard } from "@/server/social/player";
 
 // Друзья (docs/specs/duels.md §5–§7, Ф3; 3-safety.md §3). Найти друг друга можно только намеренно: по коду (заявка, владелец
 // кода принимает) или по ссылке-приглашению /f/<token> (её создал сам приглашающий — это и есть его согласие; добавление —
@@ -11,7 +12,8 @@ import { cardFromJson, keys, PROFILE_TTL_SEC, type PublicCard } from "@/server/s
 //
 // Ключи:
 //   pl:fr:{pid}    SET друзей, ≤ 100, 180 дней
-//   pl:frq:{pid}   SET входящих заявок (pid отправителей), ≤ 20, 14 дней
+//   pl:frq:{pid}   ZSET входящих заявок: pid отправителя → время заявки (мс), ≤ 20; заявка живёт 14 дней от СВОЕГО времени
+//                  (старые отбрасываются при чтении и вычищаются при новой заявке — новая не продлевает старые)
 //   pl:blk:{pid}   SET заблокированных, 180 дней
 //   pl:inv:{token} STRING → pid, 7 дней; pl:inv:{token}:n — сколько раз по ней добавились (≤ 30)
 // Блокировку не раскрываем: заблокированный получает «sent» (как будто заявка ждёт ответа — отказ и так молчаливый),
@@ -19,7 +21,7 @@ import { cardFromJson, keys, PROFILE_TTL_SEC, type PublicCard } from "@/server/s
 
 export const FRIENDS_MAX = 100;
 export const REQUESTS_MAX = 20;
-export const REQUEST_TTL_SEC = 14 * 86_400;
+export { REQUEST_TTL_SEC, freshRequests };
 export const INVITE_TTL_SEC = 7 * 86_400;
 export const INVITE_MAX_USES = 30;
 /** Ссылка-приглашение: 16 случайных байт base64url. */
@@ -44,33 +46,33 @@ function befriendOps(a: string, b: string): KvOp[] {
   return [
     { op: "sadd", key: keys.friends(a), members: [b], ttlSec: PROFILE_TTL_SEC },
     { op: "sadd", key: keys.friends(b), members: [a], ttlSec: PROFILE_TTL_SEC },
-    { op: "srem", key: keys.requests(a), members: [b] },
-    { op: "srem", key: keys.requests(b), members: [a] },
+    { op: "zrem", key: keys.requests(a), members: [b] },
+    { op: "zrem", key: keys.requests(b), members: [a] },
     { op: "srem", key: keys.blocked(a), members: [b] },
   ];
 }
 
 /** Состояние пары для решений о дружбе — один конвейер, 7 команд. */
-async function pairState(kv: CountingKv, me: string, other: string) {
-  const [myCode, otherCode, isFriend, blockedByThem, theyAsked, myCount, theirCount] = await kv.pipeline([
+async function pairState(kv: CountingKv, me: string, other: string, now: number) {
+  const [myCode, otherCode, isFriend, blockedByThem, theyAskedAt, myCount, theirCount] = await kv.pipeline([
     { op: "hget", key: keys.profile(me), field: "code" },
     { op: "hget", key: keys.profile(other), field: "code" },
     { op: "sismember", key: keys.friends(me), member: other },
     { op: "sismember", key: keys.blocked(other), member: me },
-    { op: "sismember", key: keys.requests(me), member: other },
+    { op: "zscore", key: keys.requests(me), member: other },
     { op: "scard", key: keys.friends(me) },
     { op: "scard", key: keys.friends(other) },
   ] as const);
-  return { meOk: !!myCode, otherOk: !!otherCode, isFriend, blockedByThem, theyAsked, myCount, theirCount };
+  return { meOk: !!myCode, otherOk: !!otherCode, isFriend, blockedByThem, theyAsked: freshRequest(theyAskedAt, now), myCount, theirCount };
 }
 
 /**
  * Заявка в друзья по коду. Он мне уже писал — сразу взаимная дружба («accepted»). Меня заблокировали — «sent», ничего не
  * пишем. null — у меня нет профиля (истёк): маршрут отвечает 401 no_player.
  */
-export async function requestFriend(kv: CountingKv, me: string, other: string): Promise<RequestStatus | null> {
+export async function requestFriend(kv: CountingKv, me: string, other: string, now = serverNow()): Promise<RequestStatus | null> {
   if (other === me) return "self";
-  const s = await pairState(kv, me, other);
+  const s = await pairState(kv, me, other, now);
   if (!s.meOk) return null;
   if (!s.otherOk) return "not_found";
   if (s.isFriend) return "already";
@@ -80,10 +82,14 @@ export async function requestFriend(kv: CountingKv, me: string, other: string): 
     await kv.pipeline(befriendOps(me, other));
     return "accepted";
   }
-  const pending = await kv.scard(keys.requests(other));
-  if (pending >= REQUESTS_MAX) return "limit";
+  const entries = await kv.zrange(keys.requests(other), 0, -1);
+  const fresh = freshRequests(entries, now).filter((p) => p !== me);
+  if (fresh.length >= REQUESTS_MAX) return "limit";
+  // Повторная заявка того же игрока обновляет время (14 дней от неё); просроченные чужие — вычищаются здесь же.
+  const stale = entries.filter((e) => e.member !== me && !freshRequest(e.score, now)).map((e) => e.member);
   await kv.pipeline([
-    { op: "sadd", key: keys.requests(other), members: [me], ttlSec: REQUEST_TTL_SEC },
+    ...(stale.length ? [{ op: "zrem", key: keys.requests(other), members: stale } as KvOp] : []),
+    { op: "zadd", key: keys.requests(other), score: now, member: me, ttlSec: REQUEST_TTL_SEC },
     { op: "srem", key: keys.blocked(me), members: [other] },
   ]);
   return "sent";
@@ -92,15 +98,17 @@ export async function requestFriend(kv: CountingKv, me: string, other: string): 
 export type RespondStatus = "accepted" | "declined" | "not_found" | "limit";
 
 /** Ответ на заявку: принять — взаимная дружба, отклонить — молча убрать заявку. */
-export async function respondFriend(kv: CountingKv, me: string, other: string, accept: boolean): Promise<RespondStatus> {
-  const [removed, otherCode, myCount, theirCount, blockedByThem] = await kv.pipeline([
-    { op: "srem", key: keys.requests(me), members: [other] },
+export async function respondFriend(kv: CountingKv, me: string, other: string, accept: boolean, now = serverNow()): Promise<RespondStatus> {
+  const [askedAt, , otherCode, myCount, theirCount, blockedByThem] = await kv.pipeline([
+    { op: "zscore", key: keys.requests(me), member: other },
+    { op: "zrem", key: keys.requests(me), members: [other] },
     { op: "hget", key: keys.profile(other), field: "code" },
     { op: "scard", key: keys.friends(me) },
     { op: "scard", key: keys.friends(other) },
     { op: "sismember", key: keys.blocked(other), member: me },
   ] as const);
-  if (!removed || !otherCode) return "not_found";
+  // Заявки нет или она старше 14 дней (просроченная просто убрана) — «не найдена».
+  if (!freshRequest(askedAt, now) || !otherCode) return "not_found";
   if (!accept) return "declined";
   // Он успел меня заблокировать — заявка просто исчезает (блокировку не раскрываем).
   if (blockedByThem) return "declined";
@@ -127,8 +135,8 @@ export async function blockPlayer(kv: CountingKv, me: string, other: string, on:
     { op: "sadd", key: keys.blocked(me), members: [other], ttlSec: PROFILE_TTL_SEC },
     { op: "srem", key: keys.friends(me), members: [other] },
     { op: "srem", key: keys.friends(other), members: [me] },
-    { op: "srem", key: keys.requests(me), members: [other] },
-    { op: "srem", key: keys.requests(other), members: [me] },
+    { op: "zrem", key: keys.requests(me), members: [other] },
+    { op: "zrem", key: keys.requests(other), members: [me] },
   ]);
 }
 
@@ -138,14 +146,17 @@ export interface FriendLists {
   blocked: PublicCard[];
 }
 
-/** Друзья, входящие заявки и заблокированные с карточками: SMEMBERS ×3 + MGET = 4 команды. Удалившиеся — пропускаются. */
-export async function friendLists(kv: CountingKv, me: string): Promise<FriendLists> {
+/**
+ * Друзья, входящие заявки (только действующие, новые первыми) и заблокированные с карточками: SMEMBERS ×2 + ZRANGE + MGET =
+ * 4 команды. Удалившиеся — пропускаются.
+ */
+export async function friendLists(kv: CountingKv, me: string, now = serverNow()): Promise<FriendLists> {
   const [fr, rq, bl] = await kv.pipeline([
     { op: "smembers", key: keys.friends(me) },
-    { op: "smembers", key: keys.requests(me) },
+    { op: "zrange", key: keys.requests(me), start: 0, stop: -1 },
     { op: "smembers", key: keys.blocked(me) },
   ] as const);
-  const groups = [fr.slice(0, FRIENDS_MAX), rq.slice(0, REQUESTS_MAX), bl.slice(0, FRIENDS_MAX)];
+  const groups = [fr.slice(0, FRIENDS_MAX), freshRequests(rq, now).slice(0, REQUESTS_MAX), bl.slice(0, FRIENDS_MAX)];
   const ids = [...new Set(groups.flat())];
   const raw = ids.length ? await kv.mget(ids.map(keys.card)) : [];
   const card = new Map(ids.map((id, k) => [id, cardFromJson(raw[k] ?? null)]));
@@ -220,7 +231,7 @@ export async function acceptInvite(kv: CountingKv, me: string, token: string): P
   const info = await inviteInfo(kv, token);
   if (!info) return { status: "expired" };
   if (info.pid === me) return { status: "self" };
-  const s = await pairState(kv, me, info.pid);
+  const s = await pairState(kv, me, info.pid, serverNow());
   if (!s.meOk) return null;
   if (!s.otherOk || s.blockedByThem) return { status: "expired" };
   if (s.isFriend) return { status: "already", card: info.card };

@@ -24,11 +24,12 @@ export function socialStateOf(r: Res<unknown>): SocialState {
   return "on";
 }
 
-export async function call<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<Res<T>> {
+export async function call<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> }): Promise<Res<T>> {
   try {
+    const headers = { ...(init?.body !== undefined ? { "content-type": "application/json" } : {}), ...init?.headers };
     const res = await fetch(path, {
       method: init?.method ?? "GET",
-      headers: init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
       signal: init?.signal,
       cache: "no-store",
@@ -166,5 +167,13 @@ export async function getTop(now: number, signal?: AbortSignal): Promise<Res<Top
 export type ReportReason = "name" | "cheat" | "other";
 export type ReportWhere = "friend" | "request" | "top" | "challenge" | "result" | "match" | "invite";
 
-export const reportPlayer = (code: string, reason: ReportReason, where: ReportWhere, matchId?: string) =>
-  call<{ ok: true }>("/api/social/report", { method: "POST", body: { code, reason, where, ...(matchId ? { matchId } : {}) } });
+/**
+ * Жалоба. Живой матч (Ф4): seat — подписанное место в матче (заголовок x-duel-seat); адресата сервер находит сам по матчу
+ * и месту, код в теле не нужен (у случайного соперника его и нет — только «~метка»).
+ */
+export const reportPlayer = (code: string, reason: ReportReason, where: ReportWhere, matchId?: string, seat?: string) =>
+  call<{ ok: true }>("/api/social/report", {
+    method: "POST",
+    body: { ...(seat ? {} : { code }), reason, where, ...(matchId ? { matchId } : {}) },
+    ...(seat ? { headers: { "x-duel-seat": seat } } : {}),
+  });

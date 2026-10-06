@@ -8,10 +8,18 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { PlayerAvatar, useShowName } from "@/components/social/PlayerCard";
 import { BotChip } from "./BotChip";
 
-// Соперник на экранах дуэли (этап 16Д): бот Бит (чип «бот»), запись друга (призрак, чип «запись»), живой игрок (Ф4) или
-// никого — запись своего вызова другу (solo). Экраны VS, матча и итогов рисуют соперника только через эти компоненты.
+// Соперник на экранах дуэли (этап 16Д) — одна модель для DuelPlay, ChallengePlay и LivePlay:
+//   bot   — Бит (вычисляемый), всегда с чипом «бот»;
+//   ghost — запись друга (вызов, Ф3), чип «запись»;
+//   solo  — никого: запись своего вызова другу (Ф3);
+//   human — живой игрок (Ф4), без чипа; card null — ещё не известен.
+// Экраны VS, матча и итогов рисуют соперника только через эти компоненты; имя — через useShowName (скрытое жалобой — «Игрок N»).
 
-export type Rival = { kind: "bot"; band: DuelBand } | { kind: "ghost" | "human"; card: PublicCard } | { kind: "solo" };
+export type Rival =
+  | { kind: "bot"; band: DuelBand }
+  | { kind: "ghost"; card: PublicCard }
+  | { kind: "human"; card: PublicCard | null }
+  | { kind: "solo" };
 
 export const BOT_RIVAL = (band: DuelBand): Rival => ({ kind: "bot", band });
 
@@ -42,14 +50,15 @@ export function RivalAvatar({ rival, size }: { rival: Rival; size: number }) {
         <Send size={Math.round(size * 0.5)} aria-hidden />
       </span>
     );
-  return <PlayerAvatar card={rival.card} size={size} />;
+  return <PlayerAvatar card={rival.card ?? { frame: null }} size={size} />;
 }
 
 /** Имя соперника. */
 export function useRivalName(): (rival: Rival) => string {
   const { t } = useT();
   const show = useShowName();
-  return (rival) => (rival.kind === "bot" ? t("duel.bot.name") : rival.kind === "solo" ? t("social.solo.name") : show(rival.card));
+  return (rival) =>
+    rival.kind === "bot" ? t("duel.bot.name") : rival.kind === "solo" ? t("social.solo.name") : rival.card ? show(rival.card) : t("duel.search.unknown");
 }
 
 /** Метка вида соперника: «бот», «запись» или ничего (живой игрок, запись своего вызова). */

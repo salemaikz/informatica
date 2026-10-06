@@ -200,6 +200,23 @@ describe("заявки в друзья по коду", () => {
     for (let k = 0; k < 20; k++) expect((await post(request, "/api/social/friends/request", b, { code: a.code })).status).toBe(200);
     expect((await post(request, "/api/social/friends/request", b, { code: a.code })).status).toBe(429);
   });
+
+  it("заявка живёт 14 дней от своего времени: новая заявка не продлевает старую (pl:frq — ZSET)", async () => {
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const c = await create("Сауле");
+    await post(request, "/api/social/friends/request", b, { code: a.code });
+    clock += 10 * 86_400_000;
+    await post(request, "/api/social/friends/request", c, { code: a.code });
+    expect(codes((await lists(a)).json.requests).sort()).toEqual([c.code, b.code].sort());
+    clock += 5 * 86_400_000; // заявке Болата 15 дней, Сауле — 5
+    expect(codes((await lists(a)).json.requests)).toEqual([c.code]);
+    expect((await get<{ requests: number }>(home, "/api/social/home", a)).json.requests).toBe(1);
+    expect((await post(respond, "/api/social/friends/respond", a, { code: b.code, accept: true })).json).toEqual({ status: "not_found" });
+    // Просроченная заявка не делает встречную заявку «сразу дружбой».
+    expect((await post(request, "/api/social/friends/request", a, { code: b.code })).json.status).toBe("sent");
+    expect((await post(respond, "/api/social/friends/respond", a, { code: c.code, accept: true })).json).toEqual({ status: "accepted" });
+  });
 });
 
 describe("ссылка-приглашение /f/<token>", () => {

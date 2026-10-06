@@ -151,6 +151,12 @@ describe("pending-link: ссылки соцчасти (Ф3 дуэлей)", () =>
       expect(pendingLinkOf(bad), bad).toBeNull();
   });
 
+  it("слияние Ф3+Ф4: и ссылки соцчасти, и комната живой дуэли /duel/r/<код>", () => {
+    expect(pendingLinkOf(`/f/${TOKEN}`)).toBe(`/f/${TOKEN}`);
+    expect(pendingLinkOf("/duel/r/abc12z")).toBe("/duel/r/ABC12Z");
+    expect(pendingLinkOf("/duel/r/ABC12Z#x")).toBeNull();
+  });
+
   it("сохраняется и возвращается после онбординга", () => {
     savePendingLink(`/duel/c/${CH}?from=share`, 1000);
     expect(takePendingLink(2000)).toBe(`/duel/c/${CH}`);

@@ -22,7 +22,9 @@ import { RivalAvatar, RivalChip, useRivalName, type Rival } from "./rival";
 
 // Итоги дуэли (этап 16Д, docs/specs/duels.md §9): победа — кубок золотом; проигрыш — мягко, без красного заголовка;
 // счёт, верные, время, опыт; «Реванш» (новый вход — новое сердечко), «Разобрать ошибки» (статические объяснения),
-// «К дуэлям». «Отправить другу» появится с вызовами (Ф3). Бит подписан «бот».
+// «К дуэлям». Соперник — через rival.tsx: Бит подписан «бот» и говорит реплику; запись друга — чип «запись»; живой игрок —
+// без чипа и без реплик Бита (ребёнок не должен думать, что играл с ботом). Слот extra — ссылка вызова, очки недели,
+// «не попал в топ», технический итог; report — «Пожаловаться» у человека; rematchState — реванш с живым (согласие за 20 с).
 
 const fmtTime = (ms: number) => {
   const s = Math.round(ms / 1000);
@@ -44,6 +46,7 @@ export function DuelResult({
   report,
   onChallenge,
   challengeLabel,
+  rematchState = "idle",
 }: {
   result: DuelOutcome;
   you: DuelSideStat;
@@ -55,15 +58,17 @@ export function DuelResult({
   /** Нет — без кнопки «Реванш» (запись друга, запись своего вызова). */
   onRematch?: () => void;
   onHub: () => void;
-  /** Соперник (Ф3); по умолчанию — Бит. */
+  /** Соперник (rival.tsx); по умолчанию — Бит. */
   opponent?: Rival;
-  /** Блок над кнопками: ссылка вызова, очки недели, плашка «не попал в топ». */
+  /** Блок над кнопками: ссылка вызова, очки недели, плашка «не попал в топ», технический итог. */
   extra?: ReactNode;
   /** Кнопка «Пожаловаться» у соперника-человека (у бота её нет). */
   report?: ReactNode;
   /** «Вызвать друга на этот режим» / «Вызвать в ответ» (Ф3). */
   onChallenge?: () => void;
   challengeLabel?: string;
+  /** Реванш с живым (Ф4): ждём ответа, соперник просит, соперник не ответил. */
+  rematchState?: "idle" | "waiting" | "offered" | "none";
 }) {
   const { t } = useT();
   const rivalName = useRivalName();
@@ -99,7 +104,7 @@ export function DuelResult({
         ) : (
           <>
             <Mascot mood="neutral" size={88} />
-            <h1 className="text-xl font-extrabold">{t("duel.result.loss")}</h1>
+            <h1 className="text-xl font-extrabold">{bot ? t("duel.result.loss") : t("duel.result.lossLive")}</h1>
           </>
         )}
       </div>
@@ -123,7 +128,12 @@ export function DuelResult({
         ) : (
           <div className="flex min-w-0 flex-col items-center gap-1" data-testid="duel-result-rival">
             <RivalAvatar rival={opponent} size={40} />
-            <span className="line-clamp-2 w-full text-center text-sm font-extrabold [overflow-wrap:anywhere]">{rivalName(opponent)}</span>
+            <span
+              className="line-clamp-2 w-full text-center text-sm font-extrabold [overflow-wrap:anywhere]"
+              data-testid={opponent.kind === "human" ? "duel-opp-name" : undefined}
+            >
+              {rivalName(opponent)}
+            </span>
             <span className="flex items-center gap-1">
               <RivalChip rival={opponent} />
               {report}
@@ -142,6 +152,7 @@ export function DuelResult({
         </span>
       </div>
 
+      {/* Реплики Бита — только после матча с Битом: после человека или записи он не «говорит» как соперник. */}
       {bot && (
         <MascotSays mood={result === "loss" ? "happy" : result === "win" ? "celebrate" : "happy"} size={56}>
           <span className="font-bold">{t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}</span>
@@ -153,10 +164,20 @@ export function DuelResult({
 
       <div className="flex-1" />
       <div className="flex flex-col gap-3">
+        {rematchState === "offered" && (
+          <p role="status" className="text-center text-sm font-extrabold text-ink-primary" data-testid="duel-rematch-offer">
+            {t("duel.rematch.opp")}
+          </p>
+        )}
+        {rematchState === "none" && (
+          <p role="status" className="text-center text-sm font-semibold text-muted">
+            {t("duel.rematch.none")}
+          </p>
+        )}
         {onRematch && (
-          <Button size="lg" block onClick={onRematch} icon={<RotateCcw size={20} />}>
-            {t("duel.rematch")}
-            <HeartCost n={ENTRY_COST.duel} variant="solid" />
+          <Button size="lg" block onClick={onRematch} disabled={rematchState === "waiting"} icon={<RotateCcw size={20} />} data-testid="duel-rematch">
+            {rematchState === "waiting" ? t("duel.rematch.wait") : t("duel.rematch")}
+            {rematchState !== "waiting" && <HeartCost n={ENTRY_COST.duel} variant="solid" />}
           </Button>
         )}
         {onChallenge && (
