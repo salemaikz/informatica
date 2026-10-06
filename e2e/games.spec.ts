@@ -7,9 +7,8 @@ for (const id of GAME_IDS) {
   test(`мини-игра ${id} запускается`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto("/onboarding");
-    await page.evaluate(() =>
-      localStorage.setItem(
+    await page.addInitScript(() =>
+      localStorage.getItem("informatica-v1") || localStorage.setItem(
         "informatica-v1",
         JSON.stringify({
           state: {
@@ -21,10 +20,13 @@ for (const id of GAME_IDS) {
         }),
       ),
     );
+    await page.goto("/onboarding");
     await page.goto("/practice");
     await page.locator(`a[href="/game/${id}"]`).click();
     await page.waitForURL(`**/game/${id}`);
-    await page.getByRole("button", { name: "Играть" }).click();
+    await expect(page.getByRole("button", { name: /^Играть/ })).toContainText("1 сердце");
+    await page.getByRole("button", { name: /^Играть/ }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1")!).state.hearts.count)).toBe(4);
     // Игровое поле: появились интерактивные элементы, правила скрылись
     await expect(page.getByText("Правила")).toHaveCount(0);
     await expect(page.locator("main button").first()).toBeVisible();

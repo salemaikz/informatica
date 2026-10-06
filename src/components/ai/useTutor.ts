@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
-import { AiError, streamTutor } from "@/lib/ai";
+import { AiError, standardGuidance, streamTutor } from "@/lib/ai";
 import { useApp } from "@/lib/store";
 import { buildStudentContext } from "@/lib/student-context";
+import type { StandardIntent } from "@/lib/standard-guidance";
 import type { DictKey } from "@/i18n/dict";
 
 export interface TutorTurn {
@@ -22,11 +23,12 @@ export function useTutor() {
 
   const ask = useCallback(
     async (
-      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string },
+      args: { mode: TutorMode; messages: TutorTurn[]; task?: TaskContext; image?: string; standard?: StandardIntent },
       onText: (text: string) => void,
     ): Promise<string | null> => {
       const app = useApp.getState();
-      if (!app.spendAi()) {
+      const reusable = !!args.standard && !!args.task?.stepId;
+      if (!reusable && !app.spendAi()) {
         setError("tutor.limit");
         return null;
       }
@@ -35,17 +37,18 @@ export function useTutor() {
       abort.current = ctrl;
       setError(null);
       setStreaming(true);
+      let receivedText = false;
+      const receive = (text: string) => { if (text.trim()) receivedText = true; onText(text); };
       try {
-        const text = await streamTutor(
-          { ...args, context: buildStudentContext(useApp.getState()) },
-          onText,
-          ctrl.signal,
-        );
+        const text = reusable
+          ? await standardGuidance({ stepId: args.task!.stepId!, lessonId: args.task!.lessonId, lang: app.profile.lang, intent: args.standard!, answered: args.task!.answered ?? false }, ctrl.signal)
+          : await streamTutor({ mode: args.mode, messages: args.messages, task: args.task, image: args.image, context: buildStudentContext(useApp.getState()) }, receive, ctrl.signal);
+        if (reusable) onText(text);
         useApp.getState().unlock("ai_friend");
         return text;
       } catch (e) {
+        if (!reusable && !receivedText) useApp.getState().refundAi();
         if (ctrl.signal.aborted) return null;
-        useApp.getState().refundAi();
         setError(e instanceof AiError && e.code === "rate_limited" ? "tutor.limit" : "tutor.error");
         return null;
       } finally {

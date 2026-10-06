@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Clock, Sparkles, Target, Zap } from "lucide-react";
+import { BookOpen, Clock, Target, Zap } from "lucide-react";
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import Link from "next/link";
@@ -11,8 +11,7 @@ import type { SessionResult } from "@/lib/types";
 import type { LessonFeedbackResponse } from "@/lib/ai-types";
 import { useApp } from "@/lib/store";
 import { feedback as giveFeedback } from "@/lib/feedback";
-import { lessonFeedback } from "@/lib/ai";
-import { buildStudentContext } from "@/lib/student-context";
+import { lessonSummary } from "@/lib/lesson-summary";
 import { achievementById } from "@/lib/gamification";
 import { masteryLevel } from "@/lib/mastery";
 import { skillById } from "@/content/skills";
@@ -41,35 +40,10 @@ function formatTime(sec: number) {
 
 export type FeedbackState = { status: "loading" } | { status: "done"; data: LessonFeedbackResponse } | { status: "failed" };
 
-/**
- * Запрашивает у ИИ отзыв об уроке и обновляет «память наставника».
- * Вызывается из обработчика завершения урока (не из эффекта), поэтому запрос уходит ровно один раз.
- */
+/** Бесплатный итог по результатам без вызова модели. */
 export function requestLessonFeedback(result: SessionResult, onState: (s: FeedbackState) => void) {
-  const app = useApp.getState();
-  if (!app.spendAi()) {
-    onState({ status: "failed" });
-    return;
-  }
-  onState({ status: "loading" });
-  const mistakes = result.answers.filter((a) => !a.correct && !a.retry);
-  const skills = [...new Set(result.answers.map((a) => a.skill).filter(Boolean))] as string[];
-  lessonFeedback({
-    context: buildStudentContext(app),
-    lesson: result.title,
-    accuracy: result.accuracy,
-    durationSec: result.durationSec,
-    mistakes: mistakes.slice(0, 8).map((m) => ({ q: m.prompt, given: m.given, expected: m.expected })),
-    skills: skills.map((id) => ({ title: skillById(id)?.title[app.profile.lang] ?? id, mastery: app.skills[id]?.mastery ?? 0 })),
-  })
-    .then((data) => {
-      if (data.memory) useApp.getState().setMemory(data.memory);
-      onState({ status: "done", data });
-    })
-    .catch(() => {
-      useApp.getState().refundAi();
-      onState({ status: "failed" });
-    });
+  const lang = useApp.getState().profile.lang;
+  onState({ status: "done", data: lessonSummary(result, lang, id => skillById(id)?.title[lang] ?? id) });
 }
 
 export function Results({
@@ -195,9 +169,9 @@ export function Results({
         </div>
       )}
 
-      <Reveal delay={0.5} className="rounded-3xl border-2 border-ai/30 bg-ai-soft p-4 sm:p-5">
-        <p className="mb-2 flex items-center gap-1.5 font-extrabold text-ai">
-          <Sparkles size={18} /> {t("res.ai")}
+      <Reveal delay={0.5} className="rounded-3xl border-2 border-primary/30 bg-primary-soft p-4 sm:p-5">
+        <p className="mb-2 flex items-center gap-1.5 font-extrabold text-primary">
+          <Target size={18} /> {t("res.ai")}
         </p>
         {feedback.status === "loading" && (
           <div className="flex flex-col gap-2" aria-busy>

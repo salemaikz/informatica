@@ -28,7 +28,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const needsOnboarding = hydrated && !onboarded && pathname !== "/onboarding" && pathname !== "/video-lab";
+  const needsOnboarding = hydrated && !onboarded && pathname !== "/onboarding" && !pathname.startsWith("/video-lab");
 
   useEffect(() => {
     const el = document.documentElement;

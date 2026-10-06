@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { ProfileAvatar } from "@/components/economy/ProfileAvatar";
 import { Download, RotateCcw } from "lucide-react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { useRouter } from "next/navigation";
@@ -71,10 +72,9 @@ export default function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <h1 className="text-2xl font-extrabold">{t("nav.profile")}</h1>
       <div className="flex items-center gap-4">
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-2xl font-extrabold text-primary">
-          {(profile.name.trim()[0] ?? "?").toUpperCase()}
-        </span>
+        <ProfileAvatar size={64}/>
         <div className="flex-1">
           <input
             value={profile.name}
@@ -88,25 +88,6 @@ export default function ProfilePage() {
 
       <LevelCard />
 
-      <Card>
-        <p className="mb-3 text-lg font-extrabold">{t("prof.achievements")}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {ACHIEVEMENTS.map((a) => {
-            const got = !!achievements[a.id];
-            return (
-              <div
-                key={a.id}
-                className={clsx("flex flex-col items-center gap-1 rounded-2xl border-2 p-3 text-center", got ? "border-gold bg-gold-soft" : "border-border opacity-70")}
-                title={l(a.description)}
-              >
-                <AchievementBadge icon={a.icon} got={got} size={44} />
-                <span className="text-sm font-extrabold">{l(a.title)}</span>
-                <span className="text-xs font-semibold text-muted">{l(a.description)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
 
       <Card className="divide-y-2 divide-border py-1">
         <Row label={t("prof.lang")}>
@@ -180,6 +161,26 @@ export default function ProfilePage() {
             ]}
           />
         </Row>
+      </Card>
+
+      <Card>
+        <p className="mb-3 text-lg font-extrabold">{t("prof.achievements")}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {ACHIEVEMENTS.map((a) => {
+            const got = !!achievements[a.id];
+            return (
+              <div
+                key={a.id}
+                className={clsx("flex flex-col items-center gap-1 rounded-2xl border-2 p-3 text-center", got ? "border-gold bg-gold-soft" : "border-border opacity-70")}
+                title={l(a.description)}
+              >
+                <AchievementBadge icon={a.icon} got={got} size={44} />
+                <span className="text-sm font-extrabold">{l(a.title)}</span>
+                <span className="text-xs font-semibold text-muted">{l(a.description)}</span>
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <div className="flex flex-col gap-3 sm:flex-row">

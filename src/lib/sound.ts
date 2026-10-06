@@ -193,3 +193,99 @@ export function playSound(name: SoundName, opts: SoundOptions = {}) {
     // звук — не критично
   }
 }
+
+export type MusicTrack = "game" | "focus";
+export type MusicSnapshot = { enabled: boolean; playing: boolean; unavailable: boolean; track: MusicTrack };
+const MUSIC_STORAGE_KEY = "informatica-music-v1";
+const MUSIC_FILES: Record<MusicTrack, string> = { game: "/media/music/bit-arcade.wav", focus: "/media/music/quiet-focus.wav" };
+const SILENT_MUSIC: MusicSnapshot = { enabled: false, playing: false, unavailable: false, track: "game" };
+let musicSnapshot = SILENT_MUSIC;
+let musicAudio: HTMLAudioElement | null = null;
+let musicOwner: symbol | null = null;
+let musicLoaded = false;
+let musicRequest = 0;
+const musicSubscribers = new Set<() => void>();
+
+function publishMusic(update: Partial<MusicSnapshot>) {
+  const next = { ...musicSnapshot, ...update };
+  if (Object.keys(next).every((key) => next[key as keyof MusicSnapshot] === musicSnapshot[key as keyof MusicSnapshot])) return;
+  musicSnapshot = next;
+  musicSubscribers.forEach((listener) => listener());
+}
+
+function pauseMusic() {
+  musicRequest++;
+  musicAudio?.pause();
+  publishMusic({ playing: false });
+}
+
+async function resumeMusic() {
+  if (typeof document === "undefined" || !musicSnapshot.enabled || !musicOwner || document.hidden) return;
+  const request = ++musicRequest;
+  try {
+    if (!musicAudio) {
+      musicAudio = new Audio();
+      musicAudio.loop = true;
+      musicAudio.preload = "none";
+      musicAudio.volume = .2;
+    }
+    const file = MUSIC_FILES[musicSnapshot.track];
+    if (musicAudio.getAttribute("src") !== file) {
+      musicAudio.pause();
+      musicAudio.src = file;
+    }
+    await musicAudio.play();
+    if (request === musicRequest && musicOwner && musicSnapshot.enabled && !document.hidden) publishMusic({ playing: true, unavailable: false });
+    else if (!musicOwner || !musicSnapshot.enabled || document.hidden) musicAudio.pause();
+  } catch {
+    if (request === musicRequest) publishMusic({ playing: false, unavailable: true });
+  }
+}
+
+function loadMusicPreference() {
+  if (musicLoaded || typeof window === "undefined") return;
+  musicLoaded = true;
+  try { publishMusic({ enabled: window.localStorage.getItem(MUSIC_STORAGE_KEY) === "on" }); } catch { /* приватный режим */ }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pauseMusic(); else void resumeMusic(); });
+  window.addEventListener("pagehide", pauseMusic);
+  window.addEventListener("storage", (event) => {
+    if (event.key !== MUSIC_STORAGE_KEY) return;
+    publishMusic({ enabled: event.newValue === "on", unavailable: false });
+    if (musicSnapshot.enabled) void resumeMusic(); else pauseMusic();
+  });
+  // Сохранённое разрешение не отменяет требование браузера к первому нажатию.
+  const retry = () => { if (musicSnapshot.enabled && !musicSnapshot.playing && musicOwner) void resumeMusic(); };
+  window.addEventListener("pointerdown", retry, { passive: true });
+  window.addEventListener("keydown", retry);
+}
+
+export function subscribeMusic(listener: () => void) {
+  musicSubscribers.add(listener);
+  loadMusicPreference();
+  return () => { musicSubscribers.delete(listener); };
+}
+export const getMusicSnapshot = () => musicSnapshot;
+export const getServerMusicSnapshot = () => SILENT_MUSIC;
+
+/** Только активная игра/тест владеет фоном. Последний владелец останавливает музыку при уходе. */
+export function enterActivityMusic(owner: symbol, track: MusicTrack) {
+  loadMusicPreference();
+  musicOwner = owner;
+  publishMusic({ track, unavailable: false });
+  void resumeMusic();
+}
+export function exitActivityMusic(owner: symbol) {
+  if (musicOwner !== owner) return;
+  musicOwner = null;
+  pauseMusic();
+}
+export function setMusicEnabled(enabled: boolean) {
+  loadMusicPreference();
+  publishMusic({ enabled, unavailable: false });
+  try { window.localStorage.setItem(MUSIC_STORAGE_KEY, enabled ? "on" : "off"); } catch { /* настройка действует в текущей вкладке */ }
+  if (enabled) void resumeMusic(); else pauseMusic();
+}
+export function setMusicTrack(track: MusicTrack) {
+  publishMusic({ track, unavailable: false });
+  if (musicSnapshot.enabled) void resumeMusic();
+}

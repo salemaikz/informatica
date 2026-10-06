@@ -2,7 +2,7 @@
 
 import { Feather, Play, RotateCcw, Timer, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import type { GameMode, GameResult } from "@/games/types";
 import { gameById } from "@/games/registry";
 import { GAME_COMPONENTS } from "@/games/components";
@@ -15,6 +15,8 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ToolboxButton } from "@/components/tools/Toolbox";
 import { useToolboxLevel } from "@/components/tools/useToolbox";
+import { ActivityMusic } from "@/components/music/ActivityMusic";
+import { HeartChip, useHeartStatus } from "@/components/economy/HeartGate";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 
 type Phase = { name: "intro" } | { name: "playing"; round: number } | { name: "result"; result: GameResult; reward: GameReward };
@@ -38,6 +40,10 @@ export function GameShell({ id }: { id: string }) {
   const recordGame = useApp((s) => s.recordGame);
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [round, setRound] = useState(0);
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const finishedRound = useRef(false);
+  const [heartError, setHeartError] = useState(false);
+  const heartStatus = useHeartStatus();
   const Game = GAME_COMPONENTS[id];
   const Icon = meta.icon;
   // Инструменты во время игры: «Спокойно» — все, «Обычный» — как на ЕНТ, «Блиц» — никаких.
@@ -45,11 +51,19 @@ export function GameShell({ id }: { id: string }) {
 
   const start = () => {
     const next = round + 1;
+    if (!useApp.getState().startLearningRun("game", `${sessionId}:${next}`)) {
+      setHeartError(true);
+      return;
+    }
+    setHeartError(false);
+    finishedRound.current = false;
     setRound(next);
     setPhase({ name: "playing", round: next });
   };
 
   const finish = (result: GameResult) => {
+    if (finishedRound.current) return;
+    finishedRound.current = true;
     const reward = recordGame(id, result, mode);
     if (sound) playSound("complete");
     if (reward.newBest && stat) {
@@ -75,6 +89,7 @@ export function GameShell({ id }: { id: string }) {
           <span className="flex flex-1 items-center gap-2 truncate text-lg font-extrabold">
             <Icon size={20} strokeWidth={2.4} style={{ color: meta.ink }} className="shrink-0" /> {l(meta.title)}
           </span>
+          <HeartChip />
           {phase.name === "playing" && <ToolboxButton variant="icon" />}
           {statKey && (
             <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">
@@ -84,6 +99,8 @@ export function GameShell({ id }: { id: string }) {
         </div>
       </header>
 
+      <ActivityMusic mode="game" active={phase.name === "playing"} className="mx-auto w-full max-w-2xl px-4 py-2" />
+      {heartError && <p role="alert" className="mx-4 rounded-xl bg-danger-soft p-3 font-bold text-danger">{t("economy.empty")}</p>}
       {/* Во время игры поле занимает всю ширину/высоту под шапкой — отступы задаёт сама игра. */}
       <main className={cn("mx-auto flex w-full max-w-2xl flex-1 flex-col", phase.name !== "playing" && "px-4 pb-8")}>
         {phase.name === "intro" && (
@@ -140,8 +157,8 @@ export function GameShell({ id }: { id: string }) {
             <div className="flex-1" />
             {/* Кнопка всегда видна внизу экрана, даже если правила и выбор темпа не помещаются. */}
             <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-bg from-70% to-transparent px-4 pb-4 pt-6">
-              <Button size="lg" block onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
-                {t("game.play")}
+              <Button size="lg" block disabled={!heartStatus.unlimited && heartStatus.hearts === 0} onClick={start} icon={<Play size={20} fill="currentColor" />} autoFocus>
+                {t("game.play")} · {heartStatus.unlimited ? t("economy.unlimited") : t("practice.heartCost")}
               </Button>
             </div>
           </div>
@@ -188,7 +205,7 @@ export function GameShell({ id }: { id: string }) {
             {!statKey && <p className="text-center text-sm font-bold text-muted">{t("game.calmNoRecord")}</p>}
             <div className="flex-1" />
             <div className="flex flex-col gap-3">
-              <Button size="lg" block onClick={start} icon={<RotateCcw size={20} />}>
+              <Button size="lg" block disabled={!heartStatus.unlimited && heartStatus.hearts === 0} onClick={start} icon={<RotateCcw size={20} />}>
                 {t("game.again")}
               </Button>
               <Button variant="secondary" block onClick={() => router.push("/practice")}>

@@ -1,4 +1,5 @@
 import type { Skill } from "@/lib/types";
+import { CURRICULUM_LESSONS } from "./lessons";
 
 const NUMBER_SYSTEMS = { ru: "Системы счисления", kk: "Санау жүйелері" };
 
@@ -23,6 +24,8 @@ export const SKILLS: Skill[] = [
     title: { ru: "Свойства двоичных чисел", kk: "Екілік сандардың қасиеттері" },
     topic: NUMBER_SYSTEMS,
   },
+  ...CURRICULUM_LESSONS.filter((lesson, index, all) => all.findIndex((item) => item.skills[0] === lesson.skills[0]) === index)
+    .map((lesson) => ({ id: lesson.skills[0], title: lesson.title, topic: lesson.title })),
 ];
 
 export function skillById(id: string): Skill | undefined {

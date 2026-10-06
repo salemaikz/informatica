@@ -40,6 +40,9 @@ import { MatchView } from "./steps/MatchView";
 import { OrderView } from "./steps/OrderView";
 import { SolutionView } from "./steps/SolutionView";
 import type { StepProps } from "./steps/types";
+import { ActivityMusic } from "@/components/music/ActivityMusic";
+import { HeartGate, HeartChip } from "@/components/economy/HeartGate";
+import type { LearningRunKind } from "@/lib/economy";
 import { Results, requestLessonFeedback, type FeedbackState } from "./Results";
 
 interface QueueItem {
@@ -50,6 +53,7 @@ interface QueueItem {
 
 export interface PlayerProps {
   kind: "lesson" | "drill";
+  runKind?: LearningRunKind;
   lessonId?: string;
   title: string;
   steps: Step[];
@@ -91,7 +95,12 @@ function QuestionView(props: StepProps<QuestionStep>) {
   }
 }
 
-export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: PlayerProps) {
+export function LessonPlayer(props: PlayerProps) {
+  const [runId] = useState(() => crypto.randomUUID());
+  return <HeartGate kind={props.runKind ?? props.kind} runId={runId}><LearningSession {...props} /></HeartGate>;
+}
+
+function LearningSession({ kind, lessonId, title, steps, mistakeMap }: PlayerProps) {
   const router = useRouter();
   const { t, l, lang } = useT();
   const recordAnswer = useApp((s) => s.recordAnswer);
@@ -120,6 +129,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   const startedAt = useRef(0);
   const skippedRef = useRef(0);
+  const finishedRef = useRef(false);
   const stepStartedAt = useRef(0);
 
   useEffect(() => {
@@ -134,8 +144,11 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
 
   const finish = useCallback(
     (finalRecords: AnswerRecord[], finalXp: number, finalMaxCombo: number) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
       const firstTries = finalRecords.filter((r) => !r.retry);
-      const accuracy = firstTries.length ? firstTries.reduce((a, r) => a + r.score, 0) / firstTries.length : 1;
+      const expectedQuestions = steps.filter(isQuestion).length;
+      const accuracy = expectedQuestions ? firstTries.reduce((a, r) => a + r.score, 0) / expectedQuestions : 0;
       const result: SessionResult = {
         kind,
         lessonId,
@@ -154,7 +167,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       setSession({ result, bonusXp, achievements });
       requestLessonFeedback(result, setFeedback);
     },
-    [finishSession, kind, lessonId, title],
+    [finishSession, kind, lessonId, title, steps],
   );
 
   const next = useCallback(() => {
@@ -179,7 +192,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
     (res: StepResult) => {
       if (!question) return;
       const newCombo = res.correct ? combo + 1 : 0;
-      const gained = xpForAnswer(res.correct, item.retry, newCombo);
+      const baseGained = xpForAnswer(res.correct, item.retry, newCombo);
       const rec: AnswerRecord = {
         stepId: question.id,
         skill: question.skill,
@@ -192,7 +205,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         timeMs: Date.now() - stepStartedAt.current,
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
-      recordAnswer(rec, gained, lessonId);
+      const gained = recordAnswer(rec, baseGained, lessonId);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
       if (res.correct && mistakeMap?.[question.id]) dismissMistake(mistakeMap[question.id]);
       noteCombo(newCombo);
@@ -315,10 +328,12 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
 
   // Контекст для ИИ: задание (с ответом, если ученик уже ответил) или теория текущего шага.
   const taskCtx = useMemo<TaskContext | null>(() => {
-    if (step.type === "theory") return { prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
-    if (step.type === "video") return { prompt: tx(step.title, lang), theory: tx(step.title, lang) };
+    if (step.type === "theory") return { stepId: step.id, lessonId, prompt: tx(step.title, lang), theory: plain(tx(step.body, lang)) };
+    if (step.type === "video") return { stepId: step.id, lessonId, prompt: tx(step.title, lang), theory: tx(step.title, lang) };
     if (!question) return null;
     return {
+      stepId: question.id,
+      lessonId,
       prompt: promptText(question, lang),
       options: question.type === "choice" || question.type === "multi" ? question.options.map((o) => tx(o, lang)) : undefined,
       correct: expectedText(question, lang),
@@ -326,7 +341,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
       explanation: plain(tx(question.explanation, lang)),
       answered: phase === "feedback",
     };
-  }, [step, question, lang, result, phase]);
+  }, [step, question, lessonId, lang, result, phase]);
   const askSuggestions: DictKey[] = !question
     ? ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"]
     : phase === "feedback"
@@ -366,6 +381,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
             <X size={24} />
           </button>
           <ProgressBar value={progress} className="flex-1" label={title} />
+          <HeartChip />
           <ComboFlame combo={combo} />
           <button
             type="button"
@@ -380,6 +396,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
         </div>
       </header>
 
+      <ActivityMusic mode="test" active={!session} className="mx-auto w-full max-w-2xl px-4 py-2" />
       {/* Контент шага */}
       {/* Новый шаг выезжает справа и проявляется (≈250 мс); старый не ждём — ученика не тормозим. */}
       <m.main
@@ -443,7 +460,7 @@ export function LessonPlayer({ kind, lessonId, title, steps, mistakeMap }: Playe
                 </button>
               )}
             </div>
-            <h1 className="text-xl font-extrabold leading-snug sm:text-2xl">{l(question.prompt)}</h1>
+            <div role="heading" aria-level={1} className="text-xl font-extrabold leading-snug sm:text-2xl"><Markdown>{l(question.prompt)}</Markdown></div>
             <Shake active={phase === "feedback" && !!result && !result.correct && SHAKE_AREA.has(question.type)} strength={6}>
               <QuestionView
                 key={item.key}

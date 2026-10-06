@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Brain, Lock, RotateCcw, Timer, Trophy } from "lucide-react";
+import { Brain, Braces, FileQuestion, Lock, RotateCcw, Timer, Trophy } from "lucide-react";
 import Link from "next/link";
 import { SKILLS } from "@/content/skills";
 import { unlockedSkills } from "@/content/course";
@@ -10,7 +10,6 @@ import { masteryLevel } from "@/lib/mastery";
 import { useT } from "@/i18n/useT";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Pill } from "@/components/ui/Pill";
 import { MASTERY_COLOR } from "@/components/lesson/Results";
 import { GAMES } from "@/games/registry";
 
@@ -33,7 +32,7 @@ export default function PracticePage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <Link
           href={anyUnlocked ? "/drill?mode=smart" : "/learn"}
-          className="flex flex-col gap-2 rounded-3xl bg-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
+          className="flex flex-col gap-2 rounded-3xl bg-action-primary p-5 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
         >
           <Brain size={30} />
           <span className="text-lg font-extrabold">{t("prac.smart")}</span>
@@ -45,7 +44,7 @@ export default function PracticePage() {
           className={clsx(
             "flex flex-col gap-2 rounded-3xl p-5",
             mistakes.length
-              ? "bg-danger text-white shadow-[0_5px_0_var(--danger-strong)] active:translate-y-1 active:shadow-none"
+              ? "bg-action-danger text-white shadow-[0_5px_0_var(--danger-strong)] active:translate-y-1 active:shadow-none"
               : "pointer-events-none border-2 border-border bg-surface text-muted",
           )}
         >
@@ -98,13 +97,8 @@ export default function PracticePage() {
         </section>
       )}
 
-      <div className="flex items-center gap-4 rounded-3xl border-2 border-dashed border-border p-4 text-muted">
-        <Timer size={28} />
-        <div className="flex-1">
-          <p className="font-extrabold text-text">{t("prac.ent")}</p>
-          <p className="text-sm font-semibold">{t("prac.ent.desc")}</p>
-        </div>
-        <Pill>{t("common.soon")}</Pill>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[{ href: "/ent", title: "prac.ent", desc: "exam.format", Icon: Timer }, { href: "/context", title: "practice.context", desc: "practice.contextHint", Icon: FileQuestion }, { href: "/code-practice", title: "practice.code", desc: "practice.codeHint", Icon: Braces }, { href: "/assessment", title: "practice.section", desc: "practice.sectionHint", Icon: Trophy }].map(({ href, title, desc, Icon }) => <Link key={href} href={href} className="flex flex-col gap-2 rounded-3xl border-2 border-primary/25 bg-surface p-4 hover:bg-primary-soft"><Icon size={26} className="text-primary"/><h2 className="text-lg font-extrabold">{t(title as import('@/i18n/dict').DictKey)}</h2><p className="text-sm font-semibold text-muted">{t(desc as import('@/i18n/dict').DictKey)}</p><p className="mt-auto text-sm font-extrabold text-danger">{t('practice.heartCost')}</p></Link>)}
       </div>
 
       <Card>

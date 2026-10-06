@@ -21,6 +21,9 @@ export interface StudentContext {
 
 /** Задание, к которому относится вопрос (подсказка / разбор ошибки). */
 export interface TaskContext {
+  /** Идентификатор опубликованного шага для общей библиотеки подсказок. */
+  stepId?: string;
+  lessonId?: string;
   prompt: string;
   /** Варианты, если есть. */
   options?: string[];

@@ -49,5 +49,5 @@ export function DrillScreen({ mode, skill }: { mode: "smart" | "mistakes" | "ski
       </div>
     );
   }
-  return <LessonPlayer kind="drill" title={title} steps={session.steps} mistakeMap={session.map} />;
+  return <LessonPlayer kind="drill" runKind={mode === "mistakes" ? "review" : "drill"} title={title} steps={session.steps} mistakeMap={session.map} />;
 }

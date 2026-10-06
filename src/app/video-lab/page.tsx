@@ -3,7 +3,7 @@ import Gallery from "./Gallery";
 
 export const metadata: Metadata = {
   title: "Видеолаборатория — Informatica",
-  description: "Четыре тестовых стиля учебного ролика по информатике.",
+  description: "Черновики анимированных объяснений по информатике для выбора и просмотра.",
   robots: { index: false, follow: false },
 };
 

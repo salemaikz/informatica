@@ -80,71 +80,84 @@ export interface AchievementDef {
   icon: AchievementIcon;
   title: L;
   description: L;
+  /** Награда чипами: сложность достижения от 1 до 10. */
+  difficulty: number;
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "first_lesson",
+    difficulty: 1,
     icon: "graduation",
     title: { ru: "Первый шаг", kk: "Алғашқы қадам" },
     description: { ru: "Пройди первый урок", kk: "Алғашқы сабақты өт" },
   },
   {
     id: "perfect",
+    difficulty: 2,
     icon: "gem",
     title: { ru: "Без ошибок", kk: "Қатесіз" },
     description: { ru: "Пройди урок без единой ошибки", kk: "Сабақты бірде-бір қатесіз өт" },
   },
   {
     id: "combo_7",
+    difficulty: 3,
     icon: "flame",
     title: { ru: "В ударе", kk: "Бабыңдасың" },
     description: { ru: "7 верных ответов подряд", kk: "Қатарынан 7 дұрыс жауап" },
   },
   {
     id: "streak_3",
+    difficulty: 3,
     icon: "calendar",
     title: { ru: "Три дня подряд", kk: "Үш күн қатарынан" },
     description: { ru: "Занимайся 3 дня подряд", kk: "3 күн қатарынан оқы" },
   },
   {
     id: "streak_7",
+    difficulty: 7,
     icon: "trophy",
     title: { ru: "Неделя силы", kk: "Күш аптасы" },
     description: { ru: "Занимайся 7 дней подряд", kk: "7 күн қатарынан оқы" },
   },
   {
     id: "xp_500",
+    difficulty: 5,
     icon: "star",
     title: { ru: "500 XP", kk: "500 XP" },
     description: { ru: "Набери 500 очков опыта", kk: "500 тәжірибе ұпайын жина" },
   },
   {
     id: "ai_friend",
+    difficulty: 1,
     icon: "sparkles",
     title: { ru: "Любопытный", kk: "Білуге құмар" },
     description: { ru: "Задай вопрос ИИ-помощнику", kk: "ЖИ-көмекшіге сұрақ қой" },
   },
   {
     id: "solver",
+    difficulty: 2,
     icon: "camera",
     title: { ru: "Решатель", kk: "Шешуші" },
     description: { ru: "Отправь решение на проверку ИИ", kk: "Шешіміңді ЖИ тексеруіне жібер" },
   },
   {
     id: "drill",
+    difficulty: 2,
     icon: "dumbbell",
     title: { ru: "Тренер сам себе", kk: "Өз-өзіңе жаттықтырушы" },
     description: { ru: "Пройди тренировку слабых тем", kk: "Әлсіз тақырыптар жаттығуын өт" },
   },
   {
     id: "gamer",
+    difficulty: 1,
     icon: "gamepad",
     title: { ru: "Игрок", kk: "Ойыншы" },
     description: { ru: "Сыграй в мини-игру", kk: "Шағын ойын ойна" },
   },
   {
     id: "binary_master",
+    difficulty: 10,
     icon: "brain",
     title: { ru: "Повелитель битов", kk: "Биттер әміршісі" },
     description: {

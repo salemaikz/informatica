@@ -4,6 +4,7 @@ import { BookCheck, Clock, Flame, Sparkles, Target, Trash2, Trophy, Zap } from "
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SKILLS } from "@/content/skills";
+import { problemAnalytics } from "@/lib/problem-analytics";
 import { useApp } from "@/lib/store";
 import { masteryLevel } from "@/lib/mastery";
 import { useLevel, useStreak } from "@/lib/hooks";
@@ -41,6 +42,8 @@ export default function StatsPage() {
   const skills = useApp((s) => s.skills);
   const lessons = useApp((s) => s.lessons);
   const mistakes = useApp((s) => s.mistakes);
+  const questionStats = useApp((s) => s.questionStats);
+  const problems = problemAnalytics(questionStats, SKILLS);
   const memory = useApp((s) => s.memory);
   const setMemory = useApp((s) => s.setMemory);
   const { xp, level } = useLevel();
@@ -95,6 +98,23 @@ export default function StatsPage() {
         )}
       </Card>
 
+      <Card>
+        <h2 className="mb-2 text-lg font-extrabold">{t("stats.problemTopics")}</h2>
+        <p className="mb-3 text-sm font-semibold text-muted">{t("stats.problemHint")}</p>
+        {!problems.topics.length ? <p className="font-semibold text-muted">{t("stats.noProblems")}</p> : <ul className="flex flex-col divide-y divide-border">{problems.topics.map(topic => <li key={topic.skill.id} className="flex items-center justify-between gap-3 py-3">
+          <div><p className="font-extrabold">{l(topic.skill.title)}</p><p className="text-sm font-semibold text-muted">{t("stats.problemCounts", { n: topic.attempts, correct: topic.correct })} · {Math.round(topic.scoreTotal / topic.attempts * 100)}%</p></div>
+          <Link href={`/drill?mode=skill&skill=${encodeURIComponent(topic.skill.id)}`} className="shrink-0 rounded-xl bg-primary-soft px-3 py-2 text-sm font-extrabold text-primary">{t("prac.train")}</Link>
+        </li>)}</ul>}
+      </Card>
+      {problems.questions.length > 0 && <Card>
+        <h2 className="mb-3 text-lg font-extrabold">{t("stats.problemQuestions")}</h2>
+        <ul className="flex flex-col gap-3">{problems.questions.slice(0, 12).map(question => <li key={question.stepId} className="rounded-xl bg-surface-2 p-3">
+          <p className="whitespace-pre-line text-sm font-semibold">{question.prompt}</p>
+          <p className="mt-2 text-xs font-extrabold text-danger">{t("stats.problemCounts", { n: question.attempts, correct: question.correct })}</p>
+          {question.skill && <p className="mt-1 text-xs font-bold text-muted">{l(SKILLS.find(skill => skill.id === question.skill)?.title ?? { ru: question.skill, kk: question.skill })}</p>}
+        </li>)}</ul>
+      </Card>}
+
       {mistakes.length > 0 && (
         <Card>
           <div className="mb-3 flex items-center justify-between">
@@ -123,7 +143,7 @@ export default function StatsPage() {
         </Card>
       )}
 
-      <Card className="border-ai/30">
+      {memory && <Card className="border-ai/30">
         <div className="mb-2 flex items-center justify-between">
           <p className="flex items-center gap-1.5 font-extrabold text-ai">
             <Sparkles size={18} /> {t("stats.memory")}
@@ -134,8 +154,8 @@ export default function StatsPage() {
             </button>
           )}
         </div>
-        {memory ? <Markdown className="text-[15px]">{memory}</Markdown> : <p className="font-semibold text-muted">{t("stats.memoryEmpty")}</p>}
-      </Card>
+        <Markdown className="text-[15px]">{memory}</Markdown>
+      </Card>}
     </div>
   );
 }

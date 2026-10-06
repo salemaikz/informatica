@@ -131,7 +131,7 @@ export type Step = VideoStep | TheoryStep | QuestionStep;
 
 export type StepType = Step["type"];
 
-export type VisualId = "place-values" | "binary-weights" | "division-ladder" | "lamps";
+export type VisualId = "place-values" | "binary-weights" | "division-ladder" | "lamps" | "truth-table" | "code-trace" | "information-units" | "network-flow" | "sql-pipeline" | "sheet-references" | "graph-path";
 
 export interface Lesson {
   id: string;

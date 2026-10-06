@@ -13,11 +13,11 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
 
 export function StreakChip() {
-  const { current, activeToday } = useStreak();
+  const { current } = useStreak();
   const { t } = useT();
   return (
-    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
-      <Flame size={20} fill={activeToday ? "currentColor" : "none"} /> {current}
+    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
+      <Flame size={20} fill={current > 0 ? "currentColor" : "none"} /> {current}
     </span>
   );
 }

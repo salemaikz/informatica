@@ -9,10 +9,10 @@ type Variant = "primary" | "success" | "danger" | "ai" | "secondary" | "ghost";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-primary text-white shadow-[0_4px_0_var(--primary-strong)] hover:brightness-105",
-  success: "bg-success text-white shadow-[0_4px_0_var(--success-strong)] hover:brightness-105",
-  danger: "bg-danger text-white shadow-[0_4px_0_var(--danger-strong)] hover:brightness-105",
-  ai: "bg-ai text-white shadow-[0_4px_0_var(--ai-strong)] hover:brightness-105",
+  primary: "bg-action-primary text-white shadow-[0_4px_0_var(--primary-strong)] hover:brightness-105",
+  success: "bg-action-success text-white shadow-[0_4px_0_var(--success-strong)] hover:brightness-105",
+  danger: "bg-action-danger text-white shadow-[0_4px_0_var(--danger-strong)] hover:brightness-105",
+  ai: "bg-action-ai text-white shadow-[0_4px_0_var(--ai-strong)] hover:brightness-105",
   secondary: "bg-surface text-text border-2 border-border shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
   ghost: "bg-transparent text-muted hover:bg-surface-2 hover:text-text",
 };

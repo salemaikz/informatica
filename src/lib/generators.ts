@@ -3,6 +3,7 @@ import { toBinary } from "./check";
 import { seeded, shuffle } from "./text";
 import type { SkillStat } from "./mastery";
 import { levelFromMastery } from "./ent";
+import { generateCurriculumQuestion, CURRICULUM_BANKS } from "./bank/curriculum";
 
 // Процедурная генерация заданий: бесконечная тренировка без затрат на ИИ.
 // У каждого задания уровень A/B/C (1/2/3), как в ЕНТ. Уровень выбирается по освоению навыка,
@@ -298,6 +299,7 @@ const GENERATORS: Record<string, Generator> = {
   "ns.bin2dec": genBin2Dec,
   "ns.dec2bin": genDec2Bin,
   "ns.props": genProps,
+  ...Object.fromEntries(CURRICULUM_BANKS.map((bank) => [bank.skill, (_rand: Rand, level: Level, seed: number) => generateCurriculumQuestion(bank.skill, level, seed)])),
 };
 
 export function canGenerate(skill: SkillId): boolean {
@@ -314,6 +316,22 @@ export function generateLeveled(skill: SkillId, level: Level, seed: number): Que
 /** Задание по освоению навыка (уровень подбирается сам). */
 export function generateStep(skill: SkillId, mastery: number, seed: number): QuestionStep {
   return generateLeveled(skill, levelFromMastery(mastery), seed);
+}
+
+/** Практикум трассировки: только задания с кодом, ответы проверяются локально. */
+export function buildCodePractice(seed: number, count = 8): QuestionStep[] {
+  const skills = ["py.variables", "py.conditions", "py.loops", "py.lists", "py.strings", "py.functions", "py.files", "algo.sorting"];
+  const questions: QuestionStep[] = [];
+  const seen = new Set<string>();
+  const rand = seeded(seed);
+  for (let tries = 0; questions.length < count && tries < count * 100; tries++) {
+    const skill = skills[Math.floor(rand() * skills.length)];
+    const level = (Math.min(2, Math.floor(questions.length * 3 / count)) + 1) as Level;
+    const question = generateCurriculumQuestion(skill, level, Math.floor(rand() * 1e9));
+    if (seen.has(question.id) || !question.prompt.ru.includes("```python")) continue;
+    seen.add(question.id); questions.push(question);
+  }
+  return questions;
 }
 
 /**

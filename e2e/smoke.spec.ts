@@ -16,12 +16,15 @@ test("онбординг и первые шаги урока", async ({ page }) 
 
   await page.getByRole("link", { name: "Начать" }).first().click();
   await page.waitForURL("**/lesson/ns-1-binary");
+  await expect(page.getByText("Одно занятие — одно сердце.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Начать занятие", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1")!).state.hearts.count)).toBe(4);
   await expect(page.getByText("Как компьютер считает")).toBeVisible();
   await page.locator("footer button").last().click(); // видео → дальше
   await page.locator("footer button").last().click(); // теория → дальше
 
   // Неверный ответ → красная панель с правильным ответом
-  await page.getByRole("button", { name: "1 и 2", exact: true }).click();
+  await page.getByRole("button", { name: /^(?:\d+\s+)?1 и 2$/ }).click();
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toBeVisible();
   await expect(page.locator("footer")).toContainText("0 и 1");
@@ -32,14 +35,15 @@ test("онбординг и первые шаги урока", async ({ page }) 
   for (const w of ["8", "4", "1"]) await page.locator(`main button[aria-label='${w}']`).click();
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.locator("footer")).toContainText("XP");
+  // Внутри уже оплаченного занятия ответы и ошибки не списывают повторный вход.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1")!).state.hearts.count)).toBe(4);
 
   expect(errors).toEqual([]);
 });
 
 test("тренировка по навыку генерирует задания", async ({ page }) => {
-  await page.goto("/onboarding");
-  await page.evaluate(() =>
-    localStorage.setItem(
+  await page.addInitScript(() =>
+    localStorage.getItem("informatica-v1") || localStorage.setItem(
       "informatica-v1",
       JSON.stringify({
         state: {
@@ -51,8 +55,11 @@ test("тренировка по навыку генерирует задания
       }),
     ),
   );
+  await page.goto("/onboarding");
   await page.goto("/practice");
   await expect(page.getByText("Ақылды жаттығу")).toBeVisible();
   await page.goto("/drill?mode=skill&skill=ns.dec2bin");
-  await expect(page.locator("main h1")).toContainText(/екілік|Екілік/);
+  await page.getByRole("button", { name: "Жаттығуды бастау", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1")!).state.hearts.count)).toBe(4);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/екілік|Екілік/);
 });

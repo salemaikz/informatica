@@ -62,9 +62,9 @@ export default function LearnPage() {
                 <Clock size={16} /> {t("common.minutes", { n: heroLesson.durationMin })}
               </span>
               <span>· {t("learn.steps", { n: heroLesson.steps.length })}</span>
-              <span className="flex items-center gap-1">
+              {heroLesson.steps.some((step) => step.type === "video") && <span className="flex items-center gap-1">
                 · <Clapperboard size={16} /> {t("lesson.video")}
-              </span>
+              </span>}
               <span className="flex items-center gap-1">
                 · <Camera size={16} /> {t("learn.photoCheck")}
               </span>
@@ -105,7 +105,8 @@ export default function LearnPage() {
                       "relative flex h-[72px] w-[72px] items-center justify-center rounded-full border-b-[6px] transition-transform active:translate-y-1 active:border-b-2",
                       soon && "border-border bg-surface-2 text-muted",
                       done && "border-warning-strong bg-gold text-white",
-                      !soon && !done && "text-white animate-pulse-ring",
+                      !soon && !done && "text-white",
+                      current && "animate-pulse-ring",
                     )}
                     style={!soon && !done ? { background: unit.color, borderColor: "rgba(0,0,0,0.25)" } : undefined}
                   >

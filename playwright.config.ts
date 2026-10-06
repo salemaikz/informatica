@@ -6,11 +6,12 @@ export default defineConfig({
   testDir: "e2e",
   timeout: 60_000,
   use: {
-    baseURL: "http://localhost:3100",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3100",
     ...devices["Pixel 7"],
+    timezoneId: "Asia/Almaty",
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: "npm run build && npx next start -p 3100",
     url: "http://localhost:3100/onboarding",
     timeout: 240_000,

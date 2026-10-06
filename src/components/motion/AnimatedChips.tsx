@@ -54,7 +54,7 @@ export function XpChipAnimated() {
 
 /** Серия дней: когда она растёт, пламя «покачивается» и увеличивается. */
 export function StreakChipAnimated() {
-  const { current, activeToday } = useStreak();
+  const { current } = useStreak();
   const { t } = useT();
   const [prev, setPrev] = useState(() => seenStreak ?? current);
   const [wiggling, setWiggling] = useState(false);
@@ -68,14 +68,14 @@ export function StreakChipAnimated() {
   }, [current]);
 
   return (
-    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", activeToday ? "text-streak" : "text-muted")}>
+    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
       <m.span
         className="flex origin-bottom"
         animate={wiggling ? { rotate: [0, -16, 14, -9, 5, 0], scale: [1, 1.25, 1.25, 1.1, 1, 1] } : { rotate: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: "easeInOut", delay: wiggling ? BUMP_DELAY : 0 }}
         onAnimationComplete={() => setWiggling(false)}
       >
-        <Flame size={20} fill={activeToday ? "currentColor" : "none"} />
+        <Flame size={20} fill={current > 0 ? "currentColor" : "none"} />
       </m.span>
       {current}
     </span>

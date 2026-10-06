@@ -6,7 +6,8 @@ import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useApp } from "@/lib/store";
+import { HeartChip } from "@/components/economy/HeartGate";
+import { ProfileAvatar } from "@/components/economy/ProfileAvatar";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -24,23 +25,11 @@ const NAV: { href: string; key: DictKey; icon: typeof BookOpen; ai?: boolean }[]
   { href: "/stats", key: "nav.stats", icon: ChartColumn },
 ];
 
-function Avatar({ size = 36 }: { size?: number }) {
-  const name = useApp((s) => s.profile.name);
-  return (
-    <span
-      className="flex items-center justify-center rounded-full bg-primary-soft font-extrabold text-primary"
-      style={{ width: size, height: size, fontSize: size * 0.42 }}
-    >
-      {(name.trim()[0] ?? "?").toUpperCase()}
-    </span>
-  );
-}
-
 function Logo() {
   return (
     <Link href="/learn" className="flex items-center gap-2">
       <Mascot size={34} />
-      <span className="text-lg font-black tracking-tight text-primary">Informatica</span>
+      <span className="hidden text-lg font-black tracking-tight text-primary min-[400px]:inline">Informatica</span>
     </Link>
   );
 }
@@ -62,6 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link
             key={href}
             href={href}
+            aria-current={active(href) ? "page" : undefined}
             className={clsx(
               "flex h-12 items-center gap-3 rounded-2xl border-2 px-3 font-extrabold transition-colors",
               active(href)
@@ -74,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Icon size={22} /> {t(key)}
           </Link>
         ))}
+        <Link href="/shop" aria-current={active("/shop") ? "page" : undefined} className="flex h-12 items-center gap-3 rounded-2xl px-3 font-extrabold text-danger hover:bg-surface-2"><HeartChip /> {t("economy.shop")}</Link>
         <div className="flex-1" />
         <button
           type="button"
@@ -89,21 +80,21 @@ export function AppShell({ children }: { children: ReactNode }) {
             active("/profile") ? "border-primary/40 bg-primary-soft text-primary" : "border-transparent text-muted hover:bg-surface-2",
           )}
         >
-          <Avatar size={28} /> {t("nav.profile")}
+          <ProfileAvatar size={28} /> {t("nav.profile")}
         </Link>
       </aside>
 
       <div className="lg:pl-64">
         {/* Телефон: верхняя панель */}
         <header className="sticky top-0 z-20 border-b-2 border-border bg-bg/90 backdrop-blur lg:hidden">
-          <div className="mx-auto flex h-14 max-w-2xl items-center gap-4 px-4 pt-[env(safe-area-inset-top)]">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2.5 px-3 pt-[env(safe-area-inset-top)]">
             <Logo />
             <div className="flex-1" />
             <StreakChipAnimated />
-            <XpChipAnimated />
+            <Link href="/shop" aria-label={t("economy.shop")}><HeartChip /></Link>
             <ToolboxButton variant="icon" />
             <Link href="/profile" aria-label={t("nav.profile")}>
-              <Avatar size={32} />
+              <ProfileAvatar size={32} />
             </Link>
           </div>
         </header>
@@ -120,6 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <StreakChipAnimated />
               <XpChipAnimated />
               <LevelChip />
+              <Link href="/shop" aria-label={t("economy.shop")}><HeartChip /></Link>
             </div>
             <LevelCard />
             <DailyGoalCard />
@@ -143,6 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={href}
                 href={href}
+                aria-current={active(href) ? "page" : undefined}
                 className={clsx(
                   "relative flex h-16 flex-col items-center justify-start gap-0.5 pt-[7px] text-[11px] font-extrabold transition-colors",
                   active(href) ? (ai ? "text-ai" : "text-primary") : "text-muted",

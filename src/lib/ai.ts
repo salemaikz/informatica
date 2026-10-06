@@ -72,3 +72,12 @@ export async function lessonFeedback(req: LessonFeedbackRequest, signal?: AbortS
   await ensureOk(res);
   return res.json();
 }
+
+/** Стандартные ответы не обращаются к модели и не расходуют личный лимит. */
+export async function standardGuidance(req: { stepId: string; lessonId?: string; lang: import('./types').Lang; intent: import('./standard-guidance').StandardIntent; answered: boolean }, signal?: AbortSignal): Promise<string> {
+  const res = await fetch('/api/ai/guidance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req), signal });
+  await ensureOk(res);
+  const data = await res.json() as { text: string };
+  if (!data.text?.trim()) throw new AiError('empty_answer');
+  return data.text;
+}

@@ -2,6 +2,7 @@
 
 import { BookmarkPlus, Check, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { StandardIntent } from "@/lib/standard-guidance";
 import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -48,8 +49,8 @@ export function AiPanel({
   const bottom = useRef<HTMLDivElement>(null);
 
   // isCurrent — защита от ответов отменённых запусков (например, при двойном монтировании в dev).
-  const stream = async (history: TutorTurn[], isCurrent: () => boolean) => {
-    const text = await ask({ mode, task, messages: history }, (full) => {
+  const stream = async (history: TutorTurn[], isCurrent: () => boolean, standard?: StandardIntent) => {
+    const text = await ask({ mode, task, messages: history, standard }, (full) => {
       if (isCurrent()) setTurns([...history, { role: "assistant", content: full }]);
     });
     if (text === null && isCurrent()) setTurns(history);
@@ -61,7 +62,7 @@ export function AiPanel({
     let alive = true;
     // Запрос к внешнему API при открытии панели; синхронно меняется только статус «загрузка».
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void stream([], () => alive);
+    void stream([], () => alive, mode === "hint" ? "hint" : "explain");
     return () => {
       alive = false;
       stop();
@@ -73,14 +74,14 @@ export function AiPanel({
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
-  const send = (text?: string) => {
+  const send = (text?: string, standard?: StandardIntent) => {
     const q = (text ?? draft).trim();
     if (!q || streaming) return;
     if (!text) setDraft("");
     const history: TutorTurn[] = [...turns, { role: "user", content: q }];
     const id = ++runId.current;
     setTurns([...history, { role: "assistant", content: "" }]);
-    void stream(history, () => id === runId.current);
+    void stream(history, () => id === runId.current, standard);
   };
 
   return (
@@ -123,7 +124,7 @@ export function AiPanel({
               <button
                 key={k}
                 type="button"
-                onClick={() => send(t(k))}
+                onClick={() => send(t(k), k.split(".").at(-1) as StandardIntent)}
                 className="rounded-full border-2 border-ai/30 bg-ai-soft px-3 py-1.5 text-sm font-extrabold text-ai hover:brightness-95"
               >
                 {t(k)}
@@ -151,7 +152,7 @@ export function AiPanel({
         <button
           type="submit"
           disabled={!draft.trim() || streaming}
-          aria-label="send"
+          aria-label={t("common.send")}
           className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ai text-white disabled:opacity-40"
         >
           <Send size={18} />

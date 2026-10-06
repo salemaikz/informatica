@@ -50,7 +50,7 @@ describe("стор: работа над ошибками", () => {
       accuracy: 1,
     };
     expect(useApp.getState().finishSession(base).bonusXp).toBe(40);
-    expect(useApp.getState().finishSession({ ...base, skipped: 1 }).bonusXp).toBe(20);
+    expect(useApp.getState().finishSession({ ...base, skipped: 1 }).bonusXp).toBe(0);
   });
 
   it("refundAi возвращает обращение", () => {

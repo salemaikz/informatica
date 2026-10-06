@@ -1,96 +1,41 @@
 import type { Lesson, Unit } from "@/lib/types";
 import { lessonBinary } from "./lessons/ns-1-binary";
+import { CURRICULUM_LESSONS } from "./lessons";
 
-// Карта курса подготовки к ЕНТ по информатике.
-// status: "soon" — урок запланирован, но ещё не написан (см. docs/ROADMAP.md).
+export const LESSONS: Record<string, Lesson> = Object.fromEntries(
+  [lessonBinary, ...CURRICULUM_LESSONS].map((lesson) => [lesson.id, lesson]),
+);
 
-export const UNITS: Unit[] = [
-  {
-    id: "u1",
-    title: { ru: "Информация и системы счисления", kk: "Ақпарат және санау жүйелері" },
-    description: { ru: "Как компьютер хранит числа", kk: "Компьютер сандарды қалай сақтайды" },
-    color: "#1a91d6",
-    lessons: [
-      { id: "ns-1-binary", title: lessonBinary.title, status: "available" },
-      { id: "ns-2-oct-hex", title: { ru: "Восьмеричная и шестнадцатеричная", kk: "Сегіздік және он алтылық" }, status: "soon" },
-      { id: "ns-3-arith", title: { ru: "Арифметика в двоичной системе", kk: "Екілік жүйедегі арифметика" }, status: "soon" },
-      { id: "info-units", title: { ru: "Единицы измерения информации", kk: "Ақпараттың өлшем бірліктері" }, status: "soon" },
-    ],
-  },
-  {
-    id: "u2",
-    title: { ru: "Логика", kk: "Логика" },
-    description: { ru: "Высказывания и таблицы истинности", kk: "Пікірлер және ақиқат кестелері" },
-    color: "#0f9f8f",
-    lessons: [
-      { id: "logic-1-ops", title: { ru: "Логические операции", kk: "Логикалық амалдар" }, status: "soon" },
-      { id: "logic-2-tables", title: { ru: "Таблицы истинности", kk: "Ақиқат кестелері" }, status: "soon" },
-    ],
-  },
-  {
-    id: "u3",
-    title: { ru: "Алгоритмы и Python", kk: "Алгоритмдер және Python" },
-    description: { ru: "От блок-схем к первым программам", kk: "Блок-схемалардан алғашқы бағдарламаларға дейін" },
-    color: "#e0457b",
-    lessons: [
-      { id: "algo-1-basics", title: { ru: "Алгоритмы и блок-схемы", kk: "Алгоритмдер және блок-схемалар" }, status: "soon" },
-      { id: "py-1-vars", title: { ru: "Переменные и типы данных", kk: "Айнымалылар және деректер типтері" }, status: "soon" },
-      { id: "py-2-if", title: { ru: "Ветвления", kk: "Тармақталу" }, status: "soon" },
-      { id: "py-3-loops", title: { ru: "Циклы", kk: "Циклдер" }, status: "soon" },
-    ],
-  },
-  {
-    id: "u4",
-    title: { ru: "Компьютер и сети", kk: "Компьютер және желілер" },
-    description: { ru: "Устройство ПК, интернет, адресация", kk: "ДК құрылысы, интернет, адрестеу" },
-    color: "#5b63e6",
-    lessons: [
-      { id: "pc-1-arch", title: { ru: "Устройство компьютера", kk: "Компьютердің құрылысы" }, status: "soon" },
-      { id: "net-1-basics", title: { ru: "Компьютерные сети и интернет", kk: "Компьютерлік желілер және интернет" }, status: "soon" },
-    ],
-  },
-  {
-    id: "u5",
-    title: { ru: "Данные", kk: "Деректер" },
-    description: { ru: "Кодирование, таблицы, базы данных", kk: "Кодтау, кестелер, деректер қоры" },
-    color: "#0e8fb0",
-    lessons: [
-      { id: "data-1-coding", title: { ru: "Кодирование текста и изображений", kk: "Мәтін мен суретті кодтау" }, status: "soon" },
-      { id: "data-2-sheets", title: { ru: "Электронные таблицы", kk: "Электрондық кестелер" }, status: "soon" },
-      { id: "data-3-db", title: { ru: "Базы данных", kk: "Деректер қоры" }, status: "soon" },
-    ],
-  },
+const sections: Omit<Unit, "lessons">[] = [
+  { id: "u1", title: { ru: "Информация и системы счисления", kk: "Ақпарат және санау жүйелері" }, description: { ru: "Числа, кодирование, объём и передача данных", kk: "Сандар, кодтау, көлем және деректерді тасымалдау" }, color: "#1a91d6" },
+  { id: "u2", title: { ru: "Логика", kk: "Логика" }, description: { ru: "Условия, таблицы истинности и схемы", kk: "Шарттар, ақиқат кестелері және сызбалар" }, color: "#0f9f8f" },
+  { id: "u3", title: { ru: "Алгоритмы и Python", kk: "Алгоритмдер және Python" }, description: { ru: "От переменных до рекурсии, файлов и графов", kk: "Айнымалылардан рекурсия, файлдар мен графтарға дейін" }, color: "#d13e70" },
+  { id: "u4", title: { ru: "Компьютер и программы", kk: "Компьютер және программалар" }, description: { ru: "Устройства, память, операционная система и ПО", kk: "Құрылғылар, жад, операциялық жүйе және программалар" }, color: "#5964cf" },
+  { id: "u5", title: { ru: "Базы данных и SQL", kk: "Деректер қоры және SQL" }, description: { ru: "Ключи, связи, запросы и изменение данных", kk: "Кілттер, байланыстар, сұраныстар және деректерді өзгерту" }, color: "#0e8fa2" },
+  { id: "u6", title: { ru: "Сети и безопасность", kk: "Желілер және қауіпсіздік" }, description: { ru: "Адреса, протоколы, защита и электронная подпись", kk: "Мекенжайлар, хаттамалар, қорғау және электрондық қолтаңба" }, color: "#bd691d" },
+  { id: "u7", title: { ru: "Таблицы, документы и веб", kk: "Кестелер, құжаттар және веб" }, description: { ru: "Формулы, информационные объекты, HTML и CSS", kk: "Формулалар, ақпараттық нысандар, HTML және CSS" }, color: "#317fa6" },
+  { id: "u8", title: { ru: "Современные технологии", kk: "Қазіргі технологиялар" }, description: { ru: "Облака, ИИ, стартапы и 3D-моделирование", kk: "Бұлт, ЖИ, стартаптар және 3D модельдеу" }, color: "#a353b2" },
+  { id: "u9", title: { ru: "Стратегия ЕНТ", kk: "ҰБТ стратегиясы" }, description: { ru: "Форматы, темп и разбор ошибок", kk: "Пішімдер, қарқын және қателерді талдау" }, color: "#aa7730" },
 ];
 
-export const LESSONS: Record<string, Lesson> = {
-  [lessonBinary.id]: lessonBinary,
-};
+export const UNITS: Unit[] = sections.map((section) => ({
+  ...section,
+  lessons: Object.values(LESSONS).filter((lesson) => lesson.unitId === section.id)
+    .map((lesson) => ({ id: lesson.id, title: lesson.title, status: "available" as const })),
+}));
 
-export function getLesson(id: string): Lesson | undefined {
-  return LESSONS[id];
-}
+export function getLesson(id: string): Lesson | undefined { return LESSONS[id]; }
 
-/** Порядковый номер урока в курсе (1-based). */
 export function lessonNumber(id: string): number {
   let n = 0;
-  for (const u of UNITS) {
-    for (const l of u.lessons) {
-      n++;
-      if (l.id === id) return n;
-    }
-  }
+  for (const unit of UNITS) for (const lesson of unit.lessons) { n++; if (lesson.id === id) return n; }
   return 0;
 }
 
-/** Навыки, открытые пройденными уроками — их можно тренировать. */
 export function unlockedSkills(completedLessonIds: string[]): string[] {
-  const set = new Set<string>();
-  for (const id of completedLessonIds) LESSONS[id]?.skills.forEach((s) => set.add(s));
-  return [...set];
+  return [...new Set(completedLessonIds.flatMap((id) => LESSONS[id]?.skills ?? []))];
 }
 
-/** Ищет шаг урока по id (для работы над ошибками). */
 export function findStep(lessonId: string | undefined, stepId: string) {
-  if (!lessonId) return undefined;
-  return LESSONS[lessonId]?.steps.find((s) => s.id === stepId);
+  return lessonId ? LESSONS[lessonId]?.steps.find((step) => step.id === stepId) : undefined;
 }

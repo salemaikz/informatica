@@ -3,11 +3,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AnswerRecord, ExplainStyle, Goal, Grade, Lang, SessionResult, Theme } from "./types";
-import { bumpStreak, levelInfo, XP, type Streak } from "./gamification";
+import { achievementById, bumpStreak, levelInfo, XP, type Streak } from "./gamification";
 import { masteryLevel, updateSkill, type SkillStat } from "./mastery";
 import { todayKey } from "./text";
 import { gameReward, gameStatKey, type GameReward } from "./games";
 import type { GameMode, GameResult } from "@/games/types";
+import { ECONOMY, canFinishSession, heartStatus, recentChipHistory, spendHeart, type ChipTransaction, type HeartWallet, type LearningRunKind, type Subscription } from "./economy";
+import { COSMETICS, pickCosmetic, type Cosmetic } from "./cosmetics";
 
 // Локальное хранилище прогресса (MVP). Всё лежит в localStorage устройства.
 // План: заменить на синхронизацию с бэкендом (см. docs/ROADMAP.md) — интерфейс действий не менять.
@@ -81,7 +83,31 @@ export interface GameStat {
   lastAt: number;
 }
 
+export interface QuestionStat {
+  stepId: string;
+  skill?: string;
+  lessonId?: string;
+  prompt: string;
+  attempts: number;
+  correct: number;
+  scoreTotal: number;
+  lastAt: number;
+}
+
 export interface AppState {
+  chips: number;
+  chipHistory: ChipTransaction[];
+  /** Ключи уже выданных наград сохраняются после очистки истории. */
+  chipClaims: Record<string, number>;
+  hearts: HeartWallet;
+  subscription: Subscription;
+  xpBoostUntil: number;
+  learningRuns: Record<string, { kind: LearningRunKind; at: number; sequence?: number }>;
+  caseLevel: number;
+  cases: number;
+  cosmetics: string[];
+  equippedCosmeticId: string | null;
+  questionStats: Record<string, QuestionStat>;
   onboarded: boolean;
   profile: Profile;
   xp: number;
@@ -103,9 +129,18 @@ export interface AppState {
 }
 
 export interface AppActions {
+  startLearningRun: (kind: LearningRunKind, runId: string) => boolean;
+  heartStatus: () => ReturnType<typeof heartStatus>;
+  recordAssessment: (kind: "ent" | "section-test", id: string, accuracy: number, durationSec?: number) => void;
+  /** Время неполного занятия: без XP, чипов и отметки завершения. */
+  recordStudyTime: (durationSec: number) => void;
+  buyXpBoost: () => boolean;
+  openCase: () => Cosmetic | null;
+  equipCosmetic: (id: string | null) => void;
+  pruneChipHistory: () => void;
   completeOnboarding: (p: Partial<Profile>) => void;
   updateProfile: (p: Partial<Profile>) => void;
-  recordAnswer: (rec: AnswerRecord, xp: number, lessonId?: string) => void;
+  recordAnswer: (rec: AnswerRecord, xp: number, lessonId?: string) => number;
   finishSession: (result: SessionResult) => { bonusXp: number };
   noteCombo: (combo: number) => void;
   unlock: (id: string) => void;
@@ -147,6 +182,18 @@ export const defaultProfile: Profile = {
 };
 
 const initialState: AppState = {
+  chips: 0,
+  chipHistory: [],
+  chipClaims: {},
+  hearts: { count: ECONOMY.freeHearts, refilledAt: 0 },
+  subscription: { plan: "free", expiresAt: null },
+  xpBoostUntil: 0,
+  learningRuns: {},
+  caseLevel: 1,
+  cases: 0,
+  cosmetics: [],
+  equippedCosmeticId: null,
+  questionStats: {},
   onboarded: false,
   profile: defaultProfile,
   xp: 0,
@@ -167,9 +214,18 @@ const initialState: AppState = {
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
+function awardChips(state: AppState, claim: string, reason: string, amount: number): AppState {
+  if (state.chipClaims[claim]) return state;
+  const at = Date.now();
+  return { ...state, chips: state.chips + amount, chipClaims: { ...state.chipClaims, [claim]: at }, chipHistory: [{ id: uid(), reason, amount, at }, ...recentChipHistory(state.chipHistory, at)] };
+}
+
 function withAchievement(state: AppState, id: string): Partial<AppState> {
   if (state.achievements[id]) return {};
+  const difficulty = achievementById(id)?.difficulty;
+  const rewarded = difficulty ? awardChips(state, `achievement:${id}`, "achievement", Math.max(1, Math.min(10, difficulty))) : state;
   return {
+    chips: rewarded.chips, chipClaims: rewarded.chipClaims, chipHistory: rewarded.chipHistory,
     achievements: { ...state.achievements, [id]: Date.now() },
     newAchievements: [...state.newAchievements, id],
   };
@@ -189,21 +245,86 @@ function evaluate(state: AppState): Partial<AppState> {
   if (solid("ns.bin2dec") && solid("ns.dec2bin")) {
     apply("binary_master");
   }
-  return { achievements: s.achievements, newAchievements: s.newAchievements };
+  return { achievements: s.achievements, newAchievements: s.newAchievements, chips: s.chips, chipClaims: s.chipClaims, chipHistory: s.chipHistory };
 }
+
+function settle(state: AppState): AppState {
+  let next = { ...state, ...evaluate(state) };
+  const today = todayKey();
+  if ((next.days[today]?.xp ?? 0) >= next.profile.dailyGoalXp) next = awardChips(next, `daily:${today}`, "daily", ECONOMY.dailyGoal);
+  const level = levelInfo(next.xp).level;
+  if (level > next.caseLevel) next = { ...next, cases: next.cases + level - next.caseLevel, caseLevel: level };
+  return { ...next, chipHistory: recentChipHistory(next.chipHistory) };
+}
+
+const boostedXp = (state: AppState, xp: number) => (Number.isFinite(xp) ? Math.max(0, Math.min(1000, Math.floor(xp))) : 0) * (state.xpBoostUntil > Date.now() ? 2 : 1);
 
 export const useApp = create<AppState & AppActions>()(
   persist(
     (set, get) => ({
       ...initialState,
 
+      heartStatus: () => heartStatus(get().hearts, get().subscription),
+
+      startLearningRun: (kind, runId) => {
+        if (!runId || runId.length > 160) return false;
+        const s = get();
+        if (s.learningRuns[runId]) return s.learningRuns[runId].kind === kind;
+        const wallet = spendHeart(s.hearts, s.subscription);
+        if (!wallet) return false;
+        const entries = Object.entries(s.learningRuns).sort((a, b) => (b[1].sequence ?? 0) - (a[1].sequence ?? 0) || b[1].at - a[1].at).slice(0, 249);
+        const sequence = Math.max(0, ...entries.map(([, run]) => run.sequence ?? 0)) + 1;
+        set({ hearts: wallet, learningRuns: { ...Object.fromEntries(entries), [runId]: { kind, at: Date.now(), sequence } }, chipHistory: recentChipHistory(s.chipHistory) });
+        return true;
+      },
+
+      recordAssessment: (kind, id, accuracy, durationSec = 0) => {
+        if (!id || id.length > 160 || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 1) return;
+        const s = get();
+        const today = todayKey();
+        const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
+        const seconds = Number.isFinite(durationSec) ? Math.max(0, Math.min(7200, Math.floor(durationSec))) : 0;
+        // Награда за каждый отдельный вариант — один раз, повтор не печатает чипы.
+        set(settle(awardChips({ ...s, days: { ...s.days, [today]: { ...day, seconds: day.seconds + seconds } }, streak: bumpStreak(s.streak, today) }, `${kind}:${id}`, kind, kind === "ent" ? ECONOMY.ent : ECONOMY.sectionTest)));
+      },
+
+      recordStudyTime: (durationSec) => set((s) => {
+        const seconds = Number.isFinite(durationSec) ? Math.max(0, Math.min(7200, Math.floor(durationSec))) : 0;
+        if (!seconds) return {};
+        const today = todayKey();
+        const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
+        return { days: { ...s.days, [today]: { ...day, seconds: day.seconds + seconds } } };
+      }),
+
+      buyXpBoost: () => {
+        const s = get();
+        if (s.chips < ECONOMY.xpBoostCost || s.xpBoostUntil > Date.now()) return false;
+        const at = Date.now();
+        set({ chips: s.chips - ECONOMY.xpBoostCost, xpBoostUntil: at + ECONOMY.xpBoostDurationMs, chipHistory: [{ id: uid(), reason: "boost", amount: -ECONOMY.xpBoostCost, at }, ...recentChipHistory(s.chipHistory, at)] });
+        return true;
+      },
+
+      openCase: () => {
+        const s = get();
+        if (s.cases <= 0 || COSMETICS.every((item) => s.cosmetics.includes(item.id))) return null;
+        const item = pickCosmetic(s.cosmetics);
+        set({ cases: s.cases - 1, cosmetics: Array.from(new Set([...s.cosmetics, item.id])) });
+        return item;
+      },
+
+      equipCosmetic: (id) => set((s) => id === null || s.cosmetics.includes(id) ? { equippedCosmeticId: id } : {}),
+      pruneChipHistory: () => set((s) => ({ chipHistory: recentChipHistory(s.chipHistory) })),
+
       completeOnboarding: (p) =>
         set((s) => ({ onboarded: true, profile: { ...s.profile, ...p, createdAt: Date.now() } })),
 
       updateProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
 
-      recordAnswer: (rec, xp, lessonId) =>
+      recordAnswer: (rec, baseXp, lessonId) => {
+        let creditedXp = 0;
         set((s) => {
+          const xp = boostedXp(s, baseXp);
+          creditedXp = xp;
           const today = todayKey();
           const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
           const skills = rec.skill ? { ...s.skills, [rec.skill]: updateSkill(s.skills[rec.skill], rec.score) } : s.skills;
@@ -228,8 +349,12 @@ export const useApp = create<AppState & AppActions>()(
           } else if (rec.correct && existing) {
             mistakes = s.mistakes.filter((m) => m.stepId !== rec.stepId);
           }
+          const previous = s.questionStats[rec.stepId];
+          const questionStats = rec.retry ? s.questionStats : { ...s.questionStats, [rec.stepId]: { stepId: rec.stepId, skill: rec.skill ?? previous?.skill, lessonId: lessonId ?? previous?.lessonId, prompt: rec.prompt.slice(0, 2000), attempts: (previous?.attempts ?? 0) + 1, correct: (previous?.correct ?? 0) + (rec.correct ? 1 : 0), scoreTotal: (previous?.scoreTotal ?? 0) + Math.max(0, Math.min(1, rec.score)), lastAt: Date.now() } };
+          const boundedStats = Object.fromEntries(Object.entries(questionStats).sort((a, b) => b[1].lastAt - a[1].lastAt).slice(0, 1000));
           const next: AppState = {
             ...s,
+            questionStats: boundedStats,
             xp: s.xp + xp,
             skills,
             mistakes,
@@ -244,16 +369,20 @@ export const useApp = create<AppState & AppActions>()(
               },
             },
           };
-          return { ...next, ...evaluate(next) };
-        }),
+          return settle(next);
+        });
+        return creditedXp;
+      },
 
       finishSession: (result) => {
         const s = get();
+        if (!canFinishSession(result)) return { bonusXp: 0 };
         const firstTry = result.answers.filter((a) => !a.retry);
         // Пропущенное задание (например, решение по фото) — уже не «без ошибок».
         const perfect = firstTry.length > 0 && firstTry.every((a) => a.correct) && !result.skipped;
-        let bonusXp = result.kind === "lesson" ? XP.lessonComplete : XP.drillComplete;
+        let bonusXp: number = result.kind === "lesson" ? XP.lessonComplete : XP.drillComplete;
         if (result.kind === "lesson" && perfect) bonusXp += XP.perfectLesson;
+        bonusXp = boostedXp(s, bonusXp);
 
         const today = todayKey();
         const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
@@ -261,7 +390,7 @@ export const useApp = create<AppState & AppActions>()(
           ...s,
           xp: s.xp + bonusXp,
           streak: bumpStreak(s.streak, today),
-          days: { ...s.days, [today]: { ...day, xp: day.xp + bonusXp, seconds: day.seconds + Math.min(7200, result.durationSec) } },
+          days: { ...s.days, [today]: { ...day, xp: day.xp + bonusXp, seconds: day.seconds + (Number.isFinite(result.durationSec) ? Math.max(0, Math.min(7200, result.durationSec)) : 0) } },
         };
         if (result.kind === "lesson" && result.lessonId) {
           const prev = s.lessons[result.lessonId];
@@ -274,12 +403,13 @@ export const useApp = create<AppState & AppActions>()(
               totalXp: (prev?.totalXp ?? 0) + result.xp + bonusXp,
             },
           };
+          if (!prev?.completions) next = awardChips(next, `lesson:${result.lessonId}`, "lesson", ECONOMY.firstLesson);
+          if (perfect) next = awardChips(next, `perfect:${result.lessonId}`, "perfect", ECONOMY.perfectLesson);
           next = { ...next, ...withAchievement(next, "first_lesson") };
           if (perfect) next = { ...next, ...withAchievement(next, "perfect") };
         }
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
-        next = { ...next, ...evaluate(next) };
-        set(next);
+        set(settle(next));
         return { bonusXp };
       },
 
@@ -287,10 +417,10 @@ export const useApp = create<AppState & AppActions>()(
         set((s) => {
           if (combo <= s.maxCombo) return {};
           const next = { ...s, maxCombo: combo };
-          return { maxCombo: combo, ...evaluate(next) };
+          return settle(next);
         }),
 
-      unlock: (id) => set((s) => withAchievement(s, id)),
+      unlock: (id) => set((s) => settle({ ...s, ...withAchievement(s, id) })),
 
       consumeNewAchievements: () => {
         const ids = get().newAchievements;
@@ -345,7 +475,8 @@ export const useApp = create<AppState & AppActions>()(
       recordGame: (gameId, result, mode = "normal") => {
         const s = get();
         const key = gameStatKey(gameId, mode);
-        const reward = gameReward(result, key ? s.games[key]?.best : undefined, mode);
+        const baseReward = gameReward(result, key ? s.games[key]?.best : undefined, mode);
+        const reward = { ...baseReward, xp: boostedXp(s, baseReward.xp) };
         const today = todayKey();
         const day = s.days[today] ?? { xp: 0, answers: 0, correct: 0, seconds: 0 };
         let skills = s.skills;
@@ -367,8 +498,7 @@ export const useApp = create<AppState & AppActions>()(
             : s.games,
         };
         next = { ...next, ...withAchievement(next, "gamer") };
-        next = { ...next, ...evaluate(next) };
-        set(next);
+        set(settle(next));
         return reward;
       },
 
@@ -378,10 +508,15 @@ export const useApp = create<AppState & AppActions>()(
       name: "informatica-v1",
       version: 1,
       storage: createJSONStorage(() => localStorage),
+      // Сохранения раннего MVP имели version 0: сохраняем прогресс, merge добавит новые поля.
+      migrate: (persisted) => (persisted && typeof persisted === "object" && !Array.isArray(persisted) ? persisted : {}) as AppState & AppActions,
+      partialize: (state) => ({ ...state, chipHistory: recentChipHistory(state.chipHistory) }),
+      onRehydrateStorage: () => (state) => state?.pruneChipHistory(),
       // Новые поля профиля получают значения по умолчанию у старых сохранений.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
-        return { ...current, ...p, profile: { ...current.profile, ...p.profile } };
+        const xp = Number.isFinite(p.xp) ? Math.max(0, p.xp ?? 0) : 0;
+        return { ...current, ...p, xp, profile: { ...current.profile, ...p.profile }, hearts: { ...current.hearts, ...p.hearts }, subscription: { ...current.subscription, ...p.subscription }, chipHistory: recentChipHistory(p.chipHistory ?? []), caseLevel: p.caseLevel ?? levelInfo(xp).level, cases: p.cases ?? Math.max(0, levelInfo(xp).level - 1), cosmetics: (p.cosmetics ?? []).filter((id) => COSMETICS.some((item) => item.id === id)) };
       },
     },
   ),

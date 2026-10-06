@@ -8,7 +8,7 @@ const version = require("remotion/package.json").version;
 const root = path.resolve(import.meta.dirname, "..");
 const chrome = process.env.REMOTION_BROWSER_EXECUTABLE || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 mkdirSync(path.join(root, "public/video-lab"), { recursive: true });
-const variants = ["cartoon", "board", "notebook", "motion"];
+const variants = ["binary-encode", "binary-decode", "cartoon", "board", "notebook", "motion", "kitchen-clear", "bit-workshop", "bit-phone", "bit-counter", "bit-detective", "bit-bakery"];
 const selected = process.argv.slice(2);
 if (selected.some((variant) => !variants.includes(variant))) throw new Error("Неизвестный вариант видео");
 for (const style of selected.length ? selected : variants) {

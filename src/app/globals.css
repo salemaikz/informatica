@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
 
 /*
   Дизайн-токены. Семантика цветов (правило проекта, см. CLAUDE.md):
@@ -18,6 +18,10 @@
   --text: #1b2333;
   --muted: #6b7487;
 
+  --action-primary: #126da3;
+  --action-success: #137b49;
+  --action-danger: #ba2b36;
+  --action-ai: #6545d6;
   --primary: #1a91d6;
   --primary-strong: #1277b3;
   --primary-soft: #e4f3fc;
@@ -148,6 +152,10 @@
   --color-ai: var(--ai);
   --color-ai-strong: var(--ai-strong);
   --color-ai-soft: var(--ai-soft);
+  --color-action-primary: var(--action-primary);
+  --color-action-success: var(--action-success);
+  --color-action-danger: var(--action-danger);
+  --color-action-ai: var(--action-ai);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -156,7 +164,7 @@
   --animate-shake: shake 0.4s ease-in-out;
   --animate-slide-up: slide-up 0.25s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;
-  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-pulse-ring: pulse-ring 2.2s ease-in-out infinite;
   --animate-rise-in: rise-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   --animate-ring-out: ring-out 0.5s ease-out forwards;
 }
@@ -182,9 +190,9 @@
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
-  70% { box-shadow: 0 0 0 14px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  18% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
+  75% { box-shadow: 0 0 0 14px transparent; }
 }
 
 /* Появление снизу с лесенкой (animation-delay задаёт компонент). Через opacity + translate — не конфликтует с transform у motion. */
