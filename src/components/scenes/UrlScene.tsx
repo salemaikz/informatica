@@ -14,21 +14,21 @@ type UrlSceneData = Extract<Scene, { kind: "url" }>;
 
 /** Классы по тону (целиком, чтобы Tailwind их увидел): заливка части и пилюля подписи. */
 const PART_TONE: Record<SceneTone, string> = {
-  primary: "bg-primary-soft text-primary-strong decoration-primary",
-  success: "bg-success-soft text-success-strong decoration-success",
-  danger: "bg-danger-soft text-danger-strong decoration-danger",
-  warning: "bg-warning-soft text-warning-strong decoration-warning",
-  ai: "bg-ai-soft text-ai-strong decoration-ai",
-  gold: "bg-gold-soft text-warning-strong decoration-gold",
+  primary: "bg-primary-soft text-ink-primary decoration-primary",
+  success: "bg-success-soft text-ink-success decoration-success",
+  danger: "bg-danger-soft text-ink-danger decoration-danger",
+  warning: "bg-warning-soft text-ink-warning decoration-warning",
+  ai: "bg-ai-soft text-ink-ai decoration-ai",
+  gold: "bg-gold-soft text-ink-warning decoration-gold",
   muted: "bg-surface-2 text-text decoration-muted",
 };
 const LABEL_TONE: Record<SceneTone, string> = {
-  primary: "text-primary-strong",
-  success: "text-success-strong",
-  danger: "text-danger-strong",
-  warning: "text-warning-strong",
-  ai: "text-ai-strong",
-  gold: "text-warning-strong",
+  primary: "text-ink-primary",
+  success: "text-ink-success",
+  danger: "text-ink-danger",
+  warning: "text-ink-warning",
+  ai: "text-ink-ai",
+  gold: "text-ink-warning",
   muted: "text-text",
 };
 

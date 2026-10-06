@@ -11,6 +11,7 @@ import {
   bandFont,
   boxGeometry,
   boxRuler,
+  rulerRows,
   formatSides,
   sides4,
   layerDim,
@@ -33,10 +34,10 @@ const LAYER: Record<BoxLayer, { fill: string; stroke: string; on: number; off: n
 
 /** Пилюли чисел в линейке — цвета слоёв (классы целиком, чтобы Tailwind их увидел). */
 const PILL: Record<BoxLayer | "total", string> = {
-  margin: "bg-warning-soft text-warning-strong",
+  margin: "bg-warning-soft text-ink-warning",
   border: "bg-surface-2 text-text",
-  padding: "bg-success-soft text-success-strong",
-  content: "bg-primary-soft text-primary-strong",
+  padding: "bg-success-soft text-ink-success",
+  content: "bg-primary-soft text-ink-primary",
   total: "bg-surface text-text ring-1 ring-border",
 };
 
@@ -151,7 +152,7 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
             wrap(
               "padding",
               <div
-                className="flex items-center justify-center text-center font-mono font-bold text-primary-strong"
+                className="flex items-center justify-center text-center font-mono font-bold text-ink-primary"
                 style={{ ...layerStyle("content", dim("content"), null, true, reduce), width: g.contentW, height: g.contentH, fontSize: g.contentFont }}
               >
                 {g.contentLabel}
@@ -187,7 +188,7 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
                 }}
                 aria-hidden="true"
               >
-                2
+                {t("scene.box.block2")}
               </div>
             </div>
             <div
@@ -195,7 +196,7 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
               style={{ top: c.labelTop, transform: "translateY(-50%)" }}
               aria-hidden="true"
             >
-              <span className="rounded-md border border-warning bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-warning-strong">{c.label}</span>
+              <span className="rounded-md border border-warning bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-ink-warning">{c.label}</span>
             </div>
           </>
         )}
@@ -206,16 +207,20 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
       {ruler.length > 0 && (
         <div className="flex flex-col items-center gap-2.5">
           {ruler.map((line, i) => (
-            <p key={i} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-center font-mono text-[13px] font-bold text-text">
-              {line.head && <span className="whitespace-nowrap">{line.head}</span>}
-              {line.terms.map((term, j) => (
-                <span key={j} className="whitespace-nowrap">
-                  <span className={cn("rounded-md px-1.5 py-0.5", PILL[term.layer])}>{term.text}</span>
-                  {j < line.terms.length - 1 && <span className="text-muted"> +</span>}
-                </span>
+            <div key={i} className="flex flex-col items-center gap-1.5">
+              {rulerRows(line).map((row, ri) => (
+                <p key={ri} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-center font-mono text-[13px] font-bold text-text">
+                  {row.head && <span className="whitespace-nowrap">{row.head}</span>}
+                  {row.terms.map(({ term, plus }, j) => (
+                    <span key={j} className="whitespace-nowrap">
+                      {plus && <span className="mr-1 text-muted">+</span>}
+                      <span className={cn("rounded-md px-1.5 py-0.5", PILL[term.layer])}>{term.text}</span>
+                    </span>
+                  ))}
+                  {row.total && <span className="whitespace-nowrap">= {row.total}</span>}
+                </p>
               ))}
-              {line.total && <span className="whitespace-nowrap">= {line.total}</span>}
-            </p>
+            </div>
           ))}
         </div>
       )}

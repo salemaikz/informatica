@@ -62,7 +62,9 @@ export function longestWord(label: string): string {
 
 /** Отступы карточки (px): рамка 2 + поля по 6 с каждой стороны. */
 const CARD_PAD = 14;
-const GAP = 8;
+/** Зазор между карточками, px. */
+export const GATES_GAP = 8;
+const GAP = GATES_GAP;
 
 /**
  * Число колонок сетки: по числу вентилей (1–3 — в один ряд, 4 — 2×2, 5–6 — по 3), но если самое длинное

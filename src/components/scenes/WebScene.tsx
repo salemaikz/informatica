@@ -28,14 +28,22 @@ export function WebScene({ scene }: { scene: WebScene }) {
         </span>
         <span className="min-w-0 flex-1 truncate rounded-md bg-surface px-2 py-0.5 font-mono text-[13px] text-muted">index.html</span>
       </div>
-      {/* sandbox="" — без allow-scripts: скрипты и обработчики в iframe не выполняются */}
-      <iframe
-        title={t("scene.browser")}
-        sandbox=""
-        srcDoc={buildWebDoc(html, scene.css)}
-        className="block w-full border-0 bg-white"
-        style={{ height: webFrameHeight(html) }}
-      />
+      {/* Подложка «страница загружается»: лежит под iframe и видна, пока документ не отрисован (или не отрисуется совсем):
+          пустого окна браузера ученик не увидит. Страница в iframe белая и закрывает подложку целиком. */}
+      <div className="relative bg-white" style={{ height: webFrameHeight(html) }}>
+        <div aria-hidden data-web-placeholder="" className="absolute inset-0 flex flex-col gap-2.5 p-3">
+          <div className="h-5 w-2/5 rounded bg-muted/25" />
+          <div className="h-3 w-3/5 rounded bg-muted/15" />
+          <div className="h-3 w-1/2 rounded bg-muted/15" />
+        </div>
+        {/* sandbox="" — без allow-scripts: скрипты и обработчики в iframe не выполняются */}
+        <iframe
+          title={t("scene.browser")}
+          sandbox=""
+          srcDoc={buildWebDoc(html, scene.css)}
+          className="relative block size-full border-0 bg-transparent"
+        />
+      </div>
     </div>
   );
   if (scene.page) {

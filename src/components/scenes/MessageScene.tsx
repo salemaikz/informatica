@@ -4,40 +4,49 @@ import { m } from "motion/react";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
-import { markNotes, messageSegments, senderInitial, type MessageSegment } from "./message";
+import { cn } from "@/lib/cn";
+import { markNotes, messageSegments, senderInitial, splitTail, type MessageSegment } from "./message";
 
 type MessageSceneData = Extract<Scene, { kind: "message" }>;
 
 /** Номер признака — маленький кружок рядом с подсвеченным фрагментом. */
 function MarkBadge({ n }: { n: number }) {
   return (
-    <span aria-hidden className="mx-0.5 inline-flex size-4 -translate-y-px items-center justify-center rounded-full border border-warning bg-warning-soft align-middle text-[10px] font-extrabold leading-none text-warning-strong">
+    <span aria-hidden className="mx-0.5 inline-flex size-4 -translate-y-px items-center justify-center rounded-full border border-warning bg-warning-soft align-middle text-[10px] font-extrabold leading-none text-ink-warning">
       {n}
     </span>
   );
 }
 
-/** Текст сообщения; признаки — заливка warning-soft и подчёркивание, после каждого — номер. */
-function Body({ segments }: { segments: MessageSegment[] }) {
+const MARK_CLS = "bg-warning-soft font-bold text-text underline decoration-warning decoration-2 underline-offset-2";
+
+/**
+ * Текст сообщения; признаки — заливка warning-soft и подчёркивание, после каждого (если у признака есть пояснение) — номер.
+ * Последнее слово признака вместе с номером не разрывается: номер не отрывается от своей фразы на переносе строки.
+ */
+function Body({ segments, noted }: { segments: MessageSegment[]; noted: ReadonlySet<number> }) {
   return (
     <p className="whitespace-pre-line text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">
-      {segments.map((s, i) =>
-        s.mark === undefined ? (
-          <span key={i}>{s.text}</span>
-        ) : (
+      {segments.map((s, i) => {
+        if (s.mark === undefined) return <span key={i}>{s.text}</span>;
+        const { head, tail } = splitTail(s.text);
+        return (
           <span key={i}>
-            <mark className="rounded-sm bg-warning-soft px-0.5 font-bold text-text underline decoration-warning decoration-2 underline-offset-2">{s.text}</mark>
-            <MarkBadge n={s.mark} />
+            {head && <mark className={cn("rounded-l-sm pl-0.5", MARK_CLS)}>{head}</mark>}
+            <span className="whitespace-nowrap">
+              <mark className={cn(head ? "rounded-r-sm pr-0.5" : "rounded-sm px-0.5", MARK_CLS)}>{tail}</mark>
+              {noted.has(s.mark) && <MarkBadge n={s.mark} />}
+            </span>
           </span>
-        ),
-      )}
+        );
+      })}
     </p>
   );
 }
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[15px] font-extrabold text-primary-strong">
+    <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[15px] font-extrabold text-ink-primary">
       {senderInitial(name)}
     </span>
   );
@@ -52,6 +61,8 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
   const text = l(scene.text);
   const segments = messageSegments(scene, lang);
   const notes = markNotes(scene.marks, lang);
+  // Номер в тексте — только у признаков с пояснением: у остальных он ни на что не указывал бы.
+  const noted = new Set(notes.map((n) => n.n));
 
   const markAria = segments
     .filter((s) => s.mark !== undefined)
@@ -77,7 +88,7 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
       transition={{ duration: 0.3 }}
       className="max-w-[88%] rounded-2xl rounded-tl-md bg-surface-2 px-3.5 py-2.5"
     >
-      <Body segments={segments} />
+      <Body segments={segments} noted={noted} />
     </m.div>
   );
 
@@ -96,7 +107,7 @@ export function MessageScene({ scene }: { scene: MessageSceneData }) {
             )}
           </div>
           <div className="px-3.5 py-3">
-            <Body segments={segments} />
+            <Body segments={segments} noted={noted} />
           </div>
         </div>
       ) : (

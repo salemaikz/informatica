@@ -4,8 +4,9 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import type { DictKey } from "@/i18n/dict";
 import { translate, useT } from "@/i18n/useT";
+import { ScrollHintBox } from "./ScrollHintBox";
 import { estimateTextWidth } from "./text-width";
-import { CIRCUIT_GEO, GATE_STYLE, OUT_CHIP_W, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
+import { CIRCUIT_GEO, CIRCUIT_MIN_SCALE, GATE_STYLE, OUT_CHIP_W, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
 
 const OP_KEY: Record<GateOp, DictKey> = {
   and: "scene.op.and",
@@ -25,7 +26,7 @@ function ValueChip({ x, y, v, below, inline }: { x: number; y: number; v: Bit; b
   return (
     <g>
       <rect x={x - 8} y={top} width={16} height={16} rx={5} className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : "fill-surface-2 stroke-border")} strokeWidth={1.5} />
-      <text x={x} y={top + 12} textAnchor="middle" fontSize={13} fontWeight={800} className={cn("font-mono", v === 1 ? "fill-success-strong" : "fill-muted")}>
+      <text x={x} y={top + 12} textAnchor="middle" fontSize={13} fontWeight={800} className={cn("font-mono", v === 1 ? "fill-ink-success" : "fill-muted")}>
         {v}
       </text>
     </g>
@@ -103,13 +104,13 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
   const feedsOutput = new Set(layout.outputs.map((o) => o.gate));
   const G = CIRCUIT_GEO;
 
-  return (
+  const svg = (
     <svg
       role="img"
       aria-label={multi ? t("scene.circuit.ariaOutputs") : t("scene.circuit.aria")}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       className="mx-auto block h-auto w-full"
-      style={{ maxWidth: Math.round(layout.width * 1.6) }}
+      style={{ maxWidth: Math.round(layout.width * 1.6), minWidth: multi ? Math.round(layout.width * CIRCUIT_MIN_SCALE) : undefined }}
     >
       {/* Провода — под узлами. Цвет — по значению источника. */}
       {layout.wires.map((w) => (
@@ -157,5 +158,16 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
             return v === undefined ? null : <ValueChip key={`o:${n.id}`} x={n.x + G.r + OUT_CHIP_W / 2 + 1} y={n.y} v={v} below={false} inline />;
           })}
     </svg>
+  );
+
+  // Схемы с несколькими выходами (сумматор) не сжимаются мельче CIRCUIT_MIN_SCALE (подписи вентилей и плашки 0/1 остаются
+  // читаемыми, ≈ 11 px): в узком блоке они прокручиваются по горизонтали, а ScrollHintBox показывает стрелку и гасит край, за которым
+  // есть продолжение. Схемы без `outputs` (уроки, банк, ЕНТ; до 420 в ширину) рисуются как раньше — по ширине блока, без прокрутки.
+  return multi ? (
+    <ScrollHintBox className="mx-auto w-full" arrow="bottom" scrollerAttrs={{ "data-circuit-scroll": "" }}>
+      {svg}
+    </ScrollHintBox>
+  ) : (
+    svg
   );
 }

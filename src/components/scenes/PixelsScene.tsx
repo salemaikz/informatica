@@ -67,7 +67,7 @@ export function PixelsScene({ scene }: { scene: PixelsScene }) {
               onClick={() => setPinned((p) => (p === r ? null : r))}
               className={cn(
                 "min-h-10 rounded-lg border px-2.5 py-1 text-left font-mono text-[13px] font-bold leading-5 tracking-[0.18em] transition-colors duration-200",
-                focusRow === r ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface text-text",
+                focusRow === r ? "border-primary bg-primary-soft text-ink-primary" : "border-border bg-surface text-text",
               )}
             >
               {row}

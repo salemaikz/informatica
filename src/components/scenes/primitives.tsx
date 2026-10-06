@@ -83,10 +83,10 @@ export type TileTone = "default" | "one" | "zero" | "highlight" | "danger";
 
 const TILE_TONE: Record<TileTone, string> = {
   default: "border-border bg-surface text-text",
-  one: "border-gold bg-gold-soft text-warning-strong",
+  one: "border-gold bg-gold-soft text-ink-warning",
   zero: "border-border bg-surface text-muted",
-  highlight: "border-primary bg-primary-soft text-primary-strong ring-4 ring-primary/25",
-  danger: "border-danger bg-danger-soft text-danger-strong",
+  highlight: "border-primary bg-primary-soft text-ink-primary ring-4 ring-primary/25",
+  danger: "border-danger bg-danger-soft text-ink-danger",
 };
 
 /** Крупная цифра в рамке. Смена цифры — лёгкий «поп»; смена тона — плавная перекраска. */
@@ -129,10 +129,10 @@ export function DigitTile({
 export type ChipTone = "primary" | "gold" | "muted" | "danger" | "plain";
 
 const CHIP_TONE: Record<ChipTone, string> = {
-  primary: "bg-primary-soft text-primary-strong",
-  gold: "bg-gold-soft text-warning-strong",
+  primary: "bg-primary-soft text-ink-primary",
+  gold: "bg-gold-soft text-ink-warning",
   muted: "bg-surface-2 text-muted",
-  danger: "bg-danger-soft text-danger-strong",
+  danger: "bg-danger-soft text-ink-danger",
   plain: "bg-surface text-text border border-border",
 };
 
@@ -376,7 +376,7 @@ export function SumLine({
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ ...springBouncy, delay: termDelay(i) }}
-              className={wrong ? "text-danger-strong" : "text-text"}
+              className={wrong ? "text-ink-danger" : "text-text"}
             >
               {term.value}
             </m.span>
@@ -388,11 +388,11 @@ export function SumLine({
           <span className="text-muted">=</span>
           {wrong ? (
             <>
-              <span className="text-danger-strong line-through decoration-[3px]">{total}</span>
+              <span className="text-ink-danger line-through decoration-[3px]">{total}</span>
               <XBadge delay={resultDelay} />
             </>
           ) : (
-            <CountUp value={total} delay={resultDelay} className="text-2xl font-extrabold text-success-strong" />
+            <CountUp value={total} delay={resultDelay} className="text-2xl font-extrabold text-ink-success" />
           )}
         </>
       )}

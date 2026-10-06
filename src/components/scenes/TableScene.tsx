@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { m } from "motion/react";
 import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
+import { ScrollHintBox } from "./ScrollHintBox";
 import type { Scene, SceneTone, Text } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -14,8 +15,11 @@ import {
   JOIN_WIDE_FROM,
   TONE_BG,
   TONE_FILL,
+  TONE_RING,
   TONE_STROKE,
   arrowGeometry,
+  arrowSlots,
+  arrowTargets,
   binaryColumns,
   cellKey,
   clipRect,
@@ -113,6 +117,10 @@ interface GridSpec {
   rowNumber: (r: number) => number;
   /** Подписать ячейки атрибутом для измерения (рамка, стрелки). */
   measureCells: boolean;
+  /** Цели стрелок: ключ ячейки → тон. Ячейка, на которую указывает стрелка, подсвечена сама (острие — не на границе строк, а в ячейке). */
+  targets: Map<string, SceneTone>;
+  /** Широкая таблица: подсказка прокрутки (затухающий край и стрелка). Без расширений разметка прежняя. */
+  scrollHint: boolean;
   /** Подписать строки атрибутом для измерения (линии JOIN): «L» или «R». */
   joinSide?: "L" | "R";
 }
@@ -133,7 +141,7 @@ const REJECT_ONLY = "shadow-[inset_0_2px_0_0_var(--danger),inset_0_-2px_0_0_var(
 /** Дополнительные классы ячейки от расширений (пусто — разметка как раньше). */
 function extraClass(state: RowState | undefined, tone: SceneTone | undefined, c: number, width: number): string | undefined {
   const parts: string[] = [];
-  if (state === "struck") parts.push("bg-danger-soft text-danger-strong line-through decoration-2");
+  if (state === "struck") parts.push("bg-danger-soft text-ink-danger line-through decoration-2");
   else if (state === "dim") parts.push("text-muted opacity-50");
   else if (state === "new") parts.push("bg-success-soft");
   else if (state === "rejected") {
@@ -173,7 +181,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                   "bg-surface-2 font-extrabold",
                   c > 0 && "border-l border-border",
                   mono ? "text-center" : "text-left",
-                  hiCols.has(c) && "bg-primary-soft text-primary-strong",
+                  hiCols.has(c) && "bg-primary-soft text-ink-primary",
                 )}
               >
                 {l(h)}
@@ -192,7 +200,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                 scope="col"
                 className={cn(
                   "border-l border-border bg-surface-2 px-3 py-1 text-center font-sans text-[13px] font-semibold text-muted transition-colors duration-200",
-                  hiCols.has(c) && "bg-primary-soft text-primary-strong",
+                  hiCols.has(c) && "bg-primary-soft text-ink-primary",
                 )}
               >
                 {colLetter(c)}
@@ -212,7 +220,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                   scope="row"
                   className={cn(
                     "sticky left-0 z-20 border-t border-border bg-surface-2 px-2 py-1 text-center font-sans text-[13px] font-semibold text-muted transition-colors duration-200",
-                    hiRows.has(r) && "bg-primary-soft text-primary-strong",
+                    hiRows.has(r) && "bg-primary-soft text-ink-primary",
                   )}
                 >
                   {spec.rowNumber(r)}
@@ -222,6 +230,9 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                 const was = spec.changes.get(cellKey(r, c));
                 const tone = spec.tones.get(cellKey(r, c)) ?? rowTone;
                 const last = c === width - 1;
+                // Цель стрелки: рамка и заливка тоном стрелки (если ячейку уже не выделили сами)
+                const target = spec.targets.get(cellKey(r, c));
+                const asTarget = target !== undefined && !hiCell(r, c);
                 return (
                   <td
                     key={c}
@@ -233,10 +244,11 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                       mono && !sheet ? "text-center" : "text-left",
                       hiBg(r, c) && "bg-primary-soft",
                       hiCell(r, c) && "relative z-10 ring-2 ring-inset ring-primary",
+                      asTarget && cn("relative z-10 ring-2 ring-inset", TONE_RING[target], !hiBg(r, c) && !tone && TONE_BG[target]),
                       bin[c] && (value === "1" ? "font-bold text-success" : "text-muted"),
                       extraClass(state, tone, c, width),
                       // JOIN: тон строки закрывает заливку подсветки — выделенный столбец в совпавших строках остаётся жирным
-                      rowTone && hiBg(r, c) && "font-extrabold text-primary-strong",
+                      rowTone && hiBg(r, c) && "font-extrabold text-ink-primary",
                       anyRejected && last && "relative pr-9",
                     )}
                   >
@@ -263,16 +275,23 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
     </table>
   );
 
+  const inner = wrapRef ? (
+    <div ref={wrapRef} className="relative">
+      {table}
+      {overlay}
+    </div>
+  ) : (
+    table
+  );
+  if (spec.scrollHint)
+    return (
+      <ScrollHintBox className="mx-auto w-full max-w-xl" frameClassName="rounded-2xl border border-border bg-surface" scrollerAttrs={spec.joinSide ? { "data-clip": "" } : undefined} arrow="top">
+        {inner}
+      </ScrollHintBox>
+    );
   return (
     <div {...(spec.joinSide ? { "data-clip": "" } : {})} className="mx-auto w-full max-w-xl overflow-x-auto rounded-2xl border border-border bg-surface">
-      {wrapRef ? (
-        <div ref={wrapRef} className="relative">
-          {table}
-          {overlay}
-        </div>
-      ) : (
-        table
-      )}
+      {inner}
     </div>
   );
 }
@@ -281,6 +300,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
 function Overlay({ scene, geo, reduce }: { scene: TableScene; geo: Geo | null; reduce: boolean }) {
   if (!geo) return null;
   const frame = scene.range ? rangeRect(geo.rects, scene.range) : null;
+  const slots = arrowSlots(scene);
   const spring = reduce ? { duration: 0 } : springSoft;
   return (
     <svg width={geo.w} height={geo.h} className="pointer-events-none absolute left-0 top-0 z-[15] overflow-visible" aria-hidden="true">
@@ -298,7 +318,7 @@ function Overlay({ scene, geo, reduce }: { scene: TableScene; geo: Geo | null; r
       {(scene.arrows ?? []).map((a, i) => {
         const from = geo.rects.get(cellKey(a.from[0], a.from[1]));
         const to = geo.rects.get(cellKey(a.to[0], a.to[1]));
-        const g = from && to ? arrowGeometry(from, to, { w: geo.w, h: geo.h }) : null;
+        const g = from && to ? arrowGeometry(from, to, { w: geo.w, h: geo.h }, slots[i]) : null;
         if (!g) return null;
         const tone = a.tone ?? "primary";
         return (
@@ -361,6 +381,8 @@ export function TableScene({ scene }: { scene: TableScene }) {
     rowNumber: (r) => sheetRowNumber(scene, r),
     measureCells: overlayOn,
     joinSide: join ? "L" : undefined,
+    targets: arrowTargets(scene),
+    scrollHint: ext,
   };
   // Без расширений — прежняя разметка (побайтно). С расширениями дерево одно и то же на любом шаге (обёртка рисуется всегда),
   // поэтому включение рамки, стрелок, строки формул или JOIN между шагами не перемонтирует таблицу и подсветка меняется плавно.
@@ -386,6 +408,8 @@ export function TableScene({ scene }: { scene: TableScene }) {
         rowNumber: (r) => r + 1,
         measureCells: false,
         joinSide: "R",
+        targets: new Map(),
+        scrollHint: true,
       }
     : null;
   const links = join && wide && joinGeo ? join.links : [];

@@ -44,7 +44,7 @@ function Panel({ panel, reduce }: { panel: WavePanel; reduce: boolean }) {
               fill="none"
               strokeWidth={2.5}
               strokeLinejoin="round"
-              className="stroke-primary-strong"
+              className="stroke-ink-primary"
               initial={reduce ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
@@ -62,7 +62,7 @@ function Panel({ panel, reduce }: { panel: WavePanel; reduce: boolean }) {
                   animate={{ y2: y, opacity: 1 }}
                   transition={{ ...spring, delay: reduce ? 0 : Math.min(s.i * 0.015, 0.3) }}
                   strokeWidth={lay.samples.length > 24 ? 1.2 : 1.6}
-                  className={panel.digital ? "stroke-primary-strong/70" : "stroke-primary/60"}
+                  className={panel.digital ? "stroke-ink-primary/70" : "stroke-primary/60"}
                 />
                 {panel.digital && <circle cx={s.x} cy={s.y} r={1.8} className="fill-muted" />}
                 <m.circle
@@ -71,7 +71,7 @@ function Panel({ panel, reduce }: { panel: WavePanel; reduce: boolean }) {
                   initial={reduce ? false : { cy: lay.axisY, opacity: 0 }}
                   animate={{ cy: y, opacity: 1 }}
                   transition={{ ...spring, delay: reduce ? 0 : Math.min(s.i * 0.015, 0.3) }}
-                  className={panel.digital ? "fill-primary-strong stroke-surface" : "fill-surface stroke-primary-strong"}
+                  className={panel.digital ? "fill-ink-primary stroke-surface" : "fill-surface stroke-ink-primary"}
                   strokeWidth={1.6}
                 />
               </g>

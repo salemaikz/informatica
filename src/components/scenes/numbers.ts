@@ -128,6 +128,21 @@ export function binaryUnits(bits: string, o: { groups?: 3 | 4 | 8; gap?: [number
   return units;
 }
 
+/**
+ * Результат сдвига кусками для показа: числа длиннее 16 разрядов не переносятся посреди записи, а делятся на группы справа налево
+ * (как плитки: по `groups`, иначе по 8). Приписанный влево ноль — отдельный последний кусок, как отдельная плитка.
+ * Склейка кусков — shiftBits(bits, dir).
+ */
+export function shiftResultChunks(bits: string, dir: "left" | "right", groups?: 3 | 4 | 8): string[] {
+  const body = dir === "left" ? bits : bits.length > 1 ? bits.slice(0, -1) : "0";
+  if (groups === undefined && body.length <= 16) return [dir === "left" ? body + "0" : body];
+  const size = groups ?? 8;
+  const parts: string[] = [];
+  for (let end = body.length; end > 0; end -= size) parts.unshift(body.slice(Math.max(0, end - size), end));
+  if (dir === "left") parts.push("0");
+  return parts;
+}
+
 // ---------- Раскладка рядов ----------
 
 export interface PlacedCell extends CellSpec {
@@ -151,6 +166,8 @@ export interface RowsLayout {
   font: number;
   /** Верх ряда весов относительно верха ряда плиток (0 — весов нет). */
   weightsDy: number;
+  /** Высота одного яруса подписей весов (WEIGHT_H). */
+  weightH: number;
   /** Верх скобок относительно верха ряда плиток (0 — скобок нет). */
   bracketDy: number;
   rows: PlacedRow[];
@@ -172,7 +189,7 @@ export function tileSizes(tileW: number): { tileH: number; font: number } {
 /** Раскладка единиц по рядам: единицы переносятся целиком (группа не рвётся), ряды делят единицы поровну. */
 export function layoutRows(
   units: UnitSpec[],
-  o: { width?: number; maxTiles?: number; unitGap?: number; weights?: boolean; brackets?: boolean; top?: number } = {},
+  o: { width?: number; maxTiles?: number; unitGap?: number; weights?: boolean; weightTiers?: 1 | 2; brackets?: boolean; top?: number } = {},
 ): RowsLayout {
   const W = o.width ?? NUM_W;
   const maxTiles = o.maxTiles ?? MAX_ROW_TILES;
@@ -199,9 +216,11 @@ export function layoutRows(
 
   const hasByte = units.some((u) => u.bracket?.byte !== undefined);
   const bracketH = o.brackets ? (hasByte ? BYTE_BRACKET_H : BRACKET_H) : 0;
+  // Подписи весов — в один ярус или в два (плотная строка: чётные и нечётные степени на разной высоте, см. weightMode)
+  const weightsH = o.weights ? WEIGHT_H * (o.weightTiers ?? 1) : 0;
   const weightsDy = o.weights ? tileH + 3 : 0;
-  const bracketDy = o.brackets ? tileH + (o.weights ? 3 + WEIGHT_H : 0) + 3 : 0;
-  const blockH = tileH + (o.weights ? 3 + WEIGHT_H : 0) + (o.brackets ? 3 + bracketH : 0);
+  const bracketDy = o.brackets ? tileH + (o.weights ? 3 + weightsH : 0) + 3 : 0;
+  const blockH = tileH + (o.weights ? 3 + weightsH : 0) + (o.brackets ? 3 + bracketH : 0);
 
   const rows: PlacedRow[] = chunks.map((c, r) => {
     const top = (o.top ?? 0) + r * (blockH + ROW_GAP);
@@ -220,20 +239,81 @@ export function layoutRows(
     return { top, cells, units: placed };
   });
 
-  return { tileW, tileH, font, weightsDy, bracketDy, rows, height: rows.length * blockH + (rows.length - 1) * ROW_GAP, width: W };
+  return { tileW, tileH, font, weightsDy, weightH: WEIGHT_H, bracketDy, rows, height: rows.length * blockH + (rows.length - 1) * ROW_GAP, width: W };
 }
 
 // ---------- Подписи весов ----------
 
-/** Подпись веса: число или «2ⁿ», если число не влезает в плитку. Режим выбирается один на всю сцену. */
-export function weightMode(exps: number[], tileW: number): { mode: "value" | "pow"; font: number } {
-  let font = Math.max(9, Math.min(13, Math.round(tileW * 0.5)));
-  const widest = Math.max(0, ...exps.map((e) => estimateTextWidth(String(2 ** e), font)));
-  if (widest <= tileW + CELL_GAP) return { mode: "value", font };
-  // «2ⁿ»: шрифт уменьшаем, пока подписи соседних плиток не разойдутся
-  const powWidest = (f: number) => Math.max(0, ...exps.map((e) => estimateTextWidth(`2${sup(e)}`, f)));
-  while (font > 6 && powWidest(font) > tileW + CELL_GAP - 2) font--;
-  return { mode: "pow", font };
+/** Показатель степени в подписи «2ⁿ» — настоящий нижний/верхний индекс (tspan), а не юникод-надстрочные знаки: те мельче 6 px. */
+export const EXP_SCALE = 0.75;
+export function expFont(base: number): number {
+  return Math.max(7, Math.round(base * EXP_SCALE));
+}
+
+/** Ширина подписи веса: число — одной строкой, степень — «2» кеглем font и показатель кеглем expFont(font). */
+export function weightWidth(exp: number, mode: "value" | "pow", font: number): number {
+  return mode === "value" ? estimateTextWidth(String(2 ** exp), font) : estimateTextWidth("2", font) + estimateTextWidth(String(exp), expFont(font));
+}
+
+/** Минимальный зазор между подписями весов соседних плиток, px. */
+export const WEIGHT_GAP = 4;
+
+/** Наименьший кегль основания «2» в подписи-степени: показатель при этом не мельче 10 (expFont(13) = 10). */
+export const POW_FONT_MIN = 13;
+export const POW_FONT_MAX = 14;
+/** Наименьший кегль числа-веса («32768»). */
+export const VALUE_FONT_MIN = 10;
+
+/**
+ * Подписи весов под плитками. Режим (число или «2ⁿ») и ярусы выбираются один раз на всю сцену:
+ * 1. число в один ярус, если оно влезает под плитку (кегль ≥ VALUE_FONT_MIN);
+ * 2. степень «2ⁿ» в один ярус, если показатель при этом не мельче 10 (кегль основания ≥ POW_FONT_MIN);
+ * 3. иначе (плотная строка из 16 плиток по 16–17 px) — два яруса: чётные степени выше, нечётные ниже. Подпись тогда
+ *    может занимать две плитки в ширину, и числа остаются крупными (число — как в п. 1, степень — не мельче POW_FONT_MIN),
+ *    а не ужимаются до 7–8 px.
+ * Подписи одного яруса не касаются друг друга (зазор ≥ WEIGHT_GAP).
+ */
+export function weightMode(exps: number[], tileW: number): { mode: "value" | "pow"; font: number; tiers: 1 | 2 } {
+  const pitch = tileW + CELL_GAP;
+  const widest = (mode: "value" | "pow", f: number) => Math.max(0, ...exps.map((e) => weightWidth(e, mode, f)));
+  const valueFont = Math.max(VALUE_FONT_MIN, Math.min(13, Math.round(tileW * 0.5)));
+  const powFont = (room: number): number | null => {
+    for (let f = POW_FONT_MAX; f >= POW_FONT_MIN; f--) if (widest("pow", f) <= room) return f;
+    return null;
+  };
+  for (const tiers of [1, 2] as const) {
+    // В двух ярусах соседние подписи одного яруса стоят через плитку: места вдвое больше
+    const room = pitch * tiers - WEIGHT_GAP;
+    if (widest("value", valueFont) <= room) {
+      // место есть с запасом (два яруса): число можно сделать крупнее, до 13
+      let f = valueFont;
+      while (tiers === 2 && f < 13 && widest("value", f + 1) <= room) f++;
+      return { mode: "value", font: f, tiers };
+    }
+    const f = powFont(room);
+    if (f !== null) return { mode: "pow", font: f, tiers };
+  }
+  // Совсем узкая плитка (меньше 12 px не бывает): степень, самый крупный кегль, при котором подписи яруса разойдутся
+  let f = POW_FONT_MIN;
+  while (f > 8 && widest("pow", f) > pitch * 2 - WEIGHT_GAP) f--;
+  return { mode: "pow", font: f, tiers: 2 };
+}
+
+/**
+ * Сдвиг подписи веса по горизонтали, чтобы она не выходила за края рисунка (у крайних плиток подпись шире плитки и без сдвига
+ * обрезалась бы краем SVG). `center` — абсолютная координата центра плитки, `w` — ширина подписи.
+ */
+export function weightShift(center: number, w: number, width = NUM_W): number {
+  const left = center - w / 2;
+  const right = center + w / 2;
+  if (left < 0) return -left;
+  if (right > width) return width - right;
+  return 0;
+}
+
+/** Ярус подписи веса: чётные степени — верхний (0), нечётные — нижний (1); при одном ярусе — всегда 0. Степень стабильна при смене числа разрядов. */
+export function weightTier(exp: number, tiers: 1 | 2): 0 | 1 {
+  return tiers === 2 && exp % 2 === 1 ? 1 : 0;
 }
 
 export function weightLabel(exp: number, mode: "value" | "pow"): string {
