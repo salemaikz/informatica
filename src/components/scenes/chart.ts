@@ -20,15 +20,24 @@ export function toneVar(tone: SceneTone): string {
   return `var(--${tone})`;
 }
 
-/** Цвета секторов: 4 чистых тона, затем светлые и тёмные оттенки (соседние всегда различаются). */
-export const PIE_COLORS: string[] = (() => {
-  const base = ["primary", "gold", "success", "ai"].map((t) => `var(--${t})`);
-  return [
-    ...base,
-    ...base.map((c) => `color-mix(in srgb, ${c} 55%, var(--surface))`),
-    ...base.map((c) => `color-mix(in srgb, ${c} 70%, var(--text))`),
-  ];
-})();
+/** Тоны, из которых строятся заливки секторов (красный — только «неверно», поэтому danger не берём). */
+export const PIE_TONES: SceneTone[] = ["primary", "gold", "success", "ai"];
+
+/** Заливка сектора: сплошная (`color`) либо диагональная штриховка тона `stripes` по фону карточки. */
+export type PieFill = { color: string; stripes?: SceneTone };
+
+/**
+ * Заливки секторов: 4 сплошных тона, затем те же тона штриховкой (узор, а не бледный оттенок — не сливается с соседями и читается
+ * в обеих темах), затем тёмные сплошные. Легенда рисует тот же узор. Соседние заливки всегда различаются.
+ */
+export const PIE_FILLS: PieFill[] = [
+  ...PIE_TONES.map((t) => ({ color: `var(--${t})` })),
+  ...PIE_TONES.map((t) => ({ color: `var(--${t})`, stripes: t })),
+  ...PIE_TONES.map((t) => ({ color: `color-mix(in srgb, var(--${t}) 70%, var(--text))` })),
+];
+
+/** Цвета секторов (без узора) — для обратной совместимости. */
+export const PIE_COLORS: string[] = PIE_FILLS.map((f) => f.color);
 
 // ---------- Числа ----------
 
@@ -43,7 +52,8 @@ export function formatNum(v: number): string {
 export function formatValue(v: number, unit?: string): string {
   const n = formatNum(v);
   if (!unit) return n;
-  return unit === "%" ? `${n}%` : `${n} ${unit}`;
+  // «%» и «°» пишутся слитно с числом, остальные единицы — через пробел
+  return unit === "%" || unit === "°" ? `${n}${unit}` : `${n} ${unit}`;
 }
 
 /**
@@ -180,7 +190,7 @@ export type ChartInput = {
 };
 
 export type TextPiece = { lines: string[]; font: number };
-export type LegendItem = { x: number; y: number; swatch: string; text: TextPiece };
+export type LegendItem = { x: number; y: number; swatch: string; /** Тон узора, если квадратик — штриховка (как у сектора круга). */ stripes?: SceneTone; text: TextPiece };
 export type Legend = { items: LegendItem[]; height: number };
 
 export type CatLabel = { x: number; lines: string[] };
@@ -200,7 +210,8 @@ type Frame = {
   xTitle?: { text: string; y: number };
   cats: CatLayout;
   legend?: Legend;
-  threshold?: { y: number; text: string; font: number; x: number; ty: number; anchor: "start" | "end" };
+  /** segs — куски линии порога по x: без участков под подписями значений (линия не перечёркивает цифры). */
+  threshold?: { y: number; text: string; font: number; x: number; ty: number; anchor: "start" | "end"; segs: [number, number][] };
   band: { x: number; w: number }[];
   highlight: Set<number>;
 };
@@ -235,8 +246,11 @@ export type PieChartLayout = {
     i: number;
     path: string;
     color: string;
+    /** Тон узора, если сектор заштрихован (заливка — штриховка этого тона по фону карточки). */
+    stripes?: SceneTone;
     dx: number;
     dy: number;
+    /** Сектор не выделен, когда выделение есть. Яркость не гасим (сектора различимы), выделенный выдвинут и обведён. */
     dim: boolean;
     /** Выноска ломаной: от края сектора по радиусу, затем колено к подписи. */
     leader?: { pts: [number, number][] };
@@ -251,7 +265,7 @@ export type ChartLayout = BarChartLayout | LineChartLayout | PieChartLayout;
 // ---------- Легенда ----------
 
 /** Легенда: квадратик + название, ряды переносятся по ширине; названия, не влезающие в строку, сжимаются/переносятся. */
-export function legendLayout(entries: { text: string; swatch: string }[], top: number, w = CHART_W): Legend {
+export function legendLayout(entries: { text: string; swatch: string; stripes?: SceneTone }[], top: number, w = CHART_W): Legend {
   const SW = 10;
   const GAP = 5;
   const SEP = 14;
@@ -284,7 +298,7 @@ export function legendLayout(entries: { text: string; swatch: string }[], top: n
     let x = (w - rowW) / 2;
     const rowH = Math.max(...row.map((it) => it.text.lines.length)) * (font + 3) + 4;
     for (const it of row) {
-      out.push({ x, y, swatch: it.e.swatch, text: it.text });
+      out.push({ x, y, swatch: it.e.swatch, stripes: it.e.stripes, text: it.text });
       x += it.width + SEP;
     }
     y += rowH;
@@ -402,7 +416,7 @@ function finishFrame(f: Frame & { headroom: number }, input: ChartInput, plotTop
       return { ...c, x, box, inside, hits };
     });
     const best = cands.find((c) => c.inside && c.hits === 0) ?? [...cands].filter((c) => c.inside).sort((a, b) => a.hits - b.hits)[0] ?? cands[0];
-    f.threshold = { y: ty, text: str, font: fit.font, x: best.x, ty: best.base, anchor: best.anchor };
+    f.threshold = { y: ty, text: str, font: fit.font, x: best.x, ty: best.base, anchor: best.anchor, segs: [[f.padL, right]] };
     thrBox = best.box;
   }
   let bottom = plotTop + f.plotH + f.cats.height;
@@ -528,6 +542,8 @@ function barLayout(input: ChartInput): BarChartLayout {
     for (let n = valueLabels.length - 1; n >= 0; n--) if (overlaps(thr, vBox(valueLabels[n]))) valueLabels.splice(n, 1);
     for (let n = funnelChips.length - 1; n >= 0; n--) if (overlaps(thr, cBox(funnelChips[n]))) funnelChips.splice(n, 1);
   }
+  // линия порога прерывается под подписями значений и процентами воронки, до которых она дотягивается по высоте
+  if (f.threshold) f.threshold.segs = thresholdSegments(f.padL, f.padL + f.plotW, f.threshold.y, [...valueLabels.map(vBox), ...funnelChips.map(cBox)]);
   const noteY = f.xTitle ? f.xTitle.y + 14 : plotTop + f.plotH + f.cats.height + 12;
   return {
     ...f,
@@ -544,6 +560,27 @@ function barLayout(input: ChartInput): BarChartLayout {
 
 type Box = { x1: number; y1: number; x2: number; y2: number };
 const overlaps = (a: Box, b: Box) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+
+/** Запас по x вокруг подписи, где линия порога прерывается (px). */
+export const THRESHOLD_CUT_PAD = 3;
+
+/** Куски линии порога по x без участков под подписями, которых линия касается по высоте (толщина ≈ 1.8): цифры не перечёркнуты. */
+export function thresholdSegments(left: number, right: number, y: number, boxes: Box[], pad = THRESHOLD_CUT_PAD): [number, number][] {
+  let segs: [number, number][] = [[left, right]];
+  for (const b of boxes) {
+    if (y < b.y1 - 1 || y > b.y2 + 1) continue;
+    const a = b.x1 - pad;
+    const c = b.x2 + pad;
+    segs = segs.flatMap(([s, e]): [number, number][] => {
+      if (c <= s || a >= e) return [[s, e]];
+      const out: [number, number][] = [];
+      if (a > s) out.push([s, a]);
+      if (c < e) out.push([c, e]);
+      return out;
+    });
+  }
+  return segs.filter(([s, e]) => e - s > 3);
+}
 
 function lineLayout(input: ChartInput): LineChartLayout {
   const f = buildFrame(input);
@@ -596,6 +633,17 @@ function lineLayout(input: ChartInput): LineChartLayout {
       if (overlaps(thr, { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 })) valueLabels.splice(n, 1);
     }
   }
+  if (f.threshold) {
+    f.threshold.segs = thresholdSegments(
+      f.padL,
+      f.padL + f.plotW,
+      f.threshold.y,
+      valueLabels.map((v) => {
+        const hw = estimateTextWidth(v.text, v.font) / 2;
+        return { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 };
+      }),
+    );
+  }
   return { ...f, type: "line", lines, points, valueLabels };
 }
 
@@ -643,8 +691,8 @@ function pieLayout(input: ChartInput): PieChartLayout {
     const ex = hl.has(i) ? EXPLODE : 0;
     const dx = Math.cos(s.mid) * ex;
     const dy = Math.sin(s.mid) * ex;
-    const color = PIE_COLORS[i % PIE_COLORS.length];
-    const out: PieChartLayout["sectors"][number] = { i, path: vals[i] > 0 && !full ? sectorPath(cx, cy, r, s) : "", color, dx, dy, dim: anyHl && !hl.has(i) };
+    const fill = PIE_FILLS[i % PIE_FILLS.length];
+    const out: PieChartLayout["sectors"][number] = { i, path: vals[i] > 0 && !full ? sectorPath(cx, cy, r, s) : "", color: fill.color, stripes: fill.stripes, dx, dy, dim: anyHl && !hl.has(i) };
     if (vals[i] > 0) {
       const side = Math.cos(s.mid) >= 0 ? 1 : -1;
       const ly = ys.get(i) ?? cy;
@@ -664,7 +712,7 @@ function pieLayout(input: ChartInput): PieChartLayout {
   });
 
   const legend = legendLayout(
-    input.labels.map((t, i) => ({ text: t, swatch: PIE_COLORS[i % PIE_COLORS.length] })),
+    input.labels.map((t, i) => ({ text: t, swatch: PIE_FILLS[i % PIE_FILLS.length].color, stripes: PIE_FILLS[i % PIE_FILLS.length].stripes })),
     areaH + 2,
   );
   return { type: "pie", w: CHART_W, h: Math.ceil(areaH + 2 + legend.height + 6), cx, cy, r, full, sectors, labelFont, legend };

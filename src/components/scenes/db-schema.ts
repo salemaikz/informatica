@@ -50,8 +50,10 @@ export const DB_GEO = {
 
 /** Масштабы шрифта строк: сначала пробуем без сжатия, потом сжимаем (не ниже 0.85), потом — тип под именем. */
 export const DB_SCALES = [1, 0.92, 0.85] as const;
-/** Кегли заголовка таблицы — от крупного к мелкому. */
-export const DB_HEAD_PX = [14, 13, 12, 11] as const;
+/** Кегли заголовка таблицы — от крупного к мелкому (HTML-карточки идут в натуральную величину, 10.5 px читаются). */
+export const DB_HEAD_PX = [14, 13, 12, 11, 10.5] as const;
+/** Горизонтальные поля заголовка таблицы (меньше, чем у строк полей: длинное слово не переносится зря). */
+export const HEAD_PADX = 4;
 /** Поправка оценки (она для начертания 700) на начертание 800. */
 const EXTRA = 1.04;
 
@@ -203,6 +205,10 @@ const headWidth = (name: string, px: number) => estimateTextWidth(name, px) * EX
 
 /** Ширина области текста внутри карточки шириной w. */
 export const innerWidth = (w: number) => w - 2 * DB_GEO.border - 2 * DB_GEO.padX;
+/** Ширина области заголовка внутри карточки шириной w. */
+export const headInnerWidth = (w: number) => w - 2 * DB_GEO.border - 2 * HEAD_PADX;
+/** Какой ширины должна быть карточка, чтобы имя таблицы в заголовке влезло в одну строку кеглем px. */
+export const headNeedWidth = (name: string, px: number) => Math.ceil(headWidth(name, px)) + 2 * DB_GEO.border + 2 * HEAD_PADX;
 
 /** Ширина карточки, которой хватает без сжатия (по самой широкой строке и заголовку). */
 export function naturalCardWidth(tables: DbTable[]): number {
@@ -248,13 +254,16 @@ export function roundedPath(pts: [number, number][], r: number): string {
 const LANE_PAD = 6;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Заголовок: кегль (самый крупный, где имена всех таблиц влезают в строку) или, если не влезли и в мелком, — перенос имени. */
-function headFit(tables: DbTable[], inner: number): { font: number; lines: number; h: number } {
+/**
+ * Заголовок: кегль (самый крупный, где имена всех таблиц влезают в строку своей карточки) или, если не влезли и в мелком, — перенос
+ * имени (в крайнем случае: слово без пробела ломается по буквам). innerOf — ширина области заголовка карточки каждой таблицы.
+ */
+function headFit(tables: DbTable[], innerOf: (i: number) => number): { font: number; lines: number; h: number } {
   for (const px of DB_HEAD_PX) {
-    if (tables.every((t) => headWidth(t.name, px) <= inner)) return { font: px, lines: 1, h: DB_GEO.headH };
+    if (tables.every((t, i) => headWidth(t.name, px) <= innerOf(i))) return { font: px, lines: 1, h: DB_GEO.headH };
   }
   const font = DB_HEAD_PX[2];
-  const lines = Math.max(...tables.map((t) => wrapLines(t.name, font, inner, EXTRA)));
+  const lines = Math.max(...tables.map((t, i) => wrapLines(t.name, font, innerOf(i), EXTRA)));
   return { font, lines, h: Math.max(DB_GEO.headH, DB_GEO.stackPad + lines * Math.ceil(font * DB_GEO.lineMul)) };
 }
 
@@ -290,25 +299,45 @@ function buildLayout(scene: DbSchemaScene, avail: number, lanesAllowed: number):
   const maxCard = Math.max(80, Math.min(cap, room));
   const natural = naturalCardWidth(tables);
   const cardW = Math.min(Math.max(natural, cols === 1 ? DB_GEO.minSingle : DB_GEO.minCard), maxCard);
-  const inner = innerWidth(cardW);
+  // Ширина каждой колонки. По умолчанию одинаковая. Если имя таблицы не влезает в заголовок даже мелким кеглем, колонка с длинным
+  // именем расширяется за счёт соседней (слово не рвём по слогам: сначала кегль и ширина, перенос — в самом крайнем случае).
+  const colW: number[] = cols === 2 ? [cardW, cardW] : [cardW];
+  if (cols === 2) {
+    const minPx = DB_HEAD_PX[DB_HEAD_PX.length - 1];
+    const need = [0, 1].map((c) => Math.max(0, ...tables.filter((_, i) => i % 2 === c).map((t) => headNeedWidth(t.name, minPx))));
+    if (need[0] > cardW || need[1] > cardW) {
+      const total = Math.max(2 * cardW, Math.min(Math.floor(avail - gutter), 2 * cap));
+      const wide = need[0] > cardW ? 0 : 1;
+      const other = 1 - wide;
+      // у соседней колонки остаётся не меньше минимума карточки и того, что нужно её собственным заголовкам
+      const floorOther = Math.max(DB_GEO.minCard, need[other]);
+      const wantWide = Math.min(cap, Math.max(cardW, need[wide]));
+      const w = Math.min(wantWide, total - floorOther);
+      if (w >= need[wide]) {
+        colW[wide] = w;
+        colW[other] = Math.min(cap, total - w);
+      }
+    }
+  }
+  const innerOf = (col: number) => innerWidth(colW[Math.min(col, colW.length - 1)]);
+  const colOfTable = (i: number) => (cols === 1 ? 0 : i % 2);
 
   // --- масштаб шрифта строк: общий для всей схемы ---
-  const allFields = tables.flatMap((t) => t.fields);
   let scale: number = DB_SCALES[DB_SCALES.length - 1];
-  for (const s of DB_SCALES) {
-    if (allFields.every((f) => fieldOneLineWidth(f, s) <= inner)) {
-      scale = s;
+  for (const sc of DB_SCALES) {
+    if (tables.every((t, i) => t.fields.every((f) => fieldOneLineWidth(f, sc) <= innerOf(colOfTable(i))))) {
+      scale = sc;
       break;
     }
   }
   // --- заголовок: общий кегль и высота ---
-  const head = headFit(tables, inner);
+  const head = headFit(tables, (i) => headInnerWidth(colW[colOfTable(i)]));
 
   // --- карточки ---
-  const protos = tables.map((t) => {
+  const protos = tables.map((t, ti) => {
     let y = DB_GEO.border + head.h;
     const fields: DbFieldBox[] = t.fields.map((f) => {
-      const fit = fitField(f, scale, inner);
+      const fit = fitField(f, scale, innerOf(colOfTable(ti)));
       const box: DbFieldBox = {
         name: f.name,
         type: f.type,
@@ -332,16 +361,16 @@ function buildLayout(scene: DbSchemaScene, avail: number, lanesAllowed: number):
   const rowH = Array.from({ length: rowsCount }, (_, r) => Math.max(...protos.filter((_, i) => Math.floor(i / cols) === r).map((p) => p.h)));
   const rowY = rowH.map((_, r) => rowH.slice(0, r).reduce((a, b) => a + b, 0) + r * DB_GEO.rowGap);
   const height = rowY[rowsCount - 1] + rowH[rowsCount - 1];
-  const width = cols === 2 ? 2 * cardW + gutter : cardW + 2 * gutter;
+  const width = cols === 2 ? colW[0] + colW[1] + gutter : cardW + 2 * gutter;
 
   const cards: DbCard[] = protos.map((p, i) => {
     const col = (i % cols) as 0 | 1;
     const row = Math.floor(i / cols) as 0 | 1;
     return {
       name: p.table.name,
-      x: cols === 1 ? gutter : col === 0 ? 0 : cardW + gutter,
+      x: cols === 1 ? gutter : col === 0 ? 0 : colW[0] + gutter,
       y: rowY[row],
-      w: cardW,
+      w: colW[col],
       h: p.h,
       col,
       row,
@@ -381,7 +410,7 @@ function buildLayout(scene: DbSchemaScene, avail: number, lanesAllowed: number):
   };
 
   // Коридор для полос: между колонками (или справа от единственной карточки).
-  const gl = cards[0].x + cardW;
+  const gl = cards[0].x + cards[0].w;
   const gr = gl + gutter;
   const lo = gl + DB_GEO.edge;
   const hi2 = gr - DB_GEO.edge;

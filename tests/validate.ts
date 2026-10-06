@@ -217,7 +217,7 @@ export function validateScene(scene: Scene): string[] {
       need(!scene.after || (scene.after.length <= 16 && scene.after.every((c) => c.length <= 8)), "tape: after — до 16 ячеек по 8 символов");
       need(!scene.alias || !!scene.name, "tape: alias — только вместе с name");
       need((scene.groups ?? []).every((g) => (["ru", "kk"] as const).every((lg) => (typeof g.label === "string" ? g.label : g.label[lg]).length <= 40)), "tape: подпись группы длиннее 40 символов");
-      need(tapeLegible(scene), "tape: слишком широкое содержимое — шрифт ячеек на 360 px мельче 8 px (меньше ячеек или короче текст)");
+      need(tapeLegible(scene), "tape: слишком широкое содержимое — шрифт ячеек на 360 px мельче 12 (≈10 px на экране): меньше ячеек или короче текст");
       break;
     }
     case "chart": {

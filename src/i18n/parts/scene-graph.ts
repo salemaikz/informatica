@@ -7,5 +7,6 @@ export const sceneGraphDict = {
   "scene.graph.ariaTree": { ru: "Дерево. Корень: {root}. Вершины: {nodes}. Рёбра: {edges}.", kk: "Ағаш. Түбір: {root}. Төбелер: {nodes}. Қабырғалар: {edges}." },
   "scene.graph.ariaPath": { ru: "Путь: {path}.", kk: "Жол: {path}." },
   "scene.graph.ariaHighlight": { ru: "Выделено: {list}.", kk: "Бөлектелгені: {list}." },
+  "scene.graph.degreesNote": { ru: "Число в кружке рядом с вершиной — её степень (сколько рёбер к ней подходит).", kk: "Төбенің жанындағы дөңгелектегі сан — оның дәрежесі (оған қанша қабырға қосылған)." },
   "scene.graph.ariaDegrees": { ru: "Степени вершин: {list}.", kk: "Төбелердің дәрежелері: {list}." },
 } satisfies Record<string, L>;

@@ -20,7 +20,6 @@ export function GridScene({ scene }: { scene: GridSceneData }) {
   const uid = `grid${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const L = gridLayout(scene);
   const arrow = pathArrow(L.path, L.cell);
-  const hasValues = !!scene.values;
   const pathKey = L.path.map((q) => `${q.x},${q.y}`).join(";");
   const pts = (p: { x: number; y: number }[]) => p.map((q) => `${q.x},${q.y}`).join(" ");
   const fade = (i: number) => (reduce ? { initial: false as const } : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { ...springSoft, delay: i * 0.02 } });
@@ -87,23 +86,43 @@ export function GridScene({ scene }: { scene: GridSceneData }) {
             </AnimatePresence>
           ))}
 
-          {/* путь обхода */}
-          {arrow && (
+          {/* путь обхода: без значений — линия через центры клеток; со значениями — короткие стрелки в просветах между ними */}
+          {arrow && L.steps.length === 0 && (
             <m.g
               key={pathKey}
-              stroke="var(--primary-strong)"
-              strokeOpacity={hasValues ? 0.5 : 0.85}
-              strokeWidth={hasValues ? 1.6 : 2.4}
+              stroke="var(--ink-primary)"
+              strokeOpacity={0.9}
+              strokeWidth={2.4}
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
               {...(reduce ? { initial: false as const } : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: springSoft })}
             >
               <polyline points={pts(arrow.line)} />
-              {arrow.head.length === 3 && <polygon points={pts(arrow.head)} fill="var(--primary-strong)" fillOpacity={hasValues ? 0.6 : 0.85} strokeWidth={1} />}
+              {arrow.head.length === 3 && <polygon points={pts(arrow.head)} fill="var(--ink-primary)" fillOpacity={0.9} strokeWidth={1} />}
             </m.g>
           )}
-          {L.path.length === 1 && <circle cx={L.path[0].x} cy={L.path[0].y} r={L.cell * 0.18} fill="var(--primary-strong)" fillOpacity={0.85} />}
+          {L.steps.length > 0 && (
+            <m.g
+              key={`steps-${pathKey}`}
+              stroke="var(--ink-primary)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              {...(reduce ? { initial: false as const } : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: springSoft })}
+            >
+              {L.steps.map((st, i) => (
+                <g key={i}>
+                  <line x1={st.from.x} y1={st.from.y} x2={st.to.x} y2={st.to.y} />
+                  <polygon points={pts(st.head)} fill="var(--ink-primary)" strokeWidth={1} />
+                </g>
+              ))}
+            </m.g>
+          )}
+          {/* путь из одной клетки: со значением — кольцо вокруг клетки, пустая — точка в центре */}
+          {L.ring && <rect x={L.ring.x} y={L.ring.y} width={L.ring.w} height={L.ring.h} rx={4} fill="none" stroke="var(--ink-primary)" strokeWidth={2.4} />}
+          {L.path.length === 1 && !L.ring && <circle cx={L.path[0].x} cy={L.path[0].y} r={L.cell * 0.18} fill="var(--ink-primary)" fillOpacity={0.9} />}
 
           {/* значения */}
           {L.blocks.map(
@@ -119,7 +138,7 @@ export function GridScene({ scene }: { scene: GridSceneData }) {
           {[...L.numLabels.entries()].map(([k, nl]) => {
             const [r, c] = k.split(":").map(Number);
             return (
-              <text key={`n${k}`} x={L.ox + c * L.cell + 2.5} y={L.oy + r * L.cell + 2 + nl.font * 0.85} fontSize={nl.font} fontWeight={800} fill="var(--primary-strong)" className="tabular-nums">
+              <text key={`n${k}`} x={L.ox + c * L.cell + 2.5} y={L.oy + r * L.cell + 2 + nl.font * 0.85} fontSize={nl.font} fontWeight={800} fill="var(--ink-primary)" className="tabular-nums">
                 {nl.text}
               </text>
             );

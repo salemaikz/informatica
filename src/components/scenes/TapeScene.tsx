@@ -5,7 +5,7 @@ import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene, SceneTone } from "@/lib/types";
-import { tapeAria, tapeLayout, type TapeArc, type TapeCell } from "./tape";
+import { TAPE_LABEL_FS, arcSegments, tapeAria, tapeLayout, type TapeCell } from "./tape";
 
 type TapeSceneData = Extract<Scene, { kind: "tape" }>;
 
@@ -19,11 +19,19 @@ const TONE_VAR: Record<SceneTone, string> = {
   muted: "var(--muted)",
 };
 
-/** Путь дуги над лентой: от (xa, y) до (xb, y), вершина на высоте height. */
-function arcPath(a: TapeArc): string {
-  const k = a.height / 0.75;
-  return `M ${a.xa} ${a.y} C ${a.xa} ${a.y - k}, ${a.xb} ${a.y - k}, ${a.xb} ${a.y}`;
-}
+/**
+ * Цвет текста подписи указателя на карточке (не на -soft-заливке): в светлой теме темнее базового, в тёмной — базовый (токены ink-*).
+ * Золото своего ink-токена не имеет — для текста смешиваем его с цветом текста, иначе жёлтые буквы на светлой карточке не читаются.
+ */
+const TONE_INK: Record<SceneTone, string> = {
+  primary: "var(--ink-primary)",
+  success: "var(--ink-success)",
+  danger: "var(--ink-danger)",
+  warning: "var(--ink-warning)",
+  ai: "var(--ink-ai)",
+  gold: "color-mix(in srgb, var(--gold) 55%, var(--text))",
+  muted: "var(--muted)",
+};
 
 /** Наконечник стрелки, направленной вниз, в точке (x, y). */
 const head = (x: number, y: number) => `M ${x - 3.5} ${y - 5} L ${x} ${y} L ${x + 3.5} ${y - 5}`;
@@ -60,18 +68,22 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           strokeWidth={c.state === "slice" || c.state === "highlight" || c.state === "sliceHl" ? 2 : 1.5}
           style={{ transition: fade }}
         />
-        <text
-          x={c.x + L.cellW / 2}
-          y={c.y + L.cellH / 2}
-          dy="0.35em"
-          textAnchor="middle"
-          fontSize={L.cellFs}
-          fontWeight={L.mono ? 700 : 800}
-          fill={c.state === "slice" || c.state === "sliceHl" ? "var(--primary-strong)" : c.state === "highlight" ? "var(--warning-strong)" : "var(--text)"}
-          className={monoCls}
-        >
-          {c.text}
-        </text>
+        {/* текст на -soft-заливке — «чернила» ink-* (в тёмной теме -strong на -soft нечитаем) */}
+        {c.lines.map((line, k) => (
+          <text
+            key={k}
+            x={c.x + L.cellW / 2}
+            y={c.y + L.cellH / 2 + (k - (c.lines.length - 1) / 2) * L.lineH}
+            dy="0.35em"
+            textAnchor="middle"
+            fontSize={L.cellFs}
+            fontWeight={L.mono ? 700 : 800}
+            fill={c.state === "slice" || c.state === "sliceHl" ? "var(--ink-primary)" : c.state === "highlight" ? "var(--ink-warning)" : "var(--text)"}
+            className={monoCls}
+          >
+            {line}
+          </text>
+        ))}
       </g>
     );
   };
@@ -112,20 +124,22 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           {L.stop && (
             <m.g {...appear}>
               <line x1={L.stop.x} x2={L.stop.x} y1={L.stop.y1} y2={L.stop.y2} stroke="var(--muted)" strokeWidth={2} strokeDasharray="4 3" strokeLinecap="round" />
-              <text x={L.stop.label.cx} y={L.stop.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--muted)">
+              <text x={L.stop.label.cx} y={L.stop.label.y} dy="0.35em" textAnchor="middle" fontSize={TAPE_LABEL_FS} fontWeight={800} fill="var(--muted)">
                 {L.stop.label.text}
               </text>
             </m.g>
           )}
 
-          {/* дуги: прыжки среза и обмены */}
+          {/* дуги: прыжки среза и обмены; там, где поверх проходит дуга выше, — разрыв (мост), а не сплетение */}
           {L.arcs.map((a) => {
-            const color = a.kind === "jump" ? "var(--primary)" : "var(--warning-strong)";
+            const color = a.kind === "jump" ? "var(--primary)" : "var(--ink-warning)";
             return (
-              <m.g key={a.key} {...appear} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d={arcPath(a)} />
-                <path d={head(a.xb, a.y)} />
-                {a.kind === "swap" && <path d={head(a.xa, a.y)} />}
+              <m.g key={a.key} {...appear} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
+                {arcSegments(a).map((d, i) => (
+                  <path key={i} d={d} />
+                ))}
+                <path d={head(a.xb, a.y)} strokeLinecap="round" />
+                {a.kind === "swap" && <path d={head(a.xa, a.y)} strokeLinecap="round" />}
               </m.g>
             );
           })}
@@ -134,7 +148,7 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
           {L.groups.map((g) => (
             <m.g key={g.key} {...appear}>
               <path d={`M ${g.x1} ${g.y + 5} V ${g.y} H ${g.x2} V ${g.y + 5}`} fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              <text x={g.label.cx} y={g.label.y} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={800} fill="var(--text)">
+              <text x={g.label.cx} y={g.label.y} dy="0.35em" textAnchor="middle" fontSize={TAPE_LABEL_FS} fontWeight={800} fill="var(--text)">
                 {g.label.text}
               </text>
             </m.g>
@@ -149,9 +163,14 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
               animate={{ opacity: 1, x: p.x, y: p.yTop }}
               transition={reduce ? { duration: 0 } : springSoft}
             >
-              {p.line && <line x1={0} x2={0} y1={6} y2={p.yEnd - p.yTop} stroke={TONE_VAR[p.tone]} strokeWidth={1.25} opacity={0.6} />}
-              {p.triangle && <path d="M -4.5 6 L 0 0 L 4.5 6 Z" fill={TONE_VAR[p.tone]} />}
-              <text x={p.label.cx - p.x} y={p.label.y - p.yTop} dy="0.35em" textAnchor="middle" fontSize={12} fontWeight={800} fill={TONE_VAR[p.tone]} className="font-mono">
+              {/* стрелка у всех одна: остриё у ячейки и стебель до подписи (выше нулевого уровня — длиннее) */}
+              {p.arrow && (
+                <>
+                  <line x1={0} x2={0} y1={4} y2={p.yEnd - p.yTop} stroke={TONE_VAR[p.tone]} strokeWidth={1.5} strokeLinecap="round" />
+                  <path d="M -4.5 6 L 0 0 L 4.5 6 Z" fill={TONE_VAR[p.tone]} />
+                </>
+              )}
+              <text x={p.label.cx - p.x} y={p.label.y - p.yTop} dy="0.35em" textAnchor="middle" fontSize={12} fontWeight={800} fill={TONE_INK[p.tone]} className="font-mono">
                 {p.label.text}
               </text>
             </m.g>

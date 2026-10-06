@@ -133,6 +133,9 @@ export function NumberlineScene({ scene }: { scene: NumberlineSceneData }) {
 
                 {row.points.map((p, pi) => (
                   <g key={`pt-${pi}`}>
+                    {p.label?.leader && (
+                      <line x1={p.label.leader.x} x2={p.label.leader.x} y1={p.label.leader.y1} y2={p.label.leader.y2} stroke={color} strokeWidth={1.25} strokeLinecap="round" opacity={0.7} />
+                    )}
                     {dot("dot", { x: p.x, open: p.open }, row.y, color)}
                     {p.label && (
                       <m.text

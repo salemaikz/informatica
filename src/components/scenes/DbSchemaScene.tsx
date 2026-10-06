@@ -8,7 +8,7 @@ import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
-import { DB_GEO, dbSchemaAria, layoutDbSchema, roundedPath, type DbCard, type DbFieldBox } from "./db-schema";
+import { DB_GEO, HEAD_PADX, dbSchemaAria, layoutDbSchema, roundedPath, type DbCard, type DbFieldBox } from "./db-schema";
 
 type DbSchemaSceneData = Extract<Scene, { kind: "db-schema" }>;
 
@@ -16,7 +16,7 @@ type DbSchemaSceneData = Extract<Scene, { kind: "db-schema" }>;
 function FieldRow({ f, scale, first }: { f: DbFieldBox; scale: number; first: boolean }) {
   const nameStyle = { fontSize: DB_GEO.namePx * scale, lineHeight: `${f.nameLineH}px` };
   const typeStyle = { fontSize: DB_GEO.typePx * scale, lineHeight: `${f.typeLineH}px` };
-  const nameCls = cn("[overflow-wrap:anywhere]", f.pk ? "font-extrabold" : "font-semibold", f.highlighted ? "text-primary-strong" : "text-text");
+  const nameCls = cn("[overflow-wrap:anywhere]", f.pk ? "font-extrabold" : "font-semibold", f.highlighted ? "text-ink-primary" : "text-text");
   const multi = f.stacked || f.nameLines > 1;
   return (
     <div
@@ -27,7 +27,7 @@ function FieldRow({ f, scale, first }: { f: DbFieldBox; scale: number; first: bo
       )}
       style={{ height: f.h, paddingLeft: DB_GEO.padX, paddingRight: DB_GEO.padX, gap: DB_GEO.iconGap }}
     >
-      <span className="flex shrink-0 items-center justify-center text-primary-strong" style={{ gap: DB_GEO.iconPairGap, minWidth: DB_GEO.icon }} aria-hidden="true">
+      <span className="flex shrink-0 items-center justify-center text-ink-primary" style={{ gap: DB_GEO.iconPairGap, minWidth: DB_GEO.icon }} aria-hidden="true">
         {f.pk && <KeyRound size={DB_GEO.icon} strokeWidth={2.4} />}
         {f.fk && <LinkIcon size={DB_GEO.icon} strokeWidth={2.4} />}
       </span>
@@ -74,10 +74,10 @@ function Card({ card, scale, headH, headLineH, settled, reduce }: { card: DbCard
     >
       <div
         className={cn(
-          "flex items-center justify-center px-2 text-center font-extrabold transition-colors duration-200",
-          card.highlighted ? "bg-primary-soft text-primary-strong" : "bg-surface-2 text-text",
+          "flex items-center justify-center text-center font-extrabold transition-colors duration-200",
+          card.highlighted ? "bg-primary-soft text-ink-primary" : "bg-surface-2 text-text",
         )}
-        style={{ height: headH, fontSize: card.headFont, lineHeight: `${headLineH}px` }}
+        style={{ height: headH, fontSize: card.headFont, lineHeight: `${headLineH}px`, paddingInline: HEAD_PADX }}
       >
         <span className="min-w-0 [overflow-wrap:anywhere]">{card.name}</span>
       </div>
@@ -151,7 +151,7 @@ export function DbSchemaScene({ scene }: { scene: DbSchemaSceneData }) {
               textAnchor={lb.anchor}
               fontSize={DB_GEO.cardLabelPx}
               fontWeight={800}
-              className={cn("transition-colors duration-200", lb.highlighted ? "fill-primary-strong" : "fill-text")}
+              className={cn("transition-colors duration-200", lb.highlighted ? "fill-ink-primary" : "fill-text")}
             >
               {lb.text}
             </text>
@@ -162,13 +162,13 @@ export function DbSchemaScene({ scene }: { scene: DbSchemaSceneData }) {
         <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs font-bold text-muted" aria-hidden="true">
           {hasPk && (
             <span className="inline-flex items-center gap-1">
-              <KeyRound size={13} strokeWidth={2.4} className="text-primary-strong" />
+              <KeyRound size={13} strokeWidth={2.4} className="text-ink-primary" />
               {t("scene.db.pk")}
             </span>
           )}
           {hasFk && (
             <span className="inline-flex items-center gap-1">
-              <LinkIcon size={13} strokeWidth={2.4} className="text-primary-strong" />
+              <LinkIcon size={13} strokeWidth={2.4} className="text-ink-primary" />
               {t("scene.db.fk")}
             </span>
           )}
