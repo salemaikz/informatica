@@ -40,7 +40,7 @@ import {
   type PerfectDrop,
 } from "./perfect";
 import { checkEntryKey, dropEntryPaid, duelEntryKey, entryPaidActive, lessonEntryKey, putEntryPaid, sanitizeEntryPaid, type EntryPaid } from "./entry-paid";
-import { botAdjAfter, duelOutcome, duelXpBase, EMPTY_DUELS, hideName as hideDuelName, pickDuelMistakes, pushDuel, sanitizeDuels, type DuelOppKind, type DuelRecord, type DuelSideStat, type DuelsState } from "./duel/record";
+import { botAdjAfter, duelOutcome, duelXpBase, EMPTY_DUELS, hideName as hideDuelName, pickDuelMistakes, pushDuel, sanitizeDuels, settleRecord, type DuelOppKind, type DuelRecord, type DuelSettle, type DuelSideStat, type DuelsState } from "./duel/record";
 import type { DuelOutcome } from "./duel/bot";
 import type { DuelModeId } from "./duel/types";
 import { fullExamChipsAllowed, fullExamCounts, lessonCounted, unitPassed } from "./exam-pass";
@@ -567,6 +567,11 @@ export interface AppActions {
    * Повтор того же id ничего не начисляет (duplicate: true).
    */
   recordDuel: (finish: DuelFinish) => { xp: number; result: DuelOutcome; record: DuelRecord; duplicate: boolean };
+  /**
+   * Ответ сервера по сыгранному вызову (Ф3): id вызова в запись истории (ссылка /duel/c/<id>) и серверный итог игры против
+   * записи — опыт за победу появляется или снимается (с тем же бустером). null — записи нет или менять нечего.
+   */
+  settleDuel: (id: string, patch: DuelSettle) => { record: DuelRecord; xpDelta: number } | null;
   /** Жалоба на игрока (Ф3): его имя у ученика скрывается сразу — «Игрок 4821» (код друга). */
   hidePlayerName: (code: string) => void;
   resetProgress: () => void;
@@ -1729,6 +1734,26 @@ export const useApp = create<AppState & AppActions>()(
         next = { ...next, ...evaluate(next) };
         set(settleChips(s, next));
         return { xp, result, record, duplicate: false };
+      },
+
+      settleDuel: (id, patch) => {
+        const s = get();
+        const rec = s.duels.history.find((r) => r.id === id);
+        if (!rec) return null;
+        const done = settleRecord(rec, patch, xpMultiplier(s.boost, rec.at));
+        if (!done) return null;
+        const { record } = done;
+        // Опыт не уходит в минус (поправка приходит через секунды после матча — обычно в тот же день).
+        const xpDelta = Math.max(-s.xp, done.xpDelta);
+        const today = todayKey();
+        const day = s.days[today];
+        set({
+          duels: { ...s.duels, history: s.duels.history.map((r) => (r.id === id ? record : r)) },
+          ...(xpDelta
+            ? { xp: s.xp + xpDelta, ...(day ? { days: { ...s.days, [today]: { ...day, xp: Math.max(0, day.xp + xpDelta) } } } : {}) }
+            : {}),
+        });
+        return { record, xpDelta };
       },
 
       hidePlayerName: (code) => {

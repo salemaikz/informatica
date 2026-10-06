@@ -19,6 +19,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/duel/challenge/
     const claims = openStart(body.value.start, c.pid, c.now, id);
     if (claims === "bad") return socialJson({ error: "bad_start" }, 400);
     if (claims === "expired") return socialJson({ error: "expired" }, 410);
+    if (claims === "stale") return socialJson({ error: "stale" }, 409);
     const answers = parseAnswers(body.value.answers, claims.n);
     if (!answers) return badRequest();
     if (!rateLimit(`duel-result:${c.pid}`, 30, 10 * 60_000)) return rateLimited();

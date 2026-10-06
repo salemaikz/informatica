@@ -29,8 +29,8 @@ import { awardWeek } from "@/server/social/tops";
 // Ключи (TTL 30 дней):
 //   du:ch:{id}    HASH: m (режим), sd (seed), b (полоса), tp (тема), tag, by (pid), s/c/a/t (счёт, верных, отвечено, время),
 //                 tl (запись «1.4210,0.8800»), f (флаги), at
-//   du:ch:{id}:p  SET pid сыгравших (каждый — один раз)
-//   du:ch:{id}:r  LIST ≤ 20 итогов принявших {p, s, c, a, t, w, at}
+//   du:ch:{id}:p  SET pid сыгравших (каждый — один раз); срок — до конца du:ch:{id} (challengeTtlLeft), не продлевается
+//   du:ch:{id}:r  LIST ≤ 20 итогов принявших {p, s, c, a, t, w, at}; срок — так же
 //   du:st:{hash}  STRING → id: старт уже записан (повторная отправка того же старта вернёт тот же вызов)
 
 export const CHALLENGE_TTL_SEC = 30 * 86_400;
@@ -157,11 +157,15 @@ export function judgeRecord(c: StartClaims, answers: readonly AnswerIn[], now: n
   return { judged, events, totals: totals(c.mode, events), flags: cheatFlagCount(judged) };
 }
 
-/** Старт из тела: подпись, свой pid, окно времени, нужный вызов (ch). */
-export function openStart(token: unknown, pid: string, now: number, ch: string | null): StartClaims | "bad" | "expired" {
+/**
+ * Старт из тела: подпись, свой pid, окно времени, нужный вызов (ch), тот же банк заданий. stale — между стартом и
+ * отправкой вышла новая сборка (другой DECK_TAG): набор по seed уже другой, ответы к старому набору не судим.
+ */
+export function openStart(token: unknown, pid: string, now: number, ch: string | null): StartClaims | "bad" | "expired" | "stale" {
   const c = verifyStart(token);
   if (!c || c.pid !== pid || (c.ch ?? null) !== ch) return "bad";
   if (!withinWindow(c, now)) return "expired";
+  if (c.deckTag !== DECK_TAG) return "stale";
   return c;
 }
 
@@ -218,7 +222,8 @@ export async function loadChallenge(kv: CountingKv, id: string): Promise<StoredC
 
 /**
  * Записать вызов по проверенной игре. Тот же старт второй раз — тот же вызов (existing). null — набор не собрался.
- * Команды: SET NX + HSET/EXPIRE (≈ 3); повтор — SET NX + GET.
+ * Сначала HSET вызова, потом SET NX метки старта: кто увидел метку — увидит и готовый вызов (двойное нажатие, повтор сети).
+ * Проигравший гонку удаляет свою лишнюю запись. Команды: HSET/EXPIRE + SET NX (≈ 3); повтор — ещё DEL + GET + HGETALL.
  */
 export async function createChallenge(
   kv: CountingKv,
@@ -232,11 +237,6 @@ export async function createChallenge(
   if (!rec) return null;
   const id = newChallengeId();
   const usedTtl = Math.max(60, Math.ceil((c.endsAt - now) / 1000) + 600);
-  if (!(await kv.set(chKeys.used(token), id, { nx: true, ttlSec: usedTtl }))) {
-    const prev = (await kv.getStr(chKeys.used(token))) ?? "";
-    const old = CHALLENGE_ID_RE.test(prev) ? await loadChallenge(kv, prev) : null;
-    return old ? { id: old.id, res: old.res, existing: true } : null;
-  }
   const res = resOf(rec.totals);
   await kv.pipeline([
     {
@@ -260,6 +260,14 @@ export async function createChallenge(
       ttlSec: CHALLENGE_TTL_SEC,
     },
   ]);
+  if (!(await kv.set(chKeys.used(token), id, { nx: true, ttlSec: usedTtl }))) {
+    const [, prev] = await kv.pipeline([
+      { op: "del", keys: [chKeys.hash(id)] },
+      { op: "getStr", key: chKeys.used(token) },
+    ] as const);
+    const old = prev && CHALLENGE_ID_RE.test(prev) ? await loadChallenge(kv, prev) : null;
+    return old ? { id: old.id, res: old.res, existing: true } : null;
+  }
   return { id, res, existing: false };
 }
 
@@ -375,7 +383,15 @@ export interface GhostResult {
   weekPts: number;
 }
 
-/** Итог игры против записи: проверка, сохранение (один раз на игрока), входящие вызвавшего, очки недели принявшему. */
+/** Сколько ещё жить подключам вызова (:p, :r): до конца самого вызова, а не 30 дней от каждой новой записи. */
+export const challengeTtlLeft = (ch: Pick<StoredChallenge, "at">, now: number): number =>
+  Math.max(60, Math.ceil((ch.at + CHALLENGE_TTL_SEC * 1000 - now) / 1000));
+
+/**
+ * Итог игры против записи: проверка, сохранение (один раз на игрока), входящие вызвавшего, очки недели принявшему.
+ * Вызвавший успел заблокировать принявшего или удалил профиль — отвечаем как обычно, но во входящие и в итоги вызова
+ * ничего не пишем (и не создаём заново pl:inbox удалённого игрока).
+ */
 export async function challengeResult(
   kv: CountingKv,
   id: string,
@@ -391,20 +407,26 @@ export async function challengeResult(
   const you = resOf(rec.totals);
   const w = winner(rec.totals, ch.res);
   const result = w.winner === "draw" ? "draw" : w.winner === "a" ? "win" : "loss";
-  const added = await kv.sadd(chKeys.played(id), [me], CHALLENGE_TTL_SEC);
+  const ttl = challengeTtlLeft(ch, now);
+  const [added, blocked, byCard] = await kv.pipeline([
+    { op: "sadd", key: chKeys.played(id), members: [me], ttlSec: ttl },
+    { op: "sismember", key: keys.blocked(ch.by), member: me },
+    { op: "getStr", key: keys.card(ch.by) },
+  ] as const);
   if (!added) return { you, rival: ch.res, result, stored: false, counted: false, weekPts: 0 };
   // Для вызвавшего итог зеркальный.
   const forBy = result === "win" ? "loss" : result === "loss" ? "win" : "draw";
-  await kv.pipeline([
-    {
-      op: "lpush",
-      key: chKeys.results(id),
-      value: JSON.stringify({ p: me, s: you.score, c: you.correct, a: you.answered, t: you.timeMs, w: forBy, at: now }),
-      max: RESULTS_MAX,
-      ttlSec: CHALLENGE_TTL_SEC,
-    },
-    inboxPushOp(ch.by, { k: "chr", id, m: ch.mode, ...(ch.topic ? { tp: ch.topic } : {}), p: me, s: you, r: ch.res, w: forBy, at: now }),
-  ]);
+  if (!blocked && byCard)
+    await kv.pipeline([
+      {
+        op: "lpush",
+        key: chKeys.results(id),
+        value: JSON.stringify({ p: me, s: you.score, c: you.correct, a: you.answered, t: you.timeMs, w: forBy, at: now }),
+        max: RESULTS_MAX,
+        ttlSec: ttl,
+      },
+      inboxPushOp(ch.by, { k: "chr", id, m: ch.mode, ...(ch.topic ? { tp: ch.topic } : {}), p: me, s: you, r: ch.res, w: forBy, at: now }),
+    ]);
   const beat = result === "win";
   const [award] = await awardWeek(
     kv,

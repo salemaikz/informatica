@@ -315,7 +315,7 @@ describe("жалобы и модерация", () => {
     expect(mine.json.player).toMatchObject({ nameState: "hidden", name: null });
     // Жалоба на себя и на неизвестный код — тот же ответ, ничего не пишется.
     expect((await post(report, "/api/social/report", target, { code: target.code, reason: "name", where: "friend" })).json).toEqual({ ok: true });
-    expect(await holder.kv!.scard(`mod:rep:${target.pid}:name`)).toBe(3);
+    expect(await holder.kv!.zcard(`mod:rep:${target.pid}:name`)).toBe(3);
   });
 
   it("10 жалоб в сутки на игрока — дальше 429", async () => {
@@ -364,5 +364,100 @@ describe("главная: входящие с карточкой автора", 
     expect(h.json.inbox[0].from).toMatchObject({ code: b.code, name: "Болат" });
     expect(JSON.stringify(h.json)).not.toContain(b.pid);
     expect(cmdsOf("home")).toBe(4);
+  });
+});
+
+describe("исправления по ревью Ф3: приглашения, жалобы, удаление профиля", () => {
+  const invite = (p: Player) => post<{ url?: string; error?: string }>(inviteCreate, "/api/social/invite-link", p);
+
+  it("живая ссылка переиспользуется, только пока до конца ≥ суток; в последний день — новая", async () => {
+    const a = await create("Айжан");
+    const first = (await invite(a)).json.url;
+    clock += 5 * 86_400_000;
+    expect((await invite(a)).json.url).toBe(first);
+    clock += 1 * 86_400_000 + 60_000; // до конца меньше суток
+    const second = (await invite(a)).json.url;
+    expect(second).toMatch(/^\/f\//);
+    expect(second).not.toBe(first);
+    // Новая ссылка снова живёт 7 дней и переиспользуется.
+    clock += 3 * 86_400_000;
+    expect((await invite(a)).json.url).toBe(second);
+  });
+
+  it("лимит 10 в сутки считает только новые ссылки: повторные нажатия «Пригласить» не тратят его", async () => {
+    const a = await create("Айжан");
+    const first = (await invite(a)).json.url;
+    for (let k = 0; k < 30; k++) {
+      const r = await invite(a);
+      expect(r.status).toBe(200);
+      expect(r.json.url).toBe(first);
+    }
+    // Новые ссылки (каждый раз прежняя исчерпана) — 10 в сутки, считая первую.
+    let last = first!;
+    for (let k = 0; k < 9; k++) {
+      await holder.kv!.set(`pl:inv:${last.slice(3)}:n`, "30");
+      const r = await invite(a);
+      expect(r.status).toBe(200);
+      last = r.json.url!;
+    }
+    await holder.kv!.set(`pl:inv:${last.slice(3)}:n`, "30");
+    expect((await invite(a)).status).toBe(429);
+  });
+
+  it("GET приглашения: тот, кого приглашающий заблокировал, видит «ссылки нет» (404 expired) — как и при POST", async () => {
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const token = (await invite(a)).json.url!.slice(3);
+    await post(block, "/api/social/block", a, { code: b.code });
+    const blocked = await inviteView.GET(req("GET", `/api/social/invite-link/${token}`, { cookie: b.cookie }), ctxOf({ token }));
+    expect(blocked.status).toBe(404);
+    expect(await blocked.json()).toEqual({ error: "expired" });
+    // Остальные (и без профиля, и сам приглашающий) — видят.
+    expect((await inviteView.GET(req("GET", `/api/social/invite-link/${token}`), ctxOf({ token }))).status).toBe(200);
+    const self = await inviteView.GET(req("GET", `/api/social/invite-link/${token}`, { cookie: a.cookie }), ctxOf({ token }));
+    expect(await self.json()).toMatchObject({ self: true });
+  });
+
+  it("GET приглашения — процессный лимит по IP (60 за 10 минут)", async () => {
+    const a = await create("Айжан");
+    const token = (await invite(a)).json.url!.slice(3);
+    const ip = "10.98.1.1";
+    for (let k = 0; k < 60; k++) expect((await inviteView.GET(req("GET", `/api/social/invite-link/${token}`, { ip }), ctxOf({ token }))).status).toBe(200);
+    expect((await inviteView.GET(req("GET", `/api/social/invite-link/${token}`, { ip }), ctxOf({ token }))).status).toBe(429);
+    expect(cmdsOf("invite.view")).toBe(0);
+  });
+
+  it("жалобы на имя: окно 30 дней не скользит — старые жалобы не считаются, повтор через 30 дней считается заново", async () => {
+    const target = await create("Ерлан");
+    const [r1, r2, r3] = [await create("Айжан"), await create("Болат"), await create("Сауле")];
+    const rep = (p: Player) => post(report, "/api/social/report", p, { code: target.code, reason: "name", where: "friend" });
+    const name = async () => JSON.parse((await holder.kv!.getStr(`pl:c:${target.pid}`))!).n;
+    await rep(r1);
+    clock += 20 * 86_400_000;
+    await rep(r2);
+    clock += 15 * 86_400_000; // жалоба r1 старше 30 дней
+    await rep(r3);
+    expect(await name()).toBe("Ерлан");
+    expect(await holder.kv!.zcard(`mod:rep:${target.pid}:name`)).toBe(2); // старая вычищена
+    await rep(r1); // через 35 дней — снова считается
+    expect(await name()).toBeNull();
+  });
+
+  it("DELETE /me: ссылка-приглашение мертва сразу, вызовы — 404, места в топе недели нет", async () => {
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const token = (await invite(a)).json.url!.slice(3);
+    await awardWeek(countingKv(holder.kv!), [{ pid: a.pid, opponent: "ghost", flags: 0, answered: 10, points: (ok: boolean) => (ok ? 2 : 0) }], [a.pid, b.pid], clock);
+    expect(await holder.kv!.zscore("top:w:2026-W41", a.pid)).toBe(2);
+    await holder.kv!.pipeline([{ op: "lpush", key: `pl:inbox:${a.pid}`, value: JSON.stringify({ k: "chr", id: "abcdefghij", at: clock }), max: 20 }]);
+
+    const del = await me.DELETE(req("DELETE", "/api/social/me", { cookie: a.cookie }));
+    expect(del.status).toBe(200);
+    expect(await holder.kv!.getStr(`pl:inv:${token}`)).toBeNull();
+    expect((await inviteView.GET(req("GET", `/api/social/invite-link/${token}`), ctxOf({ token }))).status).toBe(404);
+    const join = await inviteAccept.POST(req("POST", `/api/social/invite-link/${token}/accept`, { cookie: b.cookie }), ctxOf({ token }));
+    expect((await join.json()).status).toBe("expired");
+    expect(await holder.kv!.zscore("top:w:2026-W41", a.pid)).toBeNull();
+    expect(await holder.kv!.lrange(`pl:inbox:${a.pid}`, 0, -1)).toEqual([]);
   });
 });

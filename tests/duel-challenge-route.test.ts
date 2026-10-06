@@ -164,7 +164,8 @@ describe("вызов: запись → карточка → принять → �
     const r = await sendResult(b, id, acc.json.start, play(acc.json.start, 8));
     expect(r.status).toBe(200);
     expect(r.json).toMatchObject({ result: "win", stored: true, counted: true, weekPts: 2, you: { correct: 8 }, rival: { correct: 6 } });
-    expect(cmdsOf("duel.challenge.result")).toBeLessThanOrEqual(17);
+    // +2 с ревью: блокировка и карточка вызвавшего (не писать во входящие заблокировавшего или удалившегося).
+    expect(cmdsOf("duel.challenge.result")).toBeLessThanOrEqual(19);
     expect(await holder.kv!.zscore("top:w:2026-W41", b.pid)).toBe(2);
 
     // У Айжан во входящих: Болат, его итог, её итог, для неё — поражение.
@@ -266,5 +267,100 @@ describe("вызов: запись → карточка → принять → �
     // 12 верных (+2) и 8 неверных (−1) — если все уложились в 60 с часов блица.
     expect(rec.json.res).toMatchObject({ correct: 12, answered: 20, score: 12 * 2 - 8 });
     expect((await recordChallenge(a, (await startSolo(a, { mode: "ten", lv: 2, deckTag: DECK_TAG })).json, new Array(11).fill({ i: 0, a: 0, ms: 1000 }))).status).toBe(400);
+  });
+});
+
+const { signStart } = await import("@/server/duel/seat");
+
+describe("исправления по ревью Ф3", () => {
+  const resign = (s: StartView, over: Record<string, unknown>): StartView => ({ ...s, start: signStart({ ...verifyStart(s.start)!, ...over }) });
+
+  it("старт выдан до новой сборки (другой DECK_TAG) — запись и итог 409 stale, ничего не записано", async () => {
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const s = (await startSolo(a)).json;
+    const old = resign(s, { deckTag: "old-build" });
+    const rec = await recordChallenge(a, old, play(old, 6));
+    expect(rec.status).toBe(409);
+    expect(rec.json.error).toBe("stale");
+    const id = (await recordChallenge(a, s, play(s, 6))).json.id;
+    const acc = (await acceptCh(b, id)).json;
+    const oldAcc = resign(acc.start, { deckTag: "old-build" });
+    const r = await sendResult(b, id, oldAcc, play(oldAcc, 8));
+    expect(r.status).toBe(409);
+    expect(r.json.error).toBe("stale");
+    expect(await holder.kv!.lrange(`pl:inbox:${a.pid}`, 0, -1)).toEqual([]);
+    expect(await holder.kv!.zscore("top:w:2026-W41", b.pid)).toBeNull();
+  });
+
+  it("вызвавший заблокировал принявшего после «Принять» или удалил профиль — итог отвечает как обычно, но во входящие и итоги не пишется", async () => {
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const c = await create("Сауле");
+    const s = (await startSolo(a)).json;
+    const id = (await recordChallenge(a, s, play(s, 5))).json.id;
+    const accB = (await acceptCh(b, id)).json;
+    const accC = (await acceptCh(c, id)).json;
+    await block.POST(req("POST", "/api/social/block", { cookie: a.cookie, body: { code: b.code } }));
+    const rb = await sendResult(b, id, accB.start, play(accB.start, 8));
+    expect(rb.status).toBe(200);
+    expect(rb.json).toMatchObject({ result: "win", stored: true });
+    expect(await holder.kv!.lrange(`pl:inbox:${a.pid}`, 0, -1)).toEqual([]);
+    expect(await holder.kv!.lrange(`du:ch:${id}:r`, 0, -1)).toEqual([]);
+    // Повтор того же итога всё равно «уже сыграно».
+    expect((await sendResult(b, id, accB.start, play(accB.start, 8))).json.stored).toBe(false);
+
+    await me.DELETE(req("DELETE", "/api/social/me", { cookie: a.cookie }));
+    const rc = await sendResult(c, id, accC.start, play(accC.start, 3));
+    expect(rc.status).toBe(200);
+    expect(await holder.kv!.lrange(`pl:inbox:${a.pid}`, 0, -1)).toEqual([]);
+    expect((await holder.kv!.hgetAllStr(`pl:${a.pid}`)).code).toBeUndefined();
+  });
+
+  it("подключи :p и :r живут до конца вызова, а не 30 дней от последнего итога", async () => {
+    const { challengeTtlLeft, CHALLENGE_TTL_SEC } = await import("@/server/duel/challenge");
+    expect(challengeTtlLeft({ at: 0 }, 0)).toBe(CHALLENGE_TTL_SEC);
+    expect(challengeTtlLeft({ at: 0 }, 29 * 86_400_000)).toBe(86_400);
+    expect(challengeTtlLeft({ at: 0 }, 31 * 86_400_000)).toBe(60);
+
+    const a = await create("Айжан");
+    const b = await create("Болат");
+    const s = (await startSolo(a)).json;
+    const id = (await recordChallenge(a, s, play(s, 5))).json.id;
+    clock += 29 * 86_400_000;
+    const acc = (await acceptCh(b, id)).json;
+    expect((await sendResult(b, id, acc.start, play(acc.start, 8))).json.stored).toBe(true);
+    expect(await holder.kv!.lrange(`du:ch:${id}:r`, 0, -1)).toHaveLength(1);
+    clock += 2 * 86_400_000; // вызов истёк — и его итоги тоже
+    expect(await holder.kv!.lrange(`du:ch:${id}:r`, 0, -1)).toEqual([]);
+    expect(await holder.kv!.sismember(`du:ch:${id}:p`, b.pid)).toBe(false);
+  });
+
+  it("гонка двух отправок одного старта: вторая видит готовый вызов, лишняя запись удалена", async () => {
+    const { createChallenge, chKeys } = await import("@/server/duel/challenge");
+    const { countingKv } = await import("@/server/social/kv");
+    const a = await create("Айжан");
+    const s = (await startSolo(a)).json;
+    const answers = play(s, 6);
+    const claims = verifyStart(s.start)!;
+    const [x, y] = await Promise.all([
+      createChallenge(countingKv(holder.kv!), a.pid, s.start, claims, answers, clock),
+      createChallenge(countingKv(holder.kv!), a.pid, s.start, claims, answers, clock),
+    ]);
+    expect(x && y).toBeTruthy();
+    expect(x!.id).toBe(y!.id);
+    expect([x!.existing, y!.existing].sort()).toEqual([false, true]);
+    expect(await holder.kv!.getStr(chKeys.used(s.start))).toBe(x!.id);
+    expect((await holder.kv!.hgetAllStr(chKeys.hash(x!.id))).by).toBe(a.pid);
+  });
+
+  it("публичная карточка вызова — процессный лимит по IP (60 за 10 минут), 0 команд на отказ", async () => {
+    const a = await create("Айжан");
+    const s = (await startSolo(a)).json;
+    const id = (await recordChallenge(a, s, play(s, 5))).json.id;
+    const fixed = () => new Request(`http://localhost/api/duel/challenge/${id}`, { headers: { host: "localhost", "x-forwarded-for": "10.99.1.1" } });
+    for (let k = 0; k < 60; k++) expect((await view.GET(fixed(), ctxOf(id))).status).toBe(200);
+    expect((await view.GET(fixed(), ctxOf(id))).status).toBe(429);
+    expect(cmdsOf("duel.challenge.view")).toBe(0);
   });
 });

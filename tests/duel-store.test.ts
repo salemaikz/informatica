@@ -260,3 +260,89 @@ describe("адрес матча и отметки перезагрузки (lib/
     expect(duelPlayed([{ id }], "bot.blitz.-.1.4")).toBe(false);
   });
 });
+
+describe("Ф3: вызовы в истории, серверный итог, скрытые имена", () => {
+  const ghost = (over: Partial<DuelFinish> = {}) =>
+    finish({ matchId: "ch.Ab_-12cdEF", mode: "ten", opp: "ghost", oppName: "Болат", oppLevel: 7, oppCode: "K7QF29XM", chId: "Ab_-12cdEF", you: side(8, 8, 10), rival: side(6, 6, 10), ...over });
+
+  it("recordDuel solo: исход по своим же итогам (ничья), бонуса за победу нет, имя/код соперника не пишутся", () => {
+    const r = useApp.getState().recordDuel(finish({ matchId: "rec.42", mode: "ten", opp: "solo", oppName: "x", oppCode: "K7QF29XM", you: side(7, 7, 10), rival: side(7, 7, 10) }));
+    expect(r.result).toBe("draw");
+    expect(r.xp).toBe(duelXpBase("ten", side(7, 7), "draw", "solo"));
+    expect(duelXpBase("ten", side(7, 7), "win", "solo")).toBe(r.xp);
+    expect(r.record.oppCode).toBeUndefined();
+    expect(r.record.oppName).toBe("x"); // имя хранится у не-бота, но экран solo его не показывает
+    expect(r.record.chId).toBeUndefined();
+  });
+
+  it("recordDuel ghost: код и id вызова проходят санитайзер; мусорные — отбрасываются при загрузке", () => {
+    const r = useApp.getState().recordDuel(ghost());
+    expect(r.record).toMatchObject({ opp: "ghost", oppCode: "K7QF29XM", chId: "Ab_-12cdEF", result: "win" });
+    const bad = sanitizeDuels({ history: [{ ...r.record, oppCode: "k7qf<b>", chId: "../../x" }] });
+    expect(bad.history[0].oppCode).toBeUndefined();
+    expect(bad.history[0].chId).toBeUndefined();
+  });
+
+  it("settleDuel: solo получает id вызова (ссылка из истории), повтор — null", () => {
+    const r = useApp.getState().recordDuel(finish({ matchId: "rec.42", mode: "ten", opp: "solo", you: side(7, 7, 10), rival: side(7, 7, 10) }));
+    const xp = useApp.getState().xp;
+    expect(useApp.getState().settleDuel(r.record.id, { chId: "Ab_-12cdEF" })).toMatchObject({ xpDelta: 0, record: { chId: "Ab_-12cdEF" } });
+    expect(useApp.getState().duels.history[0].chId).toBe("Ab_-12cdEF");
+    expect(useApp.getState().settleDuel(r.record.id, { chId: "Ab_-12cdEF" })).toBeNull();
+    expect(useApp.getState().settleDuel(r.record.id, { chId: "bad id" })).toBeNull();
+    expect(useApp.getState().settleDuel("nope", { chId: "Ab_-12cdEF" })).toBeNull();
+    // У бота id вызова и серверный итог не применяются.
+    const bot = useApp.getState().recordDuel(finish());
+    expect(useApp.getState().settleDuel(bot.record.id, { chId: "Ab_-12cdEF", result: "loss" })).toBeNull();
+    expect(useApp.getState().xp).toBe(xp + bot.xp);
+  });
+
+  it("settleDuel ghost: сервер засчитал поражение — исход и бонус за победу снимаются (с тем же бустером)", () => {
+    useApp.setState({ boost: { mult: 2, until: Date.now() + 15 * MINUTE } });
+    const r = useApp.getState().recordDuel(ghost());
+    expect(r.result).toBe("win");
+    const before = useApp.getState().xp;
+    const dayBefore = Object.values(useApp.getState().days)[0].xp;
+    const s = useApp.getState().settleDuel(r.record.id, { result: "loss" })!;
+    expect(s.xpDelta).toBe(-DUEL_WIN_XP.human * 2);
+    expect(useApp.getState().xp).toBe(before - DUEL_WIN_XP.human * 2);
+    expect(Object.values(useApp.getState().days)[0].xp).toBe(dayBefore - DUEL_WIN_XP.human * 2);
+    expect(useApp.getState().duels.history[0]).toMatchObject({ result: "loss", xp: r.xp - DUEL_WIN_XP.human * 2 });
+    // Обратно: сервер подтвердил победу, которую клиент не насчитал.
+    const back = useApp.getState().settleDuel(r.record.id, { result: "win" })!;
+    expect(back.xpDelta).toBe(DUEL_WIN_XP.human * 2);
+    expect(useApp.getState().xp).toBe(before);
+    expect(useApp.getState().settleDuel(r.record.id, { result: "win" })).toBeNull();
+  });
+
+  it("hidePlayerName: только код друга, без повторов, свежий — первым, не больше 200", () => {
+    const hide = (c: string) => useApp.getState().hidePlayerName(c);
+    hide("K7QF29XM");
+    hide("bad");
+    hide("k7qf29xm");
+    hide("K7QF29XM");
+    expect(useApp.getState().duels.hiddenNames).toEqual(["K7QF29XM"]);
+    for (let k = 0; k < 205; k++) hide(String(10_000_000 + k));
+    const list = useApp.getState().duels.hiddenNames;
+    expect(list).toHaveLength(200);
+    expect(list[0]).toBe("10000204");
+    expect(list).not.toContain("K7QF29XM");
+    hide("10000010");
+    expect(useApp.getState().duels.hiddenNames[0]).toBe("10000010");
+    expect(useApp.getState().duels.hiddenNames).toHaveLength(200);
+  });
+});
+
+describe("Ф3: отметка «просмотрено» входящих (lib/social/inbox-seen.ts)", () => {
+  it("считаются только итоги новее отметки; отметка не уменьшается; хранилище недоступно — 0 без ошибок", async () => {
+    const { readInboxSeen, seenAfter, unseenCount, writeInboxSeen } = await import("@/lib/social/inbox-seen");
+    const items = [{ at: 300 }, { at: 200 }, { at: 100 }];
+    expect(unseenCount(items, 0)).toBe(3);
+    expect(unseenCount(items, 200)).toBe(1);
+    expect(seenAfter(items, 0)).toBe(300);
+    expect(seenAfter(items, 500)).toBe(500);
+    expect(seenAfter([], 7)).toBe(7);
+    expect(readInboxSeen()).toBe(0);
+    expect(() => writeInboxSeen(1)).not.toThrow();
+  });
+});

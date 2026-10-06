@@ -58,7 +58,7 @@ type Send =
   | { s: "sending" }
   | { s: "saved"; rec: Recorded }
   | { s: "ghost"; res: GhostResult }
-  | { s: "failed"; expired: boolean };
+  | { s: "failed"; expired: boolean; stale?: boolean };
 
 type Phase =
   | { name: "loading" }
@@ -67,7 +67,18 @@ type Phase =
   | { name: "saved"; rec: Recorded }
   | { name: "vs"; start: StartView; deck: DuelDeckResponse }
   | { name: "play"; start: StartView; deck: DuelDeckResponse; tl: OpponentTimeline; playId: string }
-  | { name: "result"; start: StartView; deck: DuelDeckResponse; run: RunState; you: DuelSideStat; rival: DuelSideStat; result: DuelOutcome; xp: number; send: Send };
+  | {
+      name: "result";
+      start: StartView;
+      deck: DuelDeckResponse;
+      playId: string;
+      run: RunState;
+      you: DuelSideStat;
+      rival: DuelSideStat;
+      result: DuelOutcome;
+      xp: number;
+      send: Send;
+    };
 
 const SESSION_PREFIX = "informatica-duel-rec:";
 
@@ -167,19 +178,33 @@ export function ChallengePlay(props: Props) {
     return true;
   };
 
-  const send = async (start: StartView, run: RunState): Promise<Send> => {
+  const failed = (error: string | undefined): Send => ({ s: "failed", expired: error === "expired", stale: error === "stale" });
+
+  const send = async (start: StartView, run: RunState, playId: string): Promise<Send> => {
     const answers = answersOf(start.mode, run);
     if (ghostId) {
       const r = await sendGhostResult(ghostId, start.start, answers);
-      return r.ok && r.data ? { s: "ghost", res: r.data } : { s: "failed", expired: r.error === "expired" };
+      if (!r.ok || !r.data) return failed(r.error);
+      // Итог судит сервер (plausible.ts) — его же видит вызвавший; бонус за победу у себя поправляем под него.
+      useApp.getState().settleDuel(playId, { chId: ghostId, result: r.data.result });
+      return { s: "ghost", res: r.data };
     }
     const r = await recordChallenge(start.start, answers);
-    if (r.ok && r.data) {
-      if (nonce) writeSession(nonce, { start, rec: r.data });
-      return { s: "saved", rec: r.data };
-    }
-    return { s: "failed", expired: r.error === "expired" };
+    if (!r.ok || !r.data) return failed(r.error);
+    if (nonce) writeSession(nonce, { start, rec: r.data });
+    // Ссылка на вызов — и в истории (вернуться и поделиться позже).
+    useApp.getState().settleDuel(playId, { chId: r.data.id });
+    return { s: "saved", rec: r.data };
   };
+
+  /** Ответ сервера → экран итогов: у игры против записи счёт, исход и опыт — проверенные сервером. */
+  const applySend = (start: StartView, s: Send) =>
+    setPhase((p) => {
+      if (p.name !== "result" || p.start !== start) return p;
+      if (s.s !== "ghost") return { ...p, send: s };
+      const rec = useApp.getState().duels.history.find((r) => r.id === p.playId);
+      return { ...p, send: s, you: s.res.you, rival: s.res.rival, result: s.res.result, xp: rec?.xp ?? p.xp };
+    });
 
   const finish = (start: StartView, deck: DuelDeckResponse, playId: string, run: RunState, opp: DuelEvent[]) => {
     if (recorded.current) return;
@@ -199,16 +224,16 @@ export function ChallengePlay(props: Props) {
       attempts: run.events.map((e) => ({ skill: deck.items[e.i]?.skill ?? "", correct: e.ok })).filter((a) => a.skill),
       wrong: duelWrongItems(deck.items, run, lang),
     });
-    const base = { name: "result" as const, start, deck, run, you, rival: rivalStat, result: res.result, xp: res.xp };
+    const base = { name: "result" as const, start, deck, playId, run, you, rival: rivalStat, result: res.result, xp: res.xp };
     setPhase({ ...base, send: { s: "sending" } });
-    void send(start, run).then((s) => setPhase((p) => (p.name === "result" && p.start === start ? { ...p, send: s } : p)));
+    void send(start, run, playId).then((s) => applySend(start, s));
   };
 
   const retrySend = () => {
     if (phase.name !== "result") return;
-    const { start, run } = phase;
+    const { start, run, playId } = phase;
     setPhase({ ...phase, send: { s: "sending" } });
-    void send(start, run).then((s) => setPhase((p) => (p.name === "result" && p.start === start ? { ...p, send: s } : p)));
+    void send(start, run, playId).then((s) => applySend(start, s));
   };
 
   const toHub = () => router.replace("/duel");
@@ -302,7 +327,7 @@ export function ChallengePlay(props: Props) {
           report={accepted ? <ReportPlayerButton card={accepted.by} where="result" matchId={ghostId ?? undefined} /> : undefined}
           onChallenge={accepted ? () => router.replace(recHref(mode, topic)) : phase.send.s === "saved" ? recordAgain : undefined}
           challengeLabel={accepted ? t("duel.challengeBack") : t("duel.rec.again")}
-          extra={<SendPanel send={phase.send} modeLabel={modeLabel} onRetry={retrySend} onAgain={recordAgain} />}
+          extra={<SendPanel send={phase.send} solo={!accepted} modeLabel={modeLabel} onRetry={retrySend} onAgain={recordAgain} />}
         />
       )}
       <OutOfHearts
@@ -335,7 +360,7 @@ function ShareBlock({ rec, modeLabel }: { rec: Recorded; modeLabel: string }) {
 }
 
 /** Что с отправкой результата на сервер: запись вызова, очки недели, «не попал в топ», ошибка с повтором. */
-function SendPanel({ send, modeLabel, onRetry, onAgain }: { send: Send; modeLabel: string; onRetry: () => void; onAgain: () => void }) {
+function SendPanel({ send, solo, modeLabel, onRetry, onAgain }: { send: Send; solo: boolean; modeLabel: string; onRetry: () => void; onAgain: () => void }) {
   const { t } = useT();
   if (send.s === "sending")
     return (
@@ -345,6 +370,18 @@ function SendPanel({ send, modeLabel, onRetry, onAgain }: { send: Send; modeLabe
       </p>
     );
   if (send.s === "saved") return <ShareBlock rec={send.rec} modeLabel={modeLabel} />;
+  // Задания обновились, пока шла игра: ответы к старому набору не проверить — итог не записывается.
+  if (send.s === "failed" && send.stale)
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl bg-warning-soft px-3 py-3 text-center" role="alert" data-testid="duel-send-stale">
+        <p className="text-sm font-bold text-ink-warning">{t("duel.week.stale")}</p>
+        {solo && (
+          <Button variant="secondary" size="sm" onClick={onAgain}>
+            {t("duel.rec.again")}
+          </Button>
+        )}
+      </div>
+    );
   if (send.s === "failed")
     return (
       <div className="flex flex-col gap-2 rounded-2xl bg-warning-soft px-3 py-3 text-center" role="alert">

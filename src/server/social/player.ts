@@ -343,9 +343,10 @@ export function liveWeeks(now: number): string[] {
  * и отпадут при ответе (профиля нет) или по TTL 14 дней.
  */
 export async function deletePlayer(kv: CountingKv, pid: string, now: number): Promise<void> {
-  const [code, friends] = await kv.pipeline([
+  const [code, friends, inv] = await kv.pipeline([
     { op: "hget", key: keys.profile(pid), field: "code" },
     { op: "smembers", key: keys.friends(pid) },
+    { op: "hget", key: keys.profile(pid), field: "inv" },
   ] as const);
   const owner = code ? await kv.getStr(keys.code(code)) : null;
   await kv.pipeline([
@@ -361,6 +362,8 @@ export async function deletePlayer(kv: CountingKv, pid: string, now: number): Pr
         keys.inbox(pid),
         keys.history(pid),
         ...(code && owner === pid ? [keys.code(code)] : []),
+        // Ссылка-приглашение (friends.ts: pl:inv:{token}) — сразу мёртвая, не ждём 7 дней.
+        ...(inv && /^[A-Za-z0-9_-]{22}$/.test(inv) ? [`pl:inv:${inv}`, `pl:inv:${inv}:n`] : []),
       ],
     },
     ...liveWeeks(now).map((w) => ({ op: "zrem", key: keys.topWeek(w), members: [pid] }) as KvOp),

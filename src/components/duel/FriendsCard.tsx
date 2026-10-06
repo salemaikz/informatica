@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { getTop, type HomeData } from "@/lib/social/client";
+import { readInboxSeen, seenAfter, unseenCount, writeInboxSeen } from "@/lib/social/inbox-seen";
 import { challengePath } from "@/lib/duel/challenge";
 import type { TopRowView } from "@/lib/social/view";
 import { useT } from "@/i18n/useT";
@@ -14,12 +15,14 @@ import { useShowName } from "@/components/social/PlayerCard";
 import { MODE_TITLE } from "./mode-meta";
 
 // Карточка «Друзья» на хабе дуэлей (этап 16Д, Ф3; docs/specs/duels.md §9): топ-3 друзей за неделю, входящие (кто сыграл против
-// моей записи), число заявок и вход на /duel/friends. Нет профиля игрока — приглашение добавить друзей.
+// моей записи; число — только новые, после открытия итога — 0), число заявок и вход на /duel/friends. Нет профиля игрока —
+// приглашение добавить друзей.
 
 export function FriendsCard({ home }: { home: HomeData | null }) {
   const { t } = useT();
   const show = useShowName();
   const [top, setTop] = useState<TopRowView[] | null>(null);
+  const [seenAt, setSeenAt] = useState(readInboxSeen);
   const hasPlayer = !!home?.player;
 
   useEffect(() => {
@@ -32,6 +35,12 @@ export function FriendsCard({ home }: { home: HomeData | null }) {
   }, [hasPlayer]);
 
   const inbox = home?.inbox ?? [];
+  const fresh = unseenCount(inbox, seenAt);
+  const markSeen = () => {
+    const at = seenAfter(inbox, seenAt);
+    writeInboxSeen(at);
+    setSeenAt(at);
+  };
   const requests = home?.requests ?? 0;
   return (
     <section className="flex flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4" data-testid="duel-friends-card">
@@ -55,13 +64,22 @@ export function FriendsCard({ home }: { home: HomeData | null }) {
             <div className="flex flex-col gap-1.5" data-testid="duel-inbox">
               <p className="flex items-center gap-1.5 text-sm font-extrabold text-muted">
                 <Inbox size={16} aria-hidden />
-                {t("social.hub.inbox", { n: inbox.length })}
+                <span className="flex-1">{t("social.hub.inbox")}</span>
+                {fresh > 0 && (
+                  <span data-testid="duel-inbox-new">
+                    <Pill tone="primary">{t("social.hub.inboxNew", { n: fresh })}</Pill>
+                  </span>
+                )}
               </p>
               {inbox.slice(0, 3).map((it) => (
                 <Link
                   key={`${it.id}.${it.at}`}
                   href={challengePath(it.id)}
-                  className="flex min-h-12 items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 hover:bg-border/40"
+                  onClick={markSeen}
+                  className={cn(
+                    "flex min-h-12 items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 hover:bg-border/40",
+                    it.at > seenAt && "ring-2 ring-primary/50",
+                  )}
                   data-testid="duel-inbox-item"
                 >
                   <span className="min-w-0 flex-1">

@@ -119,3 +119,40 @@ describe("pending-link: хранение", () => {
     expect(takePendingLink(1)).toBeNull();
   });
 });
+
+describe("pending-link: ссылки соцчасти (Ф3 дуэлей)", () => {
+  const TOKEN = "AbCdEfGhIjKlMnOpQrSt_-"; // 22 символа base64url
+  const CH = "Ab_-12cdEF"; // 10 символов
+
+  it("/f/<22> и /duel/c/<10> принимаются; query и hash отбрасываются", () => {
+    expect(pendingLinkOf(`/f/${TOKEN}`)).toBe(`/f/${TOKEN}`);
+    expect(pendingLinkOf(`/duel/c/${CH}`)).toBe(`/duel/c/${CH}`);
+    expect(pendingLinkOf(`/f/${TOKEN}?utm_source=wa#x`)).toBe(`/f/${TOKEN}`);
+    expect(pendingLinkOf(`/duel/c/${CH}#top`)).toBe(`/duel/c/${CH}`);
+  });
+
+  it("другая длина, лишние сегменты, обход пути, чужой домен — отказ", () => {
+    for (const bad of [
+      `/f/${TOKEN}x`,
+      `/f/${TOKEN.slice(1)}`,
+      `/f/${TOKEN}/`,
+      `/f/${TOKEN}/accept`,
+      `/duel/c/${CH}0`,
+      `/duel/c/${CH.slice(1)}`,
+      `/duel/c/${CH}/../../owner`,
+      `/duel/c/../../${CH}`,
+      `/f/..%2F..%2Fowner123456`,
+      `//evil.example/f/${TOKEN}`,
+      `https://evil.example/duel/c/${CH}`,
+      `/duel/c/${CH.slice(0, 9)}.`,
+      `/F/${TOKEN}`,
+      `/f/${TOKEN}`.padEnd(301, "?"),
+    ])
+      expect(pendingLinkOf(bad), bad).toBeNull();
+  });
+
+  it("сохраняется и возвращается после онбординга", () => {
+    savePendingLink(`/duel/c/${CH}?from=share`, 1000);
+    expect(takePendingLink(2000)).toBe(`/duel/c/${CH}`);
+  });
+});

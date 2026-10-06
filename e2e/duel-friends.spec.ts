@@ -133,6 +133,14 @@ test("друзья по коду, топ друзей, вызов и итог в
   const inbox = a.getByTestId("duel-inbox");
   await expect(inbox).toContainText("Болат", { timeout: 15_000 });
   await expect(inbox.getByTestId("duel-inbox-item")).toContainText("10 : 6");
+  // Новые итоги считаются до просмотра; своя запись в истории ведёт на карточку вызова.
+  await expect(a.getByTestId("duel-inbox-new")).toContainText("Новых: 1");
+  await expect(a.getByTestId("duel-recent").getByTestId("duel-recent-link").first()).toHaveAttribute("href", url);
+  await inbox.getByTestId("duel-inbox-item").click();
+  await expect(a).toHaveURL(new RegExp(`${url}$`));
+  await a.goto("/duel");
+  await expect(a.getByTestId("duel-inbox")).toContainText("Болат", { timeout: 15_000 });
+  await expect(a.getByTestId("duel-inbox-new")).toHaveCount(0);
   await a.goto("/duel/friends");
   await expect(a.getByTestId("friends-top").locator('li', { hasText: "Болат" }).getByTestId("top-score")).toHaveText("1");
 

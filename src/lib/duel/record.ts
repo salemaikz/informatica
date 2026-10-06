@@ -95,6 +95,32 @@ export function duelXpBase(mode: DuelModeId, you: Pick<DuelSideStat, "score" | "
   return base + (result === "win" && opp !== "solo" ? DUEL_WIN_XP[opp === "bot" ? "bot" : "human"] : 0);
 }
 
+/** Что сервер сообщил о матче после записи (Ф3): id вызова и/или его итог (проверенный plausible.ts). */
+export interface DuelSettle {
+  chId?: string;
+  result?: DuelOutcome;
+}
+
+export const CHALLENGE_ID_RE = /^[A-Za-z0-9_-]{10}$/;
+
+/**
+ * Поправить запись истории по ответу сервера: solo/ghost получают id вызова (ссылка из истории), у игры против человека
+ * или записи итог берётся серверный (сервер судит по своим правилам — оба игрока видят одно и то же), опыт пересчитывается
+ * с тем же множителем бустера (бонус за победу появляется или снимается). null — менять нечего.
+ */
+export function settleRecord(rec: DuelRecord, patch: DuelSettle, mult: number): { record: DuelRecord; xpDelta: number } | null {
+  let record = rec;
+  if (patch.chId && CHALLENGE_ID_RE.test(patch.chId) && (rec.opp === "solo" || rec.opp === "ghost") && rec.chId !== patch.chId)
+    record = { ...record, chId: patch.chId };
+  let xpDelta = 0;
+  if (patch.result && RESULTS.includes(patch.result) && (rec.opp === "ghost" || rec.opp === "human") && patch.result !== rec.result) {
+    const xp = Math.max(0, Math.round(duelXpBase(rec.mode, rec.you, patch.result, rec.opp) * mult));
+    xpDelta = xp - rec.xp;
+    record = { ...record, result: patch.result, xp };
+  }
+  return record === rec ? null : { record, xpDelta };
+}
+
 /** Сколько ошибок одного матча попадает в «Ошибки»: быстрые режимы не должны вытеснять ошибки уроков и пробников. */
 export const DUEL_MISTAKES_MAX = 3;
 
@@ -167,7 +193,7 @@ function sanitizeRecord(raw: unknown): DuelRecord | null {
   const lv = int(r.oppLevel, 1, 999);
   if (lv !== null && person) rec.oppLevel = lv;
   if (person && typeof r.oppCode === "string" && /^[0-9A-Z]{8}$/.test(r.oppCode)) rec.oppCode = r.oppCode;
-  if (typeof r.chId === "string" && /^[A-Za-z0-9_-]{10}$/.test(r.chId)) rec.chId = r.chId;
+  if (typeof r.chId === "string" && CHALLENGE_ID_RE.test(r.chId)) rec.chId = r.chId;
   return rec;
 }
 

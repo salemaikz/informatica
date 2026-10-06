@@ -163,27 +163,33 @@ export async function friendLists(kv: CountingKv, me: string): Promise<FriendLis
 /** Новый токен ссылки. */
 export const newInviteToken = (): string => randomBytes(16).toString("base64url");
 
+/** Живую ссылку отдаём повторно, только если до её конца ещё не меньше суток (иначе друг откроет уже мёртвую). */
+export const INVITE_REUSE_MIN_LEFT_MS = 86_400_000;
+
 /**
- * Ссылка-приглашение игрока: живая (≥ 1 дня до конца и не исчерпана) переиспользуется, иначе новая. null — нет профиля.
- * Токен помним в профиле (поле inv), чтобы не плодить ссылки.
+ * Ссылка-приглашение игрока: живая (≥ 1 дня до конца и не исчерпана) переиспользуется, иначе новая. Токен и срок помним
+ * в профиле (поля inv, invExp), чтобы не плодить ссылки. canMint вызывается только перед созданием новой ссылки (лимит
+ * invitePid считает новые ссылки, а не каждое нажатие «Пригласить»). null — нет профиля; "limited" — новую создать нельзя.
  */
-export async function inviteLink(kv: CountingKv, me: string): Promise<string | null> {
-  const [code, cur] = await kv.pipeline([
+export async function inviteLink(kv: CountingKv, me: string, now: number, canMint: () => Promise<boolean>): Promise<string | "limited" | null> {
+  const [code, cur, exp] = await kv.pipeline([
     { op: "hget", key: keys.profile(me), field: "code" },
     { op: "hget", key: keys.profile(me), field: "inv" },
+    { op: "hget", key: keys.profile(me), field: "invExp" },
   ] as const);
   if (!code) return null;
-  if (cur && INVITE_TOKEN_RE.test(cur)) {
+  if (cur && INVITE_TOKEN_RE.test(cur) && Number(exp) - now >= INVITE_REUSE_MIN_LEFT_MS) {
     const [owner, uses] = await kv.pipeline([
       { op: "getStr", key: friendKeys.invite(cur) },
       { op: "getStr", key: friendKeys.inviteUses(cur) },
     ] as const);
     if (owner === me && Number(uses ?? 0) < INVITE_MAX_USES - 1) return cur;
   }
+  if (!(await canMint())) return "limited";
   const token = newInviteToken();
   await kv.pipeline([
     { op: "set", key: friendKeys.invite(token), value: me, ttlSec: INVITE_TTL_SEC },
-    { op: "hset", key: keys.profile(me), fields: { inv: token } },
+    { op: "hset", key: keys.profile(me), fields: { inv: token, invExp: now + INVITE_TTL_SEC * 1000 } },
   ]);
   return token;
 }
@@ -198,6 +204,13 @@ export async function inviteInfo(kv: CountingKv, token: string): Promise<{ pid: 
   if (!pid || Number(uses ?? 0) >= INVITE_MAX_USES) return null;
   const card = cardFromJson(await kv.getStr(keys.card(pid)));
   return card ? { pid, card } : null;
+}
+
+/** Карточка для страницы /f/<token>: как inviteInfo, но тот, кого приглашающий заблокировал, видит «ссылки нет». */
+export async function inviteView(kv: CountingKv, token: string, me: string | null): Promise<{ pid: string; card: PublicCard } | null> {
+  const info = await inviteInfo(kv, token);
+  if (!info || !me || me === info.pid) return info;
+  return (await kv.sismember(keys.blocked(info.pid), me)) ? null : info;
 }
 
 export type JoinStatus = "accepted" | "already" | "self" | "expired" | "limit";

@@ -5,7 +5,8 @@ import { keys, PROFILE_TTL_SEC } from "@/server/social/player";
 
 // Жалобы на игроков и решения владельца (docs/specs/duels.md §7, Ф3; 3-safety.md §4). Свободного текста нет.
 // - Жалоба сразу скрывает имя у пожаловавшегося (клиент: hiddenNames в сторе).
-// - mod:rep:{pid}:{reason} — SET pid пожаловавшихся, 30 дней: повтор от того же игрока не считается.
+// - mod:rep:{pid}:{reason} — ZSET pid пожаловавшегося → время жалобы: считаются только жалобы за последние 30 дней
+//   (старые вычищаются при следующей), повтор от того же игрока в окне не считается. Окно не «скользит» от новых жалоб.
 // - Жалобы на имя от 3 разных игроков за 30 дней → имя скрыто у всех (nameState = hidden, в карточке n = null) до решения
 //   владельца на /owner. Имя, которое владелец уже разрешил (поле modOk), автоматически больше не скрывается.
 // - mod:queue — LIST ≤ 500 (180 дней): каждая новая жалоба; mod:log — LIST ≤ 1000 (180 дней): решения владельца.
@@ -19,6 +20,7 @@ export type ReportWhere = (typeof REPORT_WHERE)[number];
 /** Разных жалующихся на имя за 30 дней, чтобы скрыть имя у всех. */
 export const NAME_HIDE_THRESHOLD = 3;
 const REPORT_TTL_SEC = 30 * 86_400;
+const REPORT_WINDOW_MS = REPORT_TTL_SEC * 1000;
 const MOD_TTL_SEC = 180 * 86_400;
 export const MOD_QUEUE = "mod:queue";
 export const MOD_LOG = "mod:log";
@@ -59,16 +61,25 @@ export interface ReportInput {
 /** Жалоба. Возвращает: учтена ли (не повтор) и скрыто ли имя у всех этой жалобой. */
 export async function reportPlayer(kv: CountingKv, r: ReportInput, now: number): Promise<{ counted: boolean; hidden: boolean }> {
   const key = reportKey(r.target, r.reason);
-  const [added, count, nameState, name, modOk] = await kv.pipeline([
-    { op: "sadd", key, members: [r.reporter], ttlSec: REPORT_TTL_SEC },
-    { op: "scard", key },
+  const since = now - REPORT_WINDOW_MS;
+  const [added, all, nameState, name, modOk] = await kv.pipeline([
+    { op: "zadd", key, score: now, member: r.reporter, nx: true, ttlSec: REPORT_TTL_SEC },
+    { op: "zrange", key, start: 0, stop: -1 },
     { op: "hget", key: keys.profile(r.target), field: "nameState" },
     { op: "hget", key: keys.profile(r.target), field: "name" },
     { op: "hget", key: keys.profile(r.target), field: "modOk" },
   ] as const);
-  if (!added) return { counted: false, hidden: false };
+  const mine = all.find((e) => e.member === r.reporter);
+  // Повтор от того же игрока в пределах окна не считается; его жалоба старше 30 дней — считается заново (с новым временем).
+  if (!added && mine && mine.score >= since) return { counted: false, hidden: false };
+  const old = all.filter((e) => e.score < since && e.member !== r.reporter).map((e) => e.member);
+  const count = all.filter((e) => e.score >= since || e.member === r.reporter).length;
   const entry = { p: r.target, r: r.reason, w: r.where, ...(r.matchId ? { m: r.matchId } : {}), at: now };
-  await kv.pipeline([{ op: "lpush", key: MOD_QUEUE, value: JSON.stringify(entry), max: QUEUE_MAX, ttlSec: MOD_TTL_SEC }]);
+  await kv.pipeline([
+    ...(!added ? [{ op: "zadd", key, score: now, member: r.reporter, ttlSec: REPORT_TTL_SEC } as KvOp] : []),
+    ...(old.length ? [{ op: "zrem", key, members: old } as KvOp] : []),
+    { op: "lpush", key: MOD_QUEUE, value: JSON.stringify(entry), max: QUEUE_MAX, ttlSec: MOD_TTL_SEC },
+  ]);
   const hide = r.reason === "name" && count >= NAME_HIDE_THRESHOLD && nameState === "ok" && !!name && modOk !== name;
   if (hide) await hideName(kv, r.target, now);
   return { counted: true, hidden: hide };

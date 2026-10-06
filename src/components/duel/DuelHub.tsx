@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronRight, UserPlus, Users } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
@@ -10,7 +11,7 @@ import { ENTRY_COST } from "@/lib/economy";
 import { DUEL_MODE_IDS } from "@/lib/duel/modes";
 import { duelTopics, isDuelTopic, isEntTopic } from "@/lib/duel/topics";
 import { duelPlayHref, newDuelSeed } from "@/lib/duel/api";
-import { recHref } from "@/lib/duel/challenge";
+import { challengePath, recHref } from "@/lib/duel/challenge";
 import type { DuelRecord } from "@/lib/duel/record";
 import type { DuelModeId } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
@@ -291,8 +292,10 @@ function RecentDuels({ history, topicName }: { history: readonly DuelRecord[]; t
           {last.map((r) => {
             const Icon = MODE_ICON[r.mode];
             const date = shortDate(new Date(r.at), lang);
-            return (
-              <li key={r.id} className="flex items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2.5">
+            // Свой записанный вызов или игра против записи друга — строка ведёт на карточку вызова (поделиться ещё раз, итоги).
+            const href = r.chId && (r.opp === "solo" || r.opp === "ghost") ? challengePath(r.chId) : null;
+            const body = (
+              <>
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
                   <Icon size={20} aria-hidden />
                 </span>
@@ -324,6 +327,18 @@ function RecentDuels({ history, topicName }: { history: readonly DuelRecord[]; t
                     {r.opp === "solo" ? t("social.solo.result") : r.result === "win" ? t("duel.result.win") : r.result === "draw" ? t("duel.result.draw") : t("duel.result.lossShort")}
                   </span>
                 </span>
+              </>
+            );
+            const row = "flex items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2.5";
+            return (
+              <li key={r.id}>
+                {href ? (
+                  <Link href={href} className={cn(row, "hover:bg-surface-2")} data-testid="duel-recent-link">
+                    {body}
+                  </Link>
+                ) : (
+                  <div className={row}>{body}</div>
+                )}
               </li>
             );
           })}

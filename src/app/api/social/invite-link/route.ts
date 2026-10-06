@@ -11,8 +11,10 @@ export const maxDuration = 10;
 export async function POST(req: Request) {
   return socialRoute(req, "invite.create", async (ctx) => {
     if (!ctx.pid) return noPlayer();
-    if (await overLimit(ctx.kv, `inv:${ctx.pid}`, SOCIAL_RATE.invitePid, ctx.now)) return rateLimited();
-    const token = await inviteLink(ctx.kv, ctx.pid);
+    const pid = ctx.pid;
+    // Лимит — только на новые ссылки: повторное «Пригласить» с живой ссылкой ничего не тратит.
+    const token = await inviteLink(ctx.kv, pid, ctx.now, async () => !(await overLimit(ctx.kv, `inv:${pid}`, SOCIAL_RATE.invitePid, ctx.now)));
+    if (token === "limited") return rateLimited();
     if (!token) return noPlayer();
     return socialJson({ url: `/f/${token}` });
   });
