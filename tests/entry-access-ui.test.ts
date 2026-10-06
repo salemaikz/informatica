@@ -9,6 +9,7 @@ import { drillPaidKey } from "@/lib/drill-paid";
 import { FREE_PLAN, heartsView } from "@/lib/economy";
 import { lessonEntryKey } from "@/lib/entry-paid";
 import { buildRun, freshQueue } from "@/components/lesson/run-snapshot";
+import { RUN_GRACE_MS } from "@/lib/lesson-run";
 import { useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
 
@@ -141,6 +142,75 @@ describe("урок: сердечко при открытии", () => {
     expect(text()).not.toContain("Урок не закончен");
     expect(host.querySelector('[data-tour="lesson-hearts"]')).not.toBeNull();
     expect(hearts()).toBe(5);
+  });
+});
+
+describe("урок: экран «Урок не закончен»", () => {
+  const button = (label: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith(label))!;
+  // Сохранение с пройденным шагом; ago — сколько минут назад было последнее действие (оно же оплата).
+  const saveRun = (ago: number) => {
+    const at = Date.now() - ago * 60_000;
+    const run = buildRun({
+      lessonId: lesson.id,
+      steps: lesson.steps,
+      queue: freshQueue(lesson.steps),
+      pos: 1,
+      done: 1,
+      records: [],
+      xp: 0,
+      combo: 0,
+      maxCombo: 0,
+      skipped: 0,
+      activeMs: 0,
+      xpFactor: 1,
+      chipsEarned: 0,
+      cost: 1,
+      startedAt: at,
+      paidAt: at,
+      now: at,
+    });
+    useApp.getState().saveLessonRun(run);
+  };
+
+  it("«Продолжить» в течение 20 минут — бесплатно", async () => {
+    saveRun(5);
+    await render(lessonEl());
+    expect(text()).toContain("Урок не закончен");
+    expect(hearts()).toBe(5);
+    await act(async () => button("Продолжить").click());
+    expect(host.querySelector('[data-tour="lesson-hearts"]')).not.toBeNull();
+    expect(hearts()).toBe(5);
+  });
+
+  it("«Продолжить» после 20 минут — сердечко списывается по нажатию, не при открытии экрана", async () => {
+    saveRun(RUN_GRACE_MS / 60_000 + 10);
+    await render(lessonEl());
+    expect(text()).toContain("Урок не закончен");
+    expect(hearts()).toBe(5);
+    await act(async () => button("Продолжить").click());
+    expect(hearts()).toBe(4);
+    expect(host.querySelector('[data-tour="lesson-hearts"]')).not.toBeNull();
+  });
+
+  it("«Начать заново» — новый платный вход, даже если прошлый оплачен минуту назад", async () => {
+    saveRun(1);
+    useApp.getState().payEntryOnce(lessonEntryKey(lesson.id), 1);
+    expect(hearts()).toBe(4);
+    await render(lessonEl());
+    await act(async () => button("Начать заново").click());
+    expect(hearts()).toBe(3);
+    expect(useApp.getState().entryPaid[lessonEntryKey(lesson.id)]).toBe(Date.now());
+    expect(host.querySelector('[data-tour="lesson-hearts"]')).not.toBeNull();
+  });
+
+  it("сердечек нет: «Начать заново» — окно «Сердечки закончились», урок не начинается", async () => {
+    saveRun(1);
+    setHearts(0);
+    await render(lessonEl());
+    await act(async () => button("Начать заново").click());
+    expect(document.body.textContent).toContain("Сердечки закончились");
+    expect(host.querySelector('[data-tour="lesson-hearts"]')).toBeNull();
+    expect(useApp.getState().lessonRuns[lesson.id]).toBeDefined();
   });
 });
 

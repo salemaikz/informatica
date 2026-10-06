@@ -64,11 +64,21 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
 
   const onRunError = useCallback((m: string | null) => setRunError(m), []);
 
-  // Вход в задачу: платим из обработчика кнопки (запуск или проверка); ключ задачи не даёт списать дважды за 20 минут.
+  // Вход в задачу: платим из обработчика кнопки (запуск или проверка); ключ задачи не даёт списать дважды за 20 минут,
+  // а paidRef — пока задача открыта (работа дольше 20 минут не списывает снова; оболочка с key по задаче — новая задача платит).
+  const paidRef = useRef(false);
+  const outSentRef = useRef(false);
   const beforeRun = useCallback((): boolean => {
-    if (!task) return true;
-    if (useApp.getState().payEntryOnce(codeEntryKey(lang, task.id), ENTRY_COST.code).ok) return true;
-    track({ e: "hearts_out", where: "code" });
+    if (!task || paidRef.current) return true;
+    if (useApp.getState().payEntryOnce(codeEntryKey(lang, task.id), ENTRY_COST.code).ok) {
+      paidRef.current = true;
+      return true;
+    }
+    // Нехватку отмечаем в аналитике один раз на задачу, а не на каждое нажатие.
+    if (!outSentRef.current) {
+      outSentRef.current = true;
+      track({ e: "hearts_out", where: "code" });
+    }
     setOutOpen(true);
     return false;
   }, [lang, task]);

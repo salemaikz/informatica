@@ -6,7 +6,6 @@ import {
   examFinishEvent,
   finishEvent,
   gameFinishEvent,
-  playerHeartsWhere,
   quitEvent,
   sessionTotals,
   skipRecord,
@@ -187,15 +186,6 @@ describe("taskEvent", () => {
     expect(taskEvent(rec({ stepId: "q 1#2" }), new Set(["q 1#2"]), L)).toBeNull();
     expect(taskEvent(rec({ stepId: "s".repeat(78) }), new Set(["s".repeat(78)]), L)).toBeNull();
     expect(taskEvent(rec(), STABLE, "constructor")).toBeNull();
-  });
-});
-
-describe("playerHeartsWhere", () => {
-  it("урок, проверка, экстерн", () => {
-    expect(playerHeartsWhere({})).toBe("lesson");
-    expect(playerHeartsWhere({ via: "check" })).toBe("check");
-    expect(playerHeartsWhere({ mode: "extern" })).toBe("extern");
-    expect(playerHeartsWhere({ via: "check", mode: "extern" })).toBe("extern");
   });
 });
 

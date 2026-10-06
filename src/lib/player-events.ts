@@ -2,7 +2,7 @@
 // и сборка событий статистики (#69). Без React, без обращения к стору и часам — всё приходит аргументами.
 
 import { accuracyOf, tallyOf } from "./accuracy";
-import { pct, type AnalyticsEvent, type HeartOutWhere } from "./analytics";
+import { pct, type AnalyticsEvent } from "./analytics";
 import { isSafeId } from "./analytics-schema";
 import type { AnswerRecord, LessonVia, SessionResult, SkillId } from "./types";
 
@@ -122,15 +122,6 @@ export function taskEvent(rec: AnswerRecord, stable: ReadonlySet<string> | null,
     skip: rec.skipped ? 1 : 0,
     hint: rec.hinted && !rec.skipped ? 1 : 0,
   };
-}
-
-/** Где закончились сердечки у плеера: урок, «Проверить себя», экстерн или тренировка (любой режим /drill). */
-export function playerHeartsWhere(p: { via?: LessonVia; mode?: string }): HeartOutWhere {
-  if (p.mode === "extern") return "extern";
-  // Мини-тест группы (этап 14) стоит как «Проверить себя».
-  if (p.via === "check" || p.mode === "minitest") return "check";
-  // Режим есть только у тренировки (DrillMode); у урока его нет (этап 16В: тренировка платная).
-  return p.mode ? "drill" : "lesson";
 }
 
 /** Игра: доля верных в %. Раундов не было — 0. */

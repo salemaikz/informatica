@@ -444,18 +444,19 @@ export function Results({
       {kind === "lesson" && lessonId && (
         <Card appear>
           <p className="mb-3 font-extrabold">{t("modes.next.title")}</p>
+          {/* replace у всех переходов: «Назад» не возвращает в пройденный урок — новый вход стоит сердечко (#120). */}
           <div className="flex flex-col gap-3">
             {next ? (
-              <ButtonLink href={`/lesson/${next}`} size="lg" block icon={<StepForward size={20} />}>
+              <ButtonLink replace href={`/lesson/${next}`} size="lg" block icon={<StepForward size={20} />}>
                 {t("modes.next.lesson")}
               </ButtonLink>
             ) : (
-              <ButtonLink href="/learn" size="lg" block icon={<MapIcon size={20} />}>
+              <ButtonLink replace href="/learn" size="lg" block icon={<MapIcon size={20} />}>
                 {t("modes.next.map")}
               </ButtonLink>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <ButtonLink href="/drill?mode=smart" variant="secondary" block icon={<RotateCcw size={18} className="shrink-0" />} className="h-auto min-h-11 py-2 text-center leading-tight">
+              <ButtonLink replace href="/drill?mode=smart" variant="secondary" block icon={<RotateCcw size={18} className="shrink-0" />} className="h-auto min-h-11 py-2 text-center leading-tight">
                 {t("modes.next.weak")}
               </ButtonLink>
               <Button
@@ -470,7 +471,7 @@ export function Results({
               </Button>
             </div>
             <div className="flex gap-3">
-              <ButtonLink href={`/theory/${lessonId}`} variant="ghost" block icon={<Library size={18} />} className="h-auto min-h-11 flex-1 py-2 leading-tight">
+              <ButtonLink replace href={`/theory/${lessonId}`} variant="ghost" block icon={<Library size={18} />} className="h-auto min-h-11 flex-1 py-2 leading-tight">
                 {t("theory.read")}
               </ButtonLink>
               {shareLesson && (

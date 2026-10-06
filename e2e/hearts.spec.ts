@@ -1,4 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { lessonBinary } from "../src/content/lessons/ns-1-binary";
+import { withEntBoss } from "../src/lib/ent-boss";
+import { lessonSig } from "../src/lib/lesson-run";
 
 // Этап 11 (v0.10): сердечки — плата за вход, а не за ошибки (#40); незаконченный урок можно продолжить (#41).
 // Этап 16Г (#120): вход списывается сразу при открытии урока и тренировки; повторный вход в течение 20 минут бесплатный;
@@ -178,6 +181,52 @@ test("урок: открыл и сразу вышел — сердечко сп�
   await expect(page.getByText("Побег из компьютера")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Урок не закончен" })).toHaveCount(0);
   await expect(hearts(page, 4)).toBeVisible();
+  expect(await savedHearts(page)).toBe(4);
+  expect(errors).toEqual([]);
+});
+
+test("итоги урока: «Следующий урок», потом «Назад» — пройденный урок не открывается и не списывает сердечко", async ({ page }) => {
+  const errors = trackErrors(page);
+  // Сохранение на последнем шаге урока (решение по фото), вход оплачен только что — «Продолжить» бесплатно.
+  const lesson = withEntBoss(lessonBinary);
+  const pos = lesson.steps.findIndex((s) => s.id === "q-solution-45");
+  const now = Date.now();
+  const run = {
+    lessonId: lesson.id,
+    sig: lessonSig(lesson.steps),
+    queue: lesson.steps.map((s) => ({ id: s.id, retry: false })),
+    pos,
+    done: pos,
+    records: [],
+    xp: 0,
+    combo: 0,
+    maxCombo: 0,
+    skipped: 0,
+    activeMs: 60_000,
+    xpFactor: 1,
+    chipsEarned: 0,
+    cost: 1,
+    startedAt: now - 120_000,
+    updatedAt: now,
+    paidAt: now,
+  };
+  await page.route("**/api/ai/**", (route) => route.fulfill({ status: 503, body: "" }));
+  await seed(page, 5, { lessonRuns: { [lesson.id]: run } });
+  await page.goto(`/lesson/${lesson.id}`);
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: "Пропустить" }).click();
+  await expect(page.getByRole("heading", { name: "Урок пройден!" })).toBeVisible();
+  expect(await savedHearts(page)).toBe(5);
+
+  // Следующий урок — новый вход: −1. Переход заменяет запись истории (replace).
+  await page.getByRole("link", { name: "Следующий урок" }).click();
+  await expect(hearts(page, 4)).toBeVisible();
+  expect(await savedHearts(page)).toBe(4);
+
+  // «Назад» не возвращает в пройденный урок: он не открывается заново и сердечко не списывается.
+  await page.goBack();
+  await expect(page).not.toHaveURL(new RegExp(`/lesson/${lesson.id}$`));
+  await page.waitForTimeout(500);
   expect(await savedHearts(page)).toBe(4);
   expect(errors).toEqual([]);
 });

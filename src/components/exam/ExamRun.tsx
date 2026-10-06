@@ -84,7 +84,7 @@ const sameVariant = (a: ExamAttempt, kind: ExamKind, seed: number | null, topics
   (kind !== "topic" || (a.topics ?? []).join() === topics.join()) &&
   (kind !== "unit" || a.unit === unit);
 
-/** Цена входа (#40): тест по разделу — 2 сердечка, пробный ЕНТ любого вида — 1. Продолжение начатой попытки бесплатно. */
+/** Цена входа (#40, #120): тест по разделу и пробный ЕНТ любого вида — 1 сердечко. Продолжение начатой попытки бесплатно. */
 const examCost = (kind: ExamKind): number => (kind === "unit" ? ENTRY_COST.checkpoint : ENTRY_COST.exam);
 
 function buildFresh(kind: ExamKind, seed: number | null, topics: EntTopicId[], unit?: string): Fresh {
