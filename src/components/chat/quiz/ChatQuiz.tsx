@@ -4,7 +4,7 @@ import { Check, Minus, Target, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnswerRecord, EntTopicId, QuestionStep } from "@/lib/types";
 import type { QuizSummary } from "@/lib/chats";
-import { evaluate, isReady, type Answer, type StepResult } from "@/lib/evaluate";
+import { evaluate, isReady, promptText, type Answer, type StepResult } from "@/lib/evaluate";
 import { activeMs } from "@/lib/active-clock";
 import { xpForAnswer } from "@/lib/gamification";
 import { feedback as giveFeedback } from "@/lib/feedback";
@@ -143,7 +143,8 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       const rec = answerRecord(step, res, lang, Math.max(0, activeMs() - stepStartedAt.current));
       // Начислено с бустером опыта (#122) — показываем и пишем в итог то, что реально прибавилось (как LessonPlayer).
       const xpBefore = useApp.getState().xp;
-      recordAnswer(rec, gained);
+      // Текст задания на обоих языках — для «Повторяющихся ошибок».
+      recordAnswer({ ...rec, promptL: { ru: promptText(step, "ru"), kk: promptText(step, "kk") } }, gained);
       const credited = useApp.getState().xp - xpBefore;
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);

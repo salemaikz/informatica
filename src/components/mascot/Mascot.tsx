@@ -38,8 +38,9 @@ function Eyes({ mood, blinkStyle }: { mood: Mood; blinkStyle: CSSProperties }) {
             <circle cx="46" cy="64" r="4.5" />
             <circle cx="74" cy="64" r="4.5" />
           </g>
-          <path d="M38 55 l12 4" stroke={EYE} strokeWidth="3" strokeLinecap="round" />
-          <path d="M82 55 l-12 4" stroke={EYE} strokeWidth="3" strokeLinecap="round" />
+          {/* Грустные брови — внутренние концы выше внешних (наоборот выглядит сердито). */}
+          <path d="M38 59 l12 -4" stroke={EYE} strokeWidth="3" strokeLinecap="round" />
+          <path d="M82 59 l-12 -4" stroke={EYE} strokeWidth="3" strokeLinecap="round" />
         </g>
       );
     default:

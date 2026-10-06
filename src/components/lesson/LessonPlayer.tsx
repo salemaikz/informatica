@@ -526,7 +526,8 @@ export function LessonPlayer({
       };
       const xpBefore = useApp.getState().xp;
       const levelBefore = levelInfo(xpBefore).level;
-      recordAnswer(rec, gained, lessonId);
+      // Текст задания на обоих языках — для «Повторяющихся ошибок» (ученик может сменить язык).
+      recordAnswer({ ...rec, promptL: { ru: promptText(question, "ru"), kk: promptText(question, "kk") } }, gained, lessonId);
       // Сколько опыта реально зачислено (с бустером ×2 — вдвое больше): его же показываем и копим в итоге урока.
       const credited = useApp.getState().xp - xpBefore;
       const taskEv = taskEvent(rec, stableSteps, lessonId);
