@@ -21,7 +21,7 @@ const STATUS_KEY: Record<LessonReadStatus, DictKey> = {
  * Как в списке уроков (LessonCard): зелёный — только «пройден», «прочитан» — синий.
  */
 function dotClass(current: boolean, status: LessonReadStatus): string {
-  if (current) return "border-primary bg-action-primary text-white";
+  if (current) return "border-action-primary bg-action-primary text-white";
   if (status === "done") return "border-success bg-action-success text-white";
   if (status === "read") return "border-primary/40 bg-primary-soft text-ink-primary";
   return "border-border bg-surface text-muted hover:bg-surface-2";

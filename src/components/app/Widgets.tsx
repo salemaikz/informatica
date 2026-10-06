@@ -15,9 +15,14 @@ export function StreakChip() {
   const { current, activeToday } = useStreak();
   const { t } = useT();
   return (
-    <span title={t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
+    <span title={current > 0 && !activeToday ? `${t("stats.streak")}: ${t("streak.notToday")}` : t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
       <Flame size={20} fill={current > 0 ? "currentColor" : "none"} /> {current}
-      {current > 0 && !activeToday && <span aria-hidden data-testid="streak-reminder" className="h-1.5 w-1.5 rounded-full bg-streak" />}
+      {current > 0 && !activeToday && (
+        <>
+          <span aria-hidden data-testid="streak-reminder" className="h-1.5 w-1.5 rounded-full bg-streak" />
+          <span className="sr-only">{t("streak.notToday")}</span>
+        </>
+      )}
     </span>
   );
 }

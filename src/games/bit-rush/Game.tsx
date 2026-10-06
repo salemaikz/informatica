@@ -125,7 +125,7 @@ function Keypad({
       aria-disabled={locked || !canSubmit}
       onClick={onOk}
       aria-label={tx(S.ok, lang)}
-      className={cn(key, "border-primary bg-action-primary font-sans text-white")}
+      className={cn(key, "border-action-primary bg-action-primary font-sans text-white")}
     >
       {tx(S.ok, lang)}
     </button>

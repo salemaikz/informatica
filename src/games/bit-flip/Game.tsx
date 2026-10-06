@@ -437,7 +437,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                   className={cn(
                     "flex h-16 w-full items-center justify-center rounded-xl border font-mono text-xl font-bold transition-[background-color,color,transform] duration-150 motion-reduce:transition-none motion-reduce:delay-0! focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.92] motion-reduce:active:scale-100",
                     on ? "border-transparent bg-action-primary text-white shadow-md shadow-primary/30" : "border-border bg-surface-2 text-muted",
-                    (fb?.correct || revealing) && on && "bg-success",
+                    (fb?.correct || revealing) && on && "bg-action-success",
                     wrongBit && "outline-2 outline-offset-1 outline-danger",
                     (locked || task.mode === "read") && "cursor-default",
                   )}

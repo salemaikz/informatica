@@ -48,7 +48,7 @@ function OptionButton({
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-extrabold",
           box && "rounded-md",
-          selected ? "border-primary bg-action-primary text-white" : "border-border text-muted",
+          selected ? "border-action-primary bg-action-primary text-white" : "border-border text-muted",
         )}
       >
         {box && selected ? <Check size={18} strokeWidth={3.5} aria-hidden /> : badge}
@@ -158,7 +158,7 @@ export const QuestionView = memo(function QuestionView({
                         onClick={() => onChange(pickMatch(answers, q.key, row, c, item.items.length))}
                         className={cn(
                           "h-12 rounded-xl border-2 text-lg font-extrabold transition-colors active:translate-y-px",
-                          sel ? "border-primary bg-action-primary text-white" : "border-border bg-surface hover:bg-surface-2",
+                          sel ? "border-action-primary bg-action-primary text-white" : "border-border bg-surface hover:bg-surface-2",
                           locked && "pointer-events-none opacity-70",
                         )}
                       >

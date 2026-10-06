@@ -47,9 +47,9 @@ import { MASTERY_COLOR } from "@/components/progress/mastery-color";
 
 /** Плитка точности по смыслу цвета (токены, обе темы). */
 const ACC_TILE = {
-  success: { cls: "border-success text-success", bg: "bg-success" },
+  success: { cls: "border-success text-success", bg: "bg-action-success" },
   warning: { cls: "border-warning text-warning-strong", bg: "bg-warning" },
-  danger: { cls: "border-danger text-danger", bg: "bg-danger" },
+  danger: { cls: "border-danger text-danger", bg: "bg-action-danger" },
 } as const;
 
 function formatTime(sec: number) {
@@ -262,7 +262,7 @@ export function Results({
         {[
           { icon: <XpIcon size={16} className="border-white/70 bg-white/20 text-white" />, label: t("res.xp"), value: totalXp, format: (n: number) => `+${Math.round(n)}`, cls: "border-gold text-warning-strong", bg: "bg-gold" },
           { icon: <Target size={18} />, label: t("res.accuracy"), value: accuracy, format: (n: number) => `${Math.round(n)}%`, cls: accTile.cls, bg: accTile.bg },
-          { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-primary", hint: t("res2.timeHint") },
+          { icon: <Clock size={18} />, label: t("res.time"), value: result.durationSec, format: (n: number) => formatTime(Math.round(n)), cls: "border-primary text-primary", bg: "bg-action-primary", hint: t("res2.timeHint") },
         ].map((s, i) => (
           // Плитки въезжают лесенкой, числа «накручиваются» следом за своей плиткой.
           <m.div

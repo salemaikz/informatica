@@ -62,7 +62,7 @@ export function LadderScene({ scene }: { scene: LadderScene }) {
                   <span
                     className={cn(
                       "inline-flex h-10 min-w-12 items-center justify-center rounded-xl border-2 px-2 font-mono text-2xl font-extrabold transition-colors duration-300",
-                      readUp ? "border-primary bg-action-primary text-white" : "border-primary/30 bg-primary-soft text-ink-primary",
+                      readUp ? "border-action-primary bg-action-primary text-white" : "border-primary/30 bg-primary-soft text-ink-primary",
                     )}
                     style={{ transitionDelay: readUp ? `${0.2 + k * 0.12}s` : "0s" }}
                   >
