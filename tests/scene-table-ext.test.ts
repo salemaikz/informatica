@@ -130,12 +130,14 @@ describe("геометрия слоя: стрелки", () => {
     expect(rayExit(c, rectCenter(c))).toEqual(rectCenter(c));
   });
 
-  it("стрелка по строке: дуга над строкой, начало и конец — на верхних границах ячеек, наконечник в конце", () => {
+  it("стрелка по строке: дуга над строкой, начало и острие — внутри своих ячеек у верхнего края, наконечник в конце", () => {
     const a = arrowGeometry(cell(2, 0), cell(2, 2), bounds)!;
     expect(a).not.toBeNull();
     expect(a.ctrl[1]).toBeLessThan(cell(2, 0).y);
-    expect(a.start[1]).toBeCloseTo(cell(2, 0).y, 0);
-    expect(a.end[1]).toBeCloseTo(cell(2, 2).y, 0);
+    // не на границе строк: острие целиком в целевой ячейке, а не между C1 и C2
+    expect(a.start[1]).toBeGreaterThan(cell(2, 0).y + 2);
+    expect(a.end[1]).toBeGreaterThan(cell(2, 2).y + 2);
+    expect(a.end[1]).toBeLessThan(cell(2, 2).y + cell(2, 2).h / 2);
     expect(a.head[0]).toEqual(a.end);
     expect(a.d.startsWith("M")).toBe(true);
     expect(a.d).toContain("Q");
@@ -358,7 +360,7 @@ describe("TableScene: отрисовка расширений", () => {
   it("struck: зачёркнутая строка danger; dim: приглушена; new: success-soft; подпись для скринридера", () => {
     const out = grid(table({ rowStates: [{ row: 0, state: "struck" }, { row: 1, state: "dim" }, { row: 2, state: "new" }] }));
     expect(out).toContain("line-through");
-    expect(out).toContain("text-danger-strong");
+    expect(out).toContain("text-ink-danger");
     expect(out).toContain("opacity-50");
     expect(out).toContain("bg-success-soft");
     expect(out).toContain("удалённая строка");
@@ -436,7 +438,7 @@ describe("TableScene: отрисовка расширений", () => {
 
   it("JOIN: тон строки не затирает подсветку столбца — выделенный столбец в совпавших строках жирный", () => {
     const out = grid(table({ highlightCols: [1], join: { rows: [["10"]], links: [[0, 0]] } }));
-    expect(out).toContain("font-extrabold text-primary-strong");
+    expect(out).toContain("font-extrabold text-ink-primary");
   });
 
   it("расширения: дерево одно и то же на любом шаге (обёртка рисуется всегда), старая разметка без расширений не меняется", () => {

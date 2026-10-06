@@ -203,6 +203,73 @@ export function boxRuler(scene: BoxData): RulerLine[] {
   return lines;
 }
 
+// ---------- Перенос линейки ----------
+
+export interface RulerRow {
+  /** «width 250 =» — стоит в начале первой строки (или на отдельной строке, если сумма не влезает рядом). */
+  head?: string;
+  /** Слагаемые строки; `plus` — перед числом стоит «+» (у первого слагаемого линейки его нет). */
+  terms: { term: RulerTerm; plus: boolean }[];
+  /** «= 3200 px» — в конце последней строки. */
+  total?: string;
+}
+
+/** Ширина одного знака линейки (моноширинный 13 px) и зазор между элементами, px. */
+const RULER_CH = 7.8;
+const RULER_GAP = 4;
+/** Ширина, в которую линейка укладывается без переноса: сцена на телефоне — 304 px, с запасом на оценку. */
+export const RULER_MAX_W = 288;
+
+const termWidth = (t: RulerTerm, plus: boolean) => t.text.length * RULER_CH + 12 + (plus ? RULER_CH + RULER_GAP : 0);
+
+/**
+ * Линейка строками: если сумма не влезает в `maxW`, она делится на ровные по ширине строки, а знак «+» уходит в начало
+ * следующей строки (строка не кончается оператором, одинокого слагаемого на отдельной строке не остаётся).
+ * «width 250 =» при переносе встаёт отдельной строкой над суммой. Итог «= N px» — в конце последней строки.
+ */
+export function rulerRows(line: RulerLine, maxW: number = RULER_MAX_W): RulerRow[] {
+  const items = line.terms.map((term, i) => ({ term, plus: i > 0 }));
+  const w = items.map((it) => termWidth(it.term, it.plus) + RULER_GAP);
+  const headW = line.head ? line.head.length * RULER_CH + RULER_GAP : 0;
+  const totalW = line.total ? (`= ${line.total}`.length * RULER_CH + RULER_GAP) : 0;
+  const sum = (a: number, b: number) => w.slice(a, b).reduce((x, y) => x + y, 0);
+  const whole = headW + sum(0, items.length) + totalW - RULER_GAP;
+  if (items.length === 0 || whole <= maxW) return [{ head: line.head, terms: items, total: line.total }];
+
+  const rows: RulerRow[] = [];
+  const head = line.head;
+  if (head) rows.push({ head, terms: [] });
+  // Минимальное число строк, при котором самая широкая строка влезает; границы строк — равномерные (splitEven).
+  const rowW = (a: number, b: number) => sum(a, b) - RULER_GAP + (b === items.length ? totalW : 0);
+  let parts: [number, number][] = [[0, items.length]];
+  for (let n = 1; n <= items.length; n++) {
+    parts = splitEven(items.length, n, rowW);
+    if (Math.max(...parts.map(([a, b]) => rowW(a, b))) <= maxW) break;
+  }
+  parts.forEach(([a, b], r) => rows.push({ terms: items.slice(a, b), total: r === parts.length - 1 ? line.total : undefined }));
+  return rows;
+}
+
+/** Деление [0, count) на n непустых подряд идущих частей так, чтобы самая широкая часть (по rowW) была как можно уже. */
+function splitEven(count: number, n: number, rowW: (a: number, b: number) => number): [number, number][] {
+  let best: [number, number][] = [[0, count]];
+  let bestW = Infinity;
+  const go = (from: number, left: number, acc: [number, number][]) => {
+    if (left === 1) {
+      const all: [number, number][] = [...acc, [from, count]];
+      const widest = Math.max(...all.map(([a, b]) => rowW(a, b)));
+      if (widest < bestW - 1e-9) {
+        bestW = widest;
+        best = all;
+      }
+      return;
+    }
+    for (let to = from + 1; to <= count - (left - 1); to++) go(to, left - 1, [...acc, [from, to]]);
+  };
+  go(0, Math.min(n, count), []);
+  return best;
+}
+
 /** Линейка одной строкой — для тестов. */
 export function rulerText(lines: RulerLine[]): string {
   return lines

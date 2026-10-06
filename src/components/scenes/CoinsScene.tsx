@@ -99,7 +99,7 @@ export function CoinsPanel({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
               transition={{ ...springSoft, delay: 0.15 }}
-              className="mt-1 rounded-2xl bg-success-soft px-4 py-2 font-mono text-lg font-extrabold text-success-strong"
+              className="mt-1 rounded-2xl bg-success-soft px-4 py-2 font-mono text-lg font-extrabold text-ink-success"
             >
               {t("explore.code", { c: code })}
             </m.p>

@@ -2,6 +2,7 @@ import type { L } from "@/lib/types";
 
 // Этап 16Б, волна 3 (сцена wave и расширения binary, decimal; ТЗ — docs/specs/stage16b-wave3*.md). Ключи — `scene.wave.*, scene.binary.*, scene.decimal.*`.
 // Казахский — литературный, термины по глоссарию НЦТ, без глаголов с родом в русском. Вычитано моделью, носителем — нет.
+// Число после предлога связано неразрывным пробелом (\u00A0): строка не рвётся между «на» и «2».
 export const sceneSignalDict = {
   // wave: подписи под рисунком и описание для скринридера
   "scene.wave.samples": { ru: "отсчётов: {n}", kk: "өлшемдер: {n}" },
@@ -16,8 +17,8 @@ export const sceneSignalDict = {
   "scene.binary.andIp": { ru: "IP", kk: "IP" },
   "scene.binary.andMask": { ru: "Маска", kk: "Маска" },
   "scene.binary.andNet": { ru: "Сеть", kk: "Желі" },
-  "scene.binary.shiftLeft": { ru: "влево — умножаем на 2, справа приписан 0", kk: "солға — 2-ге көбейтеміз, оң жағына 0 жазылады" },
-  "scene.binary.shiftRight": { ru: "вправо — делим на 2, правый разряд отброшен", kk: "оңға — 2-ге бөлеміз, оң жақ разряд тасталады" },
+  "scene.binary.shiftLeft": { ru: "влево — умножаем на\u00A02, справа приписан\u00A00", kk: "солға — 2-ге көбейтеміз, оң жағына 0 жазылады" },
+  "scene.binary.shiftRight": { ru: "вправо — делим на\u00A02, правый разряд отброшен", kk: "оңға — 2-ге бөлеміз, оң жақ разряд тасталады" },
   "scene.binary.shiftResult": { ru: "получится:", kk: "нәтиже:" },
   "scene.binary.ariaGroups": { ru: "разрядов в группе: {g}", kk: "топтағы разряд саны: {g}" },
   "scene.binary.ariaGap": { ru: "середина пропущена", kk: "ортасы көрсетілмеген" },

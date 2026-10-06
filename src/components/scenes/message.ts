@@ -54,6 +54,12 @@ export function markNotes(marks: MessageData["marks"], lang: Lang): { n: number;
   return (marks ?? []).flatMap((m, i) => (m.note !== undefined ? [{ n: i + 1, note: tx(m.note as Text, lang) }] : []));
 }
 
+/** Признак делится на начало и последнее слово: слово держится вместе с номером признака при переносе строки. */
+export function splitTail(text: string): { head: string; tail: string } {
+  const m = /\s(?=\S+$)/.exec(text);
+  return m ? { head: text.slice(0, m.index + 1), tail: text.slice(m.index + 1) } : { head: "", tail: text };
+}
+
 /** Первая буква отправителя — для кружка-аватара. */
 export function senderInitial(from: string): string {
   const ch = [...from.trim()][0];

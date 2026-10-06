@@ -92,7 +92,7 @@ export function SwitchesScene({ scene }: { scene: SwitchesSceneData }) {
       {/* Подписи ключей: имя и положение (1 — замкнут / нажат, у «НЕ» нажатие размыкает цепь). */}
       {lay.parts.map((p, i) => (
         <text key={`l${i}`} x={p.label[0]} y={p.label[1]} textAnchor="middle" fontSize={14} fontWeight={800} className="font-mono fill-text">
-          {p.name} = <tspan className={p.value === 1 ? "fill-success-strong" : "fill-muted"}>{p.value}</tspan>
+          {p.name} = <tspan className={p.value === 1 ? "fill-ink-success" : "fill-muted"}>{p.value}</tspan>
         </text>
       ))}
 

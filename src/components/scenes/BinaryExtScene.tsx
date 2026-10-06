@@ -1,8 +1,10 @@
 "use client";
 
+import { Fragment } from "react";
 import { m } from "motion/react";
 import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
+import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
 import { subscript } from "@/lib/calc";
@@ -12,8 +14,10 @@ import {
   NUM_W,
   andLines,
   binaryUnits,
+  expFont,
   layoutRows,
   shiftBits,
+  shiftResultChunks,
   weightLabel,
   weightMode,
   type PlacedCell,
@@ -34,11 +38,11 @@ const RECT: Record<Tone, string> = {
 };
 const TEXT: Record<Tone, string> = {
   default: "fill-text",
-  one: "fill-warning-strong",
+  one: "fill-ink-warning",
   zero: "fill-muted",
-  highlight: "fill-primary-strong",
-  dropped: "fill-danger-strong",
-  added: "fill-success-strong",
+  highlight: "fill-ink-primary",
+  dropped: "fill-ink-danger",
+  added: "fill-ink-success",
 };
 
 interface LineProps {
@@ -106,7 +110,7 @@ function Rows({ lay, tone, dy = 0, weights, brackets, chars, reduce, id }: LineP
                   <path d={`M${u.x1 + 1} 0 V5 H${u.x2 - 1} V0`} fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="stroke-primary" />
                   {u.bracket.byte !== undefined ? (
                     <>
-                      <text x={(u.x1 + u.x2) / 2} y={20} textAnchor="middle" fontSize={12} fontWeight={800} className="fill-primary-strong">
+                      <text x={(u.x1 + u.x2) / 2} y={20} textAnchor="middle" fontSize={12} fontWeight={800} className="fill-ink-primary">
                         {t("scene.binary.byte", { n: u.bracket.byte })}
                       </text>
                       <text x={(u.x1 + u.x2) / 2} y={36} textAnchor="middle" fontSize={14} fontWeight={800} className="fill-muted font-mono">
@@ -114,7 +118,7 @@ function Rows({ lay, tone, dy = 0, weights, brackets, chars, reduce, id }: LineP
                       </text>
                     </>
                   ) : (
-                    <text x={(u.x1 + u.x2) / 2} y={21} textAnchor="middle" fontSize={16} fontWeight={800} className="fill-primary-strong font-mono">
+                    <text x={(u.x1 + u.x2) / 2} y={21} textAnchor="middle" fontSize={16} fontWeight={800} className="fill-ink-primary font-mono">
                       {u.bracket.text}
                     </text>
                   )}
@@ -128,15 +132,50 @@ function Rows({ lay, tone, dy = 0, weights, brackets, chars, reduce, id }: LineP
 }
 
 function WeightText({ lay, exp, cfg, crossed }: { lay: RowsLayout; exp: number; cfg: NonNullable<LineProps["weights"]>; crossed: boolean }) {
-  const label = weightLabel(exp, cfg.mode);
   const y = lay.weightsDy + 8;
   return (
     <g>
-      <text x={lay.tileW / 2} y={y} textAnchor="middle" dominantBaseline="central" fontSize={cfg.font} fontWeight={700} className={crossed ? "fill-muted font-mono" : "fill-primary-strong font-mono"} opacity={crossed ? 0.7 : 1}>
-        {label}
+      <text x={lay.tileW / 2} y={y} textAnchor="middle" dominantBaseline="central" fontSize={cfg.font} fontWeight={700} className={crossed ? "fill-muted font-mono" : "fill-ink-primary font-mono"} opacity={crossed ? 0.7 : 1}>
+        {cfg.mode === "pow" ? (
+          <>
+            2
+            {/* показатель — настоящий верхний индекс (tspan): юникод-надстрочные цифры на телефоне мельче 6 px */}
+            <tspan fontSize={expFont(cfg.font)} dy={-Math.round(cfg.font * 0.35)}>
+              {exp}
+            </tspan>
+          </>
+        ) : (
+          weightLabel(exp, cfg.mode)
+        )}
       </text>
       {crossed && <line x1={1} x2={lay.tileW - 1} y1={y} y2={y} strokeWidth={2} strokeLinecap="round" className="stroke-muted" />}
     </g>
+  );
+}
+
+/**
+ * Результат сдвига: «получится:» и число. Длинное число не рвётся посреди записи — делится на группы (как плитки, по 8 разрядов),
+ * строки переносятся по границам групп и выравниваются по центру (text-balance), подпись стоит над числом по центру.
+ */
+function ShiftResult({ bits, dir, groups }: { bits: string; dir: "left" | "right"; groups?: 3 | 4 | 8 }) {
+  const { t } = useT();
+  const chunks = shiftResultChunks(bits, dir, groups);
+  const last = chunks.length - 1;
+  return (
+    <div className={cn("flex items-baseline justify-center gap-x-2 gap-y-0.5 text-sm font-extrabold text-muted", last > 0 ? "flex-col items-center" : "flex-wrap")}>
+      <span>{t("scene.binary.shiftResult")}</span>
+      <span className="max-w-full text-balance text-center font-mono text-lg leading-snug text-ink-success" data-shift-result="">
+        {chunks.map((c, i) => (
+          <Fragment key={i}>
+            {i > 0 && " "}
+            <span className="whitespace-nowrap">
+              {c}
+              {i === last && subscript(2)}
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -214,7 +253,6 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
     .filter(Boolean)
     .join(", ");
   const ay = lay.height + 12;
-  const result = scene.shift ? shiftBits(bits, scene.shift) : "";
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
@@ -243,15 +281,7 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
       </svg>
       {/* подпись — обычным текстом, а не в SVG: длинная фраза (особенно на kk) переносится, а не вылезает за рамку */}
       {scene.shift && <p className="text-balance text-center text-sm font-extrabold text-muted">{t(scene.shift === "left" ? "scene.binary.shiftLeft" : "scene.binary.shiftRight")}</p>}
-      {scene.shift && (
-        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-sm font-extrabold text-muted">
-          <span>{t("scene.binary.shiftResult")}</span>
-          <span className="break-all font-mono text-lg text-success-strong">
-            {result}
-            {subscript(2)}
-          </span>
-        </p>
-      )}
+      {scene.shift && <ShiftResult bits={bits} dir={scene.shift} groups={scene.groups} />}
       {scene.sum && !scene.shift && (
         <SumLine
           terms={sumTerms(bits).map((w) => ({ id: String(w), value: w }))}

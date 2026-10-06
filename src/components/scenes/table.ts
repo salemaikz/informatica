@@ -46,6 +46,16 @@ export const TONE_BG: Record<SceneTone, string> = {
   gold: "bg-gold-soft",
   muted: "bg-surface-2",
 };
+/** Рамка цели стрелки тоном стрелки (inset-кольцо, классы — литералами). */
+export const TONE_RING: Record<SceneTone, string> = {
+  primary: "ring-primary",
+  success: "ring-success",
+  danger: "ring-danger",
+  warning: "ring-warning",
+  ai: "ring-ai",
+  gold: "ring-gold",
+  muted: "ring-muted",
+};
 /** Линия и стрелка тоном (SVG). */
 export const TONE_STROKE: Record<SceneTone, string> = {
   primary: "stroke-primary",
@@ -89,6 +99,25 @@ export function toneMap(scene: TableScene): Map<string, SceneTone> {
 /** Номер строки у края в режиме sheet: свой (после фильтра 2, 5, 7) или по порядку. */
 export function sheetRowNumber(scene: TableScene, r: number): number {
   return scene.rowNumbers?.[r] ?? r + 1;
+}
+
+/** Куда указывают стрелки: ключ ячейки → тон (у нескольких стрелок в одну ячейку — тон последней). Цель стрелки подсвечивается сама. */
+export function arrowTargets(scene: TableScene): Map<string, SceneTone> {
+  return new Map((scene.arrows ?? []).map((a) => [cellKey(a.to[0], a.to[1]), a.tone ?? "primary"]));
+}
+
+/**
+ * Место стрелки среди стрелок в одну и ту же ячейку: слот 0 — у самой дальней ячейки-источника (её дуга длиннее и приходит левее),
+ * дальше — ближе. Так концы стрелок в одну ячейку разведены и дуги не пересекаются у наконечников.
+ */
+export function arrowSlots(scene: TableScene): { slot: number; slots: number }[] {
+  const arrows = scene.arrows ?? [];
+  return arrows.map((a, i) => {
+    const same = arrows.map((b, j) => ({ b, j })).filter(({ b }) => b.to[0] === a.to[0] && b.to[1] === a.to[1]);
+    const dist = (b: (typeof arrows)[number]) => Math.abs(b.from[0] - b.to[0]) + Math.abs(b.from[1] - b.to[1]);
+    same.sort((x, y) => dist(y.b) - dist(x.b) || x.j - y.j);
+    return { slot: same.findIndex(({ j }) => j === i), slots: same.length };
+  });
 }
 
 /** Нужен ли слой поверх таблицы (рамка диапазона, стрелки). */
@@ -150,8 +179,10 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 /** Размер наконечника стрелки, px. */
 const HEAD_SIZE = 8;
 const HEAD_HALF = 4.5;
-/** Высота плоской дуги над строкой: умещается в отступ между строками (цифры соседней строки не задеваются), px. */
-const FLAT_PEAK = 7;
+/** Высота плоской дуги над серединой хорды: умещается в отступ между строками (цифры соседней строки не задеваются), px. */
+const FLAT_PEAK = 9;
+/** Насколько концы стрелки заходят внутрь своих ячеек (острие стрелки — не на границе строк, а в целевой ячейке), px. */
+const END_INSET = 5;
 
 /** Собирает стрелку-дугу (путь, наконечник по касательной в конце) из начала, управляющей точки и конца. */
 function finishArrow(start: Pt, ctrl: Pt, end: Pt): ArrowGeo {
@@ -176,27 +207,92 @@ function finishArrow(start: Pt, ctrl: Pt, end: Pt): ArrowGeo {
   };
 }
 
+/** Куда в ячейке-цели приходит стрелка по строке: слева (если идёт слева направо) или справа, слоты разведены по ширине ячейки. */
+function flatEndX(to: Rect, sign: number, slot: number, slots: number): number {
+  const inset = Math.max(7, Math.min(16, to.w * 0.2));
+  const step = slots > 1 ? Math.min(16, Math.max(0, (to.w - 2 * inset) / (slots - 1))) : 0;
+  return sign > 0 ? to.x + inset + slot * step : to.x + to.w - inset - slot * step;
+}
+
 /**
- * Стрелка между ячейками одной строки: плоская дуга в полоске между строками (над строкой, у первой — под ней), начало и конец —
- * на границе ячеек у самых центров. Высокая дуга задевала бы цифры соседней строки. null — места нет (одна строка во всю высоту).
+ * Стрелка между ячейками одной строки: плоская дуга через границу строк (над строкой, у первой — под ней). Начало и конец — внутри
+ * своих ячеек у края строки (на END_INSET от границы): острие стрелки указывает в целевую ячейку, а не на линию между строками.
+ * Концы нескольких стрелок в одну ячейку разведены по слотам. null — места нет (одна строка во всю высоту).
  */
-function flatRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
+function flatRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }, slot = 0, slots = 1): ArrowGeo | null {
   const c1 = rectCenter(from);
   const c2 = rectCenter(to);
   const sign = c2[0] >= c1[0] ? 1 : -1;
   const sx = c1[0] + sign * Math.min(14, from.w * 0.25);
-  const ex = c2[0] - sign * Math.min(14, to.w * 0.25);
+  const ex = flatEndX(to, sign, slot, slots);
   if (sign * (ex - sx) < 14) return null; // ячейки слишком близко: плоская дуга не поместится
   const margin = 2;
   for (const up of [true, false]) {
-    const sy = up ? from.y : from.y + from.h;
-    const ey = up ? to.y : to.y + to.h;
+    const sy = up ? from.y + END_INSET : from.y + from.h - END_INSET;
+    const ey = up ? to.y + END_INSET : to.y + to.h - END_INSET;
     const ctrl: Pt = [(sx + ex) / 2, (sy + ey) / 2 + (up ? -2 : 2) * FLAT_PEAK];
     const apexY = (sy + ey) / 4 + ctrl[1] / 2;
     if (apexY < margin || apexY > bounds.h - margin) continue;
     return finishArrow([sx, sy], ctrl, [ex, ey]);
   }
   return null;
+}
+
+/**
+ * Стрелка по клеткам для ячеек в разных строках и столбцах (по диагонали): идёт по линиям сетки — вдоль границы строк от исходной
+ * ячейки до границы столбцов целевой, затем вдоль неё до середины целевой ячейки и заходит внутрь. Так линия проходит в зазорах
+ * между цифрами (поля ячеек), а не по диагонали через них.
+ */
+function gridRouteArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo {
+  const c1 = rectCenter(from);
+  const c2 = rectCenter(to);
+  const hDir = c2[0] >= c1[0] ? 1 : -1;
+  const down = c2[1] >= c1[1];
+  const clampX = (x: number) => Math.min(bounds.w - 1, Math.max(1, x));
+  const yH = down ? from.y + from.h : from.y; // граница строк, обращённая к цели
+  const xV = clampX(hDir > 0 ? to.x : to.x + to.w); // граница столбцов, обращённая к источнику
+  const yEnd = c2[1];
+  const start: Pt = [c1[0], yH];
+  const corner1: Pt = [xV, yH];
+  const end: Pt = [clampX(xV + hDir * 10), yEnd];
+  return finishPolyline([start, corner1, [xV, yEnd], end]);
+}
+
+/** Стрелка-ломаная со скруглёнными углами (радиус до 6 px) и наконечником по последнему отрезку. */
+function finishPolyline(pts: Pt[]): ArrowGeo {
+  const last = pts[pts.length - 1];
+  const prev = pts[pts.length - 2];
+  const tl = Math.hypot(last[0] - prev[0], last[1] - prev[1]) || 1;
+  const ux = (last[0] - prev[0]) / tl;
+  const uy = (last[1] - prev[1]) / tl;
+  const head: [Pt, Pt, Pt] = [
+    [r1(last[0]), r1(last[1])],
+    [r1(last[0] - ux * HEAD_SIZE - uy * HEAD_HALF), r1(last[1] - uy * HEAD_SIZE + ux * HEAD_HALF)],
+    [r1(last[0] - ux * HEAD_SIZE + uy * HEAD_HALF), r1(last[1] - uy * HEAD_SIZE - ux * HEAD_HALF)],
+  ];
+  const baseEnd: Pt = [last[0] - ux * (HEAD_SIZE - 1), last[1] - uy * (HEAD_SIZE - 1)];
+  const path = [...pts.slice(0, -1), baseEnd];
+  let d = `M${r1(path[0][0])} ${r1(path[0][1])}`;
+  for (let i = 1; i < path.length; i++) {
+    const p = path[i];
+    const a = path[i - 1];
+    const n = path[i + 1];
+    if (!n) {
+      d += ` L${r1(p[0])} ${r1(p[1])}`;
+      continue;
+    }
+    const len1 = Math.hypot(p[0] - a[0], p[1] - a[1]);
+    const len2 = Math.hypot(n[0] - p[0], n[1] - p[1]);
+    const rad = Math.min(6, len1 / 2, len2 / 2);
+    if (rad < 1) {
+      d += ` L${r1(p[0])} ${r1(p[1])}`;
+      continue;
+    }
+    const k1 = rad / len1;
+    const k2 = rad / len2;
+    d += ` L${r1(p[0] - (p[0] - a[0]) * k1)} ${r1(p[1] - (p[1] - a[1]) * k1)} Q${r1(p[0])} ${r1(p[1])} ${r1(p[0] + (n[0] - p[0]) * k2)} ${r1(p[1] + (n[1] - p[1]) * k2)}`;
+  }
+  return { start: [r1(pts[0][0]), r1(pts[0][1])], end: [r1(last[0]), r1(last[1])], ctrl: [r1(pts[1][0]), r1(pts[1][1])], d, head };
 }
 
 /**
@@ -232,11 +328,22 @@ function innerRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): 
   return finishArrow([sx, sy], ctrl, [ex, ey]);
 }
 
+/** Сдвигает точку на границе прямоугольника внутрь него (к центру) на `px`: острие стрелки должно стоять в целевой ячейке. */
+function inward(r: Rect, p: Pt, px: number): Pt {
+  const [cx, cy] = rectCenter(r);
+  const d = Math.hypot(cx - p[0], cy - p[1]);
+  if (d < 1) return p;
+  const k = Math.min(1, px / d);
+  return [p[0] + (cx - p[0]) * k, p[1] + (cy - p[1]) * k];
+}
+
 /**
- * Стрелка-дуга от ячейки к ячейке. Начало и конец — на границах ячеек (не поверх цифр), дуга выгибается вверх (у вертикальных —
- * вправо) и остаётся внутри `bounds` (размер таблицы): если сверху нет места, выгиб идёт вниз. null — ячейка та же или стрелке негде поместиться.
+ * Стрелка от ячейки к ячейке; острие стоит внутри целевой ячейки (её же подсвечивает слой — см. arrowTargets).
+ * По строке — плоская дуга через границу строк (flatRowArrow); по диагонали — вдоль линий сетки (gridRouteArrow), без прохода по цифрам;
+ * по столбцу и в прочих случаях — дуга, выгнутая вверх (у вертикальных — вправо) и целиком внутри `bounds` (размер таблицы).
+ * `slot` / `slots` — место этой стрелки среди стрелок в ту же ячейку (arrowSlots). null — ячейка та же или стрелке негде поместиться.
  */
-export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
+export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: number }, o: { slot?: number; slots?: number } = {}): ArrowGeo | null {
   const c1 = rectCenter(from);
   const c2 = rectCenter(to);
   const dx = c2[0] - c1[0];
@@ -244,8 +351,10 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
   const len = Math.hypot(dx, dy);
   if (len < 1) return null;
   if (Math.abs(dy) < Math.min(from.h, to.h) / 2) {
-    const flat = flatRowArrow(from, to, bounds);
+    const flat = flatRowArrow(from, to, bounds, o.slot ?? 0, o.slots ?? 1);
     if (flat) return flat;
+  } else if (Math.abs(dx) >= Math.min(from.w, to.w) / 2) {
+    return gridRouteArrow(from, to, bounds);
   }
   const mid: Pt = [(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2];
   // Нормали: n1 — «вверх» (у вертикальных — «вправо»), n2 — противоположная.
@@ -287,7 +396,7 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
     if (Math.abs(dy) > Math.abs(dx)) return sideArrow(from, to, bounds, dy > 0);
     if (Math.abs(dy) < Math.min(from.h, to.h) / 2) return innerRowArrow(from, to, bounds);
   }
-  return finishArrow(start, ctrl, end);
+  return finishArrow(start, ctrl, inward(to, end, END_INSET + 1));
 }
 
 // ----- JOIN: тон совпавших строк и вид раскладки -----

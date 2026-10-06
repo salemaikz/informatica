@@ -16,9 +16,9 @@ const TONE: Record<Tone, string> = {
   primary: "bg-primary-soft text-primary",
   success: "bg-success-soft text-success",
   danger: "bg-danger-soft text-danger",
-  warning: "bg-warning-soft text-warning-strong",
+  warning: "bg-warning-soft text-ink-warning",
   ai: "bg-ai-soft text-ai",
-  gold: "bg-gold-soft text-warning-strong",
+  gold: "bg-gold-soft text-ink-warning",
   muted: "bg-surface-2 text-muted",
 };
 

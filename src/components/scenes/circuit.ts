@@ -119,6 +119,10 @@ export interface CircuitLayout {
   junctionFrom: string[];
   /** Волна 3: число пересечений проводов разных источников (при `outputs` — минимизируется перебором изломов). */
   crossings: number;
+  /** Волна 3: сколько подписей вентилей (при `labels` в опциях) пересекает провод, рамку или другую подпись; 0 — всё чисто. */
+  labelConflicts: number;
+  /** Волна 3: на сколько px раздвинуты ряды, чтобы все подписи встали под рамки (0 — раскладка по умолчанию). */
+  rowSpread: number;
 }
 
 /** Внутренний id узла-выхода: не может совпасть с именем входа или id вентиля из контента. */
@@ -196,16 +200,41 @@ const wireHits = (pts: Pt[], r: Rect): boolean => {
   return false;
 };
 
+/** Опции раскладки: число строк подписи вентиля и сами подписи (для проверки пересечений). */
+export interface CircuitLayoutOpts {
+  labelLines?: number;
+  labels?: Partial<Record<GateOp, string[]>>;
+}
+
+/** На сколько px при необходимости раздвигаются ряды, чтобы подписи вентилей встали под рамки без пересечений (перебор по возрастанию). */
+export const ROW_SPREADS = [8, 16, 24, 32] as const;
+
 /**
  * Автоматическая раскладка: вентиль стоит в столбце 1 + max(столбцов входов), по вертикали — напротив
  * среднего положения своих входов; внутри столбца вентили не ближе одного шага (порядок сохраняется).
  * Провода — ломаные: горизонталь от источника, вертикаль перед приёмником, горизонталь в клемму.
+ *
+ * У схем с несколькими выходами (`outputs`) подпись каждого вентиля стоит под его рамкой: если под рамкой проходит провод,
+ * ряды раздвигаются (ROW_SPREADS), а не подпись уезжает наверх, где её не отличить от подписи вентиля выше.
+ * Схемы без `outputs` раскладываются как раньше.
  */
-export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; labels?: Partial<Record<GateOp, string[]>> } = {}): CircuitLayout {
+export function layoutCircuit(scene: CircuitScene, opts: CircuitLayoutOpts = {}): CircuitLayout {
+  const first = layoutOnce(scene, opts, 0);
+  if (!opts.labels || !scene.outputs?.length) return first;
+  const clean = (lay: CircuitLayout) => lay.labelConflicts === 0 && lay.nodes.every((n) => !n.labelAbove);
+  if (clean(first)) return first;
+  for (const spread of ROW_SPREADS) {
+    const next = layoutOnce(scene, opts, spread);
+    if (clean(next)) return next;
+  }
+  return first;
+}
+
+function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number): CircuitLayout {
   const G = CIRCUIT_GEO;
   // Подписи вентилей в две строки — ряды и нижний отступ больше на строку.
   const extra = Math.max(0, (opts.labelLines ?? 1) - 1) * G.labelLine;
-  const rowStep = G.row + extra;
+  const rowStep = G.row + extra + spread;
   const cols = circuitColumns(scene);
   const nodes = new Map<string, CircuitNode>();
 
@@ -324,23 +353,30 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
 
   // Подписи вентилей: по умолчанию под рамкой. Если там провод, рамка соседа или чужая подпись — часть подписей переносим над рамкой.
   // Вентилей не больше шести — перебираем все варианты и берём с наименьшим числом наложений (при нуле наложений снизу ничего не меняется).
+  let labelConflicts = 0;
   if (opts.labels) {
     const labels = opts.labels;
     const gates = [...nodes.values()].filter((n) => n.kind === "gate" && (labels[n.op!] ?? []).length > 0);
     const boxes = [...nodes.values()].map((n) => ({ n, r: { x0: n.x - n.w / 2, x1: n.x + n.w / 2, y0: n.y - n.h / 2, y1: n.y + n.h / 2 } as Rect }));
+    // Наложения подписей при раскладке mask (бит i — подпись i-го вентиля над рамкой) и штраф за вынос наверх.
+    const conflictsOf = (mask: number): { hits: number; cost: number } => {
+      const rects = gates.map((g, i) => gateLabelRect(g, labels[g.op!]!, (mask >> i & 1) === 1));
+      let hits = 0;
+      let cost = 0;
+      rects.forEach((r, i) => {
+        if (r.y0 < 2) cost += 100;
+        hits += wires.filter((w) => wireHits(w.points, r)).length;
+        hits += boxes.filter((b) => b.n !== gates[i] && rectsHit(b.r, r)).length;
+        hits += rects.filter((o, j) => j > i && rectsHit(o, r)).length;
+        if (mask >> i & 1) cost += 1;
+      });
+      return { hits, cost: cost + 10 * hits };
+    };
     if (gates.length > 0 && gates.length <= 8) {
       let bestMask = 0;
       let bestCost = Infinity;
       for (let mask = 0; mask < 1 << gates.length; mask++) {
-        const rects = gates.map((g, i) => gateLabelRect(g, labels[g.op!]!, (mask >> i & 1) === 1));
-        let cost = 0;
-        rects.forEach((r, i) => {
-          if (r.y0 < 2) cost += 100;
-          cost += 10 * wires.filter((w) => wireHits(w.points, r)).length;
-          cost += 10 * boxes.filter((b) => b.n !== gates[i] && rectsHit(b.r, r)).length;
-          cost += 10 * rects.filter((o, j) => j > i && rectsHit(o, r)).length;
-          if (mask >> i & 1) cost += 1;
-        });
+        const { cost } = conflictsOf(mask);
         if (cost < bestCost) {
           bestCost = cost;
           bestMask = mask;
@@ -350,6 +386,7 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
       gates.forEach((g, i) => {
         if (bestMask >> i & 1) g.labelAbove = true;
       });
+      labelConflicts = conflictsOf(bestMask).hits;
     }
   }
 
@@ -358,7 +395,8 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
   const maxY = Math.max(...all.map((n) => n.y));
   return {
     // При нескольких выходах справа остаётся место под плашку со значением выхода.
-    width: outNode.x + G.r + G.right + (multi ? OUT_CHIP_W : 0),
+    // При нескольких выходах хвост ровно под плашку значения (+2 px); у старых схем — прежний правый запас.
+    width: outNode.x + G.r + (multi ? OUT_CHIP_W + 2 : G.right),
     height: Math.max(maxY + G.bottom + extra, ...wires.flatMap((w) => w.points.map((p) => p[1] + 8))),
     nodes: all,
     wires,
@@ -367,8 +405,16 @@ export function layoutCircuit(scene: CircuitScene, opts: { labelLines?: number; 
     junctions: multi ? junctions : [],
     junctionFrom: multi ? junctions.map((p) => wires.find((w) => w.points.some((q) => q[0] === p[0] && q[1] === p[1]))?.from ?? "") : [],
     crossings: countCrossings(wires),
+    labelConflicts,
+    rowSpread: spread,
   };
 }
+
+/**
+ * Наименьший масштаб схемы на экране: кегль подписей вентилей и плашек 0/1 в рисунке — 13, при 0,84 это ≈ 11 px.
+ * Если блок уже, схема не сжимается дальше, а прокручивается по горизонтали (с подсказкой).
+ */
+export const CIRCUIT_MIN_SCALE = 0.84;
 
 /** Место справа от выхода под плашку «0/1» (только у схем с несколькими выходами). */
 export const OUT_CHIP_W = 22;

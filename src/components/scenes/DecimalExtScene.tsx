@@ -32,7 +32,7 @@ function BaseSum({ terms, total, delay }: { terms: { id: string; text: string }[
         </Fragment>
       ))}
       <span className="text-muted">=</span>
-      <CountUp value={total} delay={delay + 0.2 + terms.length * 0.07} className="text-2xl font-extrabold text-success-strong" />
+      <CountUp value={total} delay={delay + 0.2 + terms.length * 0.07} className="text-2xl font-extrabold text-ink-success" />
     </m.div>
   );
 }
@@ -48,7 +48,7 @@ function PeelRow({ step, font, index, wide }: { step: PeelStep; font: number; in
       transition={{ ...springSoft, delay: 0.05 + index * 0.12 }}
       className="flex items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2"
     >
-      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary-strong" aria-label={t("scene.decimal.peelStep", { n: step.n })}>
+      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-ink-primary" aria-label={t("scene.decimal.peelStep", { n: step.n })}>
         {step.n}
       </span>
       <div className={cn("min-w-0 flex-1 font-mono font-bold leading-snug", wide && "flex flex-col gap-0.5")} style={{ fontSize: font }}>
@@ -56,7 +56,7 @@ function PeelRow({ step, font, index, wide }: { step: PeelStep; font: number; in
           <span>
             {step.cur} % {step.q} ={" "}
           </span>
-          <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-warning-strong">
+          <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-ink-warning">
             {step.digit}
             {named ? ` (${step.ch})` : ""}
           </span>
@@ -65,7 +65,7 @@ function PeelRow({ step, font, index, wide }: { step: PeelStep; font: number; in
           <span>
             {step.cur} {"//"} {step.q} ={" "}
           </span>
-          <span className="rounded-md bg-primary-soft px-1.5 py-0.5 text-primary-strong">{step.next}</span>
+          <span className="rounded-md bg-primary-soft px-1.5 py-0.5 text-ink-primary">{step.next}</span>
         </div>
       </div>
     </m.li>

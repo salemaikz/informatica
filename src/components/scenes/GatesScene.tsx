@@ -5,7 +5,7 @@ import type { DictKey } from "@/i18n/dict";
 import { translate, useT } from "@/i18n/useT";
 import type { GateOp, Scene } from "@/lib/types";
 import { CIRCUIT_GEO, GATE_STYLE } from "./circuit";
-import { GATE_FORMULA, GLYPH_MAX_PX, gateGlyph, gatesColumns } from "./gates";
+import { GATES_GAP, GATE_FORMULA, GLYPH_MAX_PX, gateGlyph, gatesColumns } from "./gates";
 
 type GatesSceneData = Extract<Scene, { kind: "gates" }>;
 
@@ -52,12 +52,14 @@ export function GatesScene({ scene }: { scene: GatesSceneData }) {
 
   return (
     <div className="mx-auto w-full max-w-xl">
-      <div role="img" aria-label={ariaLabel} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      {/* flex-wrap, а не grid: неполный последний ряд (например, 3 карточки в 2 колонки) стоит по центру, как у карточек устройств */}
+      <div role="img" aria-label={ariaLabel} className="flex flex-wrap justify-center" style={{ gap: GATES_GAP }}>
         {scene.ops.map((op, i) => {
           const on = hl.has(op);
           return (
             <div
               key={op}
+              style={{ width: `calc((100% - ${(cols - 1) * GATES_GAP}px) / ${cols})` }}
               className={cn(
                 "flex min-w-0 flex-col items-center gap-1 rounded-2xl border-2 px-1.5 py-2 text-center transition-colors duration-200",
                 on ? "border-primary bg-primary-soft" : "border-border bg-surface",

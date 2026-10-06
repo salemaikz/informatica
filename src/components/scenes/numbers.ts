@@ -128,6 +128,21 @@ export function binaryUnits(bits: string, o: { groups?: 3 | 4 | 8; gap?: [number
   return units;
 }
 
+/**
+ * Результат сдвига кусками для показа: числа длиннее 16 разрядов не переносятся посреди записи, а делятся на группы справа налево
+ * (как плитки: по `groups`, иначе по 8). Приписанный влево ноль — отдельный последний кусок, как отдельная плитка.
+ * Склейка кусков — shiftBits(bits, dir).
+ */
+export function shiftResultChunks(bits: string, dir: "left" | "right", groups?: 3 | 4 | 8): string[] {
+  const body = dir === "left" ? bits : bits.length > 1 ? bits.slice(0, -1) : "0";
+  if (groups === undefined && body.length <= 16) return [dir === "left" ? body + "0" : body];
+  const size = groups ?? 8;
+  const parts: string[] = [];
+  for (let end = body.length; end > 0; end -= size) parts.unshift(body.slice(Math.max(0, end - size), end));
+  if (dir === "left") parts.push("0");
+  return parts;
+}
+
 // ---------- Раскладка рядов ----------
 
 export interface PlacedCell extends CellSpec {
@@ -225,15 +240,33 @@ export function layoutRows(
 
 // ---------- Подписи весов ----------
 
-/** Подпись веса: число или «2ⁿ», если число не влезает в плитку. Режим выбирается один на всю сцену. */
+/** Показатель степени в подписи «2ⁿ» — настоящий нижний/верхний индекс (tspan), а не юникод-надстрочные знаки: те мельче 6 px. */
+export const EXP_SCALE = 0.75;
+export function expFont(base: number): number {
+  return Math.max(7, Math.round(base * EXP_SCALE));
+}
+
+/** Ширина подписи веса: число — одной строкой, степень — «2» кеглем font и показатель кеглем expFont(font). */
+export function weightWidth(exp: number, mode: "value" | "pow", font: number): number {
+  return mode === "value" ? estimateTextWidth(String(2 ** exp), font) : estimateTextWidth("2", font) + estimateTextWidth(String(exp), expFont(font));
+}
+
+/** Минимальный зазор между подписями весов соседних плиток, px. */
+export const WEIGHT_GAP = 4;
+
+/**
+ * Подпись веса: число или «2ⁿ», если число не влезает в плитку. Режим выбирается один на всю сцену.
+ * Подписи соседних плиток не касаются друг друга (зазор ≥ WEIGHT_GAP); кегль не меньше 10 у чисел и 8 у степеней.
+ */
 export function weightMode(exps: number[], tileW: number): { mode: "value" | "pow"; font: number } {
-  let font = Math.max(9, Math.min(13, Math.round(tileW * 0.5)));
-  const widest = Math.max(0, ...exps.map((e) => estimateTextWidth(String(2 ** e), font)));
-  if (widest <= tileW + CELL_GAP) return { mode: "value", font };
-  // «2ⁿ»: шрифт уменьшаем, пока подписи соседних плиток не разойдутся
-  const powWidest = (f: number) => Math.max(0, ...exps.map((e) => estimateTextWidth(`2${sup(e)}`, f)));
-  while (font > 6 && powWidest(font) > tileW + CELL_GAP - 2) font--;
-  return { mode: "pow", font };
+  const room = tileW + CELL_GAP - WEIGHT_GAP;
+  const widest = (mode: "value" | "pow", f: number) => Math.max(0, ...exps.map((e) => weightWidth(e, mode, f)));
+  const font = Math.max(10, Math.min(13, Math.round(tileW * 0.5)));
+  if (widest("value", font) <= room) return { mode: "value", font };
+  // «2ⁿ»: самый крупный кегль, при котором подписи соседних плиток разойдутся
+  let f = 13;
+  while (f > 8 && widest("pow", f) > room) f--;
+  return { mode: "pow", font: f };
 }
 
 export function weightLabel(exp: number, mode: "value" | "pow"): string {
