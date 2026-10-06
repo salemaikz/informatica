@@ -105,6 +105,9 @@ export interface PlayerProps {
   testMode?: boolean;
 }
 
+/** Запасной нижний отступ контента (класс pb-48), пока высота панели не измерена, px. */
+const FOOTER_FALLBACK_PAD = 192;
+
 /** Цвета панели ответа (токены, работают и в тёмной теме). */
 const TONE_PANEL = {
   success: "border-success/30 bg-success-soft",
@@ -838,8 +841,13 @@ export function LessonPlayer({
       <m.main
         key={item.key}
         className="mx-auto w-full max-w-2xl flex-1 px-4 pb-48 pt-2"
-        // 24px запаса сверх панели; пока высота не измерена (или нет ResizeObserver) — запасной pb-48.
-        style={footerH > 0 ? { paddingBottom: footerH + 24 + (nudge.kind ? HELP_NUDGE_PAD : 0) } : undefined}
+        // 24px запаса сверх панели; пока высота не измерена (или нет ResizeObserver) — запасной pb-48 (192px).
+        // Пока на экране плашка «Нужна помощь?», запас растёт и в запасном случае тоже.
+        style={
+          footerH > 0 || nudge.kind
+            ? { paddingBottom: (footerH > 0 ? footerH + 24 : FOOTER_FALLBACK_PAD) + (nudge.kind ? HELP_NUDGE_PAD : 0) }
+            : undefined
+        }
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.25, ease: easeOut }}
