@@ -113,32 +113,34 @@ function Cartesian({ lay, tr }: { lay: BarChartLayout | LineChartLayout; tr: Tr 
       {lay.type === "bar" && <Bars lay={lay} tr={tr} />}
       {lay.type === "line" && <Lines lay={lay} tr={tr} />}
 
-      {/* порог */}
+      {/* порог: линия — под подписями значений (они с обводкой цвета фона и «разрывают» линию), подпись порога — поверх всего */}
       {lay.threshold && (
-        <g>
-          <m.line
-            initial={false}
-            animate={{ y1: lay.threshold.y, y2: lay.threshold.y }}
-            transition={tr}
-            x1={lay.padL}
-            x2={right}
-            stroke="var(--text)"
-            strokeWidth={1.8}
-            strokeDasharray="6 4"
-          />
-          <m.text
-            initial={false}
-            animate={{ x: lay.threshold.x, y: lay.threshold.ty }}
-            transition={tr}
-            textAnchor={lay.threshold.anchor}
-            fontSize={lay.threshold.font}
-            fontWeight={800}
-            fill="var(--text)"
-            {...HALO}
-          >
-            {lay.threshold.text}
-          </m.text>
-        </g>
+        <m.line
+          initial={false}
+          animate={{ y1: lay.threshold.y, y2: lay.threshold.y }}
+          transition={tr}
+          x1={lay.padL}
+          x2={right}
+          stroke="var(--text)"
+          strokeWidth={1.8}
+          strokeDasharray="6 4"
+        />
+      )}
+      {lay.type === "bar" && <BarTexts lay={lay} tr={tr} />}
+      {lay.type === "line" && <LineTexts lay={lay} tr={tr} />}
+      {lay.threshold && (
+        <m.text
+          initial={false}
+          animate={{ x: lay.threshold.x, y: lay.threshold.ty }}
+          transition={tr}
+          textAnchor={lay.threshold.anchor}
+          fontSize={lay.threshold.font}
+          fontWeight={800}
+          fill="var(--text)"
+          {...HALO}
+        >
+          {lay.threshold.text}
+        </m.text>
       )}
 
       {/* подписи категорий */}
@@ -187,15 +189,24 @@ function Bars({ lay, tr }: { lay: BarChartLayout; tr: Tr }) {
           fill={toneVar(b.tone)}
         />
       ))}
+    </>
+  );
+}
+
+/** Подписи столбцов: значения и проценты воронки (поверх линии порога). */
+function BarTexts({ lay, tr }: { lay: BarChartLayout; tr: Tr }) {
+  return (
+    <>
       {lay.valueLabels.map((v) => (
-        <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y, opacity: v.dim ? 0.5 : 1 }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums">
+        <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y, opacity: v.dim ? 0.5 : 1 }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums" {...HALO}>
           {v.text}
         </m.text>
       ))}
       {lay.funnelChips.map((c) => (
+        // x и y у m.text — это сдвиг (transform), поэтому строки (tspan) стоят от нуля: свой x у них дал бы двойное смещение
         <m.text key={c.i} initial={false} animate={{ x: c.x, y: c.y }} transition={tr} textAnchor="middle" fontSize={c.font} fontWeight={800} fill="var(--text)">
           {c.lines.map((ln, k) => (
-            <tspan key={k} x={c.x} dy={k === 0 ? 0 : c.font + 2} fontWeight={k === 0 ? 800 : 700} fill={k === 0 ? "var(--primary-strong)" : "var(--muted)"}>
+            <tspan key={k} x={0} dy={k === 0 ? 0 : c.font + 2} fontWeight={k === 0 ? 800 : 700} fill={k === 0 ? "var(--primary-strong)" : "var(--muted)"}>
               {ln}
             </tspan>
           ))}
@@ -214,6 +225,14 @@ function Lines({ lay, tr }: { lay: LineChartLayout; tr: Tr }) {
       {lay.points.map((p) => (
         <m.circle key={p.key} initial={false} animate={{ cx: p.x, cy: p.y, r: p.r }} transition={tr} fill={toneVar(p.tone)} stroke="var(--surface)" strokeWidth={1.5} />
       ))}
+    </>
+  );
+}
+
+/** Подписи точек линий (поверх линии порога). */
+function LineTexts({ lay, tr }: { lay: LineChartLayout; tr: Tr }) {
+  return (
+    <>
       {lay.valueLabels.map((v) => (
         <m.text key={v.key} initial={false} animate={{ x: v.x, y: v.y }} transition={tr} textAnchor="middle" fontSize={v.font} fontWeight={800} fill="var(--text)" className="tabular-nums" {...HALO}>
           {v.text}

@@ -7,7 +7,7 @@ export const sceneDbDict = {
   "scene.db.aria": { ru: "Схема базы данных. Таблицы: {tables}.", kk: "Деректер қорының сызбасы. Кестелер: {tables}." },
   "scene.db.ariaTable": { ru: "{name} — поля: {fields}", kk: "{name} — өрістер: {fields}" },
   "scene.db.ariaLinks": { ru: " Связи: {links}.", kk: " Байланыстар: {links}." },
-  "scene.db.ariaLink": { ru: "{from} ссылается на {to}, связь {card}", kk: "{from} өрісі {to} өрісіне сілтейді, байланыс {card}" },
+  "scene.db.ariaLink": { ru: "{from} ссылается на {to}, связь {card}", kk: "{from} өрісі {to} өрісіне сілтеме жасайды, байланыс {card}" },
   "scene.db.ariaHl": { ru: " Выделено: {items}.", kk: " Бөлектелген: {items}." },
   "scene.db.pk": { ru: "первичный ключ", kk: "бастапқы кілт" },
   "scene.db.fk": { ru: "внешний ключ", kk: "сыртқы кілт" },

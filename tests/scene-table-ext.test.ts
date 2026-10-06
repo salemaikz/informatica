@@ -168,6 +168,33 @@ describe("геометрия слоя: стрелки", () => {
     expect(arrowGeometry(cell(1, 1), cell(1, 1), bounds)).toBeNull();
   });
 
+  it("стрелка по строке плоская: дуга не выше отступа между строками, цифры соседней строки не задеты", () => {
+    for (const [from, to] of [[cell(2, 0), cell(2, 2)], [cell(2, 2), cell(2, 0)], [cell(1, 0), cell(1, 1)]]) {
+      const a = arrowGeometry(from, to, bounds)!;
+      const apex = (a.start[1] + a.end[1]) / 4 + a.ctrl[1] / 2; // вершина квадратичной кривой при t = 0,5
+      expect(Math.abs(apex - from.y)).toBeLessThanOrEqual(8);
+    }
+    // в первой строке — под строкой, и внутри таблицы
+    const top = arrowGeometry(cell(0, 0), cell(0, 2), bounds)!;
+    expect(top.ctrl[1]).toBeGreaterThan(cell(0, 0).y + cell(0, 0).h);
+  });
+
+  it("вертикальные соседи (копирование формулы вниз): стрелка видна — не точка; наконечник направлен вниз", () => {
+    const a = arrowGeometry(cell(0, 1), cell(1, 1), bounds)!;
+    expect(Math.hypot(a.end[0] - a.start[0], a.end[1] - a.start[1])).toBeGreaterThan(12);
+    expect(a.end[1]).toBeGreaterThan(a.start[1]);
+    // начало в нижней части верхней ячейки, конец — в верхней части нижней
+    expect(a.start[1]).toBeGreaterThan(cell(0, 1).y + cell(0, 1).h / 2);
+    expect(a.end[1]).toBeLessThan(cell(1, 1).y + cell(1, 1).h / 2);
+    for (const p of [a.start, a.end, a.ctrl, ...a.head]) {
+      expect(p[0]).toBeGreaterThanOrEqual(0);
+      expect(p[0]).toBeLessThanOrEqual(bounds.w);
+    }
+    // в последнем столбце выгиб не уходит за край таблицы
+    const last = arrowGeometry(cell(0, 2), cell(1, 2), bounds)!;
+    expect(last.ctrl[0]).toBeLessThanOrEqual(bounds.w - 2 + 1e-6);
+  });
+
   it("все числа конечны для любых пар ячеек сетки 4×3 (включая диагонали и обратное направление)", () => {
     const all = [...rects(4, 3).values()];
     for (const from of all)

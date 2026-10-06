@@ -7,5 +7,5 @@ export const sceneGridDict = {
   "scene.grid.aria.values": { ru: "Значения по строкам: {list}.", kk: "Жолдар бойынша мәндер: {list}." },
   "scene.grid.aria.marks": { ru: "Выделено клеток: {n}.", kk: "Бөлектелген ұяшықтар: {n}." },
   "scene.grid.aria.merges": { ru: "Объединений: {n}.", kk: "Біріктірулер саны: {n}." },
-  "scene.grid.aria.path": { ru: "Клеток в обходе: {n}.", kk: "Айналып өту: {n} ұяшық." },
+  "scene.grid.aria.path": { ru: "Клеток в обходе: {n}.", kk: "Аралап шығу: {n} ұяшық." },
 } satisfies Record<string, L>;

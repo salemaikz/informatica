@@ -19,7 +19,7 @@ export const sceneSignalDict = {
   "scene.binary.shiftLeft": { ru: "влево — умножаем на 2, справа приписан 0", kk: "солға — 2-ге көбейтеміз, оң жағына 0 жазылады" },
   "scene.binary.shiftRight": { ru: "вправо — делим на 2, правый разряд отброшен", kk: "оңға — 2-ге бөлеміз, оң жақ разряд тасталады" },
   "scene.binary.shiftResult": { ru: "получится:", kk: "нәтиже:" },
-  "scene.binary.ariaGroups": { ru: "разрядов в группе: {g}", kk: "топтағы разряд: {g}" },
+  "scene.binary.ariaGroups": { ru: "разрядов в группе: {g}", kk: "топтағы разряд саны: {g}" },
   "scene.binary.ariaGap": { ru: "середина пропущена", kk: "ортасы көрсетілмеген" },
 
   // decimal: основание и «отрываем цифру»

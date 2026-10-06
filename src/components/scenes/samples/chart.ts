@@ -99,7 +99,7 @@ export const SAMPLES: Extract<Scene, { kind: "chart" }>[] = [
     type: "bar",
     labels: [
       { ru: "Операционные системы", kk: "Операциялық жүйелер" },
-      { ru: "Офисные программы", kk: "Кеңселік бағдарламалар" },
+      { ru: "Офисные программы", kk: "Кеңселік программалар" },
       { ru: "Браузеры", kk: "Браузерлер" },
       { ru: "Антивирусы", kk: "Антивирустар" },
       { ru: "Игры и развлечения", kk: "Ойындар және ойын-сауық" },
@@ -122,7 +122,7 @@ export const SAMPLES: Extract<Scene, { kind: "chart" }>[] = [
   {
     kind: "chart",
     type: "pie",
-    labels: [{ ru: "Python", kk: "Python" }, { ru: "Web", kk: "Web" }, { ru: "Базы данных", kk: "Дерекқорлар" }],
+    labels: [{ ru: "Python", kk: "Python" }, { ru: "Web", kk: "Web" }, { ru: "Базы данных", kk: "Деректер қорлары" }],
     series: [{ values: [50, 30, 20] }],
     values: true,
     unit: "%",

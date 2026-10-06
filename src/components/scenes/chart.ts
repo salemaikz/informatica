@@ -520,7 +520,9 @@ function barLayout(input: ChartInput): BarChartLayout {
     const hw = Math.max(...c.lines.map((ln) => estimateTextWidth(ln, c.font))) / 2;
     return { x1: c.x - hw, x2: c.x + hw, y1: c.y - c.font, y2: c.y + (c.lines.length - 1) * (c.font + 2) + 2 };
   };
-  const thr = finishFrame(f, input, plotTop, needNote ? 16 : 0, [...valueLabels.map(vBox), ...funnelChips.map(cBox)]);
+  // Подпись порога не ложится на столбцы и на подписи значений: ищем место без наложений.
+  const barBoxes: Box[] = bars.map((b) => ({ x1: b.x, x2: b.x + b.w, y1: b.y, y2: b.y + b.h }));
+  const thr = finishFrame(f, input, plotTop, needNote ? 16 : 0, [...valueLabels.map(vBox), ...funnelChips.map(cBox), ...barBoxes]);
   // Если место для подписи порога так и не нашлось без наложений, прячем конфликтующие подписи значений (цифры остаются в aria).
   if (thr) {
     for (let n = valueLabels.length - 1; n >= 0; n--) if (overlaps(thr, vBox(valueLabels[n]))) valueLabels.splice(n, 1);

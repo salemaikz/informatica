@@ -342,6 +342,24 @@ describe("исправления ревью S3", () => {
       }
     }
   });
+  it("подпись порога не ложится на столбцы, если рядом есть свободное место (образец «план/факт»)", () => {
+    const scene = SAMPLES[2];
+    for (const lang of ["ru", "kk"] as const) {
+      const lay = chartLayout(toInput(scene, lang));
+      if (lay.type !== "bar" || !lay.threshold) throw new Error();
+      const t = lay.threshold;
+      const w = estimateTextWidth(t.text, t.font);
+      const a = { x1: t.anchor === "end" ? t.x - w : t.x, x2: t.anchor === "end" ? t.x : t.x + w, y1: t.ty - t.font, y2: t.ty + 2 };
+      for (const b of lay.bars) expect(a.x1 < b.x + b.w && a.x2 > b.x && a.y1 < b.y + b.h && a.y2 > b.y, `${lang} столбец ${b.key}`).toBe(false);
+    }
+  });
+  it("воронка: строки подписи стоят от нуля (x и y у m.text — сдвиг, свой x у tspan дал бы двойное смещение)", () => {
+    const html = renderToStaticMarkup(createElement(SceneView, { scene: SAMPLES[3] }));
+    const tspans = html.match(/<tspan[^>]*>/g) ?? [];
+    const chips = tspans.filter((t) => t.includes('fill="var(--primary-strong)"'));
+    expect(chips.length).toBe(3);
+    for (const c of chips) expect(c).toContain('x="0"');
+  });
   it("двухстрочная подпись воронки помещается в слот своим кеглем", () => {
     const lay = chartLayout({ type: "bar", labels: ["a", "b", "c", "d"], series: [{ values: [3, 2, 2, 1], tone: "primary" }], values: false, ...base, funnel: true, funnelFrom: "от предыдущего", funnelNote: "n" });
     if (lay.type !== "bar") throw new Error();
