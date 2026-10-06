@@ -32,6 +32,16 @@ const WRAP_AT = 4;
 export const TAPE_INDEX_FS = 11;
 /** Высота ряда границы «не включая»: подпись и пунктир под ней. */
 const STOP_ROW = 19;
+/** Насколько конец дуги обмена сдвигается вбок, если на той же ячейке кончается или начинается дуга шага (стрелки не слипаются), px. */
+export const TAPE_SWAP_SHIFT = 7;
+/** Полуразрыв нижней дуги в месте, где её пересекает верхняя (мост), px вдоль дуги при перпендикулярном пересечении. */
+export const TAPE_ARC_GAP = 3.2;
+/** Подпись указателя: ширина стебля стрелки не ближе этого к краю чужой подписи, px. */
+const PTR_CLEAR = 2;
+/** Зазор между подписями указателей одного уровня, px (в ширину подписи уже входят поля по 1 px). */
+const PTR_GAP = 0.5;
+/** Зазор между подписями указателей на одной ячейке, когда они стоят в ряд, px. */
+const PTR_SIDE_GAP = 4;
 /** Расстояние между рядами скобок групп (px): ножки верхней скобки не касаются подписи нижней. */
 export const TAPE_GROUP_ROW = 24;
 
@@ -89,6 +99,97 @@ export function assignLevels(items: { x0: number; x1: number }[], gap = 3): numb
   return levels;
 }
 
+/** Точка дуги на параметре t: кубическая кривая (xa, y) → (xb, y) с вершиной на высоте height (концы вертикальны). */
+export function arcPoint(a: { xa: number; xb: number; y: number; height: number }, t: number): [number, number] {
+  const k = a.height / 0.75;
+  return [a.xa + (a.xb - a.xa) * (3 * t * t - 2 * t * t * t), a.y - 3 * k * t * (1 - t)];
+}
+
+/** Скорость движения по дуге (px на единицу параметра). */
+function arcSpeed(a: { xa: number; xb: number; height: number }, t: number): number {
+  const k = a.height / 0.75;
+  return Math.hypot((a.xb - a.xa) * (6 * t - 6 * t * t), 3 * k * (1 - 2 * t));
+}
+
+type Pt = [number, number];
+const lerp = (p: Pt, q: Pt, t: number): Pt => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+
+/** Разбиение кубической кривой по де Кастельжо: [левая, правая] часть. */
+function splitCubic(c: [Pt, Pt, Pt, Pt], t: number): [[Pt, Pt, Pt, Pt], [Pt, Pt, Pt, Pt]] {
+  const [p0, p1, p2, p3] = c;
+  const a = lerp(p0, p1, t);
+  const b = lerp(p1, p2, t);
+  const d = lerp(p2, p3, t);
+  const e = lerp(a, b, t);
+  const f = lerp(b, d, t);
+  const g = lerp(e, f, t);
+  return [[p0, a, e, g], [g, f, d, p3]];
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Пути видимых кусков дуги: вся кривая минус вырезы (мосты). Без вырезов — один путь. */
+export function arcSegments(a: Pick<TapeArc, "xa" | "xb" | "y" | "height" | "cuts">): string[] {
+  const k = a.height / 0.75;
+  const whole: [Pt, Pt, Pt, Pt] = [[a.xa, a.y], [a.xa, a.y - k], [a.xb, a.y - k], [a.xb, a.y]];
+  const pieces: [number, number][] = [];
+  let from = 0;
+  for (const [c0, c1] of a.cuts) {
+    if (c0 > from) pieces.push([from, c0]);
+    from = c1;
+  }
+  if (from < 1) pieces.push([from, 1]);
+  return pieces.map(([t0, t1]) => {
+    const right = t0 > 0 ? splitCubic(whole, t0)[1] : whole;
+    const c = t1 < 1 ? splitCubic(right, (t1 - t0) / (1 - t0))[0] : right;
+    return `M ${r2(c[0][0])} ${r2(c[0][1])} C ${r2(c[1][0])} ${r2(c[1][1])}, ${r2(c[2][0])} ${r2(c[2][1])}, ${r2(c[3][0])} ${r2(c[3][1])}`;
+  });
+}
+
+const ARC_SAMPLES = 48;
+
+/**
+ * Мосты: где поверх дуги проходит другая (дуга обмена над дугой шага, длинный обмен над коротким), в нижней делается разрыв.
+ * Пересечения ищутся по ломаным (ARC_SAMPLES звеньев) и пересчитываются в параметр кривой; у самых ячеек (3 px) разрывов не бывает —
+ * там стоят острия стрелок. Разрыв шире при косом пересечении.
+ */
+export function withBridges(arcs: Omit<TapeArc, "cuts">[]): TapeArc[] {
+  const pts = arcs.map((a) => Array.from({ length: ARC_SAMPLES + 1 }, (_, i) => arcPoint(a, i / ARC_SAMPLES)));
+  const above = (b: Omit<TapeArc, "cuts">, a: Omit<TapeArc, "cuts">) => (b.kind === "swap" && a.kind === "jump") || (b.kind === a.kind && b.height > a.height);
+  return arcs.map((a, i) => {
+    const raw: [number, number][] = [];
+    arcs.forEach((b, j) => {
+      if (i === j || !above(b, a)) return;
+      for (let s = 0; s < ARC_SAMPLES; s++) {
+        const [p, p2] = [pts[i][s], pts[i][s + 1]];
+        for (let u = 0; u < ARC_SAMPLES; u++) {
+          const [q, q2] = [pts[j][u], pts[j][u + 1]];
+          const r = [p2[0] - p[0], p2[1] - p[1]];
+          const v = [q2[0] - q[0], q2[1] - q[1]];
+          const den = r[0] * v[1] - r[1] * v[0];
+          if (Math.abs(den) < 1e-9) continue;
+          const ta = ((q[0] - p[0]) * v[1] - (q[1] - p[1]) * v[0]) / den;
+          const tb = ((q[0] - p[0]) * r[1] - (q[1] - p[1]) * r[0]) / den;
+          if (ta < 0 || ta >= 1 || tb < 0 || tb >= 1) continue;
+          const t = (s + ta) / ARC_SAMPLES;
+          if (a.y - arcPoint(a, t)[1] < 3) continue;
+          const sin = Math.abs(den) / (Math.hypot(r[0], r[1]) * Math.hypot(v[0], v[1]));
+          const d = (TAPE_ARC_GAP - 1 + 1 / Math.max(0.4, sin)) / arcSpeed(a, t);
+          raw.push([Math.max(0, t - d), Math.min(1, t + d)]);
+        }
+      }
+    });
+    raw.sort((x, y) => x[0] - y[0]);
+    const cuts: [number, number][] = [];
+    for (const c of raw) {
+      const last = cuts[cuts.length - 1];
+      if (last && c[0] <= last[1]) last[1] = Math.max(last[1], c[1]);
+      else cuts.push([c[0], c[1]]);
+    }
+    return { ...a, cuts };
+  });
+}
+
 export interface TapeCell {
   i: number;
   x: number;
@@ -101,12 +202,14 @@ export interface TapeCell {
 }
 export interface TapeArc {
   key: string;
-  /** Центры концов по x и нижняя линия дуги. */
+  /** Концы по x (у обмена — со сдвигом TAPE_SWAP_SHIFT, если на ячейке стоит дуга шага) и нижняя линия дуги. */
   xa: number;
   xb: number;
   y: number;
   height: number;
   kind: "jump" | "swap";
+  /** Вырезы (интервалы параметра кривой 0..1): мост там, где поверх дуги проходит дуга выше (обмен над шагом, длинный обмен над коротким). */
+  cuts: [number, number][];
 }
 export interface TapeLabelBox {
   /** Центр подписи и её ширина (оценка). */
@@ -138,8 +241,12 @@ export interface TapeLayout {
   lineH: number;
   arcs: TapeArc[];
   groups: { key: string; x1: number; x2: number; y: number; label: TapeLabelBox; level: number }[];
-  /** line — соединительная линия вниз до подписи (не рисуется, если пересекла бы чужую подпись); triangle — свой треугольник. */
-  pointers: { key: string; at: number; x: number; yTop: number; yEnd: number; label: TapeLabelBox; tone: SceneTone; level: number; line: boolean; triangle: boolean }[];
+  /**
+   * Стрелка указателя — одна на всех: остриё (треугольник) у ячейки и стебель вниз до подписи; выше нулевого уровня стебель просто длиннее.
+   * x — стебель и остриё (у подписи, мешающей стеблю, сдвинут к краю ячейки), yEnd — низ стебля. arrow=false — крайний случай:
+   * стебель негде провести (чужая подпись шире ячейки), остаётся только подпись.
+   */
+  pointers: { key: string; at: number; x: number; yTop: number; yEnd: number; label: TapeLabelBox; tone: SceneTone; level: number; arrow: boolean }[];
   stop: { x: number; y1: number; y2: number; label: TapeLabelBox } | null;
   empty: { x: number; y: number; text: string } | null;
   names: { text: string; x: number; y: number; rowCy: number }[];
@@ -169,10 +276,13 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   let cellW = Math.min(MAX_CELL, Math.max(MIN_CELL, Math.floor(avail / cols)));
   const baseCellW = cellW;
   const fits = (fs: number, w: number) => allTexts.every((s) => textWidth(s, fs, mono) <= w - 4);
-  let cellFs = Math.min(MAX_FONT, Math.floor(cellW * 0.52));
+  // Желаемый кегль: от ширины ячейки, но не мельче читаемого — одиночные знаки и короткие числа в узких ячейках (16 в ряд) тоже крупные,
+  // если помещаются; иначе кегль убавляется до влезающего.
+  const idealFs = Math.min(MAX_FONT, Math.max(Math.floor(cellW * 0.52), TAPE_LEGIBLE_FONT));
+  let cellFs = idealFs;
   while (cellFs > MIN_FONT && !fits(cellFs, cellW)) cellFs--;
   let textLines = 1;
-  if (cellFs < TAPE_LEGIBLE_FONT && !fits(Math.min(MAX_FONT, Math.floor(cellW * 0.52)), cellW)) {
+  if (cellFs < TAPE_LEGIBLE_FONT) {
     // Содержимое мельче читаемого: сначала расширяем ячейку (место на экране есть), иначе биты — на две строки по 4.
     const capW = Math.floor(avail / cols);
     // у расширенной ячейки поля пошире (по 5 px с каждой стороны), чтобы текст не упирался в рамку
@@ -199,7 +309,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   }
   if (!fits(cellFs, cellW) && textLines === 1) {
     // Даже самый мелкий шрифт не влезает — ячейка становится прямоугольной (высота прежняя, ширина по тексту);
-    // рисунок целиком уменьшится вместе с viewBox. Такие сцены validate.ts не пропускает (tapeLegible).
+    // рисунок целиком уменьшится вместе с viewBox. Такие сцены validate.ts не пропускает (tapeLegible: кегль не мельче 12).
     cellW = Math.ceil(Math.max(...allTexts.map((s) => textWidth(s, cellFs, mono))) + 4);
   }
   const lineH = Math.ceil(cellFs * 1.2);
@@ -223,19 +333,29 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   const stateOf = (i: number): TapeCell["state"] => (takenSet.has(i) ? (hl.has(i) ? "sliceHl" : "slice") : hl.has(i) ? "highlight" : dim.has(i) ? "dim" : "plain");
 
   // ---- дуги ----
-  const arcSpec: { key: string; xa: number; xb: number; kind: "jump" | "swap"; h: number }[] = [];
+  const arcSpec: Omit<TapeArc, "cuts" | "y">[] = [];
   const step = scene.slice?.step ?? 1;
   if (scene.slice && taken.length >= 2 && step !== 1) {
-    for (let k = 0; k + 1 < taken.length; k++) arcSpec.push({ key: `j${taken[k]}-${taken[k + 1]}`, xa: cx(taken[k]), xb: cx(taken[k + 1]), kind: "jump", h: 12 });
+    for (let k = 0; k + 1 < taken.length; k++) arcSpec.push({ key: `j${taken[k]}-${taken[k + 1]}`, xa: cx(taken[k]), xb: cx(taken[k + 1]), kind: "jump", height: 12 });
   }
   const jumpH = arcSpec.length ? 12 : 0;
+  // Конец дуги обмена на ячейке, где кончается или начинается дуга шага, сдвигается на свободную сторону: острия стрелок не слипаются.
+  // Свободно: у первой взятой ячейки — против хода (дуга шага уходит вперёд), у остальных — по ходу.
+  const travel = step > 0 ? 1 : -1;
+  const takenPos = new Map(taken.map((c, k) => [c, k]));
+  const swapX = (cell: number) => {
+    const k = takenPos.get(cell);
+    if (!jumpH || k === undefined) return cx(cell);
+    const side = k === 0 ? -travel : travel;
+    return cx(cell) + side * Math.min(TAPE_SWAP_SHIFT, cellW * 0.4);
+  };
   const swaps = (scene.swaps ?? []).map(([a, b], k) => ({ a, b, k, span: Math.abs(cx(a) - cx(b)) }));
   [...swaps]
     .sort((p, q) => p.span - q.span || p.k - q.k)
     .forEach((s, level) => {
-      arcSpec.push({ key: `s${s.a}-${s.b}-${s.k}`, xa: cx(s.a), xb: cx(s.b), kind: "swap", h: (jumpH ? jumpH + 4 : 0) + 14 + 9 * level + Math.min(10, s.span * 0.1) });
+      arcSpec.push({ key: `s${s.a}-${s.b}-${s.k}`, xa: swapX(s.a), xb: swapX(s.b), kind: "swap", height: (jumpH ? jumpH + 4 : 0) + 14 + 9 * level + Math.min(10, s.span * 0.1) });
     });
-  const arcZone = arcSpec.length ? Math.ceil(Math.max(...arcSpec.map((a) => a.h)) + 8) : 0;
+  const arcZone = arcSpec.length ? Math.ceil(Math.max(...arcSpec.map((a) => a.height)) + 8) : 0;
 
   // ---- группы (скобки с подписью) ----
   const groupItems = (scene.groups ?? []).map((g, k) => {
@@ -273,18 +393,68 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   if (bottomIdx) y += ROW_INDEX;
 
   // ---- указатели ----
+  // Два указателя и больше на одной ячейке: если подписи помещаются рядом в ширину ячейки, встают в ряд (стрелка над каждой подписью);
+  // иначе — друг под другом (ниже), а стебель нижней сдвигается за край верхней подписи.
+  // Уровни — по порядку ячеек (при одной ячейке — по порядку в сцене): ближе к ленте встаёт тот, кто раньше.
   const ptrItems = (scene.pointers ?? []).map((p, k) => {
     const w = textWidth(p.label, 12, true) + 2;
-    const c = clampCenter(cx(p.at), w / 2, 2, vbW - 2);
-    return { k, p, w, c };
+    const ax = cx(p.at);
+    return { k, p, w, ax, c: clampCenter(ax, w / 2, 2, vbW - 2) };
   });
-  const ptrLevels = assignLevels(ptrItems.map((it) => ({ x0: it.c - it.w / 2, x1: it.c + it.w / 2 })));
+  const onCell = new Map<number, number[]>();
+  ptrItems.forEach((it, i) => onCell.set(it.p.at, [...(onCell.get(it.p.at) ?? []), i]));
+  for (const [at, ids] of onCell) {
+    if (ids.length < 2) continue;
+    const total = ids.reduce((sum, i) => sum + ptrItems[i].w, 0) + (ids.length - 1) * PTR_SIDE_GAP;
+    if (total > cellW - 2) continue;
+    let x = cx(at) - total / 2;
+    for (const i of ids) {
+      ptrItems[i].ax = x + ptrItems[i].w / 2;
+      ptrItems[i].c = ptrItems[i].ax;
+      x += ptrItems[i].w + PTR_SIDE_GAP;
+    }
+  }
+  const ptrLevels = new Array<number>(ptrItems.length).fill(0);
+  const placed: { lv: number; x0: number; x1: number }[] = [];
+  for (const i of ptrItems.map((_, k) => k).sort((a, b) => ptrItems[a].p.at - ptrItems[b].p.at || a - b)) {
+    const it = ptrItems[i];
+    let lv = 0;
+    while (placed.some((o) => o.lv === lv && it.c - it.w / 2 < o.x1 + PTR_GAP && it.c + it.w / 2 > o.x0 - PTR_GAP)) lv++;
+    ptrLevels[i] = lv;
+    placed.push({ lv, x0: it.c - it.w / 2, x1: it.c + it.w / 2 });
+  }
   const ptrLv = ptrItems.length ? Math.max(...ptrLevels) + 1 : 0;
-  // линия вниз к подписи нижнего уровня не должна проходить сквозь чужую подпись более близкого уровня
-  const crossesLabel = (i: number) =>
-    ptrItems.some((o, j) => j !== i && ptrLevels[j] < ptrLevels[i] && Math.abs(cx(ptrItems[i].p.at) - o.c) < o.w / 2 + 1);
+  // Стебель стрелки нижнего уровня не должен проходить сквозь подпись более близкого уровня. Если проходит — стрелка сдвигается к краю
+  // ячейки (за край чужой подписи), и подпись встаёт под ней; если и так не выходит (подпись шире ячейки) — остаётся одна подпись.
+  const ptrPos = new Map<number, { x: number; c: number; arrow: boolean }>();
+  const byLevel = ptrItems.map((_, k) => k).sort((a, b) => ptrLevels[a] - ptrLevels[b] || ptrItems[a].p.at - ptrItems[b].p.at || a - b);
+  for (const i of byLevel) {
+    const it = ptrItems[i];
+    const home = it.ax;
+    if (ptrLevels[i] === 0) {
+      ptrPos.set(i, { x: home, c: it.c, arrow: true });
+      continue;
+    }
+    const lower = byLevel.filter((j) => ptrLevels[j] < ptrLevels[i]);
+    const blocked = (x: number) => lower.some((j) => Math.abs(x - ptrPos.get(j)!.c) < ptrItems[j].w / 2 + PTR_CLEAR - 0.01);
+    if (!blocked(home)) {
+      ptrPos.set(i, { x: home, c: it.c, arrow: true });
+      continue;
+    }
+    // кандидаты: сразу за краем каждой мешающей подписи, не дальше края ячейки (остриё остаётся над своей ячейкой)
+    const limit = cellW / 2 - 2.5;
+    const sameLevel = byLevel.filter((j) => j !== i && ptrLevels[j] === ptrLevels[i] && ptrPos.has(j));
+    const cands = lower
+      .flatMap((j) => [ptrPos.get(j)!.c - ptrItems[j].w / 2 - PTR_CLEAR, ptrPos.get(j)!.c + ptrItems[j].w / 2 + PTR_CLEAR])
+      .filter((x) => Math.abs(x - cx(it.p.at)) <= limit && !blocked(x))
+      .sort((a, b) => Math.abs(a - home) - Math.abs(b - home) || b - a);
+    const free = (c: number) =>
+      sameLevel.every((j) => c + it.w / 2 + PTR_GAP <= ptrPos.get(j)!.c - ptrItems[j].w / 2 || c - it.w / 2 - PTR_GAP >= ptrPos.get(j)!.c + ptrItems[j].w / 2);
+    const found = cands.map((x) => ({ x, c: clampCenter(x, it.w / 2, 2, vbW - 2) })).find((o) => free(o.c));
+    ptrPos.set(i, found ? { x: found.x, c: found.c, arrow: true } : { x: home, c: it.c, arrow: false });
+  }
   const ptrTop = y + 1;
-  const PTR_ARROW = 8;
+  const PTR_ARROW = 10;
   const PTR_ROW = 15;
   if (ptrLv) y += PTR_ARROW + ptrLv * PTR_ROW + 2;
 
@@ -376,7 +546,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
     indexStrideBottom,
     textLines,
     lineH,
-    arcs: arcSpec.map((a) => ({ key: a.key, xa: a.xa, xb: a.xb, y: arcBase - 1, height: a.h, kind: a.kind })),
+    arcs: withBridges(arcSpec.map((a) => ({ ...a, y: arcBase - 1 }))),
     groups: groupItems.map((it) => {
       const lv = groupLevels[it.k];
       // уровень 0 — ближе к ленте
@@ -392,18 +562,18 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
     }),
     pointers: ptrItems.map((it) => {
       const lv = ptrLevels[it.k];
-      const crossed = lv > 0 && crossesLabel(it.k);
+      const pos = ptrPos.get(it.k)!;
+      const labelY = ptrTop + PTR_ARROW + lv * PTR_ROW + 8;
       return {
         key: `p:${it.p.label}:${ptrItems.filter((o) => o.k < it.k && o.p.label === it.p.label).length}`,
         at: it.p.at,
-        line: lv > 0 && !crossed,
-        triangle: !crossed,
-        x: cx(it.p.at),
+        arrow: pos.arrow,
+        x: pos.x,
         yTop: ptrTop,
-        yEnd: ptrTop + PTR_ARROW + lv * PTR_ROW,
+        yEnd: labelY - 8,
         level: lv,
         tone: it.p.tone ?? "primary",
-        label: { cx: it.c, w: it.w, y: ptrTop + PTR_ARROW + lv * PTR_ROW + 8, text: it.p.label },
+        label: { cx: pos.c, w: it.w, y: labelY, text: it.p.label },
       };
     }),
     stop,
@@ -414,10 +584,13 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   };
 }
 
-/** Читаемо ли сцену на телефоне: эффективный шрифт ячеек (с учётом сжатия viewBox к 360 px) не меньше MIN_FONT. Для validate.ts. */
+/**
+ * Читаемо ли сцену на телефоне: эффективный шрифт ячеек (с учётом сжатия viewBox к 360 px) не меньше TAPE_LEGIBLE_FONT (≈ 10 px на экране) —
+ * содержимое ячеек главное в рисунке. 16 ячеек по три знака в 360 px так не поместятся: короче текст или меньше ячеек. Для validate.ts.
+ */
 export function tapeLegible(scene: TapeData): boolean {
   const L = tapeLayout(scene, (v) => (typeof v === "string" ? v : v.ru), () => "");
-  return (L.cellFs * TAPE_W) / Math.max(TAPE_W, L.vbW) >= MIN_FONT - 0.01;
+  return (L.cellFs * TAPE_W) / Math.max(TAPE_W, L.vbW) >= TAPE_LEGIBLE_FONT - 0.01;
 }
 
 /** Текст для aria-label: что лежит в ленте, срез, обмены, указатели, группы, кадр «после». Номера — как на рисунке (при index "one" с 1). */

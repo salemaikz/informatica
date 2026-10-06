@@ -449,6 +449,23 @@ describe("DbSchemaScene (SceneView)", () => {
     expect(fld).toContain("stroke-primary");
   });
 
+  it("текст на -soft-заливке — токены ink-*, а не *-strong (в тёмной теме -strong на -soft нечитаем): поле, заголовок, подписи связей, значки", () => {
+    for (const [i, s] of SAMPLES.entries()) {
+      const out = html(s);
+      expect(out, `образец ${i}`).not.toContain("primary-strong");
+      // ни один элемент с -soft-заливкой не несёт цвет текста -strong
+      for (const cls of out.match(/class="[^"]*"/g) ?? []) if (/-soft\b/.test(cls)) expect(cls, `образец ${i}`).not.toMatch(/-strong\b/);
+    }
+    // подсвеченное поле (образец 0): имя, значок и подпись связи — ink-primary
+    const fld = html(SAMPLES[0]);
+    expect(fld).toMatch(/bg-primary-soft[^"]*"[^>]*>[\s\S]*?text-ink-primary/);
+    expect(fld).toContain("fill-ink-primary");
+    // подсвеченная таблица: заголовок на primary-soft — text-ink-primary
+    expect(html(SAMPLES[3])).toMatch(/bg-primary-soft text-ink-primary/);
+    // легенда ключей — тоже ink
+    expect(renderToStaticMarkup(createElement(DbSchemaView, { scene: SAMPLES[0] }))).toContain("lucide-key-round text-ink-primary");
+  });
+
   it("PK — жирнее обычных полей; без ключей легенда не рисуется", () => {
     const out = html(SAMPLES[0]);
     expect(out).toContain("font-extrabold");
