@@ -83,7 +83,7 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 - **Уровни A/B/C** (`Level = 1 | 2 | 3`, как в ЕНТ: 50/30/20%). Уровень задания — поле `level` у шага. Уровень по освоению — `levelFromMastery` (`lib/ent.ts`): < 0.5 → A, < 0.8 → B, иначе C.
 - **Тренировка** (`lib/generators.ts`): задания генерируются кодом для навыков пройденных уроков (`generateLeveled(skill, level, seed)`). Вес навыка `(1.1 − m)²` — слабые выпадают в разы чаще. Уровень — по освоению, последняя треть тренировки на уровень выше, задания отсортированы **от лёгкого к сложному**. Генерация детерминирована по `seed`.
 - **Работа над ошибками**: берёт исходные задания урока (по `stepId`) или свежие задания на тот же навык; верный ответ закрывает ошибку.
-- **Портрет для ИИ** (`lib/student-context.ts`): имя, класс, цель, стиль объяснений, уровень, слабые/сильные темы с %, 5 последних ошибок, «память наставника», личные заметки, пройденные уроки. На сервере всё обрезается по длине (`server/context.ts`).
+- **Портрет для ИИ** (`lib/student-context.ts`): имя, класс, цель, стиль объяснений, уровень, слабые/сильные темы с %, 5 последних ошибок, личные заметки, пройденные уроки («памяти наставника» с v0.18 нет, #112). На сервере всё обрезается по длине (`server/context.ts`).
 - **Память наставника**: после урока дешёвая модель возвращает обновлённые заметки (≤ 600 символов) — что западает, что помогает, какой стиль подходит. Ученик видит и может удалить их на странице «Прогресс».
 
 ## Геймификация (`lib/gamification.ts`)
@@ -106,7 +106,7 @@ public/media/videos/…       mp3 озвучки (ru/kk)
 | … mode=`explain` | то же | разбор ошибки ученика | ~850 / ~160 |
 | … mode=`chat` (+ фото) | то же (с фото — effort low) | свободный диалог | ~725 / ~230 |
 | `POST /api/ai/check-solution` | gpt-5.4-mini, effort low, JSON-схема | проверка решения по фото | ~1200 / ~200 |
-| `POST /api/ai/lesson-feedback` | gpt-5.4-nano, JSON-схема | отзыв + память наставника | ~490 / ~280 |
+| `POST /api/ai/lesson-feedback` | gpt-5.4-nano, JSON-схема | отзыв + фокус (без памяти, #112) | ~490 / ~280 |
 
 - Промпты — `src/server/prompts.ts` (на русском, язык ответа задаётся явно, казахская терминология перечислена).
 - Защита: лимит по IP (40 / 15 / 20 запросов за 10 мин), дневной лимит на устройстве (60 обращений), обрезка всех входных полей, картинки только `data:image/(jpeg|png|webp)` до ~4 МБ; клиент сжимает фото до 1280px JPEG.
@@ -266,7 +266,7 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 ## v0.8: курс 2.0, группы разделов, контрольные, план, подсказки без ИИ
 
 ### Навигация (решение #39)
-- Конфигурация — `src/components/app/nav.ts`: `NAV_GROUPS` (Учиться · Практика · ИИ-чат · Материалы · Прогресс) с подразделами, чистые `groupOf(path)`, `subOf(path)`, `hubGroup(path)` (тесты `tests/nav.test.ts`).
+- Конфигурация — `src/components/app/nav.ts`: `NAV_GROUPS` (с v0.18 — Учиться · Практика · Материалы · Прогресс; ИИ-чат — плавающая кнопка Бита, #110) с подразделами, чистые `groupOf(path)`, `subOf(path)`, `hubGroup(path)` (тесты `tests/nav.test.ts`).
 - `AppShell`: нижняя панель телефона и боковое меню компьютера строятся из `NAV_GROUPS` (у активной группы в меню раскрыты подразделы); `SectionTabs` — строка подразделов над содержимым хаб-страниц (на телефоне), страницы её не подключают сами. Новая страница `/materials`.
 - Шпаргалка — вкладка `cheat` «Инструментов» (`components/tools/CheatSheet.tsx`, данные и таблицы считает `cheat-data.ts`); `openCheatSheet()` открывает её из «Материалов».
 
@@ -455,7 +455,7 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - `resumeTarget(lessonRuns, now, accept?)` в `lib/lesson-run.ts` — незаконченный урок своего трека, пропуская засчитанные; `ContinueCard`, `GradeProgressCard`, `QuickActions`, `SchoolMap`.
 - Пропуск `ClozeBlank` с `label` — «плашка»: `lib/cloze-bank.ts` (`clozeBank(step, lang)` — подписи + `bank`, без повторов, перемешаны по id шага), `ClozeView` заполняет первый пустой выбираемый пропуск; проверка — как у ввода (`label` в нормализованном виде входит в `blank`, `tests/validate.ts`). `expectedText` показывает подпись на языке урока.
 
-### Проводник первого входа (`components/tour/*`, `lib/tour.ts`, `lib/tips.ts`, #104)
+### Проводник первого входа (`components/tour/*`, `lib/tour.ts`, `lib/tips.ts`, #104) — заменён в v0.18 (#109)
 - `TourAgent` (в `Providers`): `learnScene({ completedLessons, onboarded, pathname })` → приветствие (`Spotlight` с вырезом вокруг `[data-tour=continue]`) или обзор панели (`hdr-*`, `nav-*`). `LessonFirstTip` — в `LessonScreen`, `AfterFirstLesson` — в `Results`, `PageTip` — на «Практике», «ИИ-чате», «Материалах», «Прогрессе», школьной карте. Показанные — `useApp.tips` (`noteTip`, `resetTips`; `TipsReset` в профиле).
 - `tourBlocking` держит `PaywallAgent` и `PushAskAgent`; онбординг и диагностика ведут на `/learn` (`notePaywallShown()` — окно тарифов в этом запуске не открывается).
 
@@ -467,6 +467,36 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - **«Идеально!»:** `lib/perfect.ts` — `isPerfectSession` (все ответы с первой попытки, верно, без подсказок, без пропусков), `nextPerfectRun` (только первые прохождения); поле `perfectRun` (`lib/rewards-state.ts`).
 - **Кейс:** `lib/level-case.ts` — `rollLevelCase(level, seed, heartsFull)` (лента 40 призов, выигрыш на 34-й), `claimLevelCase` (выдача; опыт приза кейсов не порождает), `casesForLevelUp`/`queueCases`; поле `pendingCases` пополняет `addLevelCases` внутри `settleChips`. UI — `components/rewards/LevelCase.tsx` (лента, касание — сразу приз, `initialRoll` — показать уже выданный), `CaseAgent` (в `Providers`; белый список страниц `caseAllowedPath`, ждёт проводник), `CaseWaiting` (на «Учиться» и в профиле). `PaywallAgent` ждёт, пока есть кейсы; `PushAskAgent` не открывается поверх другого `aria-modal` окна.
 - **Звуки и похвала:** `lib/sound.ts` (`perfect`, `chips`, `streak`, `caseTick`, `caseReveal`, варианты верного, ступени комбо), `lib/feedback.ts` (звук + вибрация по настройкам), `i18n/parts/praise.ts` + выбор без повтора; `components/motion/ChipFlight.tsx` (полёт чипов к цели `targetSelector`), `StreakIgnite` (`sound`, `delay`).
+
+## v0.18: этап 16В, волна 1 — украшения, всплывающий Бит, плавающий чат, «Теория 2.0» (#107–#114)
+
+### Редкость (`lib/rarity.ts`, `components/ui/rarity.ts`)
+- `Rarity` = common | rare | epic | legendary; токены `rarity-*` и `-soft` в обеих темах (только для редкости); статические классы `RARITY_TEXT/SOFT/BORDER/BG`, `RARITY_VAR` для SVG, подписи `rarity.*`. Используют украшения, достижения и `LevelBadge`.
+
+### Украшения профиля (`lib/cosmetics.ts`, `components/cosmetics/*`, #108)
+- Каталог `COSMETICS` (слот frame | banner | title, редкость, цена или `null` — только кейс), `COSMETIC_PRICE`. Стор: поле `cosmetics { owned, equipped }` (`sanitizeCosmetics` при загрузке), действия `buyAndEquipCosmetic` (списание + строка истории `reason: "buy"`, `note: id`) и `equipCosmetic`.
+- Вид: `AvatarFrame` (SVG-рамка вокруг `Avatar`; < 40 px — тонкое кольцо), `ProfileBanner`, `TitleTag`, `ProfileCard` (верх профиля), `CosmeticsShop` + `TryOnSheet` (магазин), `MyCosmetics` (профиль). Анимации — `cosmetics.module.css`, выключаются «Меньше анимаций».
+- Кейс: приз `cosmetic` (`LEVEL_CASE_WEIGHTS.cosmetic = 10`), `pickCaseCosmetic(owned, r)` до анимации, подмена на `chips30`; `rollLevelCase(level, seed, heartsFull, owned)`.
+
+### Проводник Бита (`lib/guide.ts`, `components/guide/*`, #109)
+- Сцены — данные: `GUIDE_SCENES` (шаги: метки `data-tour`, ключ реплики, настроение, `next | tap`, ожидание цели), выбор сцены — `sceneFor(tips, ctx)`; показано — `useApp.tips` / `noteTip` (`lib/tips.ts`, `TIP_IDS`). Геометрия — `placeBit` (угол, пузырь, «над целью», не за экраном), `fingerPose`.
+- `GuideHost` (в `Providers`): пауза 600 мс, поиск цели каждые 150 мс (`targets.ts`: первый видимый `[data-tour=…]`, `foreignModal` — ждём чужое окно), затемнение из 4 прямоугольников (цель нажимаема), шаг `tap` засчитывается нажатием по интерактивному элементу внутри цели (capture на `document`), на шаге `next` нажатие по цели = «Дальше». `BitPopup` — Бит и пузырь, печать текста и `bitTalk` / `bitPop` (`lib/sound.ts`); `GuidePointer` — рамка и палец. Урок и итоги помечает `GuideSpot`. `useGuideUi.active` прячет плавающую кнопку, пока Бит говорит (кроме шага, где цель — сама кнопка).
+- `tourBlocking` (из `lib/guide.ts`) держит окно тарифов, уведомлений и кейс до конца сцены nav.
+
+### Плавающий Бит-чат (`components/guide/BitDock.tsx`, `BitChatPanel.tsx`, `lib/dock.ts`, #110)
+- `dockVisible(path, …)` — белый список главных страниц; свайп — pointer events + `useMotionValue` (жесты — `lib/dock.ts`), `profile.bitHidden`. Панель — `ChatScreen` в режиме `embedded` (последний чат — `pickDockChat`), после первого открытия не размонтируется (скрыта `inert`), закрывается при смене страницы.
+
+### Экономика (#111, #116)
+- `PERFECT_DROP` + `rollPerfectDrop` (`lib/perfect.ts`); бросок — в `finishSession` (урок, мини-тест) и `recordExam` (тест по теме, по разделу); результат — `FinishOutcome.perfectDrop` / `ExamSummary.drop`, показ — `PerfectDropTile`.
+- `ENTRY_COST.drill = 1`; `DrillScreen` → `EntryGate` + `payDrill(key)` (`lib/drill-paid.ts`, окно 20 минут). Поля возврата сердечка за тренировку (`practiceHearts`) убраны (старое сохранение — молча игнорируется).
+
+### Прогресс и «Поделиться» (#114)
+- `lib/progress.ts`: `unitSkillSections` / `schoolSkillSections` → `skillGroups(sections, skills)` (все навыки раздела, сводка `counts`, «Другие навыки», `defaultOpenGroup`). Код результата урока `l1-<точность>-<XP>-<идеально>-<уроков>-<язык>` (`lib/share-code.ts`), превью и страница `/r/…`.
+
+### «Теория 2.0» (`components/theory/*`, `lib/theory.ts`, `lib/theory-pay.ts`, #113)
+- Плата: `useTheoryAccess(id)` — решение `theoryOpenStep` (wait | pay | open | locked), списание `payTheory` из колбэка кадра при открытии страницы, повтор за сутки (`theoryPaid`) и «Безлимит» — сразу открыто; нет сердечек — `OutOfHearts`, текст не рендерится. Цена — `TheoryCost` (значок ½) на карточке темы.
+- Чтение: `TheoryCrumbs` (раздел, «Урок K из M», лента уроков), `TheoryCards` (по одной, `useSwipe`, `data-no-swipe` у видео), `TheoryConspect`; режим `theoryMode` и «Продолжить чтение» `theoryLast`, «прочитано» `theoryRead` — в сторе. Ссылки — `?card=<шаг>` и `?unit=<раздел>` (страница читает `searchParams` на сервере), старые `#…` — при полной загрузке.
+- Чат по уроку: `ChatMeta.lessonId`, `findLessonChat` (один на урок), `LessonChat` (статическое первое сообщение и 3 подсказки); сервер — `loadLessonChat` (`server/context.ts`) + `lessonChatRule` (`server/prompts.ts`).
 
 ## v0.18: этап 16В — экономика после ревью (#116)
 - **Новые поля стора** (`lib/store.ts`; все проходят `mergeState` как недоверенные данные):
