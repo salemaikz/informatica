@@ -9,6 +9,7 @@ import type {
   ExplainStyle,
   Goal,
   Grade,
+  L,
   Lang,
   LessonVia,
   SessionResult,
@@ -238,7 +239,10 @@ export interface MistakeRecord {
 /** Постоянный счётчик ошибок по заданию: верный ответ его не сбрасывает («Повторяющиеся ошибки», #122). */
 export interface MissLogEntry {
   n: number;
+  /** Текст задания на языке, на котором ошиблись (запасной вариант). */
   prompt: string;
+  /** Текст на обоих языках, когда он известен: «Повторяющиеся ошибки» показывают его на языке интерфейса, а не «замороженный». */
+  promptL?: L;
   lessonId?: string;
   at: number;
 }
@@ -404,7 +408,7 @@ export interface NoteInput {
 export interface AppActions {
   completeOnboarding: (p: Partial<Profile>) => void;
   updateProfile: (p: Partial<Profile>) => void;
-  recordAnswer: (rec: AnswerRecord, xp: number, lessonId?: string) => void;
+  recordAnswer: (rec: AnswerRecord & { promptL?: L }, xp: number, lessonId?: string) => void;
   /**
    * Итог урока/тренировки: бонус XP (у повтора урока — меньше, см. lib/review.ts), статистика урока,
    * расписание повторения, серия, достижения.
@@ -539,9 +543,17 @@ const MAX_MISTAKES = 60;
 const MAX_MISS_LOG = 300;
 
 /** +1 к счётчику ошибок задания; при переполнении вытесняется самая старая запись. */
-export function bumpMissLog(log: Record<string, MissLogEntry>, stepId: string, prompt: string, lessonId: string | undefined, at: number): Record<string, MissLogEntry> {
+export function bumpMissLog(
+  log: Record<string, MissLogEntry>,
+  stepId: string,
+  prompt: string,
+  lessonId: string | undefined,
+  at: number,
+  promptL?: L,
+): Record<string, MissLogEntry> {
   const prev = log[stepId];
-  const next = { ...log, [stepId]: { n: (prev?.n ?? 0) + 1, prompt, lessonId: lessonId ?? prev?.lessonId, at } };
+  const both = cleanPromptL(promptL) ?? prev?.promptL;
+  const next = { ...log, [stepId]: { n: (prev?.n ?? 0) + 1, prompt, ...(both ? { promptL: both } : {}), lessonId: lessonId ?? prev?.lessonId, at } };
   const keys = Object.keys(next);
   if (keys.length > MAX_MISS_LOG) {
     keys.sort((a, b) => next[a].at - next[b].at);
@@ -550,13 +562,24 @@ export function bumpMissLog(log: Record<string, MissLogEntry>, stepId: string, p
   return next;
 }
 
+const PROMPT_LEN = 400;
+
+/** Текст на двух языках из недоверенных данных: обе строки непустые, длина ограничена; иначе undefined (остаётся строка prompt). */
+function cleanPromptL(raw: unknown): L | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const { ru, kk } = raw as Partial<L>;
+  if (typeof ru !== "string" || typeof kk !== "string" || !ru.trim() || !kk.trim()) return undefined;
+  return { ru: ru.slice(0, PROMPT_LEN), kk: kk.slice(0, PROMPT_LEN) };
+}
+
 function sanitizeMissLog(raw: unknown): Record<string, MissLogEntry> {
   const out: Record<string, MissLogEntry> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     const e = v as Partial<MissLogEntry> | null;
     if (!e || typeof e !== "object" || !isNum(e.n) || e.n < 1 || typeof e.prompt !== "string") continue;
-    out[k] = { n: Math.floor(e.n), prompt: e.prompt, ...(typeof e.lessonId === "string" ? { lessonId: e.lessonId } : {}), at: isNum(e.at) ? e.at : 0 };
+    const both = cleanPromptL(e.promptL);
+    out[k] = { n: Math.floor(e.n), prompt: e.prompt, ...(both ? { promptL: both } : {}), ...(typeof e.lessonId === "string" ? { lessonId: e.lessonId } : {}), at: isNum(e.at) ? e.at : 0 };
   }
   const keys = Object.keys(out);
   if (keys.length > MAX_MISS_LOG) {
@@ -1033,7 +1056,7 @@ export const useApp = create<AppState & AppActions>()(
           let missLog = s.missLog;
           const existing = s.mistakes.find((m) => m.stepId === rec.stepId);
           if (!rec.correct && !rec.retry) {
-            missLog = bumpMissLog(missLog, rec.stepId, rec.prompt, lessonId ?? existing?.lessonId, Date.now());
+            missLog = bumpMissLog(missLog, rec.stepId, rec.prompt, lessonId ?? existing?.lessonId, Date.now(), rec.promptL);
             mistakes = [
               {
                 id: existing?.id ?? uid(),

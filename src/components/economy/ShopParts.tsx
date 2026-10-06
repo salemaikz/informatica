@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { feedback } from "@/lib/feedback";
-import { formatHearts, shopItem, type ShopItem } from "@/lib/economy";
+import { formatHearts, type ShopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { Button } from "@/components/ui/Button";
@@ -149,6 +149,10 @@ export function ChipItemRow({
     }
   };
 
+  // «Полный запас» при нехватке меньше REFILL_MIN_MISSING не продаётся: строку прячем, чтобы цена и подсказка не спорили
+  // (+1 и +3 покупаются по одному / тройкой). Пока идёт анимация «Куплено», строка остаётся.
+  if (item.kind === "refill" && !done && !av.ok && av.reason === "overflow") return null;
+
   const reason = done
     ? t("shop.bought")
     : av.ok
@@ -158,13 +162,7 @@ export function ChipItemRow({
         : av.reason === "unlimited"
           ? t("shop.fail.unlimited")
           : av.reason === "overflow"
-            ? t(
-                item.kind !== "refill"
-                  ? "shop.fail.overflow"
-                  : !hearts.unlimited && hearts.max - hearts.count >= (shopItem("hearts-3")?.amount ?? 3)
-                    ? "shop.fail.overflowRefill"
-                    : "shop.fail.overflowRefillOne",
-              )
+            ? t("shop.fail.overflow")
             : t("shop.fail.chips", { n: av.missing ?? 0 });
 
   return (
@@ -207,7 +205,7 @@ export function ChipItemRow({
         <p
           className={cn(
             "flex items-center gap-1 text-[13px] font-extrabold",
-            done ? "text-success-strong" : blocked ? "text-muted" : "text-warning-strong",
+            done ? "text-ink-success" : blocked ? "text-muted" : "text-ink-warning",
           )}
         >
           {reason}

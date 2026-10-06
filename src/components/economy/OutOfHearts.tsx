@@ -9,7 +9,7 @@ import { ShortfallSheet } from "./ShortfallSheet";
  * Бесплатной тренировки нет (этап 16В). Подпись диалога «Сердечки закончились» — по ней ищут окно тесты.
  * layout="sheet" — шторка поверх экрана (open/onClose); layout="screen" — полноэкранно на входе.
  * need — цена входа (0,5, 1 или 2): окно предлагает продолжить, когда сердечек хватает на вход.
- * what="theory" — окно открытия темы теории (0,5): другой текст.
+ * what="theory" — окно открытия темы теории (0,5): другой текст. context="code" — открыто из задачи кода: подзаголовок упоминает задачи кода.
  * onResume — сердечек хватает (куплены, восстановились или пробный «Безлимит»): вызывающий продолжает вход.
  */
 export function OutOfHearts({
@@ -18,6 +18,7 @@ export function OutOfHearts({
   need = 1,
   onClose,
   what = "entry",
+  context,
   onResume,
   onExit,
 }: {
@@ -26,8 +27,9 @@ export function OutOfHearts({
   need?: number;
   onClose?: () => void;
   what?: "entry" | "theory";
+  context?: "code";
   onResume: () => void;
   onExit: () => void;
 }) {
-  return <ShortfallSheet need="hearts" cost={need} layout={layout} open={open} onClose={onClose} what={what} onResume={onResume} onExit={onExit} plansFrom="hearts" />;
+  return <ShortfallSheet need="hearts" cost={need} layout={layout} open={open} onClose={onClose} what={what} context={context} onResume={onResume} onExit={onExit} plansFrom="hearts" />;
 }

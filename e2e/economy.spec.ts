@@ -88,12 +88,12 @@ test("магазин: полный запас — цена за недостаю
 test("магазин: полный запас не продаётся, пока не хватает меньше четырёх", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  // Осталось 3 из 5: «Полный запас (+2)» невыгоден, тройка не помещается — берём по одному.
+  // Осталось 3 из 5: «Полный запас (+2)» не продаётся (строка скрыта), тройка не помещается — берём по одному.
   await seed(page, { wallet: { chips: 300, earned: 300, spent: 0 }, hearts: { count: 3, updatedAt: Date.now(), day: "2099-01-01" } });
   await page.goto("/shop");
-  await expect(page.getByRole("button", { name: "Купить: Полный запас (+2)" })).toBeDisabled();
-  // Не хватает двух: тройка тоже не поместится — «Выгоднее по одному».
-  await expect(page.getByText("Выгоднее по одному", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Сердечки", exact: true })).toBeVisible();
+  // Полировка 16Г: строка «Полный запас» прячется (цена и подсказка не спорят с +1 и +3).
+  await expect(page.getByRole("button", { name: /^Купить: Полный запас/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Купить: \+3 сердечка/ })).toBeDisabled();
   await expect(page.getByText("Столько не поместится — бери по одному")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Купить: \+1 сердечко/ })).toBeEnabled();

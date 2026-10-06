@@ -37,19 +37,21 @@ function TaskRow({ lang, task, n, stat, showLevel }: { lang: IdeLang; task: IdeT
           {solved ? <Check size={20} strokeWidth={3} /> : n}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-extrabold">{l(task.title)}</span>
-          {!solved && stat && stat.attempts > 0 && <span className="block text-xs font-bold text-muted">{t("ide.list.attempts", { n: stat.attempts })}</span>}
-        </span>
-        {showLevel && (
-          <span
-            title={t("ide.level", { l: LEVEL_LETTER[task.level] })}
-            className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-lg bg-primary-soft px-1.5 text-xs font-extrabold text-primary"
-          >
-            {LEVEL_LETTER[task.level]}
+          <span className="line-clamp-2 block font-extrabold leading-snug">{l(task.title)}</span>
+          {/* Уровень, цена (задача стоит сердечко, этап 16Г, #120: списывается при первом запуске или проверке) и попытки — отдельной строкой, чтобы название не обрезалось. */}
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {showLevel && (
+              <span
+                title={t("ide.level", { l: LEVEL_LETTER[task.level] })}
+                className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-lg bg-primary-soft px-1.5 text-xs font-extrabold text-ink-primary"
+              >
+                {LEVEL_LETTER[task.level]}
+              </span>
+            )}
+            <HeartCost n={ENTRY_COST.code} />
+            {!solved && stat && stat.attempts > 0 && <span className="text-xs font-bold text-muted">{t("ide.list.attempts", { n: stat.attempts })}</span>}
           </span>
-        )}
-        {/* Задача стоит сердечко (этап 16Г, #120): списывается при первом запуске или проверке. */}
-        <HeartCost n={ENTRY_COST.code} />
+        </span>
         <ChevronRight size={20} className="shrink-0 text-muted" aria-hidden />
       </Link>
     </li>
@@ -101,7 +103,7 @@ export function TaskList({ lang, tasks }: { lang: IdeLang; tasks: readonly IdeTa
                   )}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-extrabold">{title}</span>
+                    <span className="line-clamp-2 block font-extrabold leading-snug">{title}</span>
                     <span className={cn("block text-xs font-bold", done ? "text-success" : "text-muted")}>{t("ide.hub.solved", { done: g.solved, total: g.tasks.length })}</span>
                   </span>
                   <ChevronDown size={20} className={cn("shrink-0 text-muted transition-transform", isOpen && "rotate-180")} aria-hidden />
@@ -129,7 +131,7 @@ export function TaskList({ lang, tasks }: { lang: IdeLang; tasks: readonly IdeTa
       {groups.map((g, gi) => (
         <section key={g.level} aria-label={t("ide.level", { l: LEVEL_LETTER[g.level] })} className="flex flex-col gap-2">
           <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-muted">
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-lg bg-primary-soft px-1.5 text-xs text-primary">{LEVEL_LETTER[g.level]}</span>
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-lg bg-primary-soft px-1.5 text-xs text-ink-primary">{LEVEL_LETTER[g.level]}</span>
             {t(`ide.levelName.${g.level}`)}
           </h2>
           <ul className="flex flex-col gap-2">

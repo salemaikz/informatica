@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Clock, Cpu, Crown, Heart, HeartCrack, HeartPlus, HeartPulse, Sparkles } from "lucide-react";
+import { ArrowRight, Clock, Cpu, Crown, Gift, Heart, HeartCrack, HeartPlus, HeartPulse, Target } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -104,7 +104,7 @@ function BuyRow({
             <Cpu size={16} className={av.ok ? "text-gold" : undefined} aria-hidden />
             <span className="tabular-nums">{formatNum(itemPrice(item, hearts))}</span>
           </span>
-          {missing > 0 && <span className="text-xs font-bold text-danger">{t("hearts.out.missing", { n: formatNum(missing) })}</span>}
+          {missing > 0 && <span className="text-xs font-bold text-ink-warning">{t("hearts.out.missing", { n: formatNum(missing) })}</span>}
         </span>
       </button>
     </Shake>
@@ -201,6 +201,8 @@ export interface ShortfallSheetProps {
   layout?: "sheet" | "screen" | "inline";
   /** Сердечки: окно открытия темы теории (0,5) — другой текст. */
   what?: "entry" | "theory";
+  /** Сердечки: откуда открыто окно. «code» — задача практикума кода: в подзаголовке упоминаем задачи кода. */
+  context?: "code";
   open?: boolean;
   onClose?: () => void;
   /** Сердечек хватает (куплены, вернулись или пробный период): вызывающий продолжает вход. */
@@ -217,7 +219,7 @@ export interface ShortfallSheetProps {
 }
 
 function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "inline"; onSoon: (what: string, item: string) => void }) {
-  const { need, cost, where, layout, what = "entry", onClose, onResume, onEnough, onExit, onLeave, plansFrom, onSoon } = props;
+  const { need, cost, where, layout, what = "entry", context, onClose, onResume, onEnough, onExit, onLeave, plansFrom, onSoon } = props;
   const { t, lang } = useT();
   const hearts = useHearts();
   const { chips } = useChips();
@@ -288,10 +290,10 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
     }
   };
 
-  const planTitle = isHearts ? t("econ16c.out.unlimited") : t("aicost.need.plan");
-  const planDesc = isHearts ? t("hearts.out.unlimitedDesc") : plansFrom === "ai" ? t("short.plan.ai") : t("short.plan.chips");
+  const planTitle = t("aicost.need.plan");
+  const planDesc = isHearts ? t("pol16d.out.unlimitedDesc") : plansFrom === "ai" ? t("short.plan.ai") : t("short.plan.chips");
   const trialBtn = opts.trial ? (
-    <Button size={layout === "inline" ? "md" : "lg"} block icon={<Sparkles size={layout === "inline" ? 18 : 20} aria-hidden />} onClick={onTrial}>
+    <Button size={layout === "inline" ? "md" : "lg"} block icon={<Gift size={layout === "inline" ? 18 : 20} aria-hidden />} onClick={onTrial}>
       {t("short.trial", { n: TRIAL_DAYS })}
     </Button>
   ) : null;
@@ -346,7 +348,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
     <div className={cn("flex flex-col gap-3", layout === "screen" && "w-full max-w-md")}>
       <div className="flex flex-col items-center gap-2 text-center">
         <m.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={springBouncy}>
-          <Mascot mood={back ? "happy" : "sad"} size={layout === "screen" ? 104 : 72} />
+          <Mascot mood={back ? "happy" : "neutral"} size={layout === "screen" ? 104 : 72} />
         </m.div>
         <h2 className="flex items-center gap-2 text-2xl font-extrabold leading-tight">
           {isHearts ? (
@@ -362,12 +364,12 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
         </h2>
         {isHearts ? (
           <p className="font-semibold text-muted">
-            {back ? t("hearts.out.backText") : what === "theory" ? t("hearts15.out.theoryText", { cost: formatHearts(ENTRY_COST.theory) }) : t("econ16c.out.text")}
+            {back ? t("hearts.out.backText") : what === "theory" ? t("hearts15.out.theoryText", { cost: formatHearts(ENTRY_COST.theory) }) : t(context === "code" ? "pol16d.out.textCode" : "econ16c.out.text")}
           </p>
         ) : (
           <>
             <p className="font-bold">{t("aicost.need.text", { need: formatNum(cost), have: formatNum(chips) })}</p>
-            {opts.missingChips > 0 && <p className="text-sm font-extrabold text-ink-gold">{t("short.chips.missing", { n: formatNum(opts.missingChips) })}</p>}
+            {opts.missingChips > 0 && <p className="text-sm font-extrabold text-ink-warning">{t("short.chips.missing", { n: formatNum(opts.missingChips) })}</p>}
           </>
         )}
         {isHearts && !back && cost !== 1 && (
@@ -424,7 +426,7 @@ function Content(props: ShortfallSheetProps & { layout: "sheet" | "screen" | "in
             <LinkCard href={`/plans?from=${plansFrom}`} tone="gold" icon={<Crown size={24} fill="currentColor" />} title={planTitle} desc={planDesc} onClick={() => leave("plan")} />
           )}
           {trialBtn}
-          <LinkCard href="/shop#shop-earn" tone="primary" icon={<Sparkles size={22} />} title={t("short.earn")} desc={t("short.earnDesc")} onClick={() => leave("earn")} />
+          <LinkCard href="/shop#shop-earn" tone="primary" icon={<Target size={22} />} title={t("short.earn")} desc={t("short.earnDesc")} onClick={() => leave("earn")} />
         </m.div>
       )}
 

@@ -4,6 +4,7 @@ import { CheckCheck, Loader2, Play, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SqlJsStatic } from "sql.js";
 import { Button } from "@/components/ui/Button";
+import { EntryNote, PaidLabel, useEntryDue } from "@/components/ide/EntryPrice";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { checkSql, explainSqlError } from "@/lib/ide/sql/check";
 import { describeSchema, loadSql, runSql, type SqlRun, type TableInfo } from "@/lib/ide/sql/db";
@@ -21,6 +22,7 @@ type Load = "loading" | "ready" | "error";
  */
 export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t, l } = useT();
+  const due = useEntryDue();
   const [load, setLoad] = useState<Load>("loading");
   const [schema, setSchema] = useState<TableInfo[] | null>(null);
   // Результат привязан к задаче, для которой запускали, — при переходе на другую задачу старый результат не показываем.
@@ -87,15 +89,16 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
       <CodeEditor value={code} onChange={onCodeChange} language="sql" minHeight={170} ariaLabel={t("idesql.editor.aria")} />
 
       <div className="flex gap-2">
-        <Button variant="primary" size="lg" className="flex-1" icon={ready || load === "error" ? <Play size={18} /> : <Loader2 size={18} className="animate-spin" />} disabled={!ready} onClick={onRun}>
-          {t("idesql.run")}
+        <Button variant="primary" size="lg" className={due ? "flex-1 px-3" : "flex-1"} icon={ready || load === "error" ? <Play size={18} className={due ? "max-[399px]:hidden" : undefined} /> : <Loader2 size={18} className="animate-spin" />} disabled={!ready} onClick={onRun}>
+          <PaidLabel>{t("idesql.run")}</PaidLabel>
         </Button>
         {task && (
-          <Button variant="success" size="lg" className="flex-1" icon={<CheckCheck size={18} />} disabled={!ready} onClick={onCheckClick}>
-            {t("idesql.check")}
+          <Button variant="primary" size="lg" className="flex-1" icon={<CheckCheck size={18} />} disabled={!ready} onClick={onCheckClick}>
+            <PaidLabel>{t("idesql.check")}</PaidLabel>
           </Button>
         )}
       </div>
+      <EntryNote />
 
       {load === "loading" && (
         <p className="flex items-center gap-2 text-sm font-bold text-muted" role="status">

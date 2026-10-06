@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Code, Eye, Loader2, Play, SquareCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EntryNote, PaidLabel } from "@/components/ide/EntryPrice";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -135,16 +136,17 @@ export function Workspace({ task, code, onCodeChange, onCheck, beforeRun }: Work
 
       {webCheck && (
         <Button
-          variant="success"
+          variant="primary"
           size="lg"
           block
           disabled={checking}
           onClick={check}
           icon={checking ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <SquareCheckBig size={20} aria-hidden />}
         >
-          {checking ? t("ideweb.checking") : t("ideweb.check")}
+          {checking ? t("ideweb.checking") : <PaidLabel>{t("ideweb.check")}</PaidLabel>}
         </Button>
       )}
+      <EntryNote />
     </div>
   );
 }

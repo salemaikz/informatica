@@ -3,6 +3,7 @@
 import { ArrowDownToLine, ArrowRightToLine, CheckCheck, Eraser, Eye, EyeOff, Minus, MousePointerClick, Plus, TriangleAlert } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { EntryNote, PaidLabel } from "@/components/ide/EntryPrice";
 import { cn } from "@/lib/cn";
 import { checkExcel, describeSheetError } from "@/lib/ide/excel/check";
 import type { WorkspaceProps } from "@/lib/ide/types";
@@ -386,10 +387,11 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
       </div>
 
       {task && (
-        <Button variant="success" size="lg" block icon={<CheckCheck size={18} />} onClick={onCheckClick}>
-          {t("idexl.check")}
+        <Button variant="primary" size="lg" block icon={<CheckCheck size={18} />} onClick={onCheckClick}>
+          <PaidLabel>{t("idexl.check")}</PaidLabel>
         </Button>
       )}
+      <EntryNote />
 
       <p className="text-xs text-muted">{t("idexl.sep.hint")}</p>
     </div>

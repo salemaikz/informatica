@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CircleAlert, Clock, Loader2, Play, Square, SquareCheckBig, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EntryNote, PaidLabel, useEntryDue } from "@/components/ide/EntryPrice";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -17,6 +18,7 @@ const SHOW_LIMIT = 20000;
 
 export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t } = useT();
+  const due = useEntryDue();
   const jsCheck = task?.check.kind === "js" ? task.check : null;
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -92,23 +94,24 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
               {t("iderun.stop")}
             </Button>
           ) : (
-            <Button variant="primary" size="lg" block className={jsCheck ? undefined : "col-span-2"} onClick={run} icon={<Play size={20} aria-hidden />}>
-              {t("ideweb.js.run")}
+            <Button variant="primary" size="lg" block className={cn(jsCheck ? undefined : "col-span-2", due && "px-3")} onClick={run} icon={<Play size={20} aria-hidden className={due ? "max-[399px]:hidden" : undefined} />}>
+              <PaidLabel>{t("ideweb.js.run")}</PaidLabel>
             </Button>
           )}
           {jsCheck && (
             <Button
-              variant="success"
+              variant="primary"
               size="lg"
               block
               disabled={busy}
               onClick={check}
               icon={checking ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <SquareCheckBig size={20} aria-hidden />}
             >
-              {checking ? t("ideweb.checking") : t("ideweb.check")}
+              {checking ? t("ideweb.checking") : <PaidLabel>{t("ideweb.check")}</PaidLabel>}
             </Button>
           )}
         </div>
+        <EntryNote />
         <p className="text-xs text-muted">{t("ideweb.js.note")}</p>
       </div>
 
