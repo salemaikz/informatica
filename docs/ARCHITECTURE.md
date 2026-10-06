@@ -555,3 +555,21 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - Огонь серии — по `current > 0`, точка `streak.notToday`; `pulse-ring` 2,2 с ease-in-out; на карте пульсирует только рекомендованный урок.
 - `src/videos/PlayerInner.tsx`: `controls={false}` + своя панель (пуск, звук, ползунок, полный экран с запасным «псевдо» режимом, клавиши); строки `video.*`.
 - Музыка: `lib/music.ts` (общий `Audio`, `preload="none"`, пауза в скрытой вкладке, сброс после ошибки), `lib/music-pref.ts`, `components/music/*`; `profile.music { enabled, track: auto | arcade | focus }`; файлы `public/media/music/*.ogg|m4a` (синтез `scripts/generate-original-music.mjs`); в `ExamRun` не монтируется.
+
+## v0.20: этап 16Д — дуэли «Жекпе-жек», друзья, топ друзей, живые матчи (#126–#129, `docs/specs/duels.md`)
+
+### Ядро (чистое, `src/lib/duel/*`)
+- `modes.ts` (режимы, полосы уровня, пределы), `deck.ts` (**только сервер**: `buildDeck(mode, seed, band, topic?)` из банка, `DECK_TAG` от исходников банка — `scripts/deck-tag.mjs` в `npm run build`), `check.ts` (проверка ответа без банка), `topics.ts`, `score.ts` (счёт со штрафом, победитель, техническая победа, засчитано ли), `plausible.ts` (минимальное время, сумма против серверного времени, порядок, дубли), `bot.ts` (`botProfile`, `botTimeline`, `opponentAt`, `nextBotAdj`), `timeline.ts`, `week.ts` (неделя по Астане), `run.ts` и `record.ts` (логика матча и запись в стор), `live.ts`, `challenge.ts`, `api.ts`.
+- `src/lib/friend-code.ts` (8 знаков), `src/lib/moderation/{name-format,skeleton}.ts` (без стоп-слов).
+
+### Сервер
+- `server/kv.ts`: ZSET/SET/HSETNX/SET NX EX/MGET/DEL/EXPIRE/конвейер в обеих реализациях, одиночка памяти в `globalThis`; `getStrictKv()`.
+- `server/social/*`: `kv.ts` (`getSocialKv`, `socialEnabled`, `namesEnabled`), `player.ts` (cookie `inf_pl`, профиль `pl:{pid}`, карточка `pl:c:{pid}`, код `pl:code:{CODE}`, заявки `pl:frq` — ZSET со сроком у каждой), `friends.ts`, `inbox.ts`, `tops.ts` (`planWeekAward` + `awardWeek`), `report.ts`, `code.ts`, `http.ts`, `limit.ts`.
+- `server/duel/*`: `seat.ts` (подписанные места и старт), `matchmaking.ts` (очередь «Блица», захват через ZREM), `room.ts` (комнаты по коду), `match.ts` (состояние, ответы, ленивое завершение), `challenge.ts` (вызовы и записи); `server/moderation/*` (стоп-корни, `checkName`, `server-only`); `server/clock.ts` (`serverNow`, тестовый сдвиг только при `DUEL_TEST_HOOKS=1` и не на Vercel); `server/signed-id.ts`.
+- Маршруты: `/api/social/{me,home,friends,friends/request,friends/respond,friends/[code],block,invite-link,invite-link/[token],invite-link/[token]/accept,top/friends,report}`, `/api/duel/{deck,start,challenge,challenge/[id],challenge/[id]/accept,challenge/[id]/result,queue,queue/[ticket],room,room/[code]/join,m/[id],m/[id]/{ready,answers,done,leave,rematch},test/clock}`, `/api/owner/social`. Все — `sameOrigin`, игрок по cookie, потолок тела, 503 при выключенной соцчасти, строка лога `[social] route=… cmds=N`.
+
+### Клиент
+- Страницы: `/duel` (хаб), `/duel/friends`, `/duel/play` (матч с Битом), `/duel/rec` (запись вызова), `/duel/c/[id]` (вызов друга), `/duel/live` (поиск и живой матч), `/duel/r/[code]` (комната), `/f/[token]` (приглашение); ссылки проходят онбординг через `lib/pending-link.ts`.
+- Компоненты `components/duel/*` (`DuelHub`, `DuelPlay`, `ChallengePlay`, `LivePlay`, `VsScreen`, `DuelRun`, `DuelResult`, `rival.tsx` — один тип соперника: bot | ghost | solo | human), `components/social/*` (`PlayerCard`, `NameForm`, `FriendsTop`, `ReportPlayerButton`, `useSocial`), хук `useDuel` (опрос, сдвиг часов, пауза в скрытой вкладке, отступ при ошибках).
+- Стор: `duels { history ≤ 50, botAdj, hiddenNames }`, `recordDuel`; `ENTRY_COST.duel = 1`, `duelEntryKey`.
+- e2e: `e2e/duel-bot.spec.ts` (обычный набор), `playwright.duels-friends.config.ts`, `playwright.duel-live.config.ts` (свой сервер с `SOCIAL_MEMORY_OK=1 SOCIAL_SECRET=test DUEL_TEST_HOOKS=1`, два контекста браузера).
