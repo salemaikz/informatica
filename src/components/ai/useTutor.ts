@@ -15,13 +15,25 @@ export interface TutorTurn {
   content: string;
 }
 
-/** Общий хук потокового ответа наставника: лимиты, контекст ученика, отмена. */
+/**
+ * Общий хук потокового ответа наставника: лимиты, контекст ученика, отмена.
+ * Компонент размонтировали посреди ответа (ушли со страницы, «Все чаты» в панели Бита, закрыли шторку) — запрос
+ * обрывается; если ответа ещё не было видно, обращение возвращается, а уже показанная часть отдаётся вызывающему как
+ * ответ (чат сохранит её в переписку, хотя экрана уже нет).
+ */
 export function useTutor() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<DictKey | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const unmounted = useRef(false);
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+      abort.current?.abort();
+    };
+  }, []);
 
   const ask = useCallback(
     async (
@@ -73,11 +85,16 @@ export function useTutor() {
       abort.current = ctrl;
       setError(null);
       setStreaming(true);
+      // Сколько ответа ученик уже увидел (на случай обрыва при размонтировании).
+      let shown = "";
       try {
         const meta: { status: string | null } = { status: null };
         const text = await streamTutor(
           { ...args, context },
-          onText,
+          (full) => {
+            shown = full;
+            onText(full);
+          },
           ctrl.signal,
           (st) => {
             meta.status = st;
@@ -91,8 +108,16 @@ export function useTutor() {
         if (!crisis) useApp.getState().unlock("ai_friend");
         return text;
       } catch (e) {
-        // Остановил ученик (или пришёл новый запрос) — показанную часть оставляет вызывающий, обращение не возвращается.
-        if (ctrl.signal.aborted) return null;
+        if (ctrl.signal.aborted) {
+          // Ушли с экрана посреди ответа: ничего не показано — обращение возвращается; часть показана — она и есть ответ.
+          if (unmounted.current) {
+            if (shown.trim()) return shown;
+            refund();
+            return null;
+          }
+          // Остановил ученик (или пришёл новый запрос) — показанную часть оставляет вызывающий, обращение не возвращается.
+          return null;
+        }
         // Сбой, обрыв потока (stream_cut), отказ сервера: ответ не получен — возвращаем обращение, ответ не сохраняем.
         refund();
         setError(aiErrorKey(e));

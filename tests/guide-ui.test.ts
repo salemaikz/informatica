@@ -63,6 +63,25 @@ function addTarget(name: string, attrs: Record<string, string> = {}, tag = "a") 
   return el;
 }
 
+/** Варианты ответа: блок-цель с двумя кнопками и промежутком между ними (`gap`). */
+function addOptions() {
+  const box = addTarget("lesson-options", {}, "div");
+  const gap = box.querySelector("span")!;
+  const option = document.createElement("button");
+  option.setAttribute("role", "radio");
+  option.textContent = "11";
+  box.appendChild(option);
+  return { box, gap, option };
+}
+
+/** Нажатие мышью в точку окна (координаты — для проверки «внутри выреза»; detail 1 — не клавиатура). */
+const clickAt = (el: Element, x: number, y: number) => {
+  const e = new MouseEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y, detail: 1 });
+  el.dispatchEvent(e);
+  return e;
+};
+const finger = () => document.querySelector("[data-guide-finger]");
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "requestAnimationFrame", "cancelAnimationFrame"] });
   h.pathname = "/learn";
@@ -191,6 +210,134 @@ describe("welcome: приветствие и путь к первому урок
   });
 });
 
+describe("шаг «Дальше» с целью и шаг «нажми»: вырез, палец, фокус, роли", () => {
+  it("нажатие на саму цель (ссылку) — это «Дальше»: со страницы не уходим, до цели нажатие не доходит; пальца нет", async () => {
+    const cont = addTarget("continue", { href: "/lesson/ns-1" });
+    addTarget("hdr-hearts", { href: "/shop" });
+    const reached = vi.fn();
+    cont.addEventListener("click", reached);
+    cont.addEventListener("pointerdown", reached);
+    await start();
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("следующий урок");
+    expect(finger()).toBeNull();
+
+    const down = new PointerEvent("pointerdown", { bubbles: true, cancelable: true });
+    await act(async () => {
+      cont.querySelector("span")!.dispatchEvent(down);
+    });
+    expect(down.defaultPrevented).toBe(true);
+    let e!: MouseEvent;
+    await act(async () => {
+      e = clickAt(cont.querySelector("span")!, 0, 0);
+    });
+    expect(e.defaultPrevented).toBe(true);
+    expect(reached).not.toHaveBeenCalled();
+    await wait(50);
+    expect(say()).toContain("Сердечки — входы в уроки");
+
+    // Нажатие в вырез мимо самой цели (зазор рамки вокруг сердечек) — тоже «Дальше».
+    let e2!: MouseEvent;
+    await act(async () => {
+      e2 = clickAt(document.body, 16, 96);
+    });
+    expect(e2.defaultPrevented).toBe(true);
+    await wait(50);
+    expect(say()).toContain("Нажми «Начать»");
+    expect(tips().welcome).toBeUndefined();
+    // Шаг «нажми» — палец есть, нажатие в цель проходит как обычно.
+    expect(finger()).not.toBeNull();
+    let e3!: MouseEvent;
+    await act(async () => {
+      e3 = clickAt(cont, 0, 0);
+    });
+    expect(e3.defaultPrevented).toBe(false);
+    expect(reached).toHaveBeenCalledTimes(1);
+    await wait(10);
+    expect(tips().welcome).toBeGreaterThan(0);
+  });
+
+  it("нажатие мимо выреза на шаге «Дальше» не перехватывается (страница под затемнением его не получит — его ловит затемнение)", async () => {
+    addTarget("continue", { href: "/lesson/ns-1" });
+    await start();
+    await click("Дальше");
+    await wait(50);
+    let e!: MouseEvent;
+    await act(async () => {
+      e = clickAt(document.body, 600, 600);
+    });
+    expect(e.defaultPrevented).toBe(false);
+    // Клик с клавиатуры (detail 0) по другому элементу — координатам не верим, не перехватываем.
+    const other = document.createElement("button");
+    document.body.appendChild(other);
+    const kb = new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 30, clientY: 110, detail: 0 });
+    await act(async () => {
+      other.dispatchEvent(kb);
+    });
+    other.remove();
+    expect(kb.defaultPrevented).toBe(false);
+    await wait(50);
+    expect(say()).toContain("следующий урок");
+  });
+
+  it("фокус: без затемнения «Дальше» фокус не забирает; с затемнением — забирает; шаг «нажми» — статус, фокус на цели", async () => {
+    const cont = addTarget("continue", { href: "/lesson/ns-1" });
+    addTarget("hdr-hearts", { href: "/shop" });
+    await start();
+    expect(bubble()?.getAttribute("role")).toBe("status");
+    expect(document.activeElement).not.toBe(button("Дальше"));
+    await click("Дальше");
+    await wait(50);
+    expect(bubble()?.getAttribute("role")).toBe("dialog");
+    expect(bubble()?.getAttribute("aria-modal")).toBe("true");
+    expect(document.activeElement).toBe(button("Дальше"));
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Нажми «Начать»");
+    // Затемнение есть, но пузырь не модальный: нажимают саму цель, фокус на ней.
+    expect(dims()).toHaveLength(4);
+    expect(bubble()?.getAttribute("role")).toBe("status");
+    expect(bubble()?.getAttribute("aria-modal")).toBeNull();
+    expect(bubble()?.getAttribute("aria-live")).toBe("polite");
+    expect(document.activeElement).toBe(cont);
+  });
+
+  it("закрытая панель Бита (внутри [inert]) и скрытые окна сцене не мешают; открытое окно — мешает", async () => {
+    h.pathname = "/tutor";
+    useApp.setState({ tips: { nav: 1 } });
+    const made: HTMLElement[] = [];
+    const dialog = (setup: (el: HTMLElement, wrap: HTMLElement) => void) => {
+      const wrap = document.createElement("div");
+      const el = document.createElement("section");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-modal", "true");
+      wrap.appendChild(el);
+      setup(el, wrap);
+      document.body.appendChild(wrap);
+      made.push(wrap);
+      return wrap;
+    };
+    dialog((_, wrap) => wrap.setAttribute("inert", ""));
+    dialog((el) => (el.style.display = "none"));
+    dialog((_, wrap) => (wrap.style.display = "none"));
+    dialog((el) => (el.style.visibility = "hidden"));
+    dialog((el) => el.setAttribute("hidden", ""));
+    await start();
+    expect(say()).toContain("Спрашивай меня");
+    // Открылось настоящее окно поверх — Бит прячется и ждёт.
+    const open = dialog(() => {});
+    await wait(300);
+    expect(bubble()).toBeNull();
+    open.remove();
+    await wait(300);
+    expect(say()).toContain("Спрашивай меня");
+    made.forEach((m) => m.remove());
+  });
+});
+
 describe("lesson-first: первый урок", () => {
   beforeEach(() => {
     h.pathname = "/lesson/ns-1";
@@ -212,10 +359,14 @@ describe("lesson-first: первый урок", () => {
     expect(bubble()).toBeNull();
     expect(dims()).toHaveLength(0);
 
-    const options = addTarget("lesson-options", {}, "div");
+    const { gap, option } = addOptions();
     await wait(200);
     expect(say()).toContain("Выбери ответ");
-    await act(async () => options.querySelector("span")!.click());
+    // Нажатие в промежуток между вариантами — не выбор: шаг тот же (иначе Бит просил бы «Проверить» без ответа).
+    await act(async () => gap.click());
+    await wait(200);
+    expect(say()).toContain("Выбери ответ");
+    await act(async () => option.click());
     await wait(10);
     const check = addTarget("lesson-check", {}, "button");
     await wait(200);
@@ -234,6 +385,41 @@ describe("lesson-first: первый урок", () => {
     addTarget("lesson-hearts");
     await start();
     expect(say()).toContain("списал 2 сердечка");
+  });
+
+  it.each([
+    ["«Безлимит»", { tier: "unlimited" as const, until: Date.now() + 86_400_000 }],
+    ["пробный «Безлимит»", { tier: "unlimited" as const, until: Date.now() + 86_400_000, trial: true, trialUsed: true }],
+  ])("%s: сердечки не списывались — Бит так и говорит", async (_, plan) => {
+    useApp.setState({ plan });
+    addTarget("lesson-hearts");
+    await start();
+    expect(say()).toContain("На «Безлимите» уроки без сердечек");
+    expect(say()).not.toContain("списал");
+  });
+
+  it("Escape, пока Бит спрятан (ждёт вопрос с вариантами), проводник не закрывает; Бит на экране — закрывает", async () => {
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    await start();
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(5000);
+    expect(bubble()).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(tips()["lesson-first"]).toBeUndefined();
+    expect(tips().nav).toBeUndefined();
+    addOptions();
+    await wait(200);
+    expect(say()).toContain("Выбери ответ");
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(tips()["lesson-first"]).toBeGreaterThan(0);
+    expect(tips().nav).toBeGreaterThan(0);
   });
 
   it("урок кончился без вариантов — сцена закрывается, на итогах начинается after-first", async () => {
@@ -304,10 +490,18 @@ describe("nav: после первого урока", () => {
     addTarget("bit-dock", {}, "button");
     await start();
     expect(useGuideUi.getState().active).toBe(true);
+    expect(useGuideUi.getState().dockStep).toBe(false);
     await click("Дальше");
     await wait(2000);
     expect(say()).toContain("А это я!");
     expect(useGuideUi.getState().active).toBe(false);
+    expect(useGuideUi.getState().dockStep).toBe(true);
+    // Нажатие на саму кнопку Бита (она в вырезе) — «Дальше», а не чат.
+    await act(async () => {
+      clickAt(document.querySelector('[data-tour="bit-dock"]')!, 0, 0);
+    });
+    await wait(50);
+    expect(useGuideUi.getState().dockStep).toBe(false);
   });
 });
 

@@ -4,8 +4,10 @@ import {
   BIT_SIZE,
   GUIDE_SCENES,
   completedLessonsCount,
+  aimFinger,
   estimateBubbleH,
   fingerPose,
+  fingerRect,
   overlaps,
   padRect,
   placeBit,
@@ -171,6 +173,16 @@ describe("stepText", () => {
     expect(stepText(hearts, { n: 2 })).toBe("guide.lesson.heartsMany");
     expect(stepText(hearts, {})).toBe("guide.lesson.hearts");
   });
+  it("«Безлимит» и пробный: сердечки не списывались — своя реплика, без «списал»", () => {
+    const hearts = GUIDE_SCENES["lesson-first"].steps[0];
+    expect(stepText(hearts, { n: 1, free: true })).toBe("guide.lesson.heartsFree");
+    expect(stepText(hearts, { n: 2, free: true })).toBe("guide.lesson.heartsFree");
+    expect(dict["guide.lesson.heartsFree"].ru).not.toContain("списал");
+    expect(dict["guide.lesson.heartsFree"].ru).toContain("Безлимит");
+    expect(dict["guide.lesson.heartsFree"].kk).toContain("Шексіз");
+    // Остальные шаги на безлимит не реагируют.
+    expect(stepText(GUIDE_SCENES.welcome.steps[2], { free: true })).toBe("guide.welcome.hearts");
+  });
 });
 
 describe("геометрия: рамка", () => {
@@ -245,6 +257,64 @@ describe("placeBit: Бит снизу, пузырь не закрывает це
     ok(null, { vw: 320, vh: 568, bottomInset: 64 });
     ok({ x: 10, y: 80, w: 300, h: 120 }, { vw: 320, vh: 568, bottomInset: 64 }, 110);
   });
+  it("360×640, цель во всю ширину (y 94…406): пузырь не выше верха окна, кнопки пузыря над нижней панелью, Бит внизу", () => {
+    const vp = { vw: 360, vh: 640, bottomInset: 64 };
+    const target = { x: 0, y: 94, w: 360, h: 312 };
+    for (const len of [40, 75, 110, 140]) {
+      const p = placeBit(target, vp, len);
+      const r = placementRects(p, vp.vh, len);
+      expect(r.bubble.y, `len ${len}`).toBeGreaterThanOrEqual(0);
+      expect(r.bubble.y + r.bubble.h, `len ${len}`).toBeLessThanOrEqual(vp.vh - vp.bottomInset);
+      expect(r.bit.y + r.bit.h, `len ${len}`).toBeLessThanOrEqual(vp.vh - vp.bottomInset);
+      // Под целью есть место для Бита — он не поднимается над ней (сел бы на верх экрана).
+      expect(p.bitBottom, `len ${len}`).toBe(64 + 12);
+      expect(r.bit.y, `len ${len}`).toBeGreaterThanOrEqual(target.y + target.h);
+    }
+  });
+  it("360×640 в уроке (без нижней панели): высокие варианты ответа — Бит и пузырь под ними, в окне", () => {
+    ok({ x: 16, y: 94, w: 328, h: 312 }, { vw: 360, vh: 640, bottomInset: 0 }, 32);
+  });
+  it("360×760, кнопка «Начать» карточки урока (≈ y 460…510): Бит внизу в углу, пузырь ниже цели, не на карточке", () => {
+    const vp = { vw: 360, vh: 760, bottomInset: 64 };
+    // Цель с зазором рамки (6 px) — как её отдаёт проводник.
+    for (const target of [
+      { x: 10, y: 454, w: 340, h: 62 },
+      { x: 10, y: 460, w: 340, h: 62 },
+    ]) {
+      for (const len of [47, 75]) {
+        const p = placeBit(target, vp, len);
+        const r = placementRects(p, vp.vh, len);
+        expect(p.bitBottom, `y ${target.y}, len ${len}`).toBe(64 + 12);
+        expect(r.bit.y, `y ${target.y}, len ${len}`).toBeGreaterThanOrEqual(target.y + target.h);
+        // Пузырь в окне; цель он не закрывает (или задевает самый край — меньше четверти её высоты).
+        expect(r.bubble.y).toBeGreaterThanOrEqual(0);
+        expect(r.bubble.y + r.bubble.h).toBeLessThanOrEqual(vp.vh - vp.bottomInset);
+        expect(r.bubble.y, `y ${target.y}, len ${len}`).toBeGreaterThan(target.y + (target.h * 3) / 4);
+      }
+    }
+  });
+  it("360×760: под целью хватает места для Бита и пузыря над ним — так и ставим, ниже цели", () => {
+    const vp = { vw: 360, vh: 760, bottomInset: 64 };
+    const target = { x: 10, y: 300, w: 340, h: 62 };
+    const p = ok(target, vp, 75);
+    const r = placementRects(p, vp.vh, 75);
+    expect(p.bitBottom).toBe(76);
+    expect(r.bubble.y).toBeGreaterThan(target.y + target.h);
+  });
+  it("кнопка у самого низа: Бит поднимается, только если под целью ему нет места", () => {
+    const lesson = { vw: 360, vh: 640, bottomInset: 0 };
+    const check = { x: 10, y: 566, w: 340, h: 68 };
+    const p = ok(check, lesson, 25);
+    expect(p.bitBottom).toBeGreaterThan(640 - check.y);
+  });
+  it("варианты, где пузырь вылез бы за верх окна, отбрасываются (низкий экран, кнопка внизу)", () => {
+    const vp = { vw: 360, vh: 420, bottomInset: 0 };
+    const target = { x: 10, y: 250, w: 340, h: 160 };
+    const p = placeBit(target, vp, 140);
+    const r = placementRects(p, vp.vh, 140);
+    expect(r.bubble.y).toBeGreaterThanOrEqual(0);
+    expect(r.bubble.y + r.bubble.h).toBeLessThanOrEqual(vp.vh);
+  });
   it("оценка высоты пузыря: длиннее текст и уже пузырь — выше", () => {
     expect(estimateBubbleH(120, 256)).toBeGreaterThan(estimateBubbleH(120, 336));
     expect(estimateBubbleH(200, 336)).toBeGreaterThan(estimateBubbleH(40, 336));
@@ -273,5 +343,55 @@ describe("fingerPose: палец смотрит на цель со сторон�
     expect(fingerPose(target, { x: 150, y: 600 }, 10).y).toBeCloseTo(130);
     expect(fingerPose(target, { x: 150, y: 600 }).y).toBeCloseTo(140 - 40 / 3);
     expect(fingerPose({ x: 0, y: 0, w: 300, h: 300 }, { x: 150, y: 900 }).y).toBeCloseTo(286);
+  });
+});
+
+describe("aimFinger: палец не ложится на Бита и пузырь", () => {
+  it("fingerRect: «пальцем вверх» — палец ниже кончика, кисть справа", () => {
+    expect(fingerRect({ x: 100, y: 100, angle: 0 })).toEqual({ x: 86, y: 98, w: 42, h: 58 });
+    // Повёрнут на 180° (палец сверху цели, смотрит вниз) — тянется вверх от кончика.
+    const down = fingerRect({ x: 100, y: 100, angle: 180 });
+    expect(down.y + down.h).toBeCloseTo(102);
+    expect(down.y).toBeCloseTo(44);
+  });
+  it("цель вверху (чипы в шапке), Бит внизу — палец со стороны Бита, как раньше", () => {
+    const target = { x: 250, y: 10, w: 64, h: 36 };
+    const vp = { vw: 360, vh: 740, bottomInset: 64 };
+    const p = placeBit(target, vp, 34);
+    const r = placementRects(p, vp.vh, 34);
+    const from = { x: r.bit.x + BIT_SIZE / 2, y: r.bit.y + BIT_SIZE / 2 };
+    expect(aimFinger(target, from, [r.bit, r.bubble], vp.vw, vp.vh)).toEqual(fingerPose(target, from));
+  });
+  it("360×760, «Нажми «Начать»»: Бит и пузырь сразу под кнопкой — палец заходит с другой стороны и их не закрывает", () => {
+    const vp = { vw: 360, vh: 760, bottomInset: 64 };
+    const target = { x: 10, y: 454, w: 340, h: 62 };
+    const len = 47;
+    const p = placeBit(target, vp, len);
+    const r = placementRects(p, vp.vh, len);
+    const from = { x: r.bit.x + BIT_SIZE / 2, y: r.bit.y + BIT_SIZE / 2 };
+    const f = aimFinger(target, from, [r.bit, r.bubble], vp.vw, vp.vh);
+    const box = fingerRect(f);
+    expect(overlaps(box, r.bit)).toBe(false);
+    expect(overlaps(box, r.bubble)).toBe(false);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.w).toBeLessThanOrEqual(vp.vw);
+    // Кончик — у самой цели.
+    expect(f.y).toBeGreaterThanOrEqual(target.y);
+    expect(f.y).toBeLessThanOrEqual(target.y + target.h);
+  });
+  it("«Проверить» у низа урока: Бит поднят над кнопкой — палец его не закрывает", () => {
+    const vp = { vw: 360, vh: 640, bottomInset: 0 };
+    const target = { x: 10, y: 566, w: 340, h: 68 };
+    const p = placeBit(target, vp, 25);
+    const r = placementRects(p, vp.vh, 25);
+    const f = aimFinger(target, { x: r.bit.x + BIT_SIZE / 2, y: r.bit.y + BIT_SIZE / 2 }, [r.bit, r.bubble], vp.vw, vp.vh);
+    expect(overlaps(fingerRect(f), r.bit)).toBe(false);
+    expect(overlaps(fingerRect(f), r.bubble)).toBe(false);
+  });
+  it("свободного места нет нигде — палец со стороны Бита", () => {
+    const target = { x: 0, y: 0, w: 360, h: 640 };
+    const from = { x: 300, y: 600 };
+    expect(aimFinger(target, from, [{ x: 0, y: 0, w: 360, h: 640 }], 360, 640)).toEqual(fingerPose(target, from));
   });
 });

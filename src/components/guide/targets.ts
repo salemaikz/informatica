@@ -29,8 +29,22 @@ export function radiusOf(el: Element | null): number {
   return Number.isFinite(v) ? v : 16;
 }
 
+/**
+ * Окно действительно на экране: не внутри `[inert]` / `[hidden]` (закрытая, но смонтированная панель Бита) и не скрыто
+ * стилями (`display: none` у него или предка, `visibility: hidden`).
+ */
+export function shownOnScreen(el: Element): boolean {
+  if (el.closest("[inert], [hidden]")) return false;
+  if (getComputedStyle(el).visibility === "hidden") return false;
+  for (let n: Element | null = el; n; n = n.parentElement) if (getComputedStyle(n).display === "none") return false;
+  return true;
+}
+
+/** Модальное окно поверх страницы — чужое: не сам проводник (`[data-guide]`) и действительно на экране. */
+export const liveModal = (el: Element): boolean => !el.closest("[data-guide]") && shownOnScreen(el);
+
 /** Открыто чужое модальное окно (шторка, кейс, тарифы): Бит ждёт, пока его закроют. */
-export const foreignModal = (): boolean => !!document.querySelector('[role="dialog"][aria-modal="true"]:not([data-guide])');
+export const foreignModal = (): boolean => Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).some(liveModal);
 
 /** Высота safe-area снизу (полоска «домой» на iPhone): env() из JS не прочитать — меряем пробником. */
 let safeProbe: HTMLDivElement | null = null;

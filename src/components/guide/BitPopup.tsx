@@ -93,7 +93,7 @@ export interface BitPopupProps {
   action: GuideAction;
   /** Последний шаг: «Понятно» вместо «Дальше». */
   last: boolean;
-  /** Шаг с затемнением: пузырь — модальный диалог. */
+  /** Шаг с затемнением и «Дальше»: пузырь — модальный диалог, фокус на «Дальше». Шаг «нажми» — не модальный (фокус на цели). */
   modal: boolean;
   reduce: boolean;
   sound: boolean;
@@ -221,11 +221,12 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
               >
                 {t("guide.skip")}
               </Button>
-              {/* Фокус — на «Дальше», когда реплика появилась (у шага «нажми» фокус ставит GuideHost — на цель). */}
+              {/* Фокус — на «Дальше», только когда пузырь модальный (шаг с затемнением). Без затемнения страница работает —
+                  фокус ученика не уводим; у шага «нажми» фокус ставит GuideHost — на цель. */}
               {action === "next" && (
                 <Button
                   size="md"
-                  autoFocus
+                  autoFocus={modal}
                   className="min-w-24"
                   onClick={(e) => {
                     e.stopPropagation();
