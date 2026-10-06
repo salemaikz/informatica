@@ -63,7 +63,11 @@ export function SectionTabs() {
   if (!group) return null;
   return (
     <nav aria-label={t("nav2.sections")} className="-mx-4 mb-4 sm:-mx-6 lg:hidden">
-      <div ref={scroller} className="relative flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+      {/* Края мягко гаснут (в зоне полей 16 px): обрезанная соседняя вкладка читается как «листай», а не как ошибка вёрстки. */}
+      <div
+        ref={scroller}
+        className="relative flex gap-2 overflow-x-auto px-4 py-1 [mask-image:linear-gradient(to_right,transparent,black_1rem,black_calc(100%-1rem),transparent)] [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
+      >
         {group.subs.map((sub) => {
           const active = sub.id === current;
           return (
@@ -73,7 +77,7 @@ export function SectionTabs() {
               active={active}
               className={cn(
                 "flex h-10 shrink-0 items-center gap-2 rounded-full border-2 px-4 text-sm font-extrabold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                active ? "border-primary/40 bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
+                active ? "border-primary/40 bg-primary-soft text-ink-primary" : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
               )}
             />
           );

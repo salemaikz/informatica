@@ -15,6 +15,8 @@ export const gamifyDict = {
   // ---- достижения: сводка, группы, шторка (K) ----
   "gamify.collected": { ru: "Собрано {a} из {b}", kk: "Жиналды: {a} / {b}" },
   "gamify.of": { ru: "{a} из {b}", kk: "{a} / {b}" },
+  // Короткий счётчик у мини-полосок сводки (узкая колонка на 360 px)
+  "gamify.ofShort": { ru: "{a}/{b}", kk: "{a}/{b}" },
   "gamify.group.common": { ru: "Обычные", kk: "Қарапайым" },
   "gamify.group.rare": { ru: "Редкие", kk: "Сирек" },
   "gamify.group.epic": { ru: "Эпические", kk: "Эпикалық" },

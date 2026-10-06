@@ -20,7 +20,7 @@ import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
 import { Composer } from "./Composer";
 import { LessonChips, LessonIntro } from "./LessonChat";
-import { displayTitle, firstUserText, lastPreview, MODE_NAME_KEY, quizInHistory, reviewRequest, toHistory, topicTitle } from "./helpers";
+import { chatHeader, firstUserText, lastPreview, quizInHistory, reviewRequest, toHistory } from "./helpers";
 import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
 import { QuizCard } from "./QuizCard";
@@ -122,8 +122,7 @@ export function ChatScreen({
     );
   }
 
-  const title = displayTitle(chat, lang, t);
-  const topic = topicTitle(chat.topic, lang, true);
+  const { title, subtitle } = chatHeader(chat, lang, t);
 
   /** Новая лента: в память, на диск и в метаданные списка (превью, счётчик, название по первому вопросу). */
   const commit = (next: ChatMsg[]) => {
@@ -247,10 +246,7 @@ export function ChatScreen({
           <span className="block truncate text-lg font-extrabold">{title}</span>
           <span className="flex items-center gap-1.5 text-xs font-extrabold text-ai">
             <ModeIcon mode={chat.mode} size={14} lesson={!!chat.lessonId} />
-            <span className="truncate">
-              {chat.lessonId ? t("theory16c.chat.badge") : t(MODE_NAME_KEY[chat.mode])}
-              {topic ? ` · ${topic}` : ""}
-            </span>
+            {subtitle && <span className="truncate">{subtitle}</span>}
           </span>
         </button>
         {!embedded && (

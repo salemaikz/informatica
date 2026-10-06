@@ -333,10 +333,20 @@ export function BitDock() {
   };
 
   const openPanel = () => {
+    // Поверх чужого окна (напоминания, тарифы, кейс) панель не открываем: кнопка прячется по наблюдателю не мгновенно.
+    if (overlayOpen()) return;
+    // Флаг — сразу, до загрузки куска панели: окна-агенты по нему не лезут поверх.
+    useGuideUi.getState().setChatOpen(true);
     setChatId(chooseChat());
     setMounted(true);
     setOpenPath(pathname);
   };
+
+  // Флаг «чат открыт» следует за состоянием панели (закрыли, ушли со страницы, открылись «Инструменты») и гаснет при размонтировании.
+  useEffect(() => {
+    useGuideUi.getState().setChatOpen(open);
+  }, [open]);
+  useEffect(() => () => useGuideUi.getState().setChatOpen(false), []);
 
   const newChat = () => setChatId(useApp.getState().createChat("free"));
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { lessonMeta } from "@/content/catalog";
@@ -23,12 +23,12 @@ const STATUS_KEY: Record<LessonReadStatus, DictKey> = {
 function dotClass(current: boolean, status: LessonReadStatus): string {
   if (current) return "border-primary bg-primary text-white";
   if (status === "done") return "border-success bg-success text-white";
-  if (status === "read") return "border-primary/40 bg-primary-soft text-primary";
+  if (status === "read") return "border-primary/40 bg-primary-soft text-ink-primary";
   return "border-border bg-surface text-muted hover:bg-surface-2";
 }
 
 /**
- * «Где я»: «Раздел 2 · Логика → Урок 3 из 8» и лента уроков раздела (кружки с номерами; нажатие — к другому уроку раздела).
+ * «Где я»: «← Раздел 2 · Логика … Урок 3 из 8» (одна строка) и лента уроков раздела (кружки с номерами; нажатие — к другому уроку раздела).
  * Номер раздела — как на карте курса; номер урока — среди готовых уроков раздела.
  */
 export function TheoryCrumbs({ place, lessonId, statusOf }: { place: LessonPlace; lessonId: string; statusOf: (id: string) => LessonReadStatus }) {
@@ -46,8 +46,9 @@ export function TheoryCrumbs({ place, lessonId, statusOf }: { place: LessonPlace
   }, [lessonId]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <nav className="flex min-w-0 items-center gap-1">
+    <div className="flex flex-col gap-1.5">
+      {/* Одна строка: ссылка на раздел (сжимается и обрезается, если длинная) и счётчик «Урок K из M» у правого края. */}
+      <nav className="flex min-w-0 items-center justify-between gap-3">
         <Link
           href={theoryUnitHref(place.unit.id)}
           className="-ml-2 flex min-h-10 min-w-0 items-center gap-1.5 rounded-xl px-2 text-sm font-extrabold hover:bg-surface-2"
@@ -58,12 +59,11 @@ export function TheoryCrumbs({ place, lessonId, statusOf }: { place: LessonPlace
             {t("learn.unit", { n: place.unitIndex + 1 })} · {l(place.unit.title)}
           </span>
         </Link>
-        <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden />
         <span className="shrink-0 text-sm font-extrabold text-muted">{t("theory16c.crumb.lesson", { n: place.number, m: place.total })}</span>
       </nav>
 
       {place.total > 1 && (
-        <div data-strip className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label={t("theory16c.strip.label")} role="group">
+        <div data-strip className="-mx-4 overflow-x-auto px-4 pb-1 pt-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label={t("theory16c.strip.label")} role="group">
           <ol className="flex w-max gap-2">
             {place.ids.map((id, i) => {
               const isCurrent = id === lessonId;
@@ -77,7 +77,8 @@ export function TheoryCrumbs({ place, lessonId, statusOf }: { place: LessonPlace
                     aria-current={isCurrent ? "page" : undefined}
                     aria-label={t("theory16c.strip.item", { n: i + 1, title: title ? l(title) : "", status: t(STATUS_KEY[status]) })}
                     className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-extrabold tabular-nums transition-colors",
+                      // Кружок 32 px (лента ниже ростом), зона касания — 40 px.
+                      "relative flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-extrabold tabular-nums transition-colors after:absolute after:-inset-1 after:content-['']",
                       "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
                       dotClass(isCurrent, status),
                     )}

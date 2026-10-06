@@ -126,6 +126,8 @@ export default function ProfilePage() {
                 onChange={(e) => setDraft(e.target.value.slice(0, NAME_MAX))}
                 className="h-11 w-full rounded-xl border-2 border-primary bg-surface px-3 text-lg font-extrabold outline-none"
               />
+              {/* Подсказка про 30 символов — только пока имя редактируется, в карточке она не висит. */}
+              <p className="text-xs font-semibold text-muted">{t("prof2.name.hint")}</p>
               <div className="flex gap-2">
                 <Button type="submit" size="sm" className="h-10" disabled={!draft.trim()}>
                   {t("prof2.name.save")}
@@ -143,7 +145,6 @@ export default function ProfilePage() {
             {t("prof2.name.edit")}
           </Button>
         )}
-        <p className="text-xs font-semibold text-muted">{t("prof2.name.hint")}</p>
       </ProfileCard>
 
       <LevelCard />

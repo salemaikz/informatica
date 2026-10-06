@@ -19,6 +19,7 @@ import { translate } from "@/i18n/useT";
 import { chat2Dict } from "@/i18n/parts/chat2";
 import {
   appendMessage,
+  chatHeader,
   clip,
   describeQuiz,
   displayTitle,
@@ -114,6 +115,31 @@ describe("components/chat/helpers", () => {
     expect(displayTitle({ title: " Мой ", mode: "free" }, "ru", trRu)).toBe("Мой");
     expect(displayTitle({ title: "", mode: "free" }, "ru", trRu)).toBe("Свободный");
     expect(displayTitle({ title: "", mode: "tasks", topic: "t04" }, "kk", trKk)).toBe("Тапсырма бер: Санау жүйелері");
+  });
+
+  it("шапка чата: заголовок и подзаголовок не повторяют друг друга («Еркін / Еркін»)", () => {
+    // Новый безымянный чат: «Новый чат» + режим — для всех режимов и обоих языков.
+    for (const mode of CHAT_MODES) {
+      for (const [lang, tr] of [["ru", trRu], ["kk", trKk]] as const) {
+        const h = chatHeader({ title: "", mode, count: 0 }, lang, tr);
+        expect(h.title, `${mode} ${lang}`).toBe(tr("chat2.new"));
+        expect(h.subtitle, `${mode} ${lang}`).toBe(tr(MODE_NAME_KEY[mode]));
+        expect(h.title.toLowerCase()).not.toBe(h.subtitle.toLowerCase());
+      }
+    }
+    expect(chatHeader({ title: "", mode: "free", count: 0 }, "kk", trKk)).toEqual({ title: "Жаңа чат", subtitle: "Еркін" });
+    expect(chatHeader({ title: "", mode: "free", count: 0 }, "ru", trRu)).toEqual({ title: "Новый чат", subtitle: "Свободный" });
+    // С темой — тема в подзаголовке.
+    expect(chatHeader({ title: "", mode: "tasks", topic: "t04", count: 0 }, "kk", trKk)).toEqual({ title: "Жаңа чат", subtitle: "Тапсырма бер · Санау жүйелері" });
+    // Своё название — как есть, режим под ним.
+    expect(chatHeader({ title: " Мой вопрос ", mode: "free", count: 3 }, "ru", trRu)).toEqual({ title: "Мой вопрос", subtitle: "Свободный" });
+    // Чат по теме урока: название урока, «По теме урока» под ним.
+    expect(chatHeader({ title: "Двоичная система", mode: "free", lessonId: "l1", count: 1 }, "ru", trRu)).toEqual({ title: "Двоичная система", subtitle: "По теме урока" });
+    // Без названия, но с сообщениями (фото вместо текста): без дубля.
+    expect(chatHeader({ title: "", mode: "free", count: 2 }, "ru", trRu)).toEqual({ title: "Свободный", subtitle: "" });
+    expect(chatHeader({ title: "", mode: "explain", topic: "t04", count: 2 }, "ru", trRu)).toEqual({ title: "Счисление", subtitle: "Объясни тему" });
+    // Переименовали в имя режима — подзаголовок не повторяет.
+    expect(chatHeader({ title: "Свободный", mode: "free", count: 2 }, "ru", trRu).subtitle).toBe("");
   });
 
   it("история для ИИ: последние 12, карточка итога — текстом", () => {

@@ -134,3 +134,30 @@ export function displayTitle(c: { title: string; mode: ChatMode; topic?: EntTopi
   const topic = topicTitle(c.topic, lang, true);
   return topic ? `${mode}: ${topic}` : mode;
 }
+
+/**
+ * Шапка чата: заголовок и подзаголовок без повтора одного слова («Еркін / Еркін»). Свой заголовок — как есть, под ним режим (и тема);
+ * чат без названия и без сообщений — «Новый чат», под ним режим; без названия, но с сообщениями — тема (или режим) без подзаголовка-дубля.
+ * Чат по теме урока в подзаголовке называет «По теме урока».
+ */
+export function chatHeader(
+  c: { title: string; mode: ChatMode; topic?: EntTopicId; lessonId?: string; count?: number },
+  lang: Lang,
+  tr: Tr,
+): { title: string; subtitle: string } {
+  const own = c.title.trim();
+  const modeName = c.lessonId ? tr("theory16c.chat.badge") : tr(MODE_NAME_KEY[c.mode]);
+  const topic = topicTitle(c.topic, lang, true);
+  const full = topic ? `${modeName} · ${topic}` : modeName;
+  let title: string;
+  let subtitle = full;
+  if (own) title = own;
+  else if ((c.count ?? 0) === 0) title = tr("chat2.new");
+  else {
+    title = topic || modeName;
+    subtitle = topic ? modeName : "";
+  }
+  // Название совпало с подписью (чат переименовали в «Свободный») — второй раз не повторяем.
+  if (subtitle.trim().toLowerCase() === title.trim().toLowerCase()) subtitle = "";
+  return { title, subtitle };
+}

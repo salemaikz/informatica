@@ -72,7 +72,8 @@ export function ProfileCard({
             <LevelBadge level={level} size="md" className="shrink-0" />
             <div className="min-w-0 leading-tight">
               <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("stats.level")}</p>
-              <p className="truncate font-extrabold">{l(levelTitle(level))}</p>
+              {/* Звание не обрезаем: «Жаңадан бастаушы» (~158 px) не влезает в ~130 px рядом с аватаром — переносится на вторую строку. */}
+              <p className="break-words font-extrabold">{l(levelTitle(level))}</p>
             </div>
           </div>
         </div>

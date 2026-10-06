@@ -46,8 +46,9 @@ export function TitleTag({ title, size = "md", className }: { title: CosmeticId 
     <span
       data-title={def.id}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 rounded-full border text-center font-extrabold leading-tight",
-        size === "sm" ? "px-2 py-0.5 text-[11px]" : size === "lg" ? "gap-1.5 px-4 py-1.5 text-base" : "px-2.5 py-1 text-xs",
+        "inline-flex max-w-full items-center gap-1 border text-center font-extrabold leading-tight",
+        // sm — в узкой карточке сетки (~100 px): значок над названием, а не слева «посередине» двух строк текста.
+        size === "sm" ? "flex-col rounded-2xl px-2 py-1 text-[11px]" : size === "lg" ? "gap-1.5 rounded-full px-4 py-1.5 text-base" : "rounded-full px-2.5 py-1 text-xs",
         RARITY_SOFT[def.rarity],
         RARITY_TEXT[def.rarity],
         TAG_BORDER[def.rarity],

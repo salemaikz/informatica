@@ -28,7 +28,7 @@ export const profileDict = {
   "prof2.name.label": { ru: "Имя", kk: "Аты" },
   "prof2.name.placeholder": { ru: "Как тебя зовут?", kk: "Атың кім?" },
   "prof2.name.hint": { ru: "До 30 символов. По имени к тебе обращаются Бит и ИИ-помощник.", kk: "30 таңбаға дейін. Бит пен ЖИ-көмекші саған осы атпен сөйлеседі." },
-  "prof2.name.edit": { ru: "Изменить", kk: "Өзгерту" },
+  "prof2.name.edit": { ru: "Изменить имя", kk: "Атты өзгерту" },
   "prof2.name.save": { ru: "Сохранить", kk: "Сақтау" },
   "prof2.goals.title": { ru: "Цели", kk: "Мақсаттар" },
   "prof2.goals.examDate": { ru: "Дата ЕНТ", kk: "ҰБТ күні" },

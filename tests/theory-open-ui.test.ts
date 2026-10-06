@@ -237,6 +237,28 @@ describe("страница чтения (TheoryReader)", () => {
     expect(hearts()).toBe(5);
   });
 
+  it("компактная шапка: «Спросить Бита» — короткая кнопка с меткой тура, переключатель режима — в строке «Карточка 1 из N», метки тура на месте", async () => {
+    await render(createElement(StrictMode, null, reader()));
+    await frame();
+    const ask = host.querySelector<HTMLElement>("[data-tour=theory-ask]")!;
+    expect(ask.textContent).toBe("Спросить Бита");
+    expect(ask.getAttribute("aria-label")).toBe("Спросить Бита об этой теме");
+    expect(ask.className).toContain("bg-ai");
+    // Сводка «N карточек · M мин чтения» — одна строка текста, без пилюль.
+    expect(host.querySelector("h1")!.nextElementSibling!.textContent).toMatch(/\d+ карточ\S* · \d+ мин чтения/);
+    // Переключатель и подпись «Карточка 1 из N» — в одной строке; под ней сегменты.
+    const label = [...host.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Карточка 1 из"))!;
+    const row = label.parentElement!;
+    const toggle = row.querySelector('[role="group"]')!;
+    expect(toggle.getAttribute("aria-label")).toBe("Как читать");
+    expect([...toggle.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["По карточкам", "Всё сразу"]);
+    expect(host.querySelector("[data-tour=theory-next]")).not.toBeNull();
+    // «Всё сразу»: переключатель остаётся (справа), подписи «Карточка 1 из» нет.
+    await act(async () => ([...toggle.querySelectorAll("button")].find((b) => b.textContent === "Всё сразу") as HTMLElement).click());
+    expect(body()).not.toContain("Карточка 1 из");
+    expect(host.querySelector('[role="group"][aria-label="Как читать"]')).not.toBeNull();
+  });
+
   it("P3: сердечек нет — окно «Сердечки закончились», текста темы нет, выход — к списку теории", async () => {
     useApp.setState({ hearts: { count: 0, updatedAt: Date.now(), day: todayKey() } });
     await render(reader());

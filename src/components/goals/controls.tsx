@@ -9,14 +9,18 @@ export function Segmented<T extends string | number>({
   options,
   onChange,
   label,
+  size = "md",
 }: {
   value: T;
   options: { id: T; label: string }[];
   onChange: (v: T) => void;
   label?: string;
+  /** sm — компактные сегменты в одну строку с другими элементами (визуально 32 px, зона касания шире на невидимые 6 px сверху и снизу). */
+  size?: "md" | "sm";
 }) {
+  const sm = size === "sm";
   return (
-    <div role="group" aria-label={label} className="flex min-w-0 max-w-full flex-wrap gap-1.5">
+    <div role="group" aria-label={label} className={cn("flex min-w-0 max-w-full", sm ? "gap-1" : "flex-wrap gap-1.5")}>
       {options.map((o) => (
         <button
           key={String(o.id)}
@@ -24,8 +28,11 @@ export function Segmented<T extends string | number>({
           onClick={() => onChange(o.id)}
           aria-pressed={value === o.id}
           className={cn(
-            "min-h-10 max-w-full rounded-xl border-2 px-3.5 py-1.5 text-sm font-bold transition-colors",
-            value === o.id ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-muted hover:text-text",
+            "max-w-full border-2 font-bold transition-colors",
+            sm
+              ? "relative min-h-8 rounded-lg px-2 text-xs font-extrabold after:absolute after:-inset-x-0.5 after:-inset-y-1.5 after:content-['']"
+              : "min-h-10 rounded-xl px-3.5 py-1.5 text-sm",
+            value === o.id ? "border-primary bg-primary-soft text-ink-primary" : "border-border bg-surface text-muted hover:text-text",
           )}
         >
           {o.label}

@@ -13,6 +13,7 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { easeOut, springBouncy, springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { cosmeticDef } from "@/lib/cosmetics";
+import { levelTitle } from "@/lib/gamification";
 import { cn } from "@/lib/cn";
 import { COSMETIC_PRIZE_BOX, CosmeticPrizeBody, EquipPrizeButton } from "./CosmeticPrize";
 import { PrizeIcon, prizeDesc, prizeName, prizeShortName } from "./prize";
@@ -66,7 +67,7 @@ export function LevelCase({
   /** Окно перемонтировано после выдачи приза: сразу показываем уже выпавший приз (без ленты, конфетти и звука). */
   initialRoll?: LevelCaseRoll;
 }) {
-  const { t } = useT();
+  const { t, l } = useT();
   const reduce = useReduceMotion();
   const [phase, setPhase] = useState<Phase>(initialRoll ? "reveal" : "closed");
   const [roll, setRoll] = useState<LevelCaseRoll | null>(initialRoll ?? null);
@@ -195,15 +196,17 @@ export function LevelCase({
               </m.span>
             </div>
             <m.div className="flex flex-col gap-1.5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.15 }}>
-              <div className="flex items-center justify-center gap-2">
-                <LevelBadge level={level} size="md" />
-                <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("gamify.newLevel")}</p>
+              {/* «Новый уровень!» — только в заголовке ниже; здесь — номер и звание уровня (без повтора той же фразы). */}
+              <div className="flex items-center justify-center gap-2.5">
+                <LevelBadge level={level} size="md" plate />
+                <p className="text-sm font-extrabold uppercase tracking-wide text-ink-warning">{l(levelTitle(level))}</p>
               </div>
               <h1 className="text-balance text-3xl font-extrabold leading-tight">{t("case.title")}</h1>
               <p className="text-balance font-semibold text-muted">{t("case.sub")}</p>
             </m.div>
             <m.div className="flex w-full flex-col gap-2" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.3 }}>
-              <Button variant="primary" size="lg" block onClick={begin} autoFocus>
+              {/* autoFocus нужен клавиатуре; на телефоне кольцо фокуса не рисуем (иначе у кнопки двойная рамка). */}
+              <Button variant="primary" size="lg" block onClick={begin} autoFocus className="pointer-coarse:focus-visible:outline-0">
                 {t("case.open")}
               </Button>
               <Button variant="ghost" size="md" block onClick={onClose}>
@@ -216,9 +219,10 @@ export function LevelCase({
         {phase === "spin" && roll && (
           <>
             <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-center gap-2">
-                <LevelBadge level={level} size="md" />
-                <p className="text-sm font-extrabold uppercase tracking-wide text-warning-strong">{t("gamify.newLevel")}</p>
+              {/* «Новый уровень!» — только в заголовке ниже; здесь — номер и звание уровня (без повтора той же фразы). */}
+              <div className="flex items-center justify-center gap-2.5">
+                <LevelBadge level={level} size="md" plate />
+                <p className="text-sm font-extrabold uppercase tracking-wide text-ink-warning">{l(levelTitle(level))}</p>
               </div>
               <h1 className="text-balance text-2xl font-extrabold leading-tight">{t("case.spinning")}</h1>
             </div>
@@ -267,7 +271,7 @@ export function LevelCase({
             </m.div>
             <m.div className={cn("w-full", cosmeticId && "grid grid-cols-2 gap-2")} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springSoft, delay: 0.5 }}>
               {cosmeticId && <EquipPrizeButton id={cosmeticId} />}
-              <Button variant="primary" size="lg" block onClick={onClose} autoFocus>
+              <Button variant="primary" size="lg" block onClick={onClose} autoFocus className="pointer-coarse:focus-visible:outline-0">
                 {t("case.done")}
               </Button>
             </m.div>
