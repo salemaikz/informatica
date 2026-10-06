@@ -17,6 +17,8 @@ import { ChipBurst } from "./ChipBurst";
 // Компактные значки для шапки приложения: сердечки и чипы. Оба ведут в магазин.
 
 const BUMP_DELAY = 0.3;
+/** Фокус как у примитивов (RULES 2.10), а не стандартная обводка браузера. */
+const FOCUS = "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 // Что ученик уже «видел» в шапке: урок идёт вне оболочки, и, вернувшись, он увидит рост чипов.
 let seenChips: number | null = null;
@@ -40,6 +42,7 @@ export function HeartsChip({ className }: { className?: string }) {
       className={cn(
         "relative flex h-10 shrink-0 items-center gap-1 rounded-xl px-1 font-extrabold hover:bg-surface-2",
         "text-heart",
+        FOCUS,
         className,
       )}
     >
@@ -92,7 +95,7 @@ export function ChipsChip({ className }: { className?: string }) {
       href="/shop"
       aria-label={label}
       title={label}
-      className={cn("relative flex h-10 shrink-0 items-center gap-1 rounded-xl px-1 font-extrabold text-warning-strong hover:bg-surface-2", className)}
+      className={cn("relative flex h-10 shrink-0 items-center gap-1 rounded-xl px-1 font-extrabold text-warning-strong hover:bg-surface-2", FOCUS, className)}
     >
       <Cpu size={20} className="text-gold" />
       <m.span

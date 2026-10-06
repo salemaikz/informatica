@@ -17,19 +17,21 @@ import { formatNum, shopAvailability } from "./shop-helpers";
 import { refillGain, shownPrice } from "./shop-rules";
 import { useChips, useHearts } from "./useEconomy";
 
-/** Раздел магазина: заголовок, подсказка и содержимое. */
+/** Раздел магазина: заголовок, подсказка и содержимое. `tour` — метка проводника на заголовке с подсказкой. */
 export function ShopSection({
   title,
   hint,
+  tour,
   children,
 }: {
   title: string;
   hint?: string;
+  tour?: string;
   children: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <div>
+      <div data-tour={tour}>
         <h2 className="text-lg font-extrabold">{title}</h2>
         {hint && <p className="text-sm font-semibold text-muted">{hint}</p>}
       </div>
@@ -81,6 +83,8 @@ export function ChipPrice({ n, className, plus }: { n: number; className?: strin
  * Строка товара за чипы (сердечки, бустеры). Кнопка «Купить»:
  * хватает чипов — покупка (звук, пульс строки, «Куплено»); не хватает — встряска и причина; запас полон/безлимит — неактивна.
  * Цена — shownPrice (у «Полного запаса» — за недостающие сейчас, в названии «+N»; при overflow — «Выгоднее по одному или тройкой»).
+ * Причина — строкой во всю ширину под товаром: на 360 px рядом с иконкой и кнопкой она растягивала карточку на 6 строк.
+ * `tour` — метка проводника на строке.
  */
 export function ChipItemRow({
   item,
@@ -88,12 +92,14 @@ export function ChipItemRow({
   tone,
   nameKey,
   descKey,
+  tour,
 }: {
   item: ShopItem;
   icon: ReactNode;
   tone: "gold" | "heart";
   nameKey: DictKey;
   descKey: DictKey;
+  tour?: string;
 }) {
   const { t } = useT();
   const hearts = useHearts();
@@ -160,46 +166,49 @@ export function ChipItemRow({
   return (
     <m.div
       animate={controls}
-      className="flex items-center gap-3 rounded-3xl border-2 border-border bg-surface p-3.5"
+      data-tour={tour}
+      className="flex flex-col gap-2 rounded-3xl border-2 border-border bg-surface p-3.5"
     >
-      <IconTile tone={tone}>{icon}</IconTile>
-      <div className="min-w-0 flex-1 break-words">
-        <p className="font-extrabold leading-tight">{name}</p>
-        <p className="text-sm font-semibold text-muted">{desc}</p>
-        {reason && (
-          <p
-            className={cn(
-              "mt-0.5 flex items-center gap-1 text-[13px] font-extrabold",
-              done ? "text-success-strong" : blocked ? "text-muted" : "text-warning-strong",
-            )}
+      <div className="flex items-center gap-3">
+        <IconTile tone={tone}>{icon}</IconTile>
+        <div className="min-w-0 flex-1 break-words">
+          <p className="font-extrabold leading-tight">{name}</p>
+          <p className="text-sm font-semibold text-muted">{desc}</p>
+        </div>
+        <Shake active={shake} className="shrink-0">
+          <Button
+            variant={done ? "success" : av.ok ? "primary" : "secondary"}
+            size="md"
+            disabled={blocked && !done}
+            onClick={onBuy}
+            aria-label={done ? t("shop.bought") : `${t("shop.buy")}: ${name}`}
+            className="min-w-24 justify-center"
           >
-            {reason}
-            {!blocked && !done && <Cpu size={13} />}
-          </p>
-        )}
+            {done ? (
+              <Check size={20} strokeWidth={3} aria-label={t("shop.bought")} />
+            ) : (
+              <>
+                <Cpu
+                  size={17}
+                  className={av.ok || blocked ? undefined : "text-gold"}
+                />
+                {formatNum(price)}
+              </>
+            )}
+          </Button>
+        </Shake>
       </div>
-      <Shake active={shake} className="shrink-0">
-        <Button
-          variant={done ? "success" : av.ok ? "primary" : "secondary"}
-          size="md"
-          disabled={blocked && !done}
-          onClick={onBuy}
-          aria-label={done ? t("shop.bought") : `${t("shop.buy")}: ${name}`}
-          className="w-28 justify-center"
-        >
-          {done ? (
-            <Check size={20} strokeWidth={3} aria-label={t("shop.bought")} />
-          ) : (
-            <>
-              <Cpu
-                size={17}
-                className={av.ok || blocked ? undefined : "text-gold"}
-              />
-              {formatNum(price)}
-            </>
+      {reason && (
+        <p
+          className={cn(
+            "flex items-center gap-1 text-[13px] font-extrabold",
+            done ? "text-success-strong" : blocked ? "text-muted" : "text-warning-strong",
           )}
-        </Button>
-      </Shake>
+        >
+          {reason}
+          {!blocked && !done && <Cpu size={13} className="shrink-0" />}
+        </p>
+      )}
     </m.div>
   );
 }

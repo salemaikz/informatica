@@ -266,18 +266,32 @@ export default function ProfilePage() {
         <ReminderSettings />
       </Card>
 
-      <Card data-tour="profile-settings" className="divide-y-2 divide-border py-1">
-        <Row label={t("prof.lang")}>
-          <Segmented<Lang>
-            label={t("prof.lang")}
-            value={profile.lang}
-            onChange={(lang) => update({ lang })}
-            options={[
-              { id: "kk", label: "Қазақша" },
-              { id: "ru", label: "Русский" },
-            ]}
-          />
-        </Row>
+      <Card className="divide-y-2 divide-border py-1">
+        {/* Язык, тема и звук — вместе, вверху карточки: метка проводника на них (компактная цель, вся карточка выше экрана). */}
+        <div data-tour="profile-settings" className="divide-y-2 divide-border">
+          <Row label={t("prof.lang")}>
+            <Segmented<Lang>
+              label={t("prof.lang")}
+              value={profile.lang}
+              onChange={(lang) => update({ lang })}
+              options={[
+                { id: "kk", label: "Қазақша" },
+                { id: "ru", label: "Русский" },
+              ]}
+            />
+          </Row>
+          <Row label={t("prof.theme")}>
+            <Segmented<Theme>
+              label={t("prof.theme")}
+              value={profile.theme}
+              onChange={(theme) => update({ theme })}
+              options={(["system", "light", "dark"] as const).map((th) => ({ id: th, label: t(`theme.${th}` as DictKey) }))}
+            />
+          </Row>
+          <Row label={t("prof.sound")}>
+            <OnOff label={t("prof.sound")} value={profile.sound} onChange={(sound) => update({ sound })} />
+          </Row>
+        </div>
         <Row label={t("prof.goal")}>
           <Segmented<Goal>
             label={t("prof.goal")}
@@ -301,17 +315,6 @@ export default function ProfilePage() {
             onChange={(dailyGoalXp) => update({ dailyGoalXp })}
             options={[20, 50, 100].map((x) => ({ id: x, label: `${t(`daily.${x}` as DictKey)} · ${x} XP` }))}
           />
-        </Row>
-        <Row label={t("prof.theme")}>
-          <Segmented<Theme>
-            label={t("prof.theme")}
-            value={profile.theme}
-            onChange={(theme) => update({ theme })}
-            options={(["system", "light", "dark"] as const).map((th) => ({ id: th, label: t(`theme.${th}` as DictKey) }))}
-          />
-        </Row>
-        <Row label={t("prof.sound")}>
-          <OnOff label={t("prof.sound")} value={profile.sound} onChange={(sound) => update({ sound })} />
         </Row>
         <Row label={t("prof.vibration")}>
           <OnOff label={t("prof.vibration")} value={profile.vibration} onChange={(vibration) => update({ vibration })} />

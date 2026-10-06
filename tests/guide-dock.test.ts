@@ -45,7 +45,7 @@ const render = (el: ReturnType<typeof createElement>) =>
   act(async () => {
     root.render(el);
   });
-const dock = () => document.querySelector<HTMLButtonElement>('[data-tour="bit-dock"]');
+const dock = () => document.querySelector<HTMLButtonElement>("[data-dock-button]");
 const tab = () => document.querySelector<HTMLButtonElement>("[data-dock-tab]");
 /** Окно поверх страницы; wrap — обёртка (для inert / data-guide). */
 function modal(wrapAttrs: Record<string, string> = {}) {

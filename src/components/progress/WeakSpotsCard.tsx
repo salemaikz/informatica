@@ -19,9 +19,12 @@ export { REASON_TONE };
 
 /**
  * «Слабые места» (#71): до 5 навыков с низкой оценкой, упавшей точностью или давней практикой.
- * У каждого — освоение, точность за 30 дней, причина и адресная кнопка «Потренировать». Данных мало — спокойная подсказка, не красная.
+ * У каждого — освоение, точность за 30 дней, причина и адресная кнопка «Потренировать». Данных мало — спокойная подсказка, не красная
+ * (и без «Данных пока нет» снизу — то же самое второй раз).
+ * `tour` — метки проводника: список есть — `stats-weak` на заголовке и `stats-weak-first` на первой теме (компактная цель),
+ * тем нет — `stats-weak` на всей (невысокой) карточке.
  */
-export function WeakSpotsCard({ limit = 5, className }: { limit?: number; className?: string }) {
+export function WeakSpotsCard({ limit = 5, className, tour }: { limit?: number; className?: string; tour?: boolean }) {
   const { t, l } = useT();
   const skills = useSkillStats();
   const skillDays = useApp((s) => s.skillDays);
@@ -30,10 +33,13 @@ export function WeakSpotsCard({ limit = 5, className }: { limit?: number; classN
   const enough = hasEnoughData(skills);
   // Слабые навыки, по которым ответов ещё меньше порога: говорить «слабых мест нет» нельзя (C21).
   const pending = useMemo(() => pendingWeakCount(skills), [skills]);
+  const empty = spots.length === 0;
+  // Данных ещё нет совсем: подпись «Данных пока нет» повторила бы «Мало данных».
+  const fewData = empty && pending === 0 && !enough;
 
   return (
-    <Card className={className}>
-      <div className="mb-3 flex items-start gap-3">
+    <Card className={className} data-tour={tour && empty ? "stats-weak" : undefined}>
+      <div data-tour={tour && !empty ? "stats-weak" : undefined} className="mb-3 flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <Crosshair size={24} aria-hidden />
         </span>
@@ -49,18 +55,18 @@ export function WeakSpotsCard({ limit = 5, className }: { limit?: number; classN
             <p className="font-bold text-muted">{t("progress.weak.pending")}</p>
           ) : (
             <>
-              <p className="font-extrabold">{enough ? t("progress.weak.empty") : t("progress.weak.fewData", { n: MIN_ANSWERS })}</p>
+              <p className={enough ? "font-extrabold" : "font-bold text-muted"}>{enough ? t("progress.weak.empty") : t("progress.weak.fewData", { n: MIN_ANSWERS })}</p>
               {enough && <p className="text-sm font-semibold text-muted">{t("progress.weak.emptyHint")}</p>}
             </>
           )}
         </div>
       ) : (
         <ul className="flex flex-col gap-3">
-          {spots.map((s) => {
+          {spots.map((s, i) => {
             const sk = skillById(s.skill);
             const title = sk ? l(sk.title) : s.skill;
             return (
-              <li key={s.skill} className="rounded-2xl bg-surface-2 p-3">
+              <li key={s.skill} data-tour={tour && i === 0 ? "stats-weak-first" : undefined} className="rounded-2xl bg-surface-2 p-3">
                 <p className="break-normal font-extrabold leading-snug">{title}</p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold text-muted">
                   <span>{t("progress.weak.mastery", { p: percent(s.mastery) })}</span>
@@ -77,7 +83,7 @@ export function WeakSpotsCard({ limit = 5, className }: { limit?: number; classN
           })}
         </ul>
       )}
-      <DataSince period={30} className="mt-3" />
+      {!fewData && <DataSince period={30} className="mt-3" />}
     </Card>
   );
 }

@@ -31,13 +31,11 @@ export default function StatsPage() {
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-extrabold">{t("stats.title")}</h1>
 
-      {/* Метки для проводника по странице (data-tour): сводка и слабые места. */}
+      {/* Метки для проводника по странице (data-tour): сводка и слабые места (их метки ставит сама карточка). */}
       <div data-tour="stats-overview">
         <CourseProgressCard />
       </div>
-      <div data-tour="stats-weak">
-        <WeakSpotsCard />
-      </div>
+      <WeakSpotsCard tour />
       <UnitProgressList />
       {ent && <TopicTable />}
 

@@ -159,13 +159,13 @@ export default function PracticePage() {
 
       {GAMES.length > 0 && (
         <section>
-          {/* Заголовок раздела — метка для Бита-проводника. */}
+          {/* Метки для Бита-проводника: заголовок раздела и первая игра — вместе это заголовок с первым рядом игр. */}
           <div data-tour="practice-games" className="mb-3">
             <h2 className="text-lg font-extrabold">{t("games.title")}</h2>
             <p className="text-sm font-semibold text-muted">{t("games.subtitle")}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {GAMES.map((g) => {
+            {GAMES.map((g, i) => {
               const open = gameOpen(g, completedSkills);
               const best = games[g.id]?.best;
               // Универсальные игры берут навыки пройденных уроков (если они есть), остальные — свои.
@@ -175,6 +175,7 @@ export default function PracticePage() {
                 <Link
                   key={g.id}
                   href={href}
+                  data-tour={i === 0 ? "practice-games-first" : undefined}
                   aria-disabled={!open}
                   tabIndex={open ? undefined : -1}
                   className={clsx(

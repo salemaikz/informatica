@@ -58,9 +58,10 @@ test("проводник и кнопка Бита: приветствие → о
   const finger = page.locator("[data-guide-finger]");
   const next = () => bubble.getByRole("button", { name: "Дальше" }).click();
 
-  // --- welcome: без цели — статус, без затемнения; кнопки Бита нет с самого начала (не выезжает на миг перед сценой).
+  // --- welcome: без цели — модальный диалог на затемнённом экране; кнопки Бита нет с самого начала (не выезжает на миг перед сценой).
   await expect(bubble).toContainText("Привет, Т! Я Бит.");
-  await expect(page.getByRole("status", { name: "Подсказка Бита" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Подсказка Бита" })).toBeVisible();
+  await expect(page.locator("[data-guide-dim]")).toHaveCount(1);
   await expect(dock).toHaveCount(0);
   await next();
 
@@ -115,14 +116,14 @@ test("проводник и кнопка Бита: приветствие → о
   await expect(bubble).toContainText("нажми на чипы");
   await expect(page.locator("[data-bit-panel]")).toHaveCount(0);
 
-  // Шаг «нажми» — палец есть; нажатие на чипы уводит в магазин, там своя сцена.
+  // Шаг «нажми» — палец есть; нажатие на чипы уводит в магазин, там своя сцена (в порядке страницы: украшения, сердечки).
   await expect(finger).toHaveCount(1);
   await page.locator('[data-tour="hdr-chips"]:visible').first().click();
   await page.waitForURL("**/shop");
-  await expect(bubble).toContainText("Закончились сердечки");
+  await expect(bubble).toContainText("украшения профиля");
   await expect(dock).toHaveCount(0);
   await next();
-  await expect(bubble).toContainText("украшения профиля");
+  await expect(bubble).toContainText("закончатся сердечки");
   await bubble.getByRole("button", { name: "Понятно" }).click();
   await expect(bubble).toBeHidden();
 
@@ -141,7 +142,7 @@ test("проводник и кнопка Бита: приветствие → о
   // --- «Практика»: сцена page-practice появляется, кнопка Бита на это время спрятана.
   await page.getByRole("navigation", { name: "Главное меню" }).getByRole("link", { name: "Практика" }).click();
   await page.waitForURL("**/practice");
-  await expect(bubble).toContainText("Тренировка — 10 заданий");
+  await expect(bubble).toContainText("Умная тренировка");
   await expect(dock).toHaveCount(0);
   await next();
   await expect(bubble).toContainText("Игры — те же задания");
