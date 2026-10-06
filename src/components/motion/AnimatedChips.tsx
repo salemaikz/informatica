@@ -9,6 +9,7 @@ import { XpIcon } from "@/components/economy/XpIcon";
 import { useT } from "@/i18n/useT";
 import { CountUp } from "./CountUp";
 import { XpBurst } from "./XpBurst";
+import { StreakReminderBadge, StreakReminderText, streakTitle } from "./ComboFlame";
 
 // Что ученик уже «видел» в шапке. Урок идёт вне оболочки приложения, поэтому, вернувшись на главную,
 // он увидит, как XP и серия выросли (счётчик докручивается, всплывает «+N», пламя качается).
@@ -69,22 +70,20 @@ export function StreakChipAnimated() {
   }, [current]);
 
   return (
-    <span data-tour="hdr-streak" title={current > 0 && !activeToday ? `${t("stats.streak")}: ${t("streak.notToday")}` : t("stats.streak")} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
-      <m.span
-        className="flex origin-bottom"
-        animate={wiggling ? { rotate: [0, -16, 14, -9, 5, 0], scale: [1, 1.25, 1.25, 1.1, 1, 1] } : { rotate: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: "easeInOut", delay: wiggling ? BUMP_DELAY : 0 }}
-        onAnimationComplete={() => setWiggling(false)}
-      >
-        <Flame size={20} fill={current > 0 ? "currentColor" : "none"} />
-      </m.span>
+    <span data-tour="hdr-streak" title={streakTitle(t, current, activeToday)} className={clsx("flex items-center gap-1 font-extrabold", current > 0 ? "text-streak" : "text-muted")}>
+      <span className={clsx("relative flex", current > 0 && !activeToday && "mr-1")}>
+        <m.span
+          className="flex origin-bottom"
+          animate={wiggling ? { rotate: [0, -16, 14, -9, 5, 0], scale: [1, 1.25, 1.25, 1.1, 1, 1] } : { rotate: 0, scale: 1 }}
+          transition={{ duration: 0.6, ease: "easeInOut", delay: wiggling ? BUMP_DELAY : 0 }}
+          onAnimationComplete={() => setWiggling(false)}
+        >
+          <Flame size={20} fill={current > 0 ? "currentColor" : "none"} />
+        </m.span>
+        <StreakReminderBadge show={current > 0 && !activeToday} />
+      </span>
       {current}
-      {current > 0 && !activeToday && (
-        <>
-          <span aria-hidden data-testid="streak-reminder" className="h-1.5 w-1.5 rounded-full bg-streak" />
-          <span className="sr-only">{t("streak.notToday")}</span>
-        </>
-      )}
+      <StreakReminderText show={current > 0 && !activeToday} />
     </span>
   );
 }

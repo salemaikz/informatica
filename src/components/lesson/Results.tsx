@@ -301,8 +301,10 @@ export function Results({
       )}
 
       {kind === "lesson" && !counted && (
-        <p role="status" className="-mt-2 flex items-center justify-center gap-2 text-center text-sm font-extrabold text-ink-warning">
-          <AlertTriangle size={16} aria-hidden /> {t("econ16d.notCounted")}
+        // Только причина (заголовок уже говорит «не засчитан»); иконка — по первой строке, если текст переносится.
+        <p role="status" className="-mt-2 flex items-start justify-center gap-2 text-sm font-extrabold text-ink-warning">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span className="text-balance">{t("econ16d.notCounted")}</span>
         </p>
       )}
 
@@ -347,10 +349,13 @@ export function Results({
         </div>
       )}
 
-      {/* Обёртка — метка для Бита-проводника; огня нет — обёртка пустая и не занимает места. */}
-      <div data-tour="res-streak" className="empty:hidden">
-        <StreakIgnite delay={1.7} />
-      </div>
+      {/* Обёртка — метка для Бита-проводника; огня нет — обёртка пустая и не занимает места.
+          Урок не засчитан — без праздника (как и конфетти): «Огонь загорелся» под «Урок не засчитан» сбивает с толку. */}
+      {!(kind === "lesson" && !counted) && (
+        <div data-tour="res-streak" className="empty:hidden">
+          <StreakIgnite delay={1.7} />
+        </div>
+      )}
 
       {/* Бит-проводник: метка «итоги урока» — на первом пройденном уроке Бит покажет опыт, чипы и серию. */}
       {kind === "lesson" && counted && via !== "check" && <GuideSpot kind="results" />}

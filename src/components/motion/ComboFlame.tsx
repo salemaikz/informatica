@@ -7,26 +7,45 @@ import { useStreak } from "@/lib/hooks";
 import { useT } from "@/i18n/useT";
 import { springBouncy } from "./presets";
 
+/** Подпись серии: «Серия дней», а если сегодня занятий ещё не было — с пояснением (без рода). */
+export function streakTitle(t: (k: "stats.streak" | "streak.notToday") => string, current: number, activeToday: boolean): string {
+  return current > 0 && !activeToday ? `${t("stats.streak")}. ${t("streak.notToday")}` : t("stats.streak");
+}
+
 /**
- * Серия дней в шапке урока: оранжевая, пока серия идёт (точка — день ещё не засчитан), серая при нуле (как в шапке приложения).
+ * Бейдж «сегодня занятий ещё не было» на иконке огня (родитель — `relative`):
+ * точка в цвете серии с вырезом цвета фона, как у значка уведомлений. Заменил точку после числа («3•» читалась как лишний знак).
+ * Родителю при показе нужен отступ справа (`mr-1`), чтобы бейдж не наезжал на число.
+ * Текст для экранного диктора — `StreakReminderText` после числа.
+ */
+export function StreakReminderBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return <span aria-hidden data-testid="streak-reminder" className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-streak ring-2 ring-bg" />;
+}
+
+/** «Сегодня занятий ещё не было» для экранного диктора — ставится после числа серии. */
+export function StreakReminderText({ show }: { show: boolean }) {
+  const { t } = useT();
+  return show ? <span className="sr-only">. {t("streak.notToday")}</span> : null;
+}
+
+/**
+ * Серия дней в шапке урока: оранжевая, пока серия идёт (бейдж на огне — день ещё не засчитан).
+ * При нуле не показывается: шапка урока узкая, место отдаём полоске прогресса.
  * Огонь — только про серию дней; комбо показывает `ComboBadge` на панели ответа.
  */
 export function StreakFlame() {
   const { current, activeToday } = useStreak();
   const { t } = useT();
+  if (current <= 0) return null;
   return (
-    <div
-      className={cn("flex min-w-12 items-center justify-end gap-1 font-extrabold transition-colors", current > 0 ? "text-streak" : "text-muted")}
-      title={current > 0 && !activeToday ? `${t("stats.streak")}: ${t("streak.notToday")}` : t("stats.streak")}
-    >
-      <Flame size={20} fill={current > 0 ? "currentColor" : "none"} aria-hidden />
-      {current}
-      {current > 0 && !activeToday && (
-        <>
-          <span aria-hidden data-testid="streak-reminder" className="h-1.5 w-1.5 rounded-full bg-streak" />
-          <span className="sr-only">{t("streak.notToday")}</span>
-        </>
-      )}
+    <div className="flex h-10 items-center gap-1 px-1 font-extrabold text-streak" title={streakTitle(t, current, activeToday)}>
+      <span className={cn("relative flex", !activeToday && "mr-1")}>
+        <Flame size={20} fill="currentColor" aria-hidden />
+        <StreakReminderBadge show={!activeToday} />
+      </span>
+      <span className="tabular-nums">{current}</span>
+      <StreakReminderText show={!activeToday} />
     </div>
   );
 }

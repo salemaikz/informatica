@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BookOpen, Check, Clapperboard, ClipboardCheck, Eye, Handshake, Hand, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { BookOpen, Check, Clapperboard, ClipboardCheck, Clock, Eye, Handshake, Hand, Heart, Lightbulb, Minus, Repeat, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -790,16 +790,20 @@ export function LessonPlayer({
       <ActivityMusic mode="focus" active={!testMode && mode !== "minitest"} />
       {/* Верхняя панель */}
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-2xl items-center gap-2 px-4 sm:gap-3">
+        {/* Телефон (< 640px): сверху «×» и значки, полоска прогресса — отдельной строкой во всю ширину (в одной строке ей
+            оставалось ≈ 55px). От 640px — всё в одну строку. Полоска одна (order), метки проводника не дублируются.
+            Зазор между значками — 12px: рамка проводника (6px) не наезжает на соседа. */}
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-2.5 pt-2 sm:h-16 sm:flex-nowrap sm:py-0">
           <button
             type="button"
             onClick={() => setExitOpen(true)}
             aria-label={t("lesson.exit")}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2"
+            className="-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2 sm:ml-0 sm:h-10 sm:w-10"
           >
             <X size={24} />
           </button>
-          <div data-tour="lesson-progress" className="relative min-w-0 flex-1 rounded-full">
+          <span aria-hidden className="flex-1 sm:hidden" />
+          <div data-tour="lesson-progress" className="relative order-last w-full basis-full rounded-full sm:order-none sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-auto">
             <ProgressBar value={progress} label={title} />
             {/* Свечение на комбо — отдельный слой поверх полосы: сама полоса не перемонтируется. */}
             {comboTier(combo) > 0 && phase === "feedback" && result?.correct && !reduceMotion && !testMode && (
@@ -1146,12 +1150,21 @@ export function LessonPlayer({
 
       <Modal open={exitOpen} onClose={() => setExitOpen(false)} label={t(kind === "drill" ? "drill.exitTitle" : "lesson.exitTitle")}>
         <div className="flex flex-col items-center gap-3 text-center">
-          <Mascot mood="sad" size={72} />
+          {/* Не «грустный» (брови у sad читаются как сердитые): Бит не ругает за выход, а спокойно уточняет. */}
+          <Mascot mood="neutral" size={72} />
           <h3 className="text-xl font-extrabold">{t(kind === "drill" ? "drill.exitTitle" : "lesson.exitTitle")}</h3>
           <p className="text-muted">{persist ? t("lesson.exitSaved") : t("lesson.exitText")}</p>
           {/* Вход уже оплачен: с сохранением — вернуться без новой платы можно в пределах окна; без сохранения — сердечко не вернётся. */}
+          {/* Окно возврата — хорошая новость: нейтральный тон с часами, не красный (красный — «Выйти»).
+              Без сохранения сердечко не вернётся — это предупреждение, иконка сердечка. */}
           {paid && (
-            <p className="text-sm font-extrabold text-heart-strong">
+            // Иконка — внутри строки текста: при переносе она остаётся у первого слова, а не прилипает к краю окна.
+            <p className="text-balance text-sm font-bold text-muted">
+              {persist ? (
+                <Clock size={16} className="mr-1.5 inline-block align-[-3px]" aria-hidden />
+              ) : (
+                <Heart size={16} fill="currentColor" className="mr-1.5 inline-block align-[-3px] text-heart" aria-hidden />
+              )}
               {persist ? t("hearts.resume.grace", { time: graceText(lang) }) : t("lesson.exitPaid")}
             </p>
           )}
