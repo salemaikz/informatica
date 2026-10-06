@@ -40,7 +40,7 @@ import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
 import { AiPanel } from "@/components/ai/AiPanel";
-import { clearThreads, getThread, saveThread, threadKey } from "@/components/ai/ai-threads";
+import { clearThreads, threadKey } from "@/components/ai/ai-threads";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -1196,8 +1196,7 @@ export function LessonPlayer({
           noteKey={noteKey}
           suggestions={ai === "ask" ? askSuggestions : []}
           autoAsk={ai === "ask" ? (autoAsk ?? undefined) : undefined}
-          initialTurns={getThread(threadKey(aiScope, item.key, ai))}
-          onTurns={(turns) => saveThread(threadKey(aiScope, item.key, ai), turns)}
+          thread={threadKey(aiScope, item.key, ai)}
         />
       )}
     </div>

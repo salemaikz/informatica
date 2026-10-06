@@ -617,6 +617,17 @@ export function quoteAi(kind: AiKind, tier: PlanTier, usage: AiUsage | undefined
   return { ok: false, kind, day: today, cost, reason: "chips" };
 }
 
+/**
+ * Цена голосового вопроса до записи (#118): платится ответ (как сообщение в чате), а дневной потолок проходят оба —
+ * расшифровка (AI_UNITS.voice) и ответ (AI_UNITS.chat). Иначе ученик запишет вопрос, а ответ упрётся в потолок.
+ * Квитанция — ответа (kind "chat"); ничего не списывает.
+ */
+export function quoteVoiceQuestion(tier: PlanTier, usage: AiUsage | undefined, chips: number, today: string): AiReceipt {
+  const u = usageToday(usage, today);
+  if (u.count + AI_UNITS.voice + AI_UNITS.chat > AI_DAILY_CAP[tier]) return { ok: false, kind: "chat", day: today, cost: 0, reason: "cap" };
+  return quoteAi("chat", tier, usage, chips, today);
+}
+
 /** Учёт обращения по квитанции. */
 export function applyAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
   const cur = usageToday(u, r.day);

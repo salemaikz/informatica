@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unansweredTail } from "@/components/chat/helpers";
+import { orphanNeedsPhoto, unansweredTail } from "@/components/chat/helpers";
 import type { ChatMsg } from "@/lib/chats";
 import type { TutorTurn } from "@/components/ai/useTutor";
 
@@ -24,5 +24,19 @@ describe("unansweredTail", () => {
     const done: TutorTurn[] = [...open, { role: "assistant", content: "Ответ" }];
     expect(unansweredTail(open)).toBe(true);
     expect(unansweredTail(done)).toBe(false);
+  });
+});
+
+describe("orphanNeedsPhoto", () => {
+  it("вопрос с фото без ответа, фото уже нет (перезагрузка) — «Повторить» не предлагаем, просим фото заново", () => {
+    expect(orphanNeedsPhoto([msg("user", { hadImage: true })], false)).toBe(true);
+  });
+  it("фото ещё в памяти экрана — обычный «Повторить» (с тем же фото)", () => {
+    expect(orphanNeedsPhoto([msg("user", { hadImage: true })], true)).toBe(false);
+  });
+  it("вопрос без фото или ответ уже есть — нет", () => {
+    expect(orphanNeedsPhoto([msg("user")], false)).toBe(false);
+    expect(orphanNeedsPhoto([msg("user", { hadImage: true }), msg("assistant")], false)).toBe(false);
+    expect(orphanNeedsPhoto([], false)).toBe(false);
   });
 });

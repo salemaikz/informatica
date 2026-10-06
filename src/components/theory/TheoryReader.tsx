@@ -33,7 +33,7 @@ import {
 import { CARD_PARAM, paramValue } from "@/lib/theory-href";
 import { useApp } from "@/lib/store";
 import { AiPanel } from "@/components/ai/AiPanel";
-import { clearThreads, getThread, saveThread, threadKey } from "@/components/ai/ai-threads";
+import { clearThreads, threadKey } from "@/components/ai/ai-threads";
 import { useOpenLessonChat } from "@/components/chat/useLessonChat";
 import { Segmented } from "@/components/goals/controls";
 import { Button } from "@/components/ui/Button";
@@ -312,8 +312,7 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
           task={askTask}
           noteKey={lesson.id}
           suggestions={SUGGESTIONS}
-          initialTurns={getThread(threadKey(aiScope, askId, "ask"))}
-          onTurns={(turns) => saveThread(threadKey(aiScope, askId, "ask"), turns)}
+          thread={threadKey(aiScope, askId, "ask")}
         />
       )}
     </div>

@@ -3,7 +3,7 @@
 import { MessageCircleQuestion, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AiPanel } from "@/components/ai/AiPanel";
-import { clearThreads, getThread, saveThread, threadKey } from "@/components/ai/ai-threads";
+import { clearThreads, ideThreadStep, threadKey } from "@/components/ai/ai-threads";
 import { AiCost } from "@/components/economy/AiCost";
 import { Button } from "@/components/ui/Button";
 import type { IdeLang, IdeTask } from "@/lib/ide/types";
@@ -46,6 +46,8 @@ export function IdeAiHelp({ lang, task, code, error, solved }: { lang: IdeLang; 
     [snapshot, langTitle, task, l, solved, taskKey],
   );
 
+  const aiThread = threadKey(aiScope, ideThreadStep(taskKey, mode, snapshot?.error), mode);
+
   return (
     <>
       <Button
@@ -62,15 +64,14 @@ export function IdeAiHelp({ lang, task, code, error, solved }: { lang: IdeLang; 
       </Button>
       {open && taskCtx && (
         <AiPanel
-          key={mode}
+          key={aiThread}
           open
           onClose={() => setOpen(false)}
           mode={mode}
           task={taskCtx}
           noteKey="general"
           suggestions={mode === "ask" ? SUGGESTIONS : []}
-          initialTurns={getThread(threadKey(aiScope, taskKey, mode))}
-          onTurns={(turns) => saveThread(threadKey(aiScope, taskKey, mode), turns)}
+          thread={aiThread}
         />
       )}
     </>

@@ -20,7 +20,7 @@ import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
 import { Composer } from "./Composer";
 import { LessonChips, LessonIntro } from "./LessonChat";
-import { chatHeader, firstUserText, lastPreview, quizInHistory, reviewRequest, toHistory, unansweredTail } from "./helpers";
+import { chatHeader, firstUserText, lastPreview, orphanNeedsPhoto, quizInHistory, reviewRequest, toHistory, unansweredTail } from "./helpers";
 import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
 import { QuizCard } from "./QuizCard";
@@ -77,6 +77,8 @@ export function ChatScreen({
   const stoppedRef = useRef(false);
   // Фото последнего вопроса: «Повторить» после сбоя шлёт его же заново (в ленте хранится только пометка hadImage).
   const lastImageRef = useRef<string | undefined>(undefined);
+  // Фото последнего вопроса есть в памяти этого экрана (после ухода со страницы или перезагрузки — нет).
+  const [imageKept, setImageKept] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -159,6 +161,7 @@ export function ChatScreen({
     setVoiceError(null);
     setLastKind(img ? "photo" : "chat");
     lastImageRef.current = img;
+    setImageKept(!!img);
     commit([...msgsRef.current, { id: newId(), role: "user", content: q, hadImage: img ? true : undefined, voice: voice ? true : undefined, at: Date.now() }]);
     await run(img);
   };
@@ -218,6 +221,8 @@ export function ChatScreen({
   const canRetry = !voiceError && canRetryAiError(error) && list[list.length - 1]?.role === "user" && !streaming;
   // Вопрос остался без ответа и ничего не идёт (ушли со страницы до первого текста, перезагрузка): «Ответ не пришёл» и «Повторить».
   const orphan = messages !== null && !streaming && pending === null && !quizShown && !shownError && unansweredTail(list);
+  // Вопрос был с фото, а фото уже нет (в ленте — только пометка): без него «Повторить» ушёл бы текстом — просим прикрепить заново.
+  const needPhoto = orphan && orphanNeedsPhoto(list, imageKept);
   const empty = messages !== null && list.length === 0 && pending === null && !quizShown;
 
   return (
@@ -306,9 +311,13 @@ export function ChatScreen({
         {orphan && (
           <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-2 px-3 py-2">
             <p className="text-sm font-bold text-muted">{t("ai16d.noAnswer")}</p>
-            <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retry}>
-              {t("common.retry")}
-            </Button>
+            {needPhoto ? (
+              <p className="text-sm font-semibold text-muted">{t("ai16d.photoAgain")}</p>
+            ) : (
+              <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retry}>
+                {t("common.retry")}
+              </Button>
+            )}
           </div>
         )}
         {shownError === "economy.noChips" ? (

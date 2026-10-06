@@ -6,7 +6,8 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
-import type { AiReceipt } from "@/lib/economy";
+import { quoteVoiceQuestion, type AiReceipt } from "@/lib/economy";
+import { todayKey } from "@/lib/text";
 import {
   formatTimer,
   isIosUserAgent,
@@ -40,14 +41,16 @@ function micErrorKey(e: unknown): DictKey {
 /**
  * Голосовой вопрос: нажать — запись (до 60 с), нажать ещё раз — стоп и расшифровка.
  * Одна реплика — одно обращение (#118): платится ответ (chat), расшифровка бесплатных и чипов не тратит —
- * spendAi("voice") считает только дневной потолок. Поэтому перед записью проверяем, что ответ можно оплатить
- * (quoteAi("chat")): нет чипов — та же ошибка, что у сообщения в чате. Неудача расшифровки — возврат по квитанции.
+ * spendAi("voice") считает только дневной потолок. Поэтому перед записью проверяем, что ответ можно оплатить и что
+ * потолка хватит на расшифровку и ответ вместе (quoteVoiceQuestion): нет чипов — та же ошибка, что у сообщения в чате.
+ * Неудача расшифровки — возврат по квитанции.
  */
 export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
   const { t, lang } = useT();
   // Ответ на голосовой вопрос — обычное сообщение чата; расшифровка — только потолок дня.
-  const { quote } = useAiQuote("chat");
-  const { quote: voiceQuote } = useAiQuote("voice");
+  const { tier, chips } = useAiQuote("chat");
+  const usage = useApp((s) => s.aiUsage);
+  const quote = quoteVoiceQuestion(tier, usage, chips, todayKey());
   const [state, setState] = useState<State>("idle");
   const [seconds, setSeconds] = useState(0);
 
@@ -142,7 +145,6 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
   const start = useCallback(async () => {
     if (starting.current || recorder.current) return;
     if (!quote.ok) return fail(quote.reason === "chips" ? "economy.noChips" : "tutor.limit");
-    if (!voiceQuote.ok) return fail("tutor.limit");
     if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) return fail("voice.err.unsupported");
     starting.current = true;
     setState("starting");
@@ -193,7 +195,7 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
       fail("voice.err.unsupported");
     }
     }
-  }, [quote, voiceQuote, fail, finish, stop, releaseMic, clearTimers]);
+  }, [quote, fail, finish, stop, releaseMic, clearTimers]);
 
   const recording = state === "recording";
   const busy = state === "transcribing" || state === "starting";

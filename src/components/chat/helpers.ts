@@ -170,3 +170,11 @@ export function chatHeader(
 export function unansweredTail(msgs: readonly { role: "user" | "assistant" }[]): boolean {
   return msgs.length > 0 && msgs[msgs.length - 1].role === "user";
 }
+
+/**
+ * Вопрос без ответа был с фото, а самого фото у экрана уже нет (в ленте — только пометка hadImage; ушли со страницы,
+ * перезагрузка): «Повторить» отправил бы вопрос текстом и по цене чата — вместо этого просим прикрепить фото заново.
+ */
+export function orphanNeedsPhoto(msgs: readonly { role: "user" | "assistant"; hadImage?: boolean }[], imageKept: boolean): boolean {
+  return unansweredTail(msgs) && !!msgs[msgs.length - 1].hadImage && !imageKept;
+}

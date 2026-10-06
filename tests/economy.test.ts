@@ -51,6 +51,7 @@ import {
   planDaysLeft,
   pushLedger,
   quoteAi,
+  quoteVoiceQuestion,
   refillHearts,
   refundAiUsage,
   sanitizeAiUsage,
@@ -758,6 +759,19 @@ describe("ИИ: quoteAi", () => {
     expect(applyAiUsage(afterVoice, quoteAi("chat", "free", afterVoice, 0, TODAY))).toEqual({ day: TODAY, count: 5, free: 1, freeTotal: 1 });
     // возврат расшифровки бесплатных не добавляет
     expect(refundAiUsage({ day: TODAY, count: 4, free: 1, freeTotal: 1 }, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 0, free: 1, freeTotal: 1 });
+  });
+
+  it("голосовой вопрос до записи: потолок — расшифровка + ответ (4 + 1), цена — как у сообщения в чате", () => {
+    for (const tier of ["free", "lite", "unlimited"] as const) {
+      // 60 + 5 = 65 — можно; 61 + 5 = 66 — нельзя, хотя одна расшифровка (61 + 4) ещё прошла бы
+      expect(quoteVoiceQuestion(tier, usage(0, 60), 999, TODAY).ok, tier).toBe(true);
+      expect(quoteVoiceQuestion(tier, usage(0, 61), 999, TODAY), tier).toEqual({ ok: false, kind: "chat", day: TODAY, cost: 0, reason: "cap" });
+      expect(quoteAi("voice", tier, usage(0, 61), 999, TODAY).ok, tier).toBe(true);
+    }
+    // квитанция — ответа (chat): бесплатное по тарифу, потом чипы; нет чипов — chips
+    expect(quoteVoiceQuestion("free", usage(0), 0, TODAY)).toEqual(quoteAi("chat", "free", usage(0), 0, TODAY));
+    expect(quoteVoiceQuestion("free", usage(3), 100, TODAY)).toMatchObject({ ok: true, kind: "chat", pay: "chips", cost: AI_COST.chat });
+    expect(quoteVoiceQuestion("free", usage(3), 6, TODAY)).toMatchObject({ ok: false, kind: "chat", reason: "chips" });
   });
 
   it("не хватает чипов — причина chips и цена", () => {
