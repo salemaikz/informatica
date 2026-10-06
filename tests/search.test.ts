@@ -211,10 +211,10 @@ describe("документы курса", () => {
       expect(new Set(docs.map((d) => d.id)).size).toBe(docs.length);
       for (const l of lessons) {
         expect(docs.some((d) => d.kind === "lesson" && d.lessonId === l.id && d.href === `/lesson/${l.id}`)).toBe(true);
-        expect(docs.some((d) => d.kind === "conspect" && d.href === `/theory/${l.id}#conspect`)).toBe(true);
+        expect(docs.some((d) => d.kind === "conspect" && d.href === `/theory/${l.id}?card=conspect`)).toBe(true);
       }
       for (const d of docs.filter((x) => x.kind === "theory")) {
-        expect(d.href).toMatch(/^\/theory\/[^#]+#.+/);
+        expect(d.href).toMatch(/^\/theory\/[^#?]+\?card=[^#&]+$/);
         expect(d.title).toBeTruthy();
       }
     }

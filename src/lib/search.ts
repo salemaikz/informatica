@@ -2,6 +2,7 @@
 // Чистая логика без React. Индекс строится для одного языка; тексты нормализуются заранее,
 // поиск идёт по инвертированному индексу «слово → документы» (без регулярных выражений в цикле).
 
+import { CONSPECT_ID, theoryCardHref } from "./theory-href";
 import type { EntTopicId, Lang, Lesson, Skill, Unit, L } from "./types";
 
 export type SearchKind = "lesson" | "theory" | "conspect" | "skill" | "topic" | "note";
@@ -321,7 +322,7 @@ function join(parts: (string | undefined)[]): string {
 
 /**
  * Документы по урокам: урок (название, описание, раздел) + по документу на шаги theory/worked/story
- * (href `/theory/<lessonId>#<stepId>`) + конспект (`/theory/<lessonId>#conspect`).
+ * (href `/theory/<lessonId>?card=<stepId>`) + конспект (`/theory/<lessonId>?card=conspect`; lib/theory-href.ts).
  */
 export function lessonDocs(lessons: Lesson[], units: Unit[], lang: Lang): SearchDoc[] {
   const unitTitle = new Map(units.map((u) => [u.id, u.title[lang]]));
@@ -350,14 +351,14 @@ export function lessonDocs(lessons: Lesson[], units: Unit[], lang: Lang): Search
         title = step.title[lang];
         text = join([...step.steps.map((s) => s.text[lang]), step.result?.[lang]]);
       } else continue;
-      docs.push({ id: `theory:${lesson.id}:${step.id}`, kind: "theory", title, text, href: `/theory/${lesson.id}#${step.id}`, ...base });
+      docs.push({ id: `theory:${lesson.id}:${step.id}`, kind: "theory", title, text, href: theoryCardHref(lesson.id, step.id), ...base });
     }
     docs.push({
       id: `conspect:${lesson.id}`,
       kind: "conspect",
       title: lessonTitle,
       text: lesson.conspect[lang],
-      href: `/theory/${lesson.id}#conspect`,
+      href: theoryCardHref(lesson.id, CONSPECT_ID),
       ...base,
     });
   }

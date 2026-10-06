@@ -74,6 +74,8 @@ describe("код результата: мусор и границы", () => {
     "l1-085-35-0-12-r", // ведущий ноль: неканонично
     "l1-85-1000-0-12-r", // XP больше предела
     "l1-85-35-2-12-r", // «идеально» — только 0 или 1
+    "l1-99-35-1-12-r", // «идеально» при точности меньше 100 — противоречие
+    "l1-0-0-1-1-k",
     "l1-85-35-true-12-r",
     "l1-85-35-0-0-r", // уроков пройдено не меньше одного
     "l1-85-35-0-1000-r",
@@ -104,6 +106,12 @@ describe("код результата: мусор и границы", () => {
     expect(encodeShare({ ...lesson, xp: -1 })).toBeNull();
     expect(encodeShare({ ...lesson, n: 0 })).toBeNull();
     expect(encodeShare({ ...lesson, perfect: 1 as never })).toBeNull();
+    // «идеально» — только при точности 100
+    expect(encodeShare({ ...lesson, accuracy: 99, perfect: true })).toBeNull();
+    expect(encodeShare({ ...lesson, accuracy: 0, perfect: true })).toBeNull();
+    expect(encodeShare({ ...lesson, accuracy: 100, perfect: true })).toBe("l1-100-20-1-3-r");
+    // а точность 100 без «идеально» (была подсказка) — можно
+    expect(encodeShare({ ...lesson, accuracy: 100, perfect: false })).toBe("l1-100-20-0-3-r");
   });
 
   it("урок: в коде только числа и метка языка — ни имени, ни названия", () => {

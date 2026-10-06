@@ -185,7 +185,8 @@ export function Results({
       t: "lesson",
       accuracy: Math.max(0, Math.min(100, accuracy)),
       xp: Math.max(0, Math.min(SHARE_MAX_XP, Math.round(totalXp))),
-      perfect,
+      // «Идеально» в коде — только при точности 100 (иначе код негодный и кнопка пропала бы, share-code.ts).
+      perfect: perfect && accuracy === 100,
       n: Math.max(1, passed),
       lang,
     };

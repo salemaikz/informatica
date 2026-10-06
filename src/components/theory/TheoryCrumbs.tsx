@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { lessonMeta } from "@/content/catalog";
 import { cn } from "@/lib/cn";
 import type { LessonPlace, LessonReadStatus } from "@/lib/theory";
+import { theoryUnitHref } from "@/lib/theory-href";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 
@@ -15,11 +16,14 @@ const STATUS_KEY: Record<LessonReadStatus, DictKey> = {
   new: "theory16c.status.new",
 };
 
-/** Кружок урока в ленте: текущий — синий, пройденный — зелёный, прочитанный — бледно-зелёный, остальные — пустые. */
+/**
+ * Кружок урока в ленте: текущий — сплошной синий, пройденный — зелёный, прочитанный — мягкий синий, остальные — пустые.
+ * Как в списке уроков (LessonCard): зелёный — только «пройден», «прочитан» — синий.
+ */
 function dotClass(current: boolean, status: LessonReadStatus): string {
   if (current) return "border-primary bg-primary text-white";
   if (status === "done") return "border-success bg-success text-white";
-  if (status === "read") return "border-success/50 bg-success-soft text-success-strong";
+  if (status === "read") return "border-primary/40 bg-primary-soft text-primary";
   return "border-border bg-surface text-muted hover:bg-surface-2";
 }
 
@@ -45,7 +49,7 @@ export function TheoryCrumbs({ place, lessonId, statusOf }: { place: LessonPlace
     <div className="flex flex-col gap-2">
       <nav className="flex min-w-0 items-center gap-1">
         <Link
-          href={`/theory#${place.unit.id}`}
+          href={theoryUnitHref(place.unit.id)}
           className="-ml-2 flex min-h-10 min-w-0 items-center gap-1.5 rounded-xl px-2 text-sm font-extrabold hover:bg-surface-2"
           style={{ color: place.unit.color }}
         >

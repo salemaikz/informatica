@@ -76,10 +76,11 @@ export function logUsage(
   route: string,
   model: string,
   usage?: { prompt_tokens?: number; completion_tokens?: number } | null,
-  input?: { chars: number; trimmed?: boolean },
+  input?: { chars: number; trimmed?: boolean; lesson?: boolean },
 ) {
   if (!usage) return;
-  const size = input ? ` chars=${input.chars}${input.trimmed ? " trimmed=1" : ""}` : "";
+  // trimmed=1 — вход пришлось укоротить; lesson=1 — чат по теме урока (в промпте конспект урока).
+  const size = input ? ` chars=${input.chars}${input.trimmed ? " trimmed=1" : ""}${input.lesson ? " lesson=1" : ""}` : "";
   console.info(`[ai] route=${route} model=${model} in=${usage.prompt_tokens ?? 0} out=${usage.completion_tokens ?? 0}${size}`);
 }
 
