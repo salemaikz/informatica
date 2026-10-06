@@ -218,9 +218,9 @@ test("тест по разделу на карте: шторка и запуск
   await expect(page.getByRole("button", { name: "Начать" }).getByRole("img", { name: /Цена входа в сердечках: 1/ })).toBeVisible();
   await page.getByRole("button", { name: "Начать" }).click();
   await expect(page.getByText("Задание 1").first()).toBeVisible();
-  // Списано ровно две цены входа: было 5, стало 3.
+  // Списана ровно одна цена входа (тест по разделу — 1 сердечко, #120): было 5, стало 4.
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("informatica-v1") ?? "{}").state?.hearts?.count))
-    .toBe(3);
+    .toBe(4);
   expect(errors).toEqual([]);
 });

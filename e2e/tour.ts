@@ -32,6 +32,9 @@ export const ALL_TIPS = Object.fromEntries(
 export async function dismissTour(page: Page) {
   const bit = page.getByLabel("Подсказка Бита");
   await expect(bit).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(bit).toBeHidden();
+  // Пузырь может появиться чуть раньше, чем проводник начнёт слушать клавиатуру (медленная машина): жмём Escape, пока не скроется.
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(bit).toBeHidden({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
 }
