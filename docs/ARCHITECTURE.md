@@ -513,3 +513,45 @@ IdeShell (условие, подсказка, решение, итог, XP, «О
 - **Логика** — `lib/help-timer.ts` (чистая, `tests/help-timer.test.ts`): `expectedStepMs(step, lang, level?)` = (чтение + действие) × уровень; `helpAfterMs(expected)` = clamp(× 1,75, 20 с, 180 с); `helpWindowMs`/`stepHelpAfterMs` (у разбора — на подшаг); `helpKindFor`/`helpKindIn(step, { testMode })` — что предлагает плашка (`hint` / `simpler` / ничего); `canOfferHelp` (один раз на шаг, не больше `MAX_HELP_OFFERS` = 3, помощь не взята); часы шага `startHelpClock`/`tickHelpClock`/`helpDue` — идут, только пока `running`, и не больше `TICK_CAP_MS` за тик. Скрипт `scripts/step-times.ts` (`npm run step-times`) считает по тем же функциям весь курс, банк и ЕНТ и пишет `docs/content/step-times.md`.
 - **Вид и хук** — `components/lesson/HelpNudge.tsx`: `useHelpNudge({ enabled, kind, stepKey, offerKey, afterMs, touch, paused })` → `{ kind, dismiss, markHelped }` (интервал 1 с; пауза — `paused`, `useGuideUi.active`, открытый `[role="dialog"][aria-modal="true"]`, `document.visibilityState`; смена `touch` во время показа — плашка уезжает) и `HelpNudge` (ставится первым ребёнком нижней панели плеера, `absolute bottom-full`: фон панели закрывает нижнюю часть Бита). `LessonPlayer`: `offerKey` = `step.id` (повтор после ошибки — тот же шаг), `openAi` вызывает `markHelped`, отступ контента растёт на `HELP_NUDGE_PAD`, пока плашка на экране. Плеер — единственный потребитель, поэтому плашка есть в уроке и в тренировке (`DrillScreen` рисует тот же `LessonPlayer`) и нет в `ExamRun` и играх; `testMode` (мини-тест) выключает её (`tests/help-nudge-ui.test.ts` сторожит и это).
 - **ИИ** — плашка модель не вызывает. «Спросить Бита» открывает `AiPanel` в режиме `ask` с пропсом `autoAsk` (вопрос `tutor.q.simpler` уходит сам при открытии, через `setTimeout(0)`, чтобы двойной монтаж React в разработке не отправил его дважды); цену обращения берёт тот же `spendAi('ask')` в `useTutor`.
+
+## v0.19: этап 16Г — учёт ИИ, история Бита, вход при начале, «Не хватает», экономика, обучение, интерфейс (#118–#125)
+
+### Учёт ИИ (#118)
+- `lib/ai.ts → streamTutor(req, onText, signal, onMeta)`: `onMeta({ cache, fallback, crisis })` — заголовки `X-AI-Cache`, `X-AI-Fallback`, `X-AI-Crisis` до текста. Маркер `CUT` с непустым текстом — ответ (с меткой `CUT_SUFFIX` « …»), `ERR`/нет маркера — `stream_cut`.
+- `components/ai/useTutor.ts`: `spendAi` до запроса, в том числе при попадании в кэш устройства; возврат — только без ответа и за кризис. `useTutor({ detach: true })` (шторка) — закрытие не обрывает запрос.
+- `lib/economy.ts`: вида `review` нет; `aiKindIsFree(kind)` — `feedback` и `voice` не тратят бесплатные и чипы (только `AI_UNITS` потолка); `quoteVoiceQuestion` — проверка «расшифровка + ответ» перед записью.
+- Сервер (`api/ai/tutor`): при `hit` освобождает свой потолок (`g.release`), безопасный ответ считает — клиент списывает ученику в обоих случаях.
+
+### Ветки шторок ИИ и синхронизация вкладок (#119)
+- `components/ai/ai-threads.ts` (Zustand без сохранения): `Record<key, { turns, pending, rev }>`, ключ `threadKey(scope, step, mode)`; `startThread` (до запроса, `pending`), `streamThread`, `finishThread` (пишет, только если `rev` совпал), `dropThread`, `clearThreads(scope)`; зависший `pending` снимается через `THREAD_PENDING_MAX_MS` = 120 с.
+- `AiPanel` получает `thread` и подписан на ветку; пока `pending` — новые вопросы и `autoAsk` закрыты. Подключено: `LessonPlayer` (scope — урок или `drill:<ключ>`), `TheoryReader` (`theory:<id>`), `IdeAiHelp` (`ide:<задача>`, «Объясни ошибку» — `ideThreadStep(task, "explain", ошибка)`).
+- Чат: `chat/helpers.ts → unansweredTail(msgs)` → «Ответ не пришёл» + «Повторить» (или «прикрепи фото ещё раз»).
+- `lib/storage-sync.ts` (`isPeerSave`, `watchPeerSaves`) + `Providers.usePeerSync`: событие `storage` по ключу сохранения той же версии → `useApp.persist.rehydrate()`.
+
+### Вход при начале занятия (#120)
+- `lib/entry-paid.ts`: `entryPaid: Record<key, at>` (≤ 8 ключей, окно `RUN_GRACE_MS` 20 мин), ключи `lessonEntryKey`, `checkEntryKey`, `codeEntryKey`, `quizEntryKey`, ключи тренировок — `drillPaidKey`; старое поле `drillPaid` переносится в `mergeState`.
+- Стор: `payEntryOnce(key, cost)` (свежий ключ — 0, иначе `payEntry` и запись ключа при `paid > 0`), `payEntryFresh` («Начать заново»), `payDrill` — синоним; `finishSession` снимает ключ (`SessionResult.drillKey`).
+- `components/economy/useEntryAccess.ts`: `(key, cost, enabled) → { access: wait | open | locked, paid, resume }`, списание в `requestAnimationFrame`; `locked` → `OutOfHearts layout="screen"`, `hearts_out` один раз.
+- `LessonScreen` и `DrillScreen` платят хуком; `LessonPlayer` ничего не списывает — получает `prepaid`/`paidAt`. `ChatQuiz` — в `start(n)`. Практикум: `WorkspaceProps.beforeRun` (`IdeShell`), оплата запоминается в `ref`, пока задача открыта. `ENTRY_COST.checkpoint/extern = 1`, `lessonCost()` без аргумента, поля `Lesson.hearts` нет.
+- Итоги: все переходы — `replace`.
+
+### Окно «Не хватает» (#121)
+- `components/economy/shortfall.ts` (чистая: товары-сердечки по `shopAvailability`, покрывающий набор `CHIP_PACKS`, «Безлимит», пробный, таймер) + `ShortfallSheet.tsx` (раскладки `sheet | screen | inline`; «Оплата скоро» — соседом окна, не внутри: у `Modal` есть transform; монтируется лениво; `ComingSoonSheet.hideTrial`; проп `onLeave` — ссылки закрывают окно).
+- `OutOfHearts`, `NoChipsNotice` — обёртки; `ShopParts`, `TryOnSheet` открывают окно; `HEART_PASSES` нет, `HEARTS_REFILL_KZT = 490` (id аналитики `hearts-refill`); якорь `#shop-chips`.
+
+### Экономика (#122)
+- `PLAN_FEATURES.lite.maxHearts = 6`; `CHIP_REWARD` 2/0/2/5/5; `ACHIEVEMENT_CHIPS` 2/4/7/10; `chipMultiplier(tier)` — только тариф; `xpMultiplier(boost, now)` применяется в сторе (`recordAnswer`, `finishSession`, `recordGame`, `recordCodeTask`), плеер показывает зачисленный опыт (разница до/после).
+- Лента чипов — `LEDGER_KEEP_MS` 7 дней (`pruneLedger` в `pushLedger` и при загрузке).
+- `lib/exam-pass.ts`: `lessonCounted` (`LESSON_COUNT_RATIO` 0,7) → `FinishOutcome.counted`; `fullExamChipsAllowed` (новый seed и сегодня +5 не выдавали; `ExamSummary.chips`).
+- `missLog: Record<stepId, { n, prompt, lessonId?, at }>` (≤ 300) — растёт на первой ошибке в задании (урок, тренировка, экзамен); `lib/progress.ts → repeatedMistakes` → блок «Повторяющиеся ошибки».
+
+### Обучение (#124)
+- `lib/tips.ts`: `TIP_IDS` += `intro`, `learn-next`, `lesson-icons`; `welcome` — отметка без сцены (`SceneId = Exclude<TipId, "welcome">`).
+- `lib/guide.ts`: `sceneFor` — на «Учиться» `intro` / `nav` (видел старое приветствие) / `learn-next`; в уроке «Учиться» — `lesson-first` или `lesson-icons`; страницы — после конца обучения; `tourBlocking` = нет ни `learn-next`, ни `nav`; `GuideScene.also` + `alsoAfter` + `alsoDue` (первый урок отмечает `lesson-icons`, только пройдя шаг ИИ); `stepText` — порядок fallback, partial, noName, school, again, free, noCount, many; `dockExplained`.
+- Метки: `ToolboxButton tour="lesson-tools"`; хук `useAiFreeDotShown` (`AiCost.tsx`).
+
+### Интерфейс и медиа (#125)
+- Токены `--action-primary|success|danger|ai` и `--action-*-edge` во всех трёх блоках тем `globals.css` (`@theme`: `--color-action-*`); `Button` и плитки с белым текстом — на них.
+- Огонь серии — по `current > 0`, точка `streak.notToday`; `pulse-ring` 2,2 с ease-in-out; на карте пульсирует только рекомендованный урок.
+- `src/videos/PlayerInner.tsx`: `controls={false}` + своя панель (пуск, звук, ползунок, полный экран с запасным «псевдо» режимом, клавиши); строки `video.*`.
+- Музыка: `lib/music.ts` (общий `Audio`, `preload="none"`, пауза в скрытой вкладке, сброс после ошибки), `lib/music-pref.ts`, `components/music/*`; `profile.music { enabled, track: auto | arcade | focus }`; файлы `public/media/music/*.ogg|m4a` (синтез `scripts/generate-original-music.mjs`); в `ExamRun` не монтируется.
