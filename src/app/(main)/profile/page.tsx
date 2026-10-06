@@ -286,6 +286,7 @@ export default function ProfilePage() {
           <Row label={t("prof.theme")}>
             <Segmented<Theme>
               label={t("prof.theme")}
+              equal
               value={profile.theme}
               onChange={(theme) => update({ theme })}
               options={(["system", "light", "dark"] as const).map((th) => ({ id: th, label: t(`theme.${th}` as DictKey) }))}

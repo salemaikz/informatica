@@ -10,6 +10,7 @@ export function Segmented<T extends string | number>({
   onChange,
   label,
   size = "md",
+  equal,
 }: {
   value: T;
   options: { id: T; label: string }[];
@@ -17,10 +18,17 @@ export function Segmented<T extends string | number>({
   label?: string;
   /** sm — компактные сегменты в одну строку с другими элементами (визуально 32 px, зона касания шире на невидимые 6 px сверху и снизу). */
   size?: "md" | "sm";
+  /** Все варианты в одну строку равной ширины (короткие подписи, 2–4 варианта): без переноса «одинокой» кнопки на вторую строку. */
+  equal?: boolean;
 }) {
   const sm = size === "sm";
   return (
-    <div role="group" aria-label={label} className={cn("flex min-w-0 max-w-full", sm ? "gap-1" : "flex-wrap gap-1.5")}>
+    <div
+      role="group"
+      aria-label={label}
+      style={equal ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined}
+      className={cn("min-w-0 max-w-full", equal ? "grid gap-1.5" : cn("flex", sm ? "gap-1" : "flex-wrap gap-1.5"))}
+    >
       {options.map((o) => (
         <button
           key={String(o.id)}
@@ -31,7 +39,7 @@ export function Segmented<T extends string | number>({
             "max-w-full border-2 font-bold transition-colors",
             sm
               ? "relative min-h-8 rounded-lg px-2 text-xs font-extrabold after:absolute after:-inset-x-0.5 after:-inset-y-1.5 after:content-['']"
-              : "min-h-10 rounded-xl px-3.5 py-1.5 text-sm",
+              : cn("min-h-10 rounded-xl py-1.5 text-sm", equal ? "px-1.5 text-center" : "px-3.5"),
             value === o.id ? "border-primary bg-primary-soft text-ink-primary" : "border-border bg-surface text-muted hover:text-text",
           )}
         >
@@ -75,11 +83,12 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       className={cn(
         // Видимый переключатель 32 px, а зона касания — 44 px (псевдоэлемент after).
         "relative h-8 w-14 shrink-0 rounded-full border-2 transition-colors after:absolute after:-inset-1.5 after:content-[''] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
-        checked ? "border-primary bg-primary" : "border-border bg-surface-2",
+        // Выключен: заметная серая дорожка (в светлой теме bg-surface-2 почти сливался с карточкой).
+        checked ? "border-primary bg-primary" : "border-muted/50 bg-muted/30",
         disabled && "cursor-not-allowed opacity-50",
       )}
     >
-      <span className={cn("absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform", checked && "translate-x-6")} />
+      <span className={cn("absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-md ring-1 ring-black/15 transition-transform", checked && "translate-x-6")} />
     </button>
   );
 }

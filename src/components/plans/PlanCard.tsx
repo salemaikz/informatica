@@ -102,7 +102,7 @@ export function PlanCard({ tier, period, isCurrent, trialDays, index = 0, classN
             {period === "year" ? (
               <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                 <span className="whitespace-nowrap text-[15px] font-extrabold">{t("plans.card.perMonth", { price: formatTenge(perMonthOfYear(tier)) })}</span>
-                <span className="whitespace-nowrap font-bold text-muted line-through decoration-2">{formatTenge(PRICES[tier].month * 12)}</span>
+                <span className="whitespace-nowrap font-bold text-muted line-through decoration-2">{formatTenge(PRICES[tier].month)}</span>
                 <Pill tone="gold" className="border border-gold/50">
                   {t("plans.card.save", { amount: formatTenge(saving.amount) })}
                 </Pill>

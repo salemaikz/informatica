@@ -9,9 +9,9 @@ import { Mascot } from "@/components/mascot/Mascot";
 
 // Вокруг маскота парят значки того, что даёт тариф: сердечки (розовый), ИИ (фиолетовый), чипы (золотой).
 const FLOATERS: { icon: LucideIcon; tone: string; pos: string; delay: number; fill?: boolean }[] = [
-  { icon: Heart, tone: "bg-heart-soft text-heart border-heart/40", pos: "left-1 top-6", delay: 0, fill: true },
+  { icon: Heart, tone: "bg-heart-soft text-heart border-heart/40", pos: "left-2 top-4", delay: 0, fill: true },
   { icon: Sparkles, tone: "bg-ai-soft text-ai border-ai/40", pos: "right-0 top-1", delay: 0.6 },
-  { icon: Cpu, tone: "bg-gold-soft text-warning-strong border-gold/60", pos: "right-5 bottom-1", delay: 1.2 },
+  { icon: Cpu, tone: "bg-gold-soft text-warning-strong border-gold/60", pos: "right-6 bottom-0", delay: 1.2 },
 ];
 
 /** Верх окна тарифов: маскот с золотым свечением, заголовок и подзаголовок. */
@@ -19,10 +19,10 @@ export function PlansHero({ subtitle }: { subtitle: DictKey }) {
   const { t } = useT();
   return (
     <header className="flex flex-col items-center text-center">
-      <div className="relative grid h-36 w-60 place-items-center" aria-hidden>
-        <span className="absolute h-44 w-44 rounded-full bg-gold/30 blur-3xl" />
+      <div className="relative grid h-28 w-56 place-items-center sm:h-36 sm:w-60" aria-hidden>
+        <span className="absolute h-36 w-36 rounded-full bg-gold/30 blur-3xl" />
         <m.div initial={{ opacity: 0, scale: 0.7, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 300, damping: 18 }}>
-          <Mascot mood="happy" size={116} />
+          <Mascot mood="happy" size={92} />
         </m.div>
         {FLOATERS.map(({ icon: Icon, tone, pos, delay, fill }) => (
           <m.span
@@ -36,8 +36,8 @@ export function PlansHero({ subtitle }: { subtitle: DictKey }) {
           </m.span>
         ))}
       </div>
-      <h1 className="mt-1 text-balance text-[1.75rem] font-extrabold leading-tight sm:text-3xl">{t("plans.title")}</h1>
-      <p className="mt-2 max-w-sm text-balance font-semibold leading-snug text-muted">{t(subtitle)}</p>
+      <h1 className="text-balance text-2xl font-extrabold leading-tight sm:mt-1 sm:text-3xl">{t("plans.title")}</h1>
+      <p className="mt-1.5 max-w-sm text-balance text-sm font-semibold leading-snug text-muted sm:mt-2 sm:text-base">{t(subtitle)}</p>
     </header>
   );
 }
