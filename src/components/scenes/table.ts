@@ -201,19 +201,40 @@ function flatRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): A
 
 /**
  * Стрелка между вертикальными соседями: у них луч из центра выходит в одной точке общей границы (начало = конец, стрелки не видно).
- * Рисуем дугу вдоль правого края: от нижней части верхней ячейки к верхней части нижней, выгиб вправо.
+ * Рисуем дугу вдоль правого края: от ближней к границе части исходной ячейки к ближней к границе части целевой, выгиб вправо.
+ * `down` — целевая ячейка ниже исходной (копирование вниз); иначе выше: части зеркальны, стрелка остаётся короткой и не тянется через текст.
  */
-function sideArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo {
+function sideArrow(from: Rect, to: Rect, bounds: { w: number; h: number }, down: boolean): ArrowGeo {
   const x0 = from.x + from.w - Math.min(18, from.w * 0.25);
-  const sy = from.y + from.h * 0.62;
-  const ey = to.y + to.h * 0.38;
+  const near = down ? 0.62 : 0.38; // доля высоты исходной ячейки, откуда стартуем (у общей границы)
+  const sy = from.y + from.h * near;
+  const ey = to.y + to.h * (1 - near);
   const bulge = Math.max(0, Math.min(14, bounds.w - 2 - x0));
   return finishArrow([x0, sy], [x0 + bulge, (sy + ey) / 2], [x0, ey]);
 }
 
 /**
+ * Стрелка между горизонтальными соседями, когда ни над строкой, ни под ней места нет (таблица в одну строку): плоская дуга внутри строки,
+ * в полосе у нижнего края ячеек — ниже цифр. null — ячейки слишком близко или полосы нет в таблице.
+ */
+function innerRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
+  const c1 = rectCenter(from);
+  const c2 = rectCenter(to);
+  const sign = c2[0] >= c1[0] ? 1 : -1;
+  const sx = c1[0] + sign * Math.min(14, from.w * 0.25);
+  const ex = c2[0] - sign * Math.min(14, to.w * 0.25);
+  if (sign * (ex - sx) < 14) return null;
+  const sy = from.y + from.h - 6;
+  const ey = to.y + to.h - 6;
+  const ctrl: Pt = [(sx + ex) / 2, (sy + ey) / 2 + 4];
+  const apexY = (sy + ey) / 4 + ctrl[1] / 2;
+  if (Math.min(sy, ey, apexY) < 2 || Math.max(sy, ey, apexY) > bounds.h - 2) return null;
+  return finishArrow([sx, sy], ctrl, [ex, ey]);
+}
+
+/**
  * Стрелка-дуга от ячейки к ячейке. Начало и конец — на границах ячеек (не поверх цифр), дуга выгибается вверх (у вертикальных —
- * вправо) и остаётся внутри `bounds` (размер таблицы): если сверху нет места, выгиб идёт вниз. null — ячейка та же.
+ * вправо) и остаётся внутри `bounds` (размер таблицы): если сверху нет места, выгиб идёт вниз. null — ячейка та же или стрелке негде поместиться.
  */
 export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
   const c1 = rectCenter(from);
@@ -260,8 +281,12 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
     }
   }
   const { ctrl, start, end } = pick;
-  // Вертикальные соседи: начало и конец совпали — рисуем дугу у правого края ячеек.
-  if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 12) return sideArrow(from, to, bounds);
+  // Начало и конец совпали (соседи по общей границе): вертикальные — дуга у правого края ячеек; соседи по строке, когда над и под
+  // строкой места нет (таблица в одну строку), — дуга внутри строки. Вертикальную стрелку для соседей по строке не рисуем: она указывала бы вверх.
+  if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 12) {
+    if (Math.abs(dy) > Math.abs(dx)) return sideArrow(from, to, bounds, dy > 0);
+    if (Math.abs(dy) < Math.min(from.h, to.h) / 2) return innerRowArrow(from, to, bounds);
+  }
   return finishArrow(start, ctrl, end);
 }
 
