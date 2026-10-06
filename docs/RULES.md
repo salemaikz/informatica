@@ -91,7 +91,7 @@
 Для иллюстраций есть производные токены: `--device-*`, `--paper`, `--paper-line`, `--skin`, `--skin-shade`, `--art-gloss`, `--art-shadow`. Это только CSS-переменные (в `@theme` их нет) — в SVG пишем `fill="var(--device-shell-1)"`, классов `bg-device-*` не существует.
 
 Оттенки: у `primary`, `success`, `danger`, `warning`, `ai`, `heart` есть `-strong` и `-soft`; у `gold`, `streak` и `rarity-*` — только `-soft`.
-Текст и тонкие линии цвета смысла **поверх его `-soft`-заливки** — токены `ink-*` (`text-ink-primary`, `var(--ink-success)` …): в светлой теме это `-strong`, в тёмной — базовый цвет (тёмный `-strong` на тёмном `-soft` нечитаем, ≈ 3,4:1). Связку `bg-*-soft` + `text-*-strong` в новом коде не использовать.
+Текст и тонкие линии цвета смысла **поверх его `-soft`-заливки** — токены `ink-*` (`ink-primary|success|danger|warning|ai|heart|gold|streak`; `text-ink-primary`, `var(--ink-success)` …): в светлой теме — тёмные оттенки с контрастом ≥ 4,5:1 к своей `-soft`, в тёмной — базовый цвет (тёмный `-strong` на тёмном `-soft` нечитаем, ≈ 3,4:1). `Pill` уже на них. Связку `bg-*-soft` + `text-*-strong` в новом коде не использовать.
 
 Приёмы:
 

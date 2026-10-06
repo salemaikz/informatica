@@ -63,12 +63,15 @@
 
   /* «Чернила» (этап 16В): текст и тонкие линии цвета смысла поверх его -soft-заливки. В светлой теме — -strong,
      в тёмной — базовый цвет (тёмный -strong на тёмном -soft даёт контраст ≈ 3,4:1). Для подписей в рисунках и пилюль. */
-  --ink-primary: var(--primary-strong);
-  --ink-success: var(--success-strong);
+  /* Светлая: значения подобраны на контраст ≥ 4,5:1 к своей -soft-заливке (у success/warning/primary -strong для этого светлее нужного). */
+  --ink-primary: #0f6aa0;
+  --ink-success: #0f7a48;
   --ink-danger: var(--danger-strong);
-  --ink-warning: var(--warning-strong);
+  --ink-warning: #8a5a00;
   --ink-ai: var(--ai-strong);
   --ink-heart: var(--heart-strong);
+  --ink-gold: #8a5a00;
+  --ink-streak: #b34a00;
 
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 16%, var(--surface));
@@ -141,6 +144,8 @@
   --ink-warning: var(--warning);
   --ink-ai: var(--ai);
   --ink-heart: var(--heart);
+  --ink-gold: var(--gold);
+  --ink-streak: var(--streak);
 
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
@@ -213,6 +218,8 @@
     --ink-warning: var(--warning);
     --ink-ai: var(--ai);
     --ink-heart: var(--heart);
+    --ink-gold: var(--gold);
+    --ink-streak: var(--streak);
 
     /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
     --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
@@ -277,6 +284,8 @@
   --color-ink-warning: var(--ink-warning);
   --color-ink-ai: var(--ink-ai);
   --color-ink-heart: var(--ink-heart);
+  --color-ink-gold: var(--ink-gold);
+  --color-ink-streak: var(--ink-streak);
   --color-on-primary: var(--on-primary);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
