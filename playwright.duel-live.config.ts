@@ -17,6 +17,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}/onboarding`,
     timeout: 300_000,
     reuseExistingServer: false,
+    // Лог сервера ([social] route=duel.* m=<id6> cmds=N) — в вывод теста: из него считается расход команд на матч.
+    stdout: "pipe",
     env: { SOCIAL_MEMORY_OK: "1", SOCIAL_SECRET: "test-e2e-social", DUEL_TEST_HOOKS: "1" },
   },
 });

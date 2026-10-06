@@ -127,7 +127,12 @@ export function DuelResult({
       </div>
 
       <MascotSays mood={result === "loss" ? "happy" : result === "win" ? "celebrate" : "happy"} size={56}>
-        <span className="font-bold">{t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}</span>
+        <span className="font-bold">
+          {/* С живым соперником Бит говорит как тренер, а не как соперник: ребёнок не должен думать, что играл с ботом. */}
+          {human
+            ? t(result === "win" ? "duel.line.human.win" : result === "draw" ? "duel.line.human.draw" : "duel.line.human.loss")
+            : t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}
+        </span>
       </MascotSays>
       {human ? children : <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>}
 

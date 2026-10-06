@@ -6,12 +6,14 @@ import { DUEL_MODES, bandOf } from "@/lib/duel/modes";
 import type { DuelBand, DuelModeId, MatchJoin } from "@/lib/duel/types";
 import type { CountingKv } from "@/server/social/kv";
 import { keys } from "@/server/social/player";
-import { joinOf, matchFields, matchKey, newMatchId, newMatchSeed, parseMatch, scheduleFrom, seatClaims, writeMatchOp } from "./match";
+import { joinOf, matchFields, matchKey, newMatchId, newMatchSeed, parseMatch, roomScheduleFrom, seatClaims, writeMatchOp } from "./match";
 
 // Комната — живой бой с другом (docs/specs/duels.md §5, §9; 1-server.md §5). Хозяин создаёт матч в «лобби» и код из 6 знаков
-// Крокфорда: du:room:{CODE} → id матча (SET NX, 10 минут). Ссылка /duel/r/{CODE}. Друг входит: HSETNX b (второе место
-// занимает ровно один), сроки матча ставятся в момент входа; полоса набора — меньшая из двух (честнее к слабому).
-// Ошибки: expired (нет комнаты или матч отменён), full (место занято), self (своя ссылка), update_needed (другая сборка).
+// Крокфорда: du:room:{CODE} → id матча (SET NX, 10 минут). Ссылка /duel/r/{CODE}. Друг входит (POST по кнопке на странице
+// ссылки — не превью мессенджера): HSETNX b (второе место занимает ровно один); с этого момента у обоих 60 с на готовность,
+// старт назначит вторая готовность (match.ts → ensureRoomStart); полоса набора — меньшая из двух (честнее к слабому).
+// Ошибки: expired (нет комнаты, матч отменён или хозяин заблокировал гостя — блок не раскрываем), full (место занято),
+// self (своя ссылка), update_needed (другая сборка).
 
 export const ROOM_TTL_SEC = 600;
 export const roomKey = (code: string) => `du:room:${code}`;
@@ -80,9 +82,11 @@ export async function joinRoom(kv: CountingKv, rawCode: string, guest: { pid: st
     return { ok: true, join: joinOf(seatClaims(m, "b", guest.pid), secret) };
   }
   if (m.a.left || now >= m.created + ROOM_TTL_SEC * 1000) return { ok: false, status: 404, error: "expired" };
+  // Заблокированный хозяином не может вызвать его на бой (3-safety §3) — ответ как у закрытой комнаты.
+  if (await kv.sismember(keys.blocked(m.a.pid), guest.pid)) return { ok: false, status: 404, error: "expired" };
   if (!(await kv.hsetnx(matchKey(id), "b", guest.pid))) return { ok: false, status: 409, error: "full" };
   const band = Math.min(m.band, bandOf(guest.lv)) as DuelBand;
-  const sched = scheduleFrom(m.mode, band, now);
+  const sched = roomScheduleFrom(m.mode, band, now);
   await kv.pipeline([
     { op: "hset", key: matchKey(id), fields: { band, lb: guest.lv, ...(card ? { cb: card } : {}), ...sched, joined: now } },
   ]);

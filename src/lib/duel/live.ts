@@ -32,6 +32,9 @@ export const POLL = {
   resultsMaxMs: 15_000,
 } as const;
 
+/** Реванш: соперник должен согласиться за столько после нажатия (как REMATCH_WINDOW_MS сервера), мс. */
+export const REMATCH_WINDOW_MS = 20_000;
+
 /** Поиск соперника (§1 таблица, §10): кнопка Бита — с 3 с, карточка-предложение — на 12-й, поиск — до 30 с. Без автостарта. */
 export const SEARCH = { botButtonMs: 3_000, offerMs: 12_000, maxMs: 30_000 } as const;
 
@@ -293,4 +296,40 @@ export async function socialStatus(signal?: AbortSignal): Promise<"on" | "off" |
   const res = await duelFetch<unknown>("GET", "/api/social/home", { signal });
   if (res.status === 200) return "on";
   return res.status === 503 && res.error === "social_disabled" ? "off" : "down";
+}
+
+// ---------- скрытые имена (жалоба) ----------
+
+const HIDDEN_KEY = "informatica-duel-hidden";
+const HIDDEN_MAX = 100;
+
+/** Метки (код друга или «~метка» случайного соперника), чьё имя ученик скрыл у себя жалобой (3-safety §4). */
+function hiddenList(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]") as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function isNameHidden(code: string): boolean {
+  return !!code && hiddenList().includes(code);
+}
+
+/** Скрыть имя игрока у себя: дальше — «Игрок 4821». */
+export function hideName(code: string): void {
+  if (!code) return;
+  try {
+    const list = hiddenList().filter((x) => x !== code);
+    list.unshift(code);
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(list.slice(0, HIDDEN_MAX)));
+  } catch {
+    // нет хранилища — имя скрыто только до конца экрана
+  }
+}
+
+/** Карточка соперника с учётом скрытых имён. */
+export function maskHidden<T extends Pick<PublicCard, "code" | "name">>(card: T | null, hidden: boolean): T | null {
+  return card && hidden && card.name ? { ...card, name: null } : card;
 }

@@ -4,7 +4,12 @@ vi.mock("server-only", () => ({}));
 
 // Маршруты живых дуэлей (этап 16Д, Ф4; docs/specs/duels.md §11): вызываем обработчики с Request, хранилище — память
 // (сроки по serverNow: тестовые часы двигают и TTL) или подменный Upstash; часы — тестовый сдвиг server/clock.ts.
-const holder = vi.hoisted(() => ({ kv: null as null | import("@/server/kv").Kv }));
+const holder = vi.hoisted(() => ({ kv: null as null | import("@/server/kv").Kv, noBurst: false }));
+// Процессный лимит частоты (реальные часы): тест расхода команд прогоняет минуту матча за доли секунды.
+vi.mock("@/server/rate-limit", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/rate-limit")>();
+  return { ...real, rateLimit: (...a: Parameters<typeof real.rateLimit>) => holder.noBurst || real.rateLimit(...a) };
+});
 vi.mock("@/server/kv", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/server/kv")>();
   return { ...real, getKv: () => holder.kv!, getStrictKv: () => holder.kv! };
@@ -54,6 +59,8 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 interface Player {
   cookie: string;
   pid: string;
+  /** Код друга (хранимый вид). */
+  code: string;
 }
 
 async function player(name = "Аян", lv = 3): Promise<Player> {
@@ -61,7 +68,8 @@ async function player(name = "Аян", lv = 3): Promise<Player> {
   expect(res.status).toBe(200);
   const sc = res.headers.get("set-cookie")!;
   const v = new RegExp(`${PLAYER_COOKIE}=([^;]*)`).exec(sc)![1];
-  return { cookie: `${PLAYER_COOKIE}=${v}`, pid: v.slice(0, 22) };
+  const body = (await res.json()) as { player: { code: string } };
+  return { cookie: `${PLAYER_COOKIE}=${v}`, pid: v.slice(0, 22), code: body.player.code };
 }
 
 type QueueReply = { state: "waiting"; ticket: string } | { state: "matched"; join: MatchJoin } | { state: "cancelled" };
@@ -130,6 +138,7 @@ afterEach(() => {
   clock.resetClock();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  holder.noBurst = false;
 });
 
 describe("очередь «Блица»: захват через ZREM", () => {
@@ -427,7 +436,10 @@ describe("матч: готовность, ответы, завершение", (
     expect(na!.seed).toBe(nb!.seed);
     const nv = await getView(A, na!.matchId, na!.seat);
     expect(nv.state).toBe("lobby");
+    // Имя из профиля — всем после фильтра (решение владельца, duels.md, начало), а код друга случайному сопернику не уходит.
     expect(nv.opp?.card.name).toBe("Әсем");
+    expect(nv.opp?.card.code).not.toBe(B.code);
+    expect(nv.opp?.card.code).toMatch(/^~[A-Za-z0-9_-]{10}$/);
   });
 });
 
@@ -469,11 +481,25 @@ describe("комната с другом", () => {
     const hostView = await getView(A, r.matchId);
     expect(hostView.join?.matchId).toBe(r.matchId);
     expect(hostView.opp?.card.name).toBe("Әсем");
-    const ja = hostView.join!;
-    await post(ready, "ready", A, ja);
-    await post(ready, "ready", B, jb);
+    // В комнате с другом его код виден (это друг по ссылке).
+    expect(hostView.opp?.card.code).toBe(B.code);
+    const ja0 = hostView.join!;
+    // Друг готов сразу, а хозяин ещё в мессенджере (вкладка скрыта): через 10 с матч не отменён.
+    const vb0 = (await (await post(ready, "ready", B, jb)).json()) as MatchView;
+    expect(vb0.state).toBe("lobby");
+    goTo(clock.serverNow() + 10_000);
+    expect((await getView(B, r.matchId, jb.seat)).state).toBe("lobby");
+    // Хозяин вернулся и готов: старт назначен — через 5 с, места переподписаны с ним.
+    const va = (await (await post(ready, "ready", A, ja0)).json()) as MatchView;
+    expect(va.state).toBe("countdown");
+    const ja = va.join!;
+    expect(ja.startAt).toBe(clock.serverNow() + 5_000);
+    const jb1 = (await getView(B, r.matchId, jb.seat)).join!;
+    expect(jb1.startAt).toBe(ja.startAt);
     goTo(ja.startAt + 3_000);
-    const res1 = (await (await post(answers, "answers", B, jb, { answers: [{ i: 0, a: correct(jb, 0), ms: 2_800 }] })).json()) as { view: MatchView };
+    // Повторная готовность после срока не «отменяет» засчитанную (первая отметка — HSETNX).
+    expect(((await (await post(ready, "ready", B, jb1)).json()) as MatchView).state).toBe("playing");
+    const res1 = (await (await post(answers, "answers", B, jb1, { answers: [{ i: 0, a: correct(jb1, 0), ms: 2_800 }] })).json()) as { view: MatchView };
     expect(res1.view.you.correct).toBe(1);
     // Лимит задания вышел по часам сервера — тайм-аут, даже если клиент прислал малое ms.
     goTo(ja.startAt + 26_000);
@@ -515,6 +541,16 @@ describe("выключатели, сбои и тестовые часы", () => 
     expect(v.status).toBe(503);
   });
 
+  it("SOCIAL_RANDOM=0 — очередь выключена (503 random_disabled), комнаты работают", async () => {
+    const A = await player();
+    vi.stubEnv("SOCIAL_RANDOM", "0");
+    const res = await queue.POST(req("POST", "/api/duel/queue", { cookie: A.cookie, body: { lv: 1, deckTag: DECK_TAG } }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("random_disabled");
+    const r = await room.POST(req("POST", "/api/duel/room", { cookie: A.cookie, body: { mode: "blitz", lv: 3, deckTag: DECK_TAG } }));
+    expect(r.status).toBe(200);
+  });
+
   it("Upstash не ответил — 503 social_unavailable", async () => {
     const A = await player();
     const fetchMock = (async () => {
@@ -546,3 +582,215 @@ describe("выключатели, сбои и тестовые часы", () => 
     expect((await call()).status).toBe(404);
   });
 });
+
+describe("доработки по ревью Ф4", () => {
+  it("комната: никто из двоих не готов за 60 с после входа друга — отмена no_ready", async () => {
+    const A = await player("Аян");
+    const B = await player("Әсем");
+    const r = (await (await room.POST(req("POST", "/api/duel/room", { cookie: A.cookie, body: { mode: "blitz", lv: 3, deckTag: DECK_TAG } }))).json()) as { code: string; matchId: string };
+    const jr = await roomJoin.POST(req("POST", `/api/duel/room/${r.code}/join`, { cookie: B.cookie, body: { lv: 3, deckTag: DECK_TAG } }), params({ code: r.code }));
+    const jb = ((await jr.json()) as { join: MatchJoin }).join;
+    await post(ready, "ready", B, jb);
+    goTo(clock.serverNow() + 59_000);
+    expect((await getView(B, r.matchId, jb.seat)).state).toBe("lobby");
+    goTo(clock.serverNow() + 2_000);
+    const v = await getView(B, r.matchId, jb.seat);
+    expect(v.state).toBe("cancelled");
+    expect(v.cancelled).toBe("no_ready");
+  });
+
+  it("блок-лист: заблокированный не входит в комнату (как «закрыта») и не сводится в очереди", async () => {
+    const A = await player("Аян");
+    const B = await player("Әсем");
+    await holder.kv!.sadd(`pl:blk:${A.pid}`, [B.pid]);
+    const r = (await (await room.POST(req("POST", "/api/duel/room", { cookie: A.cookie, body: { mode: "blitz", lv: 3, deckTag: DECK_TAG } }))).json()) as { code: string };
+    const jr = await roomJoin.POST(req("POST", `/api/duel/room/${r.code}/join`, { cookie: B.cookie, body: { lv: 3, deckTag: DECK_TAG } }), params({ code: r.code }));
+    expect(jr.status).toBe(404);
+    expect((await jr.json()).error).toBe("expired");
+    // Очередь: в обе стороны — A блокирует B; B не может захватить A, и A не захватывает B.
+    const ra = (await join(A)) as { state: string; ticket: string };
+    const rb = (await join(B)) as { state: string; ticket: string };
+    expect(ra.state).toBe("waiting");
+    expect(rb.state).toBe("waiting");
+    expect((await poll(A, ra.ticket, true)).state).toBe("waiting");
+    expect((await poll(B, rb.ticket, true)).state).toBe("waiting");
+    expect(await holder.kv!.zcard(`du:q:blitz:${DECK_TAG}`)).toBe(2);
+  });
+
+  it("билет подписан: самодельный, чужой и просроченный — 404", async () => {
+    const A = await player("Аян");
+    const B = await player("Әсем");
+    const ra = (await join(A)) as { ticket: string };
+    // Своя полоса и «давнее» начало ради широкого допуска — подпись не сходится.
+    const [id, , , sig] = ra.ticket.split(".");
+    const forged = `${id}.4.${(Date.now() - 60_000).toString(36)}.${sig}`;
+    const f = await ticketRoute.GET(req("GET", `/api/duel/queue/${forged}?try=1`, { cookie: A.cookie }), params({ ticket: forged }));
+    expect(f.status).toBe(404);
+    // Чужой билет (подписан для A).
+    const other = await ticketRoute.GET(req("GET", `/api/duel/queue/${ra.ticket}?try=1`, { cookie: B.cookie }), params({ ticket: ra.ticket }));
+    expect(other.status).toBe(404);
+    const del = await ticketRoute.DELETE(req("DELETE", `/api/duel/queue/${ra.ticket}`, { cookie: B.cookie }), params({ ticket: ra.ticket }));
+    expect(del.status).toBe(404);
+    // Старше срока очереди.
+    goTo(clock.serverNow() + 121_000);
+    const old = await ticketRoute.GET(req("GET", `/api/duel/queue/${ra.ticket}`, { cookie: A.cookie }), params({ ticket: ra.ticket }));
+    expect(old.status).toBe(404);
+  });
+
+  it("захватчик выбрал Бита, а его попытка уже захватила соперника: отмена возвращает это место", async () => {
+    const A = await player("Аян");
+    const B = await player("Әсем");
+    const ra = (await join(A)) as { ticket: string };
+    await holder.kv!.zrem(`du:q:blitz:${DECK_TAG}`, [`${ra.ticket}|${A.pid}`]);
+    const rb = (await join(B)) as { state: string; ticket: string };
+    expect(rb.state).toBe("waiting");
+    await holder.kv!.zadd(`du:q:blitz:${DECK_TAG}`, clock.serverNow(), `${ra.ticket}|${A.pid}`);
+    // Попытка B захватила A, но ответ потерялся (ученик уже нажал «Сыграть с Битом»).
+    const lost = await poll(B, rb.ticket, true);
+    expect(lost.state).toBe("matched");
+    const c = await cancel(B, rb.ticket);
+    expect(c.state).toBe("matched");
+    expect((c as { join: MatchJoin }).join.matchId).toBe((lost as { join: MatchJoin }).join.matchId);
+    const pa = await poll(A, ra.ticket, false);
+    expect((pa as { join: MatchJoin }).join.matchId).toBe((lost as { join: MatchJoin }).join.matchId);
+  });
+
+  it("отмена во время попытки: попытка не ставит билет обратно в очередь («призрак»)", async () => {
+    const A = await player("Аян");
+    const ra = (await join(A)) as { ticket: string };
+    const real = holder.kv!;
+    // Отмена приходит, пока попытка A идёт: перед её ZADD.
+    let injected = false;
+    holder.kv = {
+      ...real,
+      pipeline: (async (ops: { op: string; member?: string }[]) => {
+        if (!injected && ops.some((o) => o.op === "zadd" && o.member === `${ra.ticket}|${A.pid}`)) {
+          injected = true;
+          await cancelRaw(A, ra.ticket);
+        }
+        return real.pipeline(ops as never);
+      }) as typeof real.pipeline,
+    };
+    const r = await poll(A, ra.ticket, true);
+    holder.kv = real;
+    expect(injected).toBe(true);
+    expect(r.state).toBe("cancelled");
+    expect(await real.zcard(`du:q:blitz:${DECK_TAG}`)).toBe(0);
+    // Повторная попытка по отменённому билету — тоже cancelled.
+    expect((await poll(A, ra.ticket, true)).state).toBe("cancelled");
+  });
+
+  it("сбой начисления после записи итога: матч не «висит», итог виден обоим", async () => {
+    const { A, B, ja, jb } = await startMatch();
+    goTo(ja.startAt + 5_000);
+    await post(answers, "answers", A, ja, { answers: [0, 1, 2, 3, 4].map((k, n) => ({ i: k, a: correct(ja, k), ms: 800 + n })) });
+    goTo(ja.endsAt + 3_500);
+    const real = holder.kv!;
+    let failed = 0;
+    holder.kv = {
+      ...real,
+      pipeline: (async (ops: { op: string }[]) => {
+        if (!failed && ops.some((o) => o.op === "zincrBy" || o.op === "lpush")) {
+          failed++;
+          throw new TypeError("fetch failed");
+        }
+        return real.pipeline(ops as never);
+      }) as typeof real.pipeline,
+    };
+    const va = await getView(A, ja.matchId, ja.seat);
+    holder.kv = real;
+    expect(failed).toBe(1);
+    expect(va.state).toBe("finished");
+    expect(va.result?.winner).toBe("you");
+    const vb = await getView(B, jb.matchId, jb.seat);
+    expect(vb.state).toBe("finished");
+    expect(vb.result?.winner).toBe("opp");
+  });
+
+  it("ответ, записанный после итога, не меняет показанный счёт", async () => {
+    const { A, B, ja, jb } = await startMatch();
+    goTo(ja.startAt + 5_000);
+    await post(answers, "answers", A, ja, { answers: [{ i: 0, a: correct(ja, 0), ms: 900 }] });
+    goTo(ja.endsAt + 3_500);
+    const fin = await getView(A, ja.matchId, ja.seat);
+    expect(fin.state).toBe("finished");
+    expect(fin.you.score).toBe(2);
+    // Гонка: ответ B проверен по снимку до итога и записан HSETNX уже после него.
+    await holder.kv!.hsetnx(`du:m:${ja.matchId}`, "b:0", `1.${jb.endsAt - jb.startAt}.900.0`);
+    const va = await getView(A, ja.matchId, ja.seat);
+    const vb = await getView(B, jb.matchId, jb.seat);
+    expect(va.opp?.score).toBe(0);
+    expect(va.oppTl).toEqual([]);
+    expect(va.result?.winner).toBe("you");
+    expect(vb.you.score).toBe(0);
+    expect(vb.opp?.score).toBe(2);
+  });
+
+  it("история случайного матча без кода соперника; комнаты — с кодом", async () => {
+    const { A, ja } = await startMatch();
+    await post(leave, "leave", A, ja);
+    const [hist] = await holder.kv!.pipeline([{ op: "lrange", key: `du:h:${A.pid}`, start: 0, stop: 0 }] as const);
+    const row = JSON.parse((hist as string[])[0]) as { opp: string; kind: string };
+    expect(row.kind).toBe("live");
+    expect(row.opp).toBe("");
+  });
+
+  it("расход команд Redis на матч «Блиц» (по логам [social] m=<id6>) — в бюджете ≤ 240", async () => {
+    holder.noBurst = true;
+    const { A, B, ja, jb } = await pairUp();
+    infos = [];
+    const id6 = ja.matchId.slice(0, 6);
+    // VS: готовность и опрос лобби 2 с.
+    await post(ready, "ready", A, ja);
+    await post(ready, "ready", B, jb);
+    for (let k = 0; k < 2; k++) {
+      await getView(A, ja.matchId, ja.seat);
+      await getView(B, jb.matchId, jb.seat);
+    }
+    // Игра 60 с, как useDuel: ответ раз в ~2,4 с; пачка уходит через 1,5 с после первого неотправленного ответа;
+    // отдельный опрос — только если 3 с ничего не отправлялось.
+    const sides = [
+      [A, ja],
+      [B, jb],
+    ] as const;
+    const next = [0, 0];
+    const lastSend = [0, 0];
+    const firstPending = [0, 0];
+    for (let t = 250; t <= 60_000; t += 250) {
+      goTo(ja.startAt + t);
+      for (let s = 0; s < 2; s++) {
+        const [p, j] = sides[s];
+        if (!firstPending[s] && next[s] < 25 && (next[s] + 1) * 2_400 <= t) firstPending[s] = t;
+        if (firstPending[s] && t - firstPending[s] >= 1_500) {
+          const batch = [];
+          while (next[s] < 25 && (next[s] + 1) * 2_400 <= t && batch.length < 5) {
+            batch.push({ i: next[s], a: correct(j, next[s]), ms: 2_400 });
+            next[s]++;
+          }
+          await post(answers, "answers", p, j, { answers: batch });
+          lastSend[s] = t;
+          firstPending[s] = 0;
+        } else if (t - lastSend[s] >= 3_000) {
+          await getView(p, j.matchId, j.seat);
+          lastSend[s] = t;
+        }
+      }
+    }
+    // Итоги: «доиграл» и опрос 2 с до 15 с.
+    goTo(ja.endsAt + 500);
+    await post(done, "done", A, ja);
+    await post(done, "done", B, jb);
+    for (let k = 0; k < 7; k++) {
+      await getView(A, ja.matchId, ja.seat);
+      await getView(B, jb.matchId, jb.seat);
+    }
+    const total = infos.filter((l) => l.includes(` m=${id6} `)).reduce((sum, l) => sum + Number(/cmds=(\d+)/.exec(l)?.[1] ?? 0), 0);
+    process.stdout.write(`[test] blitz match cmds=${total}\n`);
+    expect(total).toBeGreaterThan(50);
+    expect(total).toBeLessThanOrEqual(240);
+  });
+});
+
+async function cancelRaw(p: Player, ticket: string) {
+  return ticketRoute.DELETE(req("DELETE", `/api/duel/queue/${ticket}`, { cookie: p.cookie }), params({ ticket }));
+}

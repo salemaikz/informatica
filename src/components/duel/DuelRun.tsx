@@ -276,7 +276,7 @@ export function DuelRun({
       {/* Выход посреди матча: сердечко уже списано, матч не засчитается — спрашиваем. */}
       <Modal open={quitAsk} onClose={() => setQuitAsk(false)} label={t("duel.quit.title")}>
         <h2 className="mb-2 text-xl font-extrabold">{t("duel.quit.title")}</h2>
-        <p className="mb-4 font-semibold text-muted">{hearts.unlimited ? t("duel.quit.descFree") : t("duel.quit.desc")}</p>
+        <p className="mb-4 font-semibold text-muted">{live ? (hearts.unlimited ? t("duel.quit.liveFree") : t("duel.quit.live")) : hearts.unlimited ? t("duel.quit.descFree") : t("duel.quit.desc")}</p>
         <div className="flex flex-col gap-2">
           <Button size="lg" block onClick={() => setQuitAsk(false)}>
             {t("duel.quit.stay")}

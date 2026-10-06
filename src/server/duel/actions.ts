@@ -8,6 +8,7 @@ import {
   MATCH_ID_RE,
   READY_MS,
   START_MS,
+  advance,
   createRematch,
   judgeBatch,
   matchKey,
@@ -15,7 +16,6 @@ import {
   phaseOf,
   rematchDue,
   seatWritable,
-  settled,
   sideFor,
   viewFor,
   withAnswers,
@@ -28,7 +28,7 @@ import { withinWindow } from "./seat";
 // Кто я в матче — по подписанному месту (x-duel-seat) или, без места (хозяин комнаты до входа друга), по cookie игрока.
 // Запись по месту идёт без предварительного чтения (ключ матча точно жив: seatWritable); отметка «на связи» (_seen) —
 // при каждом запросе по месту. Каждый ответ клиенту несёт MatchView (опрос «на попутке»); лениво завершает матч тот,
-// кто первым увидел конец (match.ts → settled).
+// кто первым увидел конец, и назначает старт комнаты тот, кто первым увидел готовность обоих (match.ts → advance).
 
 export type MatchAction = "view" | "ready" | "answers" | "done" | "leave" | "rematch";
 
@@ -79,15 +79,17 @@ export function matchAction(req: Request, id: string, action: MatchAction): Prom
         const got = await load(ctx, id, seat, {});
         if (!got) return notFound();
         const mine = new URL(req.url).searchParams.get("me") === "1";
-        return viewRes(ctx, await settled(ctx.kv, got.m, now), got.side, undefined, mine);
+        return viewRes(ctx, await advance(ctx.kv, got.m, now), got.side, undefined, mine);
       }
       case "ready": {
         if (!seat) return socialJson({ error: "no_seat" }, 403);
-        // Готовность принимаем до срока (6 с от создания): позже матч уже отменён.
+        // Готовность принимаем до срока (случайный матч — 6 с от создания, комната — 60 с от входа друга; по месту:
+        // rdyBy = startAt − (START_MS − READY_MS)). Первая отметка не перезаписывается (HSETNX): поздний повтор
+        // не «отменит» уже засчитанную готовность.
         const before = now < seat.startAt - (START_MS - READY_MS);
-        const got = await load(ctx, id, seat, before ? { [`${seat.s}_rdy`]: now } : {});
+        const got = await load(ctx, id, seat, {}, before ? { field: `${seat.s}_rdy`, value: now } : undefined);
         if (!got) return notFound();
-        return viewRes(ctx, got.m, got.side);
+        return viewRes(ctx, await advance(ctx.kv, got.m, now), got.side);
       }
       case "answers": {
         if (!seat) return socialJson({ error: "no_seat" }, 403);
@@ -107,13 +109,13 @@ export function matchAction(req: Request, id: string, action: MatchAction): Prom
             accepted = batch.accepted.filter((_, k) => wrote[k]).map((j) => ({ i: j.i, ok: j.ok }));
           }
         }
-        return viewRes(ctx, await settled(ctx.kv, m, now), got.side, { accepted });
+        return viewRes(ctx, await advance(ctx.kv, m, now), got.side, { accepted });
       }
       case "done": {
         if (!seat) return socialJson({ error: "no_seat" }, 403);
         const got = await load(ctx, id, seat, now >= seat.startAt ? { [`${seat.s}_done`]: now } : {});
         if (!got) return notFound();
-        return viewRes(ctx, await settled(ctx.kv, got.m, now), got.side);
+        return viewRes(ctx, await advance(ctx.kv, got.m, now), got.side);
       }
       case "leave": {
         if (seat) {
@@ -124,7 +126,7 @@ export function matchAction(req: Request, id: string, action: MatchAction): Prom
           const side = got.side;
           const mine = side === "a" ? m.a : m.b;
           const marked = mine && !mine.left ? (side === "a" ? { ...m, a: { ...m.a, left: now } } : { ...m, b: { ...mine, left: now } }) : m;
-          return viewRes(ctx, await settled(ctx.kv, marked, now), side);
+          return viewRes(ctx, await advance(ctx.kv, marked, now), side);
         }
         // Хозяин комнаты до входа друга (места ещё нет): закрыть комнату.
         const got = await load(ctx, id, null, {});

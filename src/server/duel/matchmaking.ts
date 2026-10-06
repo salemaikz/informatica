@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { DUEL_MODES, bandOf, isDuelBand } from "@/lib/duel/modes";
 import type { DuelBand, MatchJoin } from "@/lib/duel/types";
 import type { ZEntry } from "@/server/kv";
@@ -10,17 +10,22 @@ import type { SeatClaims } from "./seat";
 
 // Подбор случайного соперника в «Блице» (docs/specs/duels.md §2.1): «захват через ZREM», без Lua — одинаково в памяти
 // и в Upstash. Очередь du:q:blitz:{deckTag} — ZSET, member «ticket|pid», score — когда ждущий последний раз был жив
-// (каждая попытка захвата обновляет). Билет «<id12>.<полоса>.<начало поиска base36>»: полоса и время ожидания — в нём.
+// (каждая попытка захвата обновляет). Билет «<id12>.<полоса>.<начало поиска base36>.<подпись>»: полоса и время ожидания —
+// в нём, подпись — HMAC(SOCIAL_SECRET, pid + билет): чужой или самодельный билет (своя полоса, «давнее» начало ради широкого
+// допуска, обход лимита создания поиска) не принимается; билет живёт не дольше QUEUE_TTL_SEC.
 //   1) конвейер: [ZREM q own (повторная попытка)] + ZRANGE q 0 9 + SMEMBERS pl:blk:{я};
-//      ZREM own = 0 — меня уже забрали: читаю du:tk:{own};
+//      ZREM own = 0 — меня уже забрали (или поиск отменён): читаю du:tk:{own};
 //   2) кандидат: другой pid, полоса в допуске по времени ожидания, не в моём блок-листе, не «мёртвый» (давно не обновлялся);
 //   3) конвейер: SISMEMBER pl:blk:{кандидат} я + ZREM q cand. ZREM = 1 — кандидат мой (заблокировал меня — возвращаю
 //      его на место); = 0 — следующий;
-//   4) захватил: HSET du:m:{id} (+EXPIRE) + SET du:tk:{cand} = его место (60 с) — отвечаю «matched» со своим местом;
-//   5) никого — ZADD q own (+EXPIRE 120 с), «waiting».
+//   4) захватил: HSET du:m:{id} (+EXPIRE) + SET du:tk:{cand} = его место + SET du:tk:{own} = моё место (60 с) — отвечаю
+//      «matched» (своё место в tk нужно отмене: ответ мог потеряться, пока ученик выбирал Бита);
+//   5) никого — конвейер ZADD q own (+EXPIRE 120 с) + GET du:tk:{own}: если за время попытки поиск отменили (DELETE
+//      ставит «cancel») или пришло место — ZREM own и отвечаю по tk; иначе «waiting».
 // Двойного матча нет: каждого забирает только тот, у кого ZREM вернул 1, а ищущий в момент поиска сам вне очереди.
 // Захват упал после ZREM (функция умерла): у ждущего ZREM own = 0, а tk пуст — он ставит «limbo» на 2 с и затем
-// заново встаёт в очередь; сиротский матч истекает сам (никто не подтвердит готовность).
+// заново встаёт в очередь (limbo не удаляем: место от медленного захвата перезапишет его и найдётся шагом 5);
+// сиротский матч истекает сам (никто не подтвердит готовность).
 
 export const QUEUE_TTL_SEC = 120;
 export const TICKET_TTL_SEC = 60;
@@ -34,7 +39,7 @@ const MAX_TRIES = 3;
 export const queueKey = (deckTag: string) => `du:q:blitz:${deckTag}`;
 export const ticketKey = (ticket: string) => `du:tk:${ticket}`;
 
-const TICKET_RE = /^([A-Za-z0-9_-]{12})\.([1-4])\.([0-9a-z]{6,10})$/;
+const TICKET_RE = /^([A-Za-z0-9_-]{12})\.([1-4])\.([0-9a-z]{6,10})\.([A-Za-z0-9_-]{16})$/;
 
 export interface Ticket {
   ticket: string;
@@ -43,11 +48,14 @@ export interface Ticket {
   since: number;
 }
 
-export function newTicket(band: DuelBand, now: number): Ticket {
-  const ticket = `${randomBytes(9).toString("base64url")}.${band}.${Math.floor(now).toString(36)}`;
-  return { ticket, band, since: Math.floor(now) };
+const ticketSig = (body: string, pid: string, secret: string) => createHmac("sha256", secret).update(`duel-ticket:${pid}:${body}`).digest("base64url").slice(0, 16);
+
+export function newTicket(band: DuelBand, now: number, pid: string, secret: string): Ticket {
+  const body = `${randomBytes(9).toString("base64url")}.${band}.${Math.floor(now).toString(36)}`;
+  return { ticket: `${body}.${ticketSig(body, pid, secret)}`, band, since: Math.floor(now) };
 }
 
+/** Разбор формы билета (участники очереди — их писал сервер; подпись не проверяется). */
 export function parseTicket(raw: unknown): Ticket | null {
   const m = typeof raw === "string" ? TICKET_RE.exec(raw) : null;
   if (!m) return null;
@@ -55,6 +63,18 @@ export function parseTicket(raw: unknown): Ticket | null {
   const since = parseInt(m[3], 36);
   if (!isDuelBand(band) || !Number.isFinite(since)) return null;
   return { ticket: raw as string, band, since };
+}
+
+/** Билет от клиента: форма, подпись этого игрока и срок; иначе null. */
+export function verifyTicket(raw: unknown, pid: string, secret: string, now: number): Ticket | null {
+  const t = parseTicket(raw);
+  if (!t) return null;
+  const dot = t.ticket.lastIndexOf(".");
+  const want = Buffer.from(ticketSig(t.ticket.slice(0, dot), pid, secret));
+  const got = Buffer.from(t.ticket.slice(dot + 1));
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
+  if (t.since > now + 60_000 || now - t.since > QUEUE_TTL_SEC * 1000) return null;
+  return t;
 }
 
 export const memberOf = (ticket: string, pid: string) => `${ticket}|${pid}`;
@@ -68,11 +88,14 @@ export function bandTolerance(waitMs: number): number {
 
 export type QueueReply = { state: "waiting"; ticket: string } | { state: "matched"; join: MatchJoin } | { state: "cancelled" };
 
-/** Значение du:tk: место стороны b (JSON claims без подписи) или «limbo:<мс>». */
-type TicketValue = { kind: "join"; claims: SeatClaims } | { kind: "limbo"; at: number } | null;
+/** Значение du:tk: место владельца билета (JSON claims без подписи), «limbo:<мс>» или «cancel» (поиск отменён). */
+type TicketValue = { kind: "join"; claims: SeatClaims } | { kind: "limbo"; at: number } | { kind: "cancel" } | null;
+
+const CANCELLED = "cancel";
 
 function readTicketValue(raw: string | null): TicketValue {
   if (!raw) return null;
+  if (raw === CANCELLED) return { kind: "cancel" };
   if (raw.startsWith("limbo:")) return { kind: "limbo", at: Number(raw.slice(6)) || 0 };
   try {
     const c = JSON.parse(raw) as SeatClaims;
@@ -109,13 +132,14 @@ export async function attempt(kv: CountingKv, me: Seeker, now: number, secret: s
     // Меня уже нет в очереди: забрали (место в du:tk) или захват в процессе / упал.
     const tk = readTicketValue(await kv.getStr(ticketKey(me.t.ticket)));
     if (tk?.kind === "join") return matchedFrom(tk.claims, me.pid, secret);
+    if (tk?.kind === "cancel") return { state: "cancelled" };
     if (tk?.kind === "limbo" && now - tk.at < LIMBO_MS) return { state: "waiting", ticket: me.t.ticket };
     if (!tk) {
       await kv.set(ticketKey(me.t.ticket), `limbo:${now}`, { nx: true, ttlSec: TICKET_TTL_SEC });
       return { state: "waiting", ticket: me.t.ticket };
     }
-    // limbo истёк, место так и не появилось — снова в очередь (ниже обычный поиск).
-    await kv.del([ticketKey(me.t.ticket)]);
+    // limbo истёк, место так и не появилось — снова в очередь (ниже обычный поиск). limbo не удаляем: DEL мог бы стереть
+    // место, которое медленный захват записал только что; его найдёт GET в конце попытки.
   }
   const blockedSet = new Set(blocked);
   const myWait = now - me.t.since;
@@ -148,10 +172,17 @@ export async function attempt(kv: CountingKv, me: Seeker, now: number, secret: s
     }
     return await createLiveMatch(kv, me, { pid, t }, now, secret);
   }
-  await kv.pipeline([
+  const res = await kv.pipeline([
     ...(stale.length ? [{ op: "zrem" as const, key: q, members: stale }] : []),
     { op: "zadd", key: q, score: now, member: own, ttlSec: QUEUE_TTL_SEC },
+    { op: "getStr", key: ticketKey(me.t.ticket) },
   ]);
+  // Пока шла попытка, поиск отменили («Сыграть с Битом», закрыта вкладка) или пришло место — не оставляем «призрака».
+  const after = readTicketValue((res[res.length - 1] as string | null) ?? null);
+  if (after?.kind === "cancel" || after?.kind === "join") {
+    await kv.zrem(q, [own]);
+    return after.kind === "join" ? matchedFrom(after.claims, me.pid, secret) : { state: "cancelled" };
+  }
   return { state: "waiting", ticket: me.t.ticket };
 }
 
@@ -188,33 +219,38 @@ async function createLiveMatch(kv: CountingKv, me: Seeker, cand: { pid: string; 
   const sched = scheduleFrom("blitz", band, now);
   const base = { id, mode: "blitz" as const, seed, band, n: DUEL_MODES.blitz.n, deckTag: me.deckTag, startAt: sched.startAt, endsAt: sched.endsAt };
   const theirs = seatClaims(base, "b", cand.pid);
+  const mine = seatClaims(base, "a", me.pid);
   await kv.pipeline([
     writeMatchOp(id, fields),
     { op: "set", key: ticketKey(cand.t.ticket), value: JSON.stringify(theirs), ttlSec: TICKET_TTL_SEC },
+    // Своё место — тоже в tk: если ответ потерялся, а ученик нажал «Сыграть с Битом», отмена вернёт это место.
+    { op: "set", key: ticketKey(me.t.ticket), value: JSON.stringify(mine), ttlSec: TICKET_TTL_SEC },
   ]);
-  return { state: "matched", join: joinOf(seatClaims(base, "a", me.pid), secret) };
+  return { state: "matched", join: joinOf(mine, secret) };
 }
 
 /** Опрос ждущего без попытки захвата: только GET du:tk (1 команда). */
 export async function peek(kv: CountingKv, ticket: Ticket, pid: string, secret: string): Promise<QueueReply> {
   const tk = readTicketValue(await kv.getStr(ticketKey(ticket.ticket)));
   if (tk?.kind === "join") return matchedFrom(tk.claims, pid, secret);
+  if (tk?.kind === "cancel") return { state: "cancelled" };
   return { state: "waiting", ticket: ticket.ticket };
 }
 
 /**
- * Отмена поиска (в том числе «Сыграть с Битом»): ZREM своего member + GET du:tk. Забрали раньше — отвечаем «matched»:
- * ученик входит в живой матч с пояснением (гонка «выбрал Бита, а меня забрали», §10).
+ * Отмена поиска (в том числе «Сыграть с Битом»): ZREM своего member + SET du:tk «cancel» (NX) + GET du:tk. Забрали
+ * раньше (или своя попытка уже захватила соперника) — отвечаем «matched»: ученик входит в живой матч с пояснением
+ * (гонка «выбрал Бита, а меня забрали», §10). Метка «cancel» не даёт идущей в этот момент попытке снова поставить
+ * билет в очередь (шаг 5 в attempt).
  */
 export async function cancel(kv: CountingKv, ticket: Ticket, pid: string, deckTag: string, secret: string): Promise<QueueReply> {
-  const [removed, raw] = await kv.pipeline([
+  const [, , raw] = await kv.pipeline([
     { op: "zrem", key: queueKey(deckTag), members: [memberOf(ticket.ticket, pid)] },
+    { op: "set", key: ticketKey(ticket.ticket), value: CANCELLED, nx: true, ttlSec: TICKET_TTL_SEC },
     { op: "getStr", key: ticketKey(ticket.ticket) },
   ] as const);
-  if (removed === 0) {
-    const tk = readTicketValue(raw);
-    if (tk?.kind === "join") return matchedFrom(tk.claims, pid, secret);
-  }
+  const tk = readTicketValue(raw);
+  if (tk?.kind === "join") return matchedFrom(tk.claims, pid, secret);
   return { state: "cancelled" };
 }
 

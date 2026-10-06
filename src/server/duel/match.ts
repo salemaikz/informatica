@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes, randomInt } from "node:crypto";
+import { createHmac, randomBytes, randomInt } from "node:crypto";
 import { buildDeck, deckLevels } from "@/lib/duel/deck";
 import { DUEL_MODES, LATE_GRACE_MS, isDuelBand, isDuelMode, itemLimitMs, matchDurationMs } from "@/lib/duel/modes";
 import { cheatFlagCount, eventsOf, judgeAnswers, type JudgedAnswer, type PlausibleFlag } from "@/lib/duel/plausible";
@@ -14,26 +14,39 @@ import { signSeat, type SeatClaims, type SeatSide } from "./seat";
 
 // Живой матч (docs/specs/duels.md §2, §5, §6, §10; duels-design/1-server.md §3): HASH du:m:{id}, TTL 1 ч от создания.
 //   мета: kind (live|room), mode, topic, seed, band, n, tag (deckTag), created, rdyBy, startAt, endsAt, a, b (pid),
-//         ca/cb (карточки JSON на момент входа), la/lb (уровни), room (код комнаты);
-//   стороны: {s}_rdy, {s}_seen, {s}_done, {s}_left, {s}_rm — время, мс; ответы {s}:{i} = «ok.t.ms.flags» через HSETNX
-//         (повтор и вторая вкладка не перезапишут);
-//   итог: fin (HSETNX — ровно одно завершение), res (JSON), rm (JSON реванша).
+//         ca/cb (карточки JSON на момент входа), la/lb (уровни), room (код комнаты), go (старт комнаты, HSETNX);
+//   стороны: {s}_rdy (HSETNX — первая готовность), {s}_seen, {s}_done, {s}_left, {s}_rm — время, мс;
+//         ответы {s}:{i} = «ok.t.ms.flags» через HSETNX (повтор и вторая вкладка не перезапишут);
+//   итог: res (JSON через HSETNX — ровно одно завершение, со счётом на момент итога), rm (JSON реванша).
 // Состояния: lobby (комната ждёт друга / ждём готовности обоих) → countdown (оба готовы, до startAt) → playing → finished;
-// cancelled — не подтвердил готовность за 6 с, ушёл до старта или комната истекла (сердечко не списано: платят в startAt).
-// Завершение ленивое: любое чтение, увидевшее конец, делает HSETNX fin; победитель гонки считает итог и в том же запросе
-// начисляет очки недели, лимиты пары и суток, историю (не в after(): там падение молча теряло бы очки).
+// cancelled — не подтвердил готовность в срок, ушёл до старта или комната истекла (сердечко не списано: платят в startAt).
+// Случайный матч: готовность — 6 с, старт — через 7,5 с после создания. Комната: друг вошёл — у обоих 60 с на готовность
+// (хозяин в это время часто в мессенджере, а вкладка на паузе); старт — через 5 с после второй готовности (HSETNX go),
+// места переподписываются с настоящим стартом (до этого — «предварительный» старт в конце окна готовности).
+// Завершение ленивое: любое чтение, увидевшее конец, читает счётчики пары и суток, считает итог и пишет его HSETNX res;
+// только победитель гонки начисляет очки недели, лимиты и историю в том же запросе (не в after()). Падение между итогом
+// и начислением теряет очки этого матча, но не «вешает» матч: итог уже записан.
+// Приватность (3-safety §3): случайному сопернику код друга не уходит — вместо него непрозрачная метка (HMAC от pid),
+// по ней же «Игрок 4821»; в историю случайного матча код соперника не пишется.
 
 export const MATCH_TTL_SEC = 3600;
-/** Готовность обоих — за столько после создания матча (входа друга в комнату), мс. */
+/** Готовность обоих — за столько после создания случайного матча, мс. */
 export const READY_MS = 6_000;
 /** Старт — через столько после создания: успеть узнать о матче (опрос 1,5–2 с), скачать набор и показать VS. */
 export const START_MS = 7_500;
+/** Комната: окно готовности после входа друга, мс. */
+export const ROOM_READY_MS = 60_000;
+/** Комната: старт через столько после второй готовности (второй узнаёт опросом за ≤ 2 с), мс. */
+export const ROOM_COUNTDOWN_MS = 5_000;
 /** Комната ждёт друга столько, мс (как du:room). */
 export const ROOM_LOBBY_MS = 10 * 60_000;
 /** Реванш: второй должен согласиться за столько после первого, мс. */
 export const REMATCH_WINDOW_MS = 20_000;
-/** Писать в хеш по подписанному месту можно, пока ключ точно жив (TTL 1 ч от создания; создание ≈ startAt − START_MS). */
-const SEAT_WRITE_MS = 50 * 60_000;
+/**
+ * Писать в хеш по подписанному месту можно, пока ключ точно жив: TTL 1 ч от создания, а старт — не позже ~11,5 мин
+ * после создания (комната 10 мин + окно готовности 60 с + отсчёт), поэтому 45 мин от старта — с запасом ≥ 3 мин.
+ */
+const SEAT_WRITE_MS = 45 * 60_000;
 
 const HISTORY_MAX = 20;
 const HISTORY_TTL_SEC = 30 * 86_400;
@@ -74,6 +87,13 @@ export interface StoredResult {
   cb: boolean;
   ya?: NotCountedWhy;
   yb?: NotCountedWhy;
+  /** Счёт, верные и число ответов сторон на момент итога: поздняя запись ответа не меняет показанный итог. */
+  sa: number;
+  sb: number;
+  ka: number;
+  kb: number;
+  na: number;
+  nb: number;
 }
 
 interface RematchInfo {
@@ -98,9 +118,10 @@ export interface MatchData {
   startAt: number;
   endsAt: number;
   room?: string;
+  /** Комната: старт назначен (оба готовы, HSETNX go). */
+  go: boolean;
   a: SideData;
   b: SideData | null;
-  fin: boolean;
   res: StoredResult | null;
   rm: RematchInfo | null;
 }
@@ -179,6 +200,10 @@ export function parseMatch(id: string, h: Record<string, string>): MatchData | n
   const n = DUEL_MODES[mode].n;
   const a = sideOf(h, "a", n, mode);
   if (!a) return null;
+  // Комната: назначенный старт (go) заменяет предварительный.
+  const go = num(h.go);
+  const startAt = go || num(h.startAt);
+  const endsAt = go ? go + durationOf(mode, band) : num(h.endsAt);
   return {
     id,
     kind: h.kind === "room" ? "room" : "live",
@@ -190,12 +215,12 @@ export function parseMatch(id: string, h: Record<string, string>): MatchData | n
     deckTag: h.tag,
     created: num(h.created),
     rdyBy: num(h.rdyBy),
-    startAt: num(h.startAt),
-    endsAt: num(h.endsAt),
+    startAt,
+    endsAt,
     ...(h.room ? { room: h.room } : {}),
+    go: go > 0,
     a,
     b: sideOf(h, "b", n, mode),
-    fin: !!h.fin,
     res: json<StoredResult>(h.res),
     rm: json<RematchInfo>(h.rm),
   };
@@ -235,6 +260,15 @@ export function scheduleFrom(mode: DuelModeId, band: DuelBand, at: number): { rd
   return { rdyBy: at + READY_MS, startAt, endsAt: startAt + durationOf(mode, band) };
 }
 
+/**
+ * Комната: друг вошёл в момент at — 60 с на готовность обоих. Предварительный старт — сразу после окна готовности
+ * (startAt − rdyBy = START_MS − READY_MS, как у случайного матча: маршрут готовности считает срок по месту одинаково);
+ * настоящий старт назначит вторая готовность (go).
+ */
+export function roomScheduleFrom(mode: DuelModeId, band: DuelBand, at: number): { rdyBy: number; startAt: number; endsAt: number } {
+  return scheduleFrom(mode, band, at + ROOM_READY_MS - READY_MS);
+}
+
 /** Поля нового матча (HSET). Комната без второго игрока — без сроков (их ставит вход друга). */
 export function matchFields(m: NewMatch): Record<string, string | number> {
   const f: Record<string, string | number> = {
@@ -251,7 +285,10 @@ export function matchFields(m: NewMatch): Record<string, string | number> {
   if (m.room) f.room = m.room;
   if (m.a.card) f.ca = m.a.card;
   if (m.b) {
-    Object.assign(f, scheduleFrom(m.mode, m.band, m.created));
+    const sched = scheduleFrom(m.mode, m.band, m.created);
+    Object.assign(f, sched);
+    // Реванш в комнате: оба на экране итогов — старт сразу назначен, как у случайного матча.
+    if (m.kind === "room") f.go = sched.startAt;
     f.b = m.b.pid;
     f.lb = m.b.lv;
     if (m.b.card) f.cb = m.b.card;
@@ -319,6 +356,24 @@ export function deckOf(m: Pick<MatchData, "mode" | "seed" | "band" | "topic">): 
 
 // ---------- состояние ----------
 
+/** Оба подтвердили готовность в срок (первая отметка хранится HSETNX и не позже rdyBy). */
+export function bothReady(m: MatchData): boolean {
+  const ok = (s: SideData | null) => !!s && s.rdy > 0 && s.rdy <= m.rdyBy;
+  return ok(m.a) && ok(m.b);
+}
+
+/**
+ * Комната: оба готовы, старта ещё нет — назначить его (HSETNX go = сейчас + 5 с; гонку двух запросов решает HSETNX,
+ * проигравший читает чужой go). Для остальных матчей — без команд.
+ */
+export async function ensureRoomStart(kv: CountingKv, m: MatchData, now: number): Promise<MatchData> {
+  if (m.kind !== "room" || m.go || !m.b || m.res || !bothReady(m)) return m;
+  const key = matchKey(m.id);
+  let go = now + ROOM_COUNTDOWN_MS;
+  if (!(await kv.hsetnx(key, "go", go))) go = num((await kv.hget(key, "go")) ?? undefined) || go;
+  return { ...m, go: true, startAt: go, endsAt: go + durationOf(m.mode, m.band) };
+}
+
 export function phaseOf(m: MatchData, now: number): { state: MatchView["state"]; cancelled?: CancelWhy } {
   if (m.res) return { state: "finished" };
   if (!m.b || !m.startAt) {
@@ -328,7 +383,12 @@ export function phaseOf(m: MatchData, now: number): { state: MatchView["state"];
   }
   const leftEarly = (s: SideData) => s.left > 0 && s.left < m.startAt;
   if (leftEarly(m.a) || leftEarly(m.b)) return { state: "cancelled", cancelled: "left" };
-  const ready = m.a.rdy > 0 && m.b.rdy > 0;
+  const ready = bothReady(m);
+  // Комната: оба готовы, а старт ещё не назначен (назначит этот же запрос — ensureRoomStart).
+  if (m.kind === "room" && !m.go) {
+    if (ready) return { state: "countdown" };
+    return now >= m.rdyBy ? { state: "cancelled", cancelled: "no_ready" } : { state: "lobby" };
+  }
   if (now < m.startAt) {
     if (ready) return { state: "countdown" };
     return now >= m.rdyBy ? { state: "cancelled", cancelled: "no_ready" } : { state: "lobby" };
@@ -385,13 +445,13 @@ const totalsOf = (m: MatchData, s: SideData): SideTotals => totals(m.mode, event
 // ---------- завершение ----------
 
 /**
- * Завершить матч ровно один раз (HSETNX fin). Победитель гонки читает счётчики пары и суток, пишет итог, очки недели,
- * счётчики и историю одним конвейером. null — завершает кто-то другой (итог появится в следующем опросе).
+ * Завершить матч ровно один раз. Сначала счётчики пары и суток (3 GET), затем итог целиком — HSETNX res: итог и есть
+ * замок, поэтому падение после него не оставляет матч «без итога навсегда». Победитель гонки одним конвейером начисляет
+ * очки недели, счётчики и историю; проигравший берёт записанный итог (HGET). null — итога нет (сбой чтения).
  */
 export async function settle(kv: CountingKv, m: MatchData, v: Verdict, now: number): Promise<StoredResult | null> {
   if (!m.b) return null;
   const key = matchKey(m.id);
-  if (!(await kv.hsetnx(key, "fin", String(now)))) return null;
   const a = m.a;
   const b = m.b;
   const day = kzDay(now);
@@ -416,6 +476,8 @@ export async function settle(kv: CountingKv, m: MatchData, v: Verdict, now: numb
     ...(v.reason === "left" && loser ? { left: loser } : {}),
     now,
   });
+  const ta = totalsOf(m, a);
+  const tb = totalsOf(m, b);
   const res: StoredResult = {
     w: v.winner,
     r: v.reason,
@@ -425,11 +487,18 @@ export async function settle(kv: CountingKv, m: MatchData, v: Verdict, now: numb
     cb: cb.counted,
     ...("why" in ca && ca.why ? { ya: ca.why } : {}),
     ...("why" in cb && cb.why ? { yb: cb.why } : {}),
+    sa: ta.score,
+    sb: tb.score,
+    ka: ta.correct,
+    kb: tb.correct,
+    na: ta.answered,
+    nb: tb.answered,
   };
-  const ta = totalsOf(m, a);
-  const tb = totalsOf(m, b);
-  const hist = (me: SideData, you: SideTotals, them: SideTotals, opp: SideData, out: string) =>
-    JSON.stringify({ m: m.id, mode: m.mode, opp: opp.card.code, you: you.score, them: them.score, res: out, at: now });
+  if (!(await kv.hsetnx(key, "res", JSON.stringify(res)))) return json<StoredResult>((await kv.hget(key, "res")) ?? undefined);
+  // Случайному сопернику код друга не уходит — и в историю его не пишем (3-safety §3).
+  const oppCode = (opp: SideData) => (m.kind === "room" ? opp.card.code : "");
+  const hist = (you: SideTotals, them: SideTotals, opp: SideData, out: string) =>
+    JSON.stringify({ m: m.id, mode: m.mode, kind: m.kind, opp: oppCode(opp), you: you.score, them: them.score, res: out, at: now });
   const outcome = (s: "a" | "b") => (v.winner === "draw" ? "draw" : v.winner === s ? "win" : "loss");
   const tail: KvOp[] = v.void
     ? []
@@ -437,20 +506,33 @@ export async function settle(kv: CountingKv, m: MatchData, v: Verdict, now: numb
         { op: "incrBy", key: pairCounterKey(day, a.pid, b.pid), n: 1, ttlSec: DAY_COUNTER_TTL_SEC },
         ...(ca.counted ? [{ op: "incrBy", key: dayCounterKey(day, a.pid), n: 1, ttlSec: DAY_COUNTER_TTL_SEC } as KvOp] : []),
         ...(cb.counted ? [{ op: "incrBy", key: dayCounterKey(day, b.pid), n: 1, ttlSec: DAY_COUNTER_TTL_SEC } as KvOp] : []),
-        { op: "lpush", key: keys.history(a.pid), value: hist(a, ta, tb, b, outcome("a")), max: HISTORY_MAX, ttlSec: HISTORY_TTL_SEC },
-        { op: "lpush", key: keys.history(b.pid), value: hist(b, tb, ta, a, outcome("b")), max: HISTORY_MAX, ttlSec: HISTORY_TTL_SEC },
+        { op: "lpush", key: keys.history(a.pid), value: hist(ta, tb, b, outcome("a")), max: HISTORY_MAX, ttlSec: HISTORY_TTL_SEC },
+        { op: "lpush", key: keys.history(b.pid), value: hist(tb, ta, a, outcome("b")), max: HISTORY_MAX, ttlSec: HISTORY_TTL_SEC },
       ];
-  await kv.pipeline([{ op: "hset", key, fields: { res: JSON.stringify(res) } }, ...ops, ...tail]);
+  const award = [...ops, ...tail];
+  if (award.length) {
+    try {
+      await kv.pipeline(award);
+    } catch (e) {
+      // Итог уже записан: ученики его увидят; теряются только очки и история этого матча.
+      console.error(`[duel] award failed m=${m.id.slice(0, 6)}`, e instanceof Error ? e.message : e);
+    }
+  }
   return res;
 }
 
-/** Матч с учётом ленивого завершения: пора — завершаем (или ждём, пока завершит другой). */
+/** Матч с учётом ленивого завершения: пора — завершаем (или берём итог, записанный другим запросом). */
 export async function settled(kv: CountingKv, m: MatchData, now: number): Promise<MatchData> {
   if (m.res) return m;
   const v = verdictOf(m, now);
   if (!v) return m;
   const res = await settle(kv, m, v, now);
-  return res ? { ...m, fin: true, res } : m;
+  return res ? { ...m, res } : m;
+}
+
+/** Шаг матча при любом запросе: назначить старт комнаты (оба готовы) и лениво завершить. */
+export async function advance(kv: CountingKv, m: MatchData, now: number): Promise<MatchData> {
+  return settled(kv, await ensureRoomStart(kv, m, now), now);
 }
 
 // ---------- реванш ----------
@@ -492,15 +574,32 @@ export async function createRematch(kv: CountingKv, m: MatchData, now: number): 
 
 // ---------- вид для клиента ----------
 
-function sideView(m: MatchData, s: SideData, now: number): SideView {
+/**
+ * Непрозрачная метка игрока для случайного соперника вместо кода друга: «~» + 10 знаков HMAC(pid). Постоянна для игрока
+ * (тот же «Игрок 4821» в разных матчах, как tag в 3-safety §2), по ней нельзя ни найти игрока, ни отправить заявку
+ * («~» не бывает в коде друга). Жалоба на случайного соперника адресуется матчем (matchId + своё место), а не меткой.
+ */
+export function anonHandle(pid: string, secret: string): string {
+  return `~${createHmac("sha256", secret).update(`duel-anon:${pid}`).digest("base64url").slice(0, 10)}`;
+}
+
+/** Карточка стороны для соперника: в случайном матче — без кода друга. */
+function cardFor(m: MatchData, s: SideData, secret: string): PublicCard {
+  return m.kind === "live" ? { ...s.card, code: anonHandle(s.pid, secret) } : s.card;
+}
+
+function sideView(m: MatchData, s: SideData, side: SeatSide, now: number, card: PublicCard): SideView {
   const t = totalsOf(m, s);
   const st = m.startAt ? sideStatus(m, s, now) : null;
+  // Итог записан — счёт с итога (ответ, принятый в гонке с завершением, не меняет показанный счёт).
+  const r = m.res;
+  const frozen = r && typeof r.sa === "number" ? (side === "a" ? { score: r.sa, correct: r.ka, answered: r.na } : { score: r.sb, correct: r.kb, answered: r.nb }) : null;
   return {
-    card: s.card,
-    answered: t.answered,
-    correct: t.correct,
-    score: t.score,
-    done: st?.done ?? false,
+    card,
+    answered: frozen?.answered ?? t.answered,
+    correct: frozen?.correct ?? t.correct,
+    score: frozen?.score ?? t.score,
+    done: frozen ? true : (st?.done ?? false),
     idleMs: st && now >= m.startAt ? st.idleMs : 0,
     ready: s.rdy > 0,
   };
@@ -510,16 +609,19 @@ function sideView(m: MatchData, s: SideData, now: number): SideView {
 export function viewFor(m: MatchData, side: SeatSide, now: number, secret: string, mine = false): MatchView {
   const me = side === "a" ? m.a : (m.b as SideData);
   const opp = side === "a" ? m.b : m.a;
+  const oside = other(side);
   const ph = phaseOf(m, now);
+  const you = sideView(m, me, side, now, me.card);
+  const oppView = opp ? sideView(m, opp, oside, now, cardFor(m, opp, secret)) : null;
   const view: MatchView = {
     id: m.id,
     kind: m.kind,
     state: ph.state,
     serverNow: now,
-    you: sideView(m, me, now),
-    opp: opp ? sideView(m, opp, now) : null,
-    oppTl: opp && m.startAt ? eventsOf(opp.answers) : [],
-    ...(mine ? { youTl: eventsOf(me.answers) } : {}),
+    you,
+    opp: oppView,
+    oppTl: opp && m.startAt ? eventsOf(opp.answers).slice(0, oppView?.answered) : [],
+    ...(mine ? { youTl: eventsOf(me.answers).slice(0, you.answered) } : {}),
     ...(ph.cancelled ? { cancelled: ph.cancelled } : {}),
   };
   if (m.res) {

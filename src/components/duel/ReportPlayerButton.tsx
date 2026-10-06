@@ -2,14 +2,18 @@
 
 import { Flag, X } from "lucide-react";
 import { useState } from "react";
-import { duelFetch } from "@/lib/duel/live";
+import { duelFetch, hideName } from "@/lib/duel/live";
 import { useT } from "@/i18n/useT";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
-// «Пожаловаться» на живого соперника (docs/specs/duels.md §7): причина без свободного текста — имя, нечестная игра,
-// другое. Отправка — POST /api/social/report (маршрут и модерация — пакет друзей, Ф3). У бота кнопки нет.
-// TODO(слияние с Ф3): если Ф3 принесла свой ReportPlayerButton (скрытие имени у себя, «Заблокировать») — взять его.
+// «Пожаловаться» на живого соперника (docs/specs/duels.md §7, 3-safety §4): причина без свободного текста — имя, нечестная
+// игра, другое. Нажатие сразу скрывает имя соперника у себя (локально, «Игрок 4821»). Отправка — POST /api/social/report
+// {matchId, reason, where:"result"} с местом в матче (x-duel-seat): адресата сервер находит по матчу и месту — код друга
+// случайного соперника клиенту не приходит; в комнате с другом добавляется и его код. «Спасибо» — только на ответ 2xx.
+// У бота кнопки нет.
+// TODO(слияние с Ф3): маршрут /api/social/report и компонент жалобы с «Заблокировать» — в пакете друзей; при слиянии
+// взять его компонент, сохранив адресацию по матчу (matchId + место) для случайных соперников.
 
 type Reason = "name" | "cheat" | "other";
 const REASONS: { id: Reason; key: "duel.report.name" | "duel.report.cheat" | "duel.report.other" }[] = [
@@ -18,22 +22,34 @@ const REASONS: { id: Reason; key: "duel.report.name" | "duel.report.cheat" | "du
   { id: "other", key: "duel.report.other" },
 ];
 
-export function ReportPlayerButton({ code, matchId }: { code: string; matchId?: string }) {
+export function ReportPlayerButton({
+  matchId,
+  seat,
+  code,
+  onHidden,
+}: {
+  matchId: string;
+  seat: string | null;
+  /** Метка соперника из карточки: код друга (комната) или «~метка» (случайный матч). */
+  code: string;
+  /** Имя скрыто у себя — экран перерисует карточку. */
+  onHidden?: () => void;
+}) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  if (!code) return null;
+  const [status, setStatus] = useState<"idle" | "busy" | "sent" | "fail">("idle");
 
   const send = async (reason: Reason) => {
-    setBusy(true);
-    await duelFetch("POST", "/api/social/report", { body: { code, reason, where: "duel", ...(matchId ? { matchId } : {}) } });
-    setBusy(false);
-    setSent(true);
+    setStatus("busy");
+    hideName(code);
+    onHidden?.();
+    const friendCode = code && !code.startsWith("~") ? { code } : {};
+    const res = await duelFetch("POST", "/api/social/report", { body: { matchId, reason, where: "result", ...friendCode }, seat });
+    setStatus(res.status >= 200 && res.status < 300 ? "sent" : "fail");
     setOpen(false);
   };
 
-  if (sent)
+  if (status === "sent")
     return (
       <p role="status" className="text-center text-xs font-bold text-muted">
         {t("duel.report.done")}
@@ -41,6 +57,11 @@ export function ReportPlayerButton({ code, matchId }: { code: string; matchId?: 
     );
   return (
     <>
+      {status === "fail" && (
+        <p role="status" className="text-center text-xs font-bold text-muted">
+          {t("duel.report.fail")}
+        </p>
+      )}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -58,8 +79,9 @@ export function ReportPlayerButton({ code, matchId }: { code: string; matchId?: 
               <X size={22} />
             </button>
           </div>
+          <p className="text-sm font-semibold text-muted">{t("duel.report.hidden")}</p>
           {REASONS.map((r) => (
-            <Button key={r.id} variant="secondary" block disabled={busy} onClick={() => void send(r.id)}>
+            <Button key={r.id} variant="secondary" block disabled={status === "busy"} onClick={() => void send(r.id)}>
               {t(r.key)}
             </Button>
           ))}

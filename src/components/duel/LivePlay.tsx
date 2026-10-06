@@ -17,12 +17,15 @@ import type { DuelSideStat } from "@/lib/duel/record";
 import type { RunState } from "@/lib/duel/run";
 import {
   CLIENT_DECK_TAG,
+  REMATCH_WINDOW_MS,
   SEARCH,
   duelFetch,
   ensurePlayer,
   isMatchJoin,
+  isNameHidden,
   liveHref,
   loadJoin,
+  maskHidden,
   playerLabel,
   resumeRun,
   roomPath,
@@ -129,6 +132,10 @@ export function LivePlay({ start }: { start: LiveStart }) {
   const [noHearts, setNoHearts] = useState(false);
   /** Сервер завершил матч, пока ученик ещё отвечал (соперник вышел или пропал): ход заканчивается. */
   const [ended, setEnded] = useState<string | null>(null);
+  /** Реванш: матч, в котором ученик нажал «Реванш», а соперник не ответил за 20 с. */
+  const [rematchLapsed, setRematchLapsed] = useState<string | null>(null);
+  /** Имя соперника скрыто жалобой — перерисовать карточку. */
+  const [, setHiddenTick] = useState(0);
   const phaseRef = useRef(phase);
   useEffect(() => {
     phaseRef.current = phase;
@@ -181,7 +188,12 @@ export function LivePlay({ start }: { start: LiveStart }) {
       return;
     }
     if (p.name === "vs") {
-      if (v.state === "cancelled") setPhase({ name: "cancelled", why: v.cancelled ?? "no_ready", mode: p.join.mode, topic: p.join.topic });
+      if (v.state === "cancelled") return setPhase({ name: "cancelled", why: v.cancelled ?? "no_ready", mode: p.join.mode, topic: p.join.topic });
+      // Комната: вторая готовность назначила настоящий старт — место переподписано с ним (до этого — предварительное).
+      if (v.join && v.join.matchId === p.join.matchId && v.join.startAt !== p.join.startAt && isMatchJoin(v.join)) {
+        saveJoin(v.join);
+        setPhase({ ...p, join: v.join });
+      }
       return;
     }
     if ((p.name === "wait" || p.name === "play") && v.state === "finished" && v.result) {
@@ -223,13 +235,25 @@ export function LivePlay({ start }: { start: LiveStart }) {
     setPhase({ name: "vs", join: j, deck });
   }
 
-  /** Конец отсчёта: свежая проверка (соперник не ушёл?) → сердечко → матч. */
+  /**
+   * Конец отсчёта: свежая проверка (соперник не ушёл? матч не отменён?) → сердечко → матч. Сердечко списываем только по
+   * виду, взятому не раньше чем за секунду до старта и говорящему «отсчёт/идёт матч»: старый вид мог не знать об отмене.
+   */
   const go = async () => {
     const p = phaseRef.current;
     if (p.name !== "vs") return;
-    const v = (await conn.refresh()) ?? conn.view;
+    let v: MatchView | null = null;
+    for (let k = 0; k < 3 && !v; k++) {
+      if (k) await new Promise((r) => setTimeout(r, 1_000));
+      if (phaseRef.current !== p) return;
+      v = await conn.refresh();
+    }
     if (phaseRef.current !== p) return;
-    if (v?.state === "cancelled") return setPhase({ name: "cancelled", why: v.cancelled ?? "no_ready", mode: p.join.mode, topic: p.join.topic });
+    if (!v) return setPhase({ name: "error", error: "lost" });
+    if (v.state === "cancelled") return setPhase({ name: "cancelled", why: v.cancelled ?? "no_ready", mode: p.join.mode, topic: p.join.topic });
+    // Ещё не отсчёт (отсчёт пойдёт заново, когда сервер скажет) или часы устройства убежали вперёд — ждём старта.
+    if (v.state !== "countdown" && v.state !== "playing") return;
+    if (v.serverNow < p.join.startAt - 1_000) return void window.setTimeout(() => void go(), p.join.startAt - v.serverNow);
     if (!useApp.getState().payEntryOnce(duelEntryKey(p.join.matchId), ENTRY_COST.duel).ok) {
       setNoHearts(true);
       return;
@@ -327,7 +351,16 @@ export function LivePlay({ start }: { start: LiveStart }) {
   };
 
   const view = conn.view && conn.view.id === matchId ? conn.view : null;
-  const opp = view?.opp?.card ?? null;
+  const rawOpp = view?.opp?.card ?? null;
+  const opp = maskHidden(rawOpp, !!rawOpp && isNameHidden(rawOpp.code));
+  const rematchState = (r: MatchView["rematch"] | undefined, id: string): "idle" | "waiting" | "offered" | "none" =>
+    r?.you && !r.next ? (rematchLapsed === id ? "none" : "waiting") : r?.opp ? "offered" : "idle";
+  const askRematch = (id: string) => {
+    setRematchLapsed(null);
+    void conn.rematch();
+    // Соперник не ответил за окно реванша — кнопка снова доступна, с пояснением.
+    window.setTimeout(() => setRematchLapsed((cur) => (phaseRef.current.name === "result" && phaseRef.current.join.matchId === id ? id : cur)), REMATCH_WINDOW_MS + 2_000);
+  };
   // Матч пропал (истёк) или сборка устарела — экран ошибки поверх любой фазы матча.
   const fatal: LiveError | null =
     phase.name === "error" || phase.name === "search" || phase.name === "prep" ? null : conn.error === "update_needed" ? "update_needed" : conn.error === "not_found" ? "expired" : null;
@@ -425,11 +458,11 @@ export function LivePlay({ start }: { start: LiveStart }) {
           events={phase.run?.events ?? []}
           answers={phase.run?.answers ?? []}
           opponent={opp}
-          rematchState={view?.rematch?.you ? "waiting" : view?.rematch?.opp ? "offered" : "idle"}
-          onRematch={() => void conn.rematch()}
+          rematchState={rematchState(view?.rematch, phase.join.matchId)}
+          onRematch={() => askRematch(phase.join.matchId)}
           onHub={toHub}
         >
-          <ResultExtras view={view} matchId={phase.join.matchId} />
+          <ResultExtras view={view} matchId={phase.join.matchId} seat={phase.join.seat} onHidden={() => setHiddenTick((n) => n + 1)} />
         </DuelResult>
       )}
 
@@ -675,7 +708,7 @@ function WaitScreen({ view, n, mode, lost, onHub }: { view: MatchView | null; n:
 }
 
 /** Под счётом на итогах с живым: причина технического итога, очки недели или «не попал в топ», жалоба. */
-function ResultExtras({ view, matchId }: { view: MatchView | null; matchId: string }) {
+function ResultExtras({ view, matchId, seat, onHidden }: { view: MatchView | null; matchId: string; seat: string; onHidden: () => void }) {
   const { t } = useT();
   const r = view?.result;
   if (!r) return null;
@@ -693,7 +726,7 @@ function ResultExtras({ view, matchId }: { view: MatchView | null; matchId: stri
           {t("duel.notCounted", { why: t(`duel.why.${r.why}`) })}
         </p>
       ) : null}
-      {view?.opp?.card.code ? <ReportPlayerButton code={view.opp.card.code} matchId={matchId} /> : null}
+      {view?.opp && !view.opp.card.bot ? <ReportPlayerButton code={view.opp.card.code} matchId={matchId} seat={seat} onHidden={onHidden} /> : null}
     </div>
   );
 }

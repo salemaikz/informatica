@@ -42,6 +42,13 @@ export async function createLimited(kv: CountingKv, req: Request, pid: string, n
   return !(mine && ip);
 }
 
+/**
+ * Выключатель случайных соперников (3-safety §8: запуск под флагом до ответа юриста): SOCIAL_RANDOM=0 — очередь «Блица»
+ * отвечает 503 random_disabled (клиент показывает «временно недоступно» и Бита); комнаты с друзьями работают.
+ */
+export const randomEnabled = (): boolean => process.env.SOCIAL_RANDOM !== "0";
+export const randomDisabled = (): Response => socialJson({ error: "random_disabled" }, 503);
+
 /** Тело запроса-объект; иначе готовый ответ 400/413. */
 export async function bodyOf(req: Request): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; res: Response }> {
   const body = await readJsonBody(req, MAX_DUEL_BODY);

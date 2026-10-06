@@ -18,9 +18,10 @@ import {
 } from "@/lib/duel/live";
 import type { AnswerIn, MatchJoin, MatchView } from "@/lib/duel/types";
 
-// Живой матч на клиенте (этап 16Д, Ф4; docs/specs/duels.md §5): опрос по фазам — лобби 2 с; в игре ответы пачкой до 5
-// или через 1,5 с, ответ сервера несёт MatchView, отдельный опрос — если 3 с ничего не отправлялось; ожидание и итоги —
-// 2 с до 15 с. Сдвиг часов — по serverNow в каждом ответе. Вкладка скрыта — опрос на паузе (часы матча идут).
+// Живой матч на клиенте (этап 16Д, Ф4; docs/specs/duels.md §5): опрос по фазам — лобби 2 с (после минуты — 5 с); в игре
+// ответы пачкой до 5 или через 1,5 с, ответ сервера несёт MatchView, отдельный опрос — если 3 с ничего не отправлялось;
+// ожидание и итоги — 2 с до 15 с, дальше ожидание — 5 с. Сдвиг часов — по serverNow в каждом ответе. Вкладка скрыта —
+// опрос на паузе (часы матча идут), вернулись — сразу опрос.
 // Ошибка сети — пауза 2 → 4 → 8 с. Поиск соперника — useDuelSearch: опрос билета 1,5 с, каждая вторая — попытка захвата.
 
 /** off — не опрашивать; lobby — вид раз в 2 с; ready — то же, но сначала «готов» (VS); play / wait / result — см. выше. */
@@ -29,6 +30,9 @@ export type DuelError = "not_found" | "update_needed" | "no_player" | "forbidden
 
 /** Сколько ошибок подряд, прежде чем показать «Связь потеряна». */
 const LOST_AFTER = 4;
+/** Долгое ожидание (лобби комнаты дольше минуты, соперник в «10 вопросах» дольше 15 с) — опрос реже: экономия команд. */
+const SLOW_POLL_MS = 5_000;
+const LOBBY_FAST_MS = 60_000;
 
 const visible = () => typeof document === "undefined" || !document.hidden;
 
@@ -194,12 +198,12 @@ export function useDuel(matchId: string | null, join: MatchJoin | null, phase: D
         if (phase === "ready" && seatRef.current && st.readyFor !== matchId) {
           if (await call("POST", "ready")) st.readyFor = matchId;
         } else await call("GET");
-        return schedule(POLL.lobbyMs);
+        return schedule(now - st.phaseAt < LOBBY_FAST_MS ? POLL.lobbyMs : SLOW_POLL_MS);
       }
       if (phase === "wait") {
         if (st.answers.some((a) => a.i >= st.acked)) await flush();
         else await call("GET");
-        return schedule(now - st.phaseAt < POLL.resultsMaxMs ? POLL.resultsMs : POLL.idleMs);
+        return schedule(now - st.phaseAt < POLL.resultsMaxMs ? POLL.resultsMs : SLOW_POLL_MS);
       }
       // Итоги: 2 с до 15 с (видно запрос реванша соперника); после своего «Реванш» — до 20 с.
       const rematchOpen = st.rematchAt > 0 && now - st.rematchAt < 22_000;
@@ -266,7 +270,7 @@ function searchFail(status: number): SearchState {
  */
 export function useDuelSearch(lv: number, onMatched?: (join: MatchJoin, late: boolean) => void) {
   const [state, setState] = useState<SearchState>({ name: "idle" });
-  const r = useRef({ ticket: null as string | null, polls: 0, failures: 0, timer: 0, run: 0, startedAt: 0 });
+  const r = useRef({ ticket: null as string | null, polls: 0, failures: 0, timer: 0, run: 0, startedAt: 0, inflight: null as Promise<unknown> | null });
   const matchedRef = useRef(onMatched);
   useEffect(() => {
     matchedRef.current = onMatched;
@@ -301,7 +305,10 @@ export function useDuelSearch(lv: number, onMatched?: (join: MatchJoin, late: bo
         }
         st.polls++;
         const capture = st.polls % POLL.captureEvery === 0;
-        const res = await duelFetch<unknown>("GET", queueUrl(st.ticket, capture));
+        const req = duelFetch<unknown>("GET", queueUrl(st.ticket, capture));
+        st.inflight = req;
+        const res = await req;
+        if (st.inflight === req) st.inflight = null;
         if (st.run !== run) return;
         if (res.status === 200 && isQueueReply(res.data)) {
           st.failures = 0;
@@ -339,7 +346,11 @@ export function useDuelSearch(lv: number, onMatched?: (join: MatchJoin, late: bo
     loop(run);
   }, [lv, finish, loop]);
 
-  /** Отмена поиска. Уже забрали — место (вход в живой матч), иначе null. */
+  /**
+   * Отмена поиска. Уже забрали — место (вход в живой матч), иначе null. Сначала дожидаемся опроса, который уже в пути:
+   * иначе он мог бы после отмены снова поставить билет в очередь. Его результат не теряется — сервер держит место в tk
+   * и вернёт его ответом на отмену.
+   */
   const stop = useCallback(async (): Promise<MatchJoin | null> => {
     const st = r.current;
     const t = st.ticket;
@@ -350,6 +361,7 @@ export function useDuelSearch(lv: number, onMatched?: (join: MatchJoin, late: bo
       setState({ name: "idle" });
       return null;
     }
+    if (st.inflight) await st.inflight;
     const res = await duelFetch<unknown>("DELETE", queueUrl(t));
     if (res.status === 200 && isQueueReply(res.data) && res.data.state === "matched") {
       setState({ name: "matched", join: res.data.join, late: true });

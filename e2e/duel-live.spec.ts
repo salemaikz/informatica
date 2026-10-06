@@ -4,8 +4,9 @@ import { ALL_TIPS } from "./tour";
 // Этап 16Д, Ф4 (docs/specs/duels.md §11): живые дуэли на двух контекстах браузера (две cookie — два игрока).
 // Запуск — со своим сервером (соцчасть в памяти, тестовые часы): npx playwright test -c playwright.duel-live.config.ts.
 // Под общим конфигом (сервер без соцчасти) сценарии пропускаются.
-// 1) комната по ссылке: оба отвечают, полоса соперника обновляется ≤ 3 с после приёма ответа, перемотка часов → итоги
-//    совпадают с обеих сторон, сердечко −1 у каждого;
+// 1) комната по ссылке: друг входит кнопкой, пока вкладка хозяина скрыта (хозяин в мессенджере) — матч не отменяется
+//    и стартует, когда хозяин вернулся; оба отвечают, полоса соперника обновляется ≤ 3 с после приёма ответа,
+//    перемотка часов → итоги совпадают с обеих сторон, сердечко −1 у каждого;
 // 2) случайный соперник: оба ищут → матч, на VS — имя соперника;
 // 3) один в поиске → кнопка Бита с 3 с → матч с ботом, чип «бот».
 
@@ -72,9 +73,24 @@ test("комната по ссылке: двое отвечают, полоса 
   const code = (await A.page.getByTestId("duel-room-code").textContent())!.trim();
   expect(code).toMatch(/^[0-9A-Z]{6}$/);
 
+  // Хозяин ушёл отправлять ссылку: вкладка скрыта, опрос на паузе.
+  const setHidden = (page: Page, hidden: boolean) =>
+    page.evaluate((h) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, hidden);
+  await setHidden(A.page, true);
+
+  // Ссылка сама в комнату не входит (превью мессенджера) — только кнопка.
   await B.page.goto(`/duel/r/${code}`);
-  // Оба на VS с карточкой соперника (имя из профиля), сердечко ещё не списано.
+  await expect(B.page.getByTestId("duel-room-invite")).toBeVisible();
+  await B.page.getByTestId("duel-room-enter").click();
   await expect(B.page.getByTestId("duel-opp-card")).toContainText("Аян", { timeout: 15_000 });
+  // Дольше прежнего окна готовности (6 с): матч не отменён, друг ждёт хозяина.
+  await B.page.waitForTimeout(8_000);
+  await expect(B.page.getByTestId("duel-live-cancelled")).toHaveCount(0);
+  await setHidden(A.page, false);
+  // Оба на VS с карточкой соперника (имя из профиля), сердечко ещё не списано.
   await expect(A.page.getByTestId("duel-opp-card")).toContainText("Әсем", { timeout: 15_000 });
   expect(await hearts(A.page)).toBe(5);
   expect(await hearts(B.page)).toBe(5);
