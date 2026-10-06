@@ -50,6 +50,7 @@ const ctl =
   "flex h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-1 text-sm font-bold text-muted hover:bg-surface-2 hover:text-text focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary aria-pressed:text-primary";
 
 type FsEl = HTMLDivElement & { webkitRequestFullscreen?: () => void };
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void };
 
 export default function PlayerInner({ videoId, lang, title }: { videoId: string; lang: Lang; title?: string }) {
   const { t } = useT();
@@ -137,7 +138,9 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
 
   const exitFullscreen = useCallback(() => {
     setPseudoFs(false);
+    const d = document as FsDoc;
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else if (d.webkitFullscreenElement) d.webkitExitFullscreen?.();
   }, []);
 
   // События плеера: воспроизведение, позиция, звук. Пока видео играет, фоновая музыка на паузе.
@@ -178,9 +181,16 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
 
   // Настоящий полный экран: следим за состоянием (выход по Esc/жесту приходит отсюда).
   useEffect(() => {
-    const onChange = () => setRealFs(document.fullscreenElement === rootRef.current);
+    const onChange = () => {
+      const d = document as FsDoc;
+      setRealFs((document.fullscreenElement ?? d.webkitFullscreenElement) === rootRef.current);
+    };
     document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
   }, []);
 
   // «Псевдо» полный экран: Esc закрывает слой.
@@ -314,7 +324,7 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
             showPosterWhenUnplayed
             renderPoster={() => (
               <div className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-4 bg-bg/80 backdrop-blur-[2px]">
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-white shadow-[0_6px_0_var(--primary-strong)]">
+                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-action-primary text-white shadow-[0_6px_0_var(--action-primary-edge)]">
                   <Play size={36} fill="currentColor" className="ml-1" />
                 </span>
                 {title && <span className="px-6 text-center text-xl font-extrabold">{title}</span>}
@@ -442,7 +452,7 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
                 aria-pressed={r === rate}
                 className={cn(
                   "min-h-11 flex-1 rounded-xl px-1 text-sm font-bold text-muted hover:text-text",
-                  r === rate && "bg-primary text-white hover:text-white",
+                  r === rate && "bg-action-primary text-white hover:text-white",
                 )}
               >
                 {formatRate(r)}

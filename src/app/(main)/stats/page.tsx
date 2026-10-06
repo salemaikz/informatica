@@ -59,13 +59,15 @@ export default function StatsPage() {
             {repeats.map((m) => (
               <li key={m.id} className="rounded-xl bg-surface-2 px-3 py-2 text-sm">
                 <p className="break-normal font-semibold">{m.prompt}</p>
-                <p className="mt-1 text-xs font-bold text-danger">{t("econ16d.repeat.misses", { n: m.misses })}</p>
+                <p className="mt-1 text-xs font-bold text-ink-danger">{t("econ16d.repeat.misses", { n: m.misses })}</p>
               </li>
             ))}
           </ul>
-          <ButtonLink href="/drill?mode=mistakes" variant="secondary" block className="mt-3">
-            {t("econ16d.repeat.cta")}
-          </ButtonLink>
+          {mistakes.length > 0 && (
+            <ButtonLink href="/drill?mode=mistakes" variant="secondary" block className="mt-3">
+              {t("econ16d.repeat.cta")}
+            </ButtonLink>
+          )}
         </Card>
       )}
       <UnitProgressList />

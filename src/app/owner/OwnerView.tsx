@@ -179,6 +179,14 @@ export function OwnerView({ data }: { data: OwnerData }) {
         <Counts rows={r.heartsOut} name={label.heartsWhere} />
       </Section>
 
+      <Section title="Не хватило чипов">
+        <Counts rows={r.chipsOut} name={label.chipOutWhere} />
+      </Section>
+
+      <Section title="Выбор в окне «Не хватает»" hint="Что нажали: что не хватало и какой вариант выбрали.">
+        <Counts rows={r.shortPick} name={label.shortPick} />
+      </Section>
+
       <Section title="Онбординг" hint="Шаги — по числу дошедших; завершили — по выбранному треку.">
         <div className="flex flex-col gap-4">
           <Counts rows={r.onboarding.steps} name={(k) => k} />

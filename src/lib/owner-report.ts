@@ -294,6 +294,8 @@ export interface OwnerReport {
     shopTotal: number;
   };
   heartsOut: Count[];
+  chipsOut: Count[];
+  shortPick: Count[];
   onboarding: { steps: Count[]; done: Count[] };
   diagnostic: { finished: number; notFinished: number };
   breakReasons: Count[];
@@ -355,6 +357,8 @@ export function buildOwnerReport(days: readonly DayFields[], names: ReportNames)
       shopTotal: total(shop),
     },
     heartsOut: counts(sum, "ho:"),
+    chipsOut: counts(sum, "co:"),
+    shortPick: counts(sum, "sp:"),
     onboarding: { steps: counts(sum, "ob:"), done: counts(sum, "od:") },
     diagnostic: { finished: sum["dg:1"] ?? 0, notFinished: sum["dg:0"] ?? 0 },
     breakReasons: counts(sum, "br:"),

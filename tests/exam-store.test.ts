@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ENT_TOPICS } from "@/content/ent-topics";
 import {
-  aiMistakes,
   chartBars,
   correctText,
   EXAM_FORMAT,
@@ -461,32 +460,6 @@ describe("разбор и данные для ИИ", () => {
     expect(whyWrongOf(s, { timeMs: 0, choice: wrongIdx }, "kk")).toMatch(/-kk$/);
     expect(whyWrongOf(s, { timeMs: 0, choice: it.correct }, "ru")).toBeNull();
     expect(whyWrongOf(s, undefined, "ru")).toBeNull();
-  });
-
-  it("aiMistakes: не больше 8, сначала с большей потерей, тексты обрезаны", () => {
-    const paper = full();
-    const rows = reviewRows(paper, {});
-    const list = aiMistakes(rows, {}, "ru", 8);
-    expect(list).toHaveLength(8);
-    for (const m of list) {
-      expect(m.q.length).toBeLessThanOrEqual(200);
-      expect(m.given).toBe("—");
-      expect(m.expected.length).toBeLessThanOrEqual(60);
-    }
-    // первые — задания на 2 балла (multi/match), потом 1 балл
-    const firstQ = rows.filter((r) => r.max === 2).length >= 8;
-    expect(firstQ).toBe(true);
-    // без ошибок — пусто
-    const perfectAnswers: ExamAnswers = {};
-    for (const q of paper.items) {
-      const it = q.item;
-      perfectAnswers[q.key] =
-        it.kind === "single" ? { timeMs: 1, choice: it.correct }
-        : it.kind === "multi" ? { timeMs: 1, multi: [...it.correct] }
-        : it.kind === "match" ? { timeMs: 1, match: [...it.answer] }
-        : { timeMs: 1, choice: it.questions[q.sub!].correct };
-    }
-    expect(aiMistakes(reviewRows(paper, perfectAnswers), perfectAnswers, "ru")).toEqual([]);
   });
 
   it("slowestRows: номера 1-based по ключам", () => {

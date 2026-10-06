@@ -22,7 +22,7 @@ import {
 import { ENT_TOPICS } from "@/content/ent-topics";
 import { decodeChallenge, withChallenge, type Challenge } from "@/lib/challenge";
 import type { ExamSummary } from "@/lib/store";
-import { plain, tx } from "@/lib/text";
+import { tx } from "@/lib/text";
 import type { EntTopicId, Lang, LessonInfo, Text } from "@/lib/types";
 
 const KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
@@ -301,19 +301,6 @@ export function reviewRows(paper: ExamPaper, answers: ExamAnswers): ReviewRow[] 
 
 /** Фильтр «только ошибки»: всё, что не набрано полностью (включая пропущенные). */
 export const onlyMistakes = (rows: ReviewRow[]) => rows.filter((r) => r.status !== "correct");
-
-/** Ошибки для запроса к ИИ: до `limit`, сначала где потеряно больше баллов, при равенстве — по порядку. */
-export function aiMistakes(rows: ReviewRow[], answers: ExamAnswers, lang: Lang, limit = 8): { q: string; given: string; expected: string }[] {
-  return onlyMistakes(rows)
-    .map((r) => ({ r, lost: r.max - r.points }))
-    .sort((a, b) => b.lost - a.lost || a.r.index - b.r.index)
-    .slice(0, limit)
-    .map(({ r }) => ({
-      q: clip(plain(questionPrompt(r.q, lang)), 200),
-      given: givenText(r.q, answers[r.q.key], lang),
-      expected: correctText(r.q, lang),
-    }));
-}
 
 /** Номера самых долгих заданий (1-based) с временем в секундах — по ключам из ExamResult.slowest. */
 export function slowestRows(paper: ExamPaper, answers: ExamAnswers, keys: string[]): { number: number; key: string; sec: number }[] {
