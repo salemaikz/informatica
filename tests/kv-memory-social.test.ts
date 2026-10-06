@@ -195,6 +195,61 @@ describe("память: списки и конвейер", () => {
   });
 });
 
+describe("конвейер: одинаковое поведение ошибок в памяти и Upstash", () => {
+  it("память: ошибка одной операции не останавливает остальные, бросается первая ошибка после всей пачки", async () => {
+    const { kv } = clock();
+    await kv.set("str", "x");
+    await expect(
+      kv.pipeline([
+        { op: "set", key: "before", value: "1" },
+        { op: "sadd", key: "str", members: ["a"] },
+        { op: "zadd", key: "str", score: 1, member: "b" },
+        { op: "set", key: "after", value: "2" },
+      ]),
+    ).rejects.toThrow(/WRONGTYPE/);
+    // как Upstash /pipeline: команды после ошибочной тоже применены
+    expect(await kv.mget(["before", "after"])).toEqual(["1", "2"]);
+  });
+
+  it("lpush max < 1 — ошибка до запуска (ни одна операция пачки не применена), в памяти и в Upstash", async () => {
+    const { kv } = clock();
+    await expect(
+      kv.pipeline([
+        { op: "set", key: "k", value: "v" },
+        { op: "lpush", key: "l", value: "m", max: 0 },
+      ]),
+    ).rejects.toThrow(/max must be/);
+    expect(await kv.getStr("k")).toBeNull();
+    await expect(kv.pipeline([{ op: "lpush", key: "l", value: "m", max: 1.5 }])).rejects.toThrow(/max must be/);
+
+    let calls = 0;
+    const fetchMock = (async () => {
+      calls++;
+      return new Response("[]", { status: 200 });
+    }) as unknown as typeof fetch;
+    const up = createUpstashKv("https://x.upstash.io", "tok", null, fetchMock);
+    await expect(up.pipeline([{ op: "set", key: "k", value: "v" }, { op: "lpush", key: "l", value: "m", max: 0 }])).rejects.toThrow(
+      /max must be/,
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("Upstash: ошибка одной команды в ответе — бросается (остальные команды Redis уже выполнил)", async () => {
+    const fetchMock = (async () =>
+      new Response(JSON.stringify([{ result: "OK" }, { error: "WRONGTYPE Operation against a key" }, { result: "OK" }]), {
+        status: 200,
+      })) as unknown as typeof fetch;
+    const up = createUpstashKv("https://x.upstash.io", "tok", null, fetchMock);
+    await expect(
+      up.pipeline([
+        { op: "set", key: "a", value: "1" },
+        { op: "sadd", key: "a", members: ["x"] },
+        { op: "set", key: "b", value: "2" },
+      ]),
+    ).rejects.toThrow(/WRONGTYPE/);
+  });
+});
+
 describe("Upstash: строгие операции одним конвейером, без отката в память", () => {
   const make = (replies: unknown[][], status = 200) => {
     const calls: unknown[] = [];
@@ -275,5 +330,28 @@ describe("одиночка памяти в globalThis", () => {
     expect(await b.getStrictKv().getStr("shared")).toBe("1");
     expect((globalThis as Record<symbol, unknown>)[MEMORY_KV_KEY]).toBe(a.memoryKv());
     await a.getKv().del(["shared"]);
+  });
+
+  it("сроки ключей одиночки идут по serverNow(): тестовый сдвиг часов истекает ключи (DUEL_TEST_HOOKS=1)", async () => {
+    for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) vi.stubEnv(k, "");
+    vi.stubEnv("DUEL_TEST_HOOKS", "1");
+    vi.stubEnv("VERCEL", "");
+    const g = globalThis as Record<symbol, unknown>;
+    const saved = g[MEMORY_KV_KEY];
+    delete g[MEMORY_KV_KEY];
+    const clockMod = await import("@/server/clock");
+    try {
+      vi.resetModules();
+      const m = await import("@/server/kv");
+      const kv = m.memoryKv();
+      await kv.set("du:tk:x", "1", { ttlSec: 60 });
+      expect(clockMod.advanceClock(59_000)).toBe(59_000);
+      expect(await kv.getStr("du:tk:x")).toBe("1");
+      clockMod.advanceClock(1_000);
+      expect(await kv.getStr("du:tk:x")).toBeNull();
+    } finally {
+      clockMod.resetClock();
+      g[MEMORY_KV_KEY] = saved;
+    }
   });
 });

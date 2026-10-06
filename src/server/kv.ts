@@ -1,4 +1,5 @@
 import "server-only";
+import { serverNow } from "@/server/clock";
 
 // Общее хранилище счётчиков и списков для серверных маршрутов (потолок расходов ИИ, жалобы, ошибки с телефонов,
 // соцчасть: профили игроков, друзья, дуэли). Есть Upstash Redis (Vercel Marketplace: KV_REST_API_URL/KV_REST_API_TOKEN
@@ -30,7 +31,7 @@ export type KvOp =
   | { op: "hget"; key: string; field: string }
   | { op: "hgetAllStr"; key: string }
   | { op: "hdel"; key: string; fields: readonly string[] }
-  /** LPUSH + (LTRIM до max) + (EXPIRE). */
+  /** LPUSH + (LTRIM до max) + (EXPIRE). max — целое ≥ 1 (иначе ошибка до запуска конвейера: в Redis LTRIM 0 -1 не обрезал бы). */
   | { op: "lpush"; key: string; value: string; max?: number; ttlSec?: number }
   | { op: "lrange"; key: string; start: number; stop: number }
   | { op: "zadd"; key: string; score: number; member: string; nx?: boolean; ttlSec?: number }
@@ -107,7 +108,13 @@ export interface KvStrictOps {
   smembers(key: string): Promise<string[]>;
   sismember(key: string, member: string): Promise<boolean>;
   scard(key: string): Promise<number>;
-  /** Несколько операций одним обращением (Upstash /pipeline; в памяти — по очереди). Не атомарно, как конвейер Redis. */
+  /**
+   * Несколько операций одним обращением (Upstash /pipeline; в памяти — по очереди). Не атомарно, как конвейер Redis.
+   * Ошибки одинаковы в обеих реализациях:
+   * - неверные аргументы (validateOp) — ошибка ДО запуска, ни одна операция не применена;
+   * - ошибка выполнения (WRONGTYPE, не число) — выполняются ВСЕ операции пачки (как Upstash /pipeline), затем бросается
+   *   первая ошибка; результаты остальных операций при этом не возвращаются, но их действие уже применено.
+   */
   pipeline<const T extends readonly KvOp[]>(ops: T): Promise<KvOpResults<T>>;
 }
 
@@ -171,6 +178,13 @@ export function bindOps(run: (ops: readonly KvOp[]) => Promise<unknown[]>): KvSt
     scard: (key) => one({ op: "scard", key }),
     pipeline: async <const T extends readonly KvOp[]>(ops: T) => (await run(ops)) as KvOpResults<T>,
   };
+}
+
+/** Проверка аргументов операции до запуска конвейера (общая для памяти и Upstash). */
+export function validateOp(op: KvOp): void {
+  if (op.op === "lpush" && op.max !== undefined && !(Number.isInteger(op.max) && op.max >= 1)) {
+    throw new Error(`ERR lpush max must be an integer >= 1 (key ${op.key})`);
+  }
 }
 
 // ---------- память процесса ----------
@@ -403,8 +417,25 @@ export function createMemoryKv(now: () => number = Date.now): Kv {
         return read(op.key, "set")?.v.size ?? 0;
     }
   };
-  // Конвейер в памяти — по очереди; первая ошибка обрывает его (для вызывающего — как отказ всего ответа Upstash).
-  const run = async (ops: readonly KvOp[]): Promise<unknown[]> => ops.map(runOne);
+  // Конвейер в памяти — по очереди, как Upstash /pipeline: ошибка одной операции не останавливает остальные,
+  // первая ошибка бросается после всей пачки (см. KvStrictOps.pipeline).
+  const run = async (ops: readonly KvOp[]): Promise<unknown[]> => {
+    ops.forEach(validateOp);
+    const out: unknown[] = [];
+    let first: unknown = undefined;
+    let failed = false;
+    for (const op of ops) {
+      try {
+        out.push(runOne(op));
+      } catch (e) {
+        if (!failed) first = e;
+        failed = true;
+        out.push(undefined);
+      }
+    }
+    if (failed) throw first;
+    return out;
+  };
 
   /** Хеш-счётчик: прибавить к полю; новое поле сверх потолка не пишется (вернётся 0). */
   const bump = (h: Map<string, string>, key: string, field: string, n: number): number => {
@@ -688,6 +719,7 @@ export function createUpstashKv(url: string, token: string, fallback: Kv | null,
   };
   // Строгие операции: все команды пачки — одним запросом; ответы раскладываются обратно по операциям.
   const runOps = async (ops: readonly KvOp[]): Promise<unknown[]> => {
+    ops.forEach(validateOp);
     const parts = ops.map(toCmds);
     const cmds = parts.flat();
     const replies = cmds.length ? await pipeline(cmds, STRICT_TIMEOUT_MS) : [];
@@ -777,10 +809,14 @@ function hashOf(raw: unknown): Record<string, number> {
 export const MEMORY_KV_KEY = Symbol.for("informatica.kv");
 type KvGlobal = { [MEMORY_KV_KEY]?: Kv };
 
-/** Память процесса (одиночка в globalThis). */
+/**
+ * Память процесса (одиночка в globalThis). Сроки ключей считаются по serverNow(): тестовый сдвиг часов
+ * (DUEL_TEST_HOOKS=1, src/server/clock.ts) истекает и ключи в памяти — e2e может «перемотать» du:tk, очередь и сирот.
+ * В Upstash сроки живут по настоящим часам Redis: там сдвиг на них не влияет (и крючки на Vercel выключены).
+ */
 export function memoryKv(): Kv {
   const g = globalThis as KvGlobal;
-  return (g[MEMORY_KV_KEY] ??= createMemoryKv());
+  return (g[MEMORY_KV_KEY] ??= createMemoryKv(serverNow));
 }
 
 function upstashEnv(): { url: string; token: string } | null {

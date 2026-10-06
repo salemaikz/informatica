@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { cosmeticDef, type CosmeticId, type CosmeticSlot } from "@/lib/cosmetics";
 import { envPositiveInt } from "@/server/ai-guard";
 import { ipHash } from "@/server/ip-hash";
@@ -8,7 +8,7 @@ import { kvRateLimit } from "@/server/rate-limit";
 import { cookieHeader, newSignedId, readSignedCookie, signedValue } from "@/server/signed-id";
 import { newFriendCode } from "@/server/social/code";
 import type { KvOp } from "@/server/kv";
-import { namesEnabled, type CountingKv } from "@/server/social/kv";
+import { namesEnabled, requireSocialSecret, type CountingKv } from "@/server/social/kv";
 
 // Профиль игрока соцчасти (docs/specs/duels.md §5–§7, Ф2). Личность до аккаунтов — pid в подписанной cookie `inf_pl`
 // (HttpOnly, SameSite=Lax, Path=/api — нужна и /api/social, и /api/duel; 400 дней; подпись SOCIAL_SECRET).
@@ -178,8 +178,12 @@ export type SaveResult =
 
 /** Имя как его сравнивает сервер: NFC, без крайних пробелов, пробелы схлопнуты. */
 const normName = (s: string): string => s.normalize("NFC").trim().replace(/\s+/gu, " ");
-/** Отпечаток отклонённого ввода (само имя не храним). */
-const nameTry = (s: string): string => createHash("sha256").update(`name-try:${normName(s).toLowerCase()}`).digest("base64url").slice(0, 12);
+/**
+ * Отпечаток отклонённого ввода (само имя не храним): HMAC с SOCIAL_SECRET и pid. Без соли короткое имя или номер
+ * телефона (отказ «contact») восстанавливались бы перебором по хешу.
+ */
+const nameTry = (pid: string, s: string): string =>
+  createHmac("sha256", requireSocialSecret()).update(`name-try:${pid}:${normName(s).toLowerCase()}`).digest("base64url").slice(0, 12);
 
 /** Счётчик лимита в общем хранилище (kvRateLimit: INCRBY + EXPIRE = 2 команды). */
 async function limited(kv: CountingKv, key: string, limit: number, windowMs: number, now: number): Promise<boolean> {
@@ -239,7 +243,7 @@ export async function saveProfile(
     }
   } else {
     const wanted = normName(input.name);
-    const mark = nameTry(input.name);
+    const mark = nameTry(playerId, input.name);
     const same =
       ((nameState === "ok" || nameState === "hidden") && wanted === name) || (nameState === "rejected" && tryMark?.split(":")[0] === mark);
     if (same) {
@@ -294,9 +298,26 @@ export async function saveProfile(
   return { ok: true, player, created, pid: playerId, ...(hint ? { hint } : {}) };
 }
 
-/** Профиль игрока (1 команда); null — нет. */
+/**
+ * Профиль игрока (1 команда); null — нет.
+ * SOCIAL_NAMES=0 включили, а в профиле осталось имя (или отпечаток отклонённого) с тех времён, когда имена были
+ * включены, — убираем их из хранилища при первом же чтении владельцем (GET /me или /home) (+4 команды, один раз). Наружу имя не уходит
+ * сразу после переключения; у игроков, которые больше не заходят, оно истечёт вместе с профилем (TTL 180 дней).
+ */
 export async function loadProfile(kv: CountingKv, pid: string): Promise<MyProfile | null> {
-  return profileFromHash(await kv.hgetAllStr(keys.profile(pid)));
+  const h = await kv.hgetAllStr(keys.profile(pid));
+  const player = profileFromHash(h);
+  if (player && !namesEnabled() && (h.name || h.nameTry)) await purgeStoredName(kv, pid, player, h.nameState === "hidden");
+  return player;
+}
+
+/** Стереть сохранённое имя из профиля и карточки (имена выключены). Скрытие модерацией («hidden») сохраняется. */
+async function purgeStoredName(kv: CountingKv, pid: string, player: MyProfile, hidden: boolean): Promise<void> {
+  await kv.pipeline([
+    { op: "hdel", key: keys.profile(pid), fields: ["name", "nameTry"] },
+    { op: "hset", key: keys.profile(pid), fields: { nameState: hidden ? "hidden" : "off" }, ttlSec: PROFILE_TTL_SEC },
+    { op: "set", key: keys.card(pid), value: cardJson({ ...player, name: null }), ttlSec: PROFILE_TTL_SEC },
+  ]);
 }
 
 // ---------- удаление ----------
@@ -365,6 +386,7 @@ export async function loadHome(kv: CountingKv, pid: string): Promise<HomeView> {
   ] as const);
   const player = profileFromHash(h);
   if (!player) return { player: null, inbox: [], requests: 0 };
+  if (!namesEnabled() && (h.name || h.nameTry)) await purgeStoredName(kv, pid, player, h.nameState === "hidden");
   const items = inbox.flatMap((s) => {
     try {
       return [JSON.parse(s) as unknown];

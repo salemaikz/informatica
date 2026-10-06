@@ -195,6 +195,40 @@ describe("POST /api/social/me — создание и обновление", () 
     expect((await kv().hgetAllStr(`pl:${pidOf(cookie)}`)).name).toBeUndefined();
   });
 
+  it("SOCIAL_NAMES=0 — имя, сохранённое раньше, стирается из хранилища при первом чтении (GET /me и /home)", async () => {
+    const a = await create({ name: "Әсем" });
+    const b = await create({ name: "Сука" }); // отклонённое: в профиле только отпечаток nameTry
+    const pa = pidOf(a.cookie);
+    const pb = pidOf(b.cookie);
+    expect((await kv().hgetAllStr(`pl:${pa}`)).name).toBe("Әсем");
+    expect((await kv().hgetAllStr(`pl:${pb}`)).nameTry).toBeTruthy();
+    vi.stubEnv("SOCIAL_NAMES", "0");
+    await me.GET(req("GET", "/api/social/me", { cookie: a.cookie }));
+    await home.GET(req("GET", "/api/social/home", { cookie: b.cookie }));
+    for (const pid of [pa, pb]) {
+      const h = await kv().hgetAllStr(`pl:${pid}`);
+      expect(h.name).toBeUndefined();
+      expect(h.nameTry).toBeUndefined();
+      expect(h.nameState).toBe("off");
+      expect(JSON.parse((await kv().getStr(`pl:c:${pid}`))!).n).toBeNull();
+    }
+    // Повторное чтение — уже без лишних команд (лог: GET /me = 1 команда).
+    info.mockClear();
+    await me.GET(req("GET", "/api/social/me", { cookie: a.cookie }));
+    expect(String(info.mock.calls.at(-1)?.[0])).toMatch(/cmds=1\b/);
+  });
+
+  it("отпечаток отклонённого имени солится секретом и pid (не sha256 самого ввода)", async () => {
+    const { createHash } = await import("node:crypto");
+    const a = await create({ name: "Бот" });
+    const b = await create({ name: "Бот" });
+    const ta = (await kv().hgetAllStr(`pl:${pidOf(a.cookie)}`)).nameTry.split(":")[0];
+    const tb = (await kv().hgetAllStr(`pl:${pidOf(b.cookie)}`)).nameTry.split(":")[0];
+    expect(ta).not.toBe(tb);
+    const plain = createHash("sha256").update("name-try:бот").digest("base64url").slice(0, 12);
+    expect([ta, tb]).not.toContain(plain);
+  });
+
   it("SOCIAL_NAMES=0 — имя не хранится и не отдаётся, в том числе сохранённое раньше", async () => {
     const { cookie } = await create({ name: "Әсем" });
     vi.stubEnv("SOCIAL_NAMES", "0");

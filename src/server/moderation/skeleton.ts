@@ -14,7 +14,8 @@ const INVISIBLE = /[\p{Cc}\p{Cf}\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180E\u2000
 
 const TO_CYR: Record<string, string> = {
   // латинские двойники
-  a: "а", b: "в", c: "с", e: "е", h: "н", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у",
+  // (i → и: «Xyi» = «хуи»; u → у нет: «Xue», «Xurshid» и узбекская латиница дали бы ложные срабатывания)
+  a: "а", b: "в", c: "с", e: "е", h: "н", i: "и", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у",
   // l33t
   "0": "о", "3": "з", "4": "ч", "6": "б", "1": "и", "!": "и", "|": "и", "@": "а", $: "с",
   // казахские буквы → ближайшие русские
@@ -48,7 +49,11 @@ export interface Skeleton {
   cyr: string[];
   /** То же для корней en и транслита (латиница). */
   lat: string[];
-  /** Вся строка без разделителей (оба скелета, с повторами и без): ловит «х у й», «х-у-й», «х.у.й». */
+  /**
+   * Склейки соседних слов через «короткий шов» (оба скелета, с повторами и без): ловит «х у й», «х-у-й», «ху йло».
+   * Два обычных слова (оба ≥ 3 знаков) НЕ склеиваются: «Alex Yerlanov» (→ «…х уе…»), «Ade Bilal» (→ «…debil…»),
+   * «Marko Takhirov» (→ «…kotak…») — иначе стоп-корень находился бы на стыке имени и фамилии.
+   */
   squashed: string[];
 }
 
@@ -68,6 +73,27 @@ function shortRuns(ws: string[]): string[] {
   return out;
 }
 
+/**
+ * Цепочки соседних слов, где каждый шов касается короткого куска (≤ 2 знаков): «х у й» → «хуй», «ху йло» → «хуйло».
+ * Отдельные слова не возвращаются (они уже в cyr/lat), только склейки из ≥ 2 кусков.
+ */
+function shortSeamChains(ws: string[]): string[] {
+  const out: string[] = [];
+  const short = (w: string) => Array.from(w).length <= 2;
+  let chain: string[] = [];
+  const flush = () => {
+    if (chain.length >= 2) out.push(chain.join(""));
+    chain = [];
+  };
+  for (const w of ws) {
+    const prev = chain[chain.length - 1];
+    if (prev !== undefined && !(short(prev) || short(w))) flush();
+    chain.push(w);
+  }
+  flush();
+  return out;
+}
+
 function variants(ws: string[]): string[] {
   const all = [...ws, ...shortRuns(ws)];
   return [...new Set(all.flatMap((w) => [w, collapseRepeats(w)]))];
@@ -80,7 +106,7 @@ export function skeleton(raw: string): Skeleton {
   const base = baseForm(raw);
   const cyrWords = words(mapChars(base, TO_CYR));
   const latWords = words(mapChars(base, TO_LAT));
-  const squashed = [cyrWords.join(""), latWords.join("")];
+  const squashed = [...shortSeamChains(cyrWords), ...shortSeamChains(latWords)];
   return {
     cyr: variants(cyrWords),
     lat: variants(latWords),
