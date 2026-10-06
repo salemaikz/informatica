@@ -203,6 +203,10 @@ describe("«Сердечки закончились»: нет бесплатно
     expect(text()).toContain("Следующее сердечко через");
     expect(text()).toContain("+1 сердечко");
     expect(text()).toContain("Безлимит: уроки, тренировки, тесты и игры без сердечек");
+    // этап 16Г: нехватка чипов — окно предлагает купить чипы, пополнить за ₸ и пробный период
+    expect(text()).toContain("Купить чипы");
+    expect(text()).toContain("Пополнить все сердечки");
+    expect(text()).toContain("7 дней бесплатно");
     expect(text()).not.toMatch(/Тренировка вернёт|Тренировка — бесплатно|Бесплатно: от/);
     expect([...host.querySelectorAll("a")].some((a) => a.getAttribute("href") === "/practice")).toBe(false);
     expect([...host.querySelectorAll("a")].some((a) => a.getAttribute("href")?.startsWith("/plans"))).toBe(true);

@@ -30,6 +30,8 @@ describe("parseFrom / closeAction", () => {
   it("подзаголовок зависит от источника", () => {
     expect(subtitleKey("hearts")).toBe("plans.sub.hearts");
     expect(subtitleKey("ai")).toBe("plans.sub.ai");
+    expect(subtitleKey("chips")).toBe("plans.sub.chips");
+    expect(parseFrom("chips")).toBe("chips");
     expect(subtitleKey("shop")).toBe("plans.sub.default");
   });
 });

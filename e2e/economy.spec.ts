@@ -100,6 +100,21 @@ test("магазин: полный запас не продаётся, пока 
   expect(errors).toEqual([]);
 });
 
+test("магазин: строка без чипов открывает окно «Не хватает чипов» (купить чипы, «Безлимит»)", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await seed(page, { wallet: { chips: 20, earned: 20, spent: 0 }, hearts: { count: 1, updatedAt: Date.now(), day: "2099-01-01" } });
+  await page.goto("/shop");
+  await page.getByRole("button", { name: /^Купить: \+1 сердечко/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Не хватает чипов" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Нужно 60 чипов, у тебя 20")).toBeVisible();
+  await expect(dialog.getByText("Чипов вдвое больше за каждое дело")).toBeVisible();
+  await dialog.getByRole("button", { name: /100 чипов/ }).click();
+  await expect(page.getByRole("dialog", { name: "Оплата скоро появится" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("история тестов: ошибка из урока исправляется работой над ошибками этого теста", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));

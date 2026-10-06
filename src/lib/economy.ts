@@ -498,18 +498,8 @@ export function packSaving(pack: ChipPack): number {
   return Math.max(0, Math.round((1 - perChip(pack) / perChip(base)) * 100));
 }
 
-/** Сердечки без ограничений на время (за ₸, оплата скоро) — для тех, кто не готов к подписке. */
-export interface HeartPass {
-  id: string;
-  hours: number;
-  /** ₸ */
-  price: number;
-}
-
-export const HEART_PASSES: HeartPass[] = [
-  { id: "hearts-24h", hours: 24, price: 149 },
-  { id: "hearts-7d", hours: 24 * 7, price: 590 },
-];
+/** Пополнить все сердечки разом за деньги, ₸ (оплата скоро): запас до полного, без подписки (#122). */
+export const HEARTS_REFILL_KZT = 490;
 
 export interface BoostPack {
   id: string;

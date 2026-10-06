@@ -32,6 +32,7 @@ describe("канонические id событий", () => {
       { e: "game_quit", game: game.id },
       { e: "shop_click", item: "chips-750" },
       { e: "shop_click", item: SHOP_ITEMS[0].id },
+      { e: "shop_click", item: "hearts-refill" },
       { e: "onb_step", step: "name" },
     ];
     for (const ev of events) expect(canonicalEvent(ev), ev.e).toEqual(ev);

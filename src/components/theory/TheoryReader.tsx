@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UNITS } from "@/content/course-map";
 import { cn } from "@/lib/cn";
+import { track } from "@/lib/analytics";
 import { ENTRY_COST } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
@@ -69,6 +70,10 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
   const router = useRouter();
   const reduce = useReduceMotion();
   const { access, resume } = useTheoryAccess(id);
+  // Статистика: сердечек не хватило на открытие темы (раз за показ окна).
+  useEffect(() => {
+    if (access === "locked") track({ e: "hearts_out", where: "theory" });
+  }, [access]);
   const open = access === "open";
   const openSave = useSaveToNotes((s) => s.open);
   const openChat = useOpenLessonChat();

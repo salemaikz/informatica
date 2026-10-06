@@ -21,6 +21,8 @@ const SAMPLES: Record<AnalyticsName, AnalyticsEvent> = {
   trial_start: { e: "trial_start", from: "other" },
   shop_click: { e: "shop_click", item: "chips-750" },
   hearts_out: { e: "hearts_out", where: "checkpoint" },
+  chips_out: { e: "chips_out", where: "cosmetic" },
+  short_pick: { e: "short_pick", need: "hearts", pick: "refill" },
   onb_step: { e: "onb_step", step: "goal" },
   onb_done: { e: "onb_done", track: "school" },
   diag: { e: "diag", done: 1, pct: 40 },
@@ -35,7 +37,7 @@ const SAMPLES: Record<AnalyticsName, AnalyticsEvent> = {
 describe("белый список событий статистики", () => {
   it("в схеме ровно те события, что в контракте lib/analytics.ts", () => {
     expect(Object.keys(EVENT_SCHEMA).sort()).toEqual(Object.keys(SAMPLES).sort());
-    expect(Object.keys(SAMPLES)).toHaveLength(26);
+    expect(Object.keys(SAMPLES)).toHaveLength(28);
   });
 
   it("каждое верное событие проходит без изменений", () => {
@@ -124,6 +126,11 @@ describe("белый список событий статистики", () => {
   it("перечисления: значение не из списка — отказ (откуда открыли окно тарифов, место, причина перерыва)", () => {
     expect(parseEvent({ e: "paywall_view", from: "evil" })).toBeNull();
     expect(parseEvent({ e: "hearts_out", where: "moon" })).toBeNull();
+    expect(parseEvent({ e: "hearts_out", where: "theory" })).toEqual({ e: "hearts_out", where: "theory" });
+    expect(parseEvent({ e: "chips_out", where: "moon" })).toBeNull();
+    expect(parseEvent({ e: "short_pick", need: "xp", pick: "heart" })).toBeNull();
+    expect(parseEvent({ e: "short_pick", need: "chips", pick: "pass" })).toBeNull();
+    expect(parseEvent({ e: "trial_start", from: "chips" })).toEqual({ e: "trial_start", from: "chips" });
     expect(parseEvent({ e: "break_reason", code: "lazy" })).toBeNull();
     expect(parseEvent({ e: "active", d: 2 })).toBeNull();
     expect(parseEvent({ e: "active", d: 30 })).toEqual({ e: "active", d: 30 });

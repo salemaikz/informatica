@@ -4,11 +4,12 @@ import {
   Cpu,
   Heart,
   HeartPlus,
+  HeartPulse,
   Rocket,
 } from "lucide-react";
 import { useState } from "react";
 import { track } from "@/lib/analytics";
-import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
+import { BOOST_PACKS, CHIP_PACKS, HEARTS_REFILL_KZT, PLAN_FEATURES, formatTenge, packSaving, shopItem } from "@/lib/economy";
 import { useT } from "@/i18n/useT";
 import { CosmeticsShop } from "@/components/cosmetics/CosmeticsShop";
 import { ComingSoonSheet } from "@/components/plans/ComingSoonSheet";
@@ -100,31 +101,22 @@ export default function ShopPage() {
               descKey="shop.item.hearts-full.desc"
             />
           )}
+          {/* Пополнить всё разом за ₸ (оплата скоро): не при «Безлимите» и не при полном запасе */}
+          {!hearts.unlimited && hearts.count < hearts.max && (
+            <MoneyRow
+              tone="heart"
+              icon={<HeartPulse size={26} />}
+              title={t("short.refill")}
+              desc={t("short.refillDesc")}
+              price={formatTenge(HEARTS_REFILL_KZT)}
+              onPick={() => pick("hearts-refill", t("shop.soon.what", { item: t("short.refill"), price: formatTenge(HEARTS_REFILL_KZT) }))}
+            />
+          )}
         </div>
       </ShopSection>
 
       <ShopSection title={t("shop.rules.title")} hint={t("shop.rules.hint")}>
         <HeartRules />
-      </ShopSection>
-
-      <ShopSection title={t("shop.passes.title")} hint={t("shop.passes.hint")}>
-        <div className="flex flex-col gap-2.5">
-          {HEART_PASSES.map((p) => {
-            const title = t("shop.pass.title", { span: formatSpan(p.hours, lang) });
-            const price = formatTenge(p.price);
-            return (
-              <MoneyRow
-                key={p.id}
-                tone="heart"
-                icon={<Heart size={26} fill="currentColor" />}
-                title={title}
-                desc={t("shop.pass.desc")}
-                price={price}
-                onPick={() => pick(p.id, t("shop.soon.what", { item: title, price }))}
-              />
-            );
-          })}
-        </div>
       </ShopSection>
 
       <ShopSection title={t("shop.boost.title")} hint={t("shop.boost.hint")}>
@@ -167,6 +159,7 @@ export default function ShopPage() {
         </div>
       </ShopSection>
 
+      <div id="shop-chips" className="scroll-mt-20">
       <ShopSection title={t("shop.chips.title")} hint={t("shop.chips.hint")}>
         <div className="flex flex-col gap-3">
           {CHIP_PACKS.map((p) => {
@@ -199,6 +192,7 @@ export default function ShopPage() {
           })}
         </div>
       </ShopSection>
+      </div>
 
       <div id="shop-earn" className="scroll-mt-20">
         <ShopSection title={t("shop.earn.title")}>

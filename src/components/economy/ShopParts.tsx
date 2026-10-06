@@ -14,6 +14,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Shake } from "@/components/motion/Shake";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { formatNum, shopAvailability } from "./shop-helpers";
+import { ShortfallSheet } from "./ShortfallSheet";
 import { refillGain, shownPrice } from "./shop-rules";
 import { useChips, useHearts } from "./useEconomy";
 
@@ -108,6 +109,7 @@ export function ChipItemRow({
   const controls = useAnimationControls();
   const [shake, setShake] = useState(false);
   const [done, setDone] = useState(false);
+  const [short, setShort] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -142,6 +144,8 @@ export function ChipItemRow({
     } else {
       setShake(true);
       timers.current.push(setTimeout(() => setShake(false), 400));
+      // Не хватает чипов — окно «Не хватает» (купить чипы, «Безлимит», заработать); тряска остаётся как отклик.
+      if (!av.ok && av.reason === "chips") setShort(true);
     }
   };
 
@@ -164,6 +168,7 @@ export function ChipItemRow({
             : t("shop.fail.chips", { n: av.missing ?? 0 });
 
   return (
+    <>
     <m.div
       animate={controls}
       data-tour={tour}
@@ -210,6 +215,9 @@ export function ChipItemRow({
         </p>
       )}
     </m.div>
+    {/* Рядом со строкой, а не внутри: у строки есть transform (пульс), и вложенная шторка уехала бы */}
+    <ShortfallSheet need="chips" cost={price} where="shop" plansFrom="chips" open={short} onClose={() => setShort(false)} />
+    </>
   );
 }
 

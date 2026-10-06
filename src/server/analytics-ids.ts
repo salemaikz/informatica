@@ -4,7 +4,7 @@ import { withEntBoss } from "@/lib/ent-boss";
 import { GAMES, GAMES_WIP } from "@/games/registry";
 import type { AnalyticsEvent } from "@/lib/analytics";
 import type { DrillMode } from "@/lib/drill";
-import { BOOST_PACKS, CHIP_PACKS, HEART_PASSES, SHOP_ITEMS } from "@/lib/economy";
+import { BOOST_PACKS, CHIP_PACKS, SHOP_ITEMS } from "@/lib/economy";
 
 // Идентификаторы в событиях приходят от клиента — им нельзя доверять: выдуманные id раздули бы суточный хеш (поля `ls:<урок>:…`,
 // `tk:<шаг>:…`) и общее хранилище (ревью этапа 12, C2). Поэтому сервер сверяет id измерений с реестрами контента, которые у него
@@ -39,7 +39,7 @@ function registries() {
     tasks,
     bareSteps,
     games: new Set([...GAMES, ...GAMES_WIP].map((g) => g.id)),
-    items: new Set([...SHOP_ITEMS.map((i) => i.id), ...CHIP_PACKS.map((p) => p.id), ...HEART_PASSES.map((p) => p.id), ...BOOST_PACKS.map((p) => p.id)]),
+    items: new Set([...SHOP_ITEMS.map((i) => i.id), ...CHIP_PACKS.map((p) => p.id), "hearts-refill", ...BOOST_PACKS.map((p) => p.id)]),
   };
   return lazy;
 }
