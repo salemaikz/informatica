@@ -16,6 +16,7 @@ import {
   initialOpenUnit,
   lessonPlace,
   lessonReadStatus,
+  liveCardParam,
   putTheoryRead,
   readableLessonIds,
   sanitizeTheoryLast,
@@ -253,6 +254,24 @@ describe("карточки урока и якоря", () => {
     expect(at).toBe(2);
     expect(isTheoryCardLocked("pay", at)).toBe(true);
     expect(isTheoryCardLocked("paid", at)).toBe(false);
+  });
+
+  it("T1: «Назад» к записи, где ?card= уже убрали при листании, — параметр с сервера устарел, открываем где остановились", () => {
+    const last = { id: "t-1", card: 4, at: 1 }; // долистали до s5 (индекс 4)
+    const cards = ["s1", "s2", "s3", "s4", "s5", CONSPECT_ID];
+    // переход по ссылке из поиска: сервер и адрес роутера — оба ?card=s3 → параметр действует
+    expect(liveCardParam("s3", "s3")).toBe("s3");
+    expect(initialCard({ card: liveCardParam("s3", "s3"), hash: "", cardIds: cards, lessonId: "t-1", last })).toBe(2);
+    // «Назад»: пропсы прежние (s3), а в адресе параметра уже нет → theoryLast, а не карточка из поиска
+    expect(liveCardParam("s3", null)).toBeNull();
+    expect(initialCard({ card: liveCardParam("s3", null), hash: "", cardIds: cards, lessonId: "t-1", last })).toBe(4);
+    // в адресе другая карточка (обе ссылки на один урок) — прежний параметр тоже не действует
+    expect(liveCardParam("s3", "s5")).toBeNull();
+    // параметра на сервере не было — его и нет (обычное открытие, старые ссылки с «#»)
+    expect(liveCardParam(null, null)).toBeNull();
+    expect(liveCardParam(undefined, undefined)).toBeNull();
+    expect(liveCardParam("", "")).toBeNull();
+    expect(liveCardParam(null, "s3")).toBeNull();
   });
 
   it("withoutCardAnchor: убирает ?card= и «#…», остальные параметры остаются; нечего убирать — null", () => {

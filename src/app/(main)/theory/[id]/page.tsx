@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getLesson } from "@/content/course";
 import { TheoryReader } from "@/components/theory/TheoryReader";
@@ -12,5 +13,10 @@ export default async function TheoryLessonPage(props: PageProps<"/theory/[id]">)
   const lesson = getLesson(id);
   if (!lesson) notFound();
   // key с карточкой: другая ссылка на тот же урок (из поиска) открывается с нужной карточки, а не с состоянием прошлого чтения.
-  return <TheoryReader key={`${id}|${card ?? ""}`} lesson={lesson} initialCard={card} />;
+  // Suspense: читалка сверяет карточку с адресом через useSearchParams (liveCardParam), а ему нужна граница на случай статической сборки.
+  return (
+    <Suspense fallback={null}>
+      <TheoryReader key={`${id}|${card ?? ""}`} lesson={lesson} initialCard={card} />
+    </Suspense>
+  );
 }

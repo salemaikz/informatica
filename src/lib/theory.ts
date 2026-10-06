@@ -189,6 +189,17 @@ export function cardIndexFromParam(card: string | null | undefined, cardIds: rea
   return cardIndexOf(card, cardIds);
 }
 
+/**
+ * Параметр `?card=`, который ещё действует. Страница получает его с сервера, а читалка после первого листания убирает
+ * `?card=` из адреса (withoutCardAnchor). При «Назад» к такой записи истории Next поднимает прежние пропсы (initialCard —
+ * карточка из поиска), хотя в адресе её уже нет: параметр устарел, и урок открывается там, где ученик остановился (theoryLast).
+ * urlCard — `?card=` из useSearchParams (адрес роутера: в отличие от window.location он уже новый в первом рендере
+ * и при переходе по ссылке, и при «Назад»). Совпали — параметр действует; иначе null.
+ */
+export function liveCardParam(serverCard: string | null | undefined, urlCard: string | null | undefined): string | null {
+  return serverCard && serverCard === urlCard ? serverCard : null;
+}
+
 /** Номер карточки в пределах 0..total-1 (мусор — 0). */
 export function clampCard(i: number, total: number): number {
   if (!Number.isFinite(i) || total <= 0) return 0;
