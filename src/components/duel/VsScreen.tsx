@@ -17,6 +17,7 @@ import { useHearts } from "@/components/economy/useEconomy";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { BotChip } from "./BotChip";
 import { MODE_ICON, MODE_TITLE, bandLabel } from "./mode-meta";
+import { RivalAvatar, RivalChip, useRivalName, type Rival } from "./rival";
 
 // Экран «VS» и отсчёт 3-2-1 перед матчем (этап 16Д): карточка ученика (имя из профиля, уровень, надетые рамка и титул)
 // против Бита (маскот, чип «бот», полоса уровня). Сердечко списывает DuelPlay в конце отсчёта (onGo — из таймера).
@@ -33,10 +34,13 @@ export function VsScreen({
   running,
   onGo,
   onClose,
+  rival,
 }: {
   mode: DuelModeId;
   topicLabel?: string;
   band: DuelBand;
+  /** Соперник (Ф3): запись друга или запись своего вызова; по умолчанию — Бит. */
+  rival?: Rival;
   /** false — отсчёт стоит (например, открыто окно «Сердечки закончились»). */
   running: boolean;
   onGo: () => void;
@@ -50,6 +54,7 @@ export function VsScreen({
   const avatar = useApp((s) => s.profile.avatar);
   const equipped = useApp((s) => s.cosmetics.equipped);
   const { level } = useLevel();
+  const rivalName = useRivalName();
   // null — ещё «VS»; 3, 2, 1; 0 — «Старт!».
   const [count, setCount] = useState<number | null>(null);
   const goRef = useRef(onGo);
@@ -98,16 +103,28 @@ export function VsScreen({
             <TitleTag title={equipped.title} size="sm" className="max-w-full" />
           </div>
           <span className="self-center text-sm font-black uppercase text-muted">{t("duel.vs")}</span>
-          <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")}>
-            <span className="flex h-[75px] w-[75px] items-center justify-center">
-              <Mascot mood="happy" size={64} />
-            </span>
-            <p className="flex max-w-full items-center gap-1.5 font-extrabold">
-              <span className="truncate">{t("duel.bot.name")}</span>
-            </p>
-            <BotChip />
-            <p className="text-xs font-extrabold text-muted">{bandLabel(t, band)}</p>
-          </div>
+          {rival && rival.kind !== "bot" ? (
+            <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")} data-testid="duel-vs-rival">
+              <span className="flex h-[75px] w-[75px] items-center justify-center">
+                <RivalAvatar rival={rival} size={60} />
+              </span>
+              <p className="line-clamp-3 w-full font-extrabold [overflow-wrap:anywhere]">{rivalName(rival)}</p>
+              <RivalChip rival={rival} />
+              {rival.kind !== "solo" && <LevelBadge level={rival.card.lv} size="sm" />}
+              {rival.kind !== "solo" && <TitleTag title={rival.card.title} size="sm" className="max-w-full" />}
+            </div>
+          ) : (
+            <div className={cn("flex min-w-0 flex-col items-center gap-2 rounded-3xl border-2 border-border bg-surface p-3 text-center", !reduce && "animate-rise-in")}>
+              <span className="flex h-[75px] w-[75px] items-center justify-center">
+                <Mascot mood="happy" size={64} />
+              </span>
+              <p className="flex max-w-full items-center gap-1.5 font-extrabold">
+                <span className="truncate">{t("duel.bot.name")}</span>
+              </p>
+              <BotChip />
+              <p className="text-xs font-extrabold text-muted">{bandLabel(t, band)}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex min-h-28 flex-1 items-center justify-center" aria-live="polite">
@@ -118,7 +135,9 @@ export function VsScreen({
           )}
         </div>
 
-        <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>
+        <p className="text-center text-xs font-semibold text-muted">
+          {t(rival?.kind === "ghost" ? "duel.ch.ghostNote" : rival?.kind === "solo" ? "duel.rec.note" : "duel.bot.note")}
+        </p>
         {!hearts.unlimited && (
           <p className="flex items-center gap-2 rounded-2xl bg-heart-soft px-3 py-2 text-sm font-bold text-ink-heart">
             <Heart size={16} fill="currentColor" className="shrink-0" aria-hidden />

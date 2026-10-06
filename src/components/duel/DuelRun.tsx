@@ -21,6 +21,7 @@ import { Avatar } from "@/components/app/Avatar";
 import { Mascot } from "@/components/mascot/Mascot";
 import { BotChip } from "./BotChip";
 import { MODE_TITLE } from "./mode-meta";
+import { RivalAvatar, RivalChip, useRivalName, type Rival } from "./rival";
 
 // Экран матча дуэли (этап 16Д, Ф1): задания по очереди, общие часы (блиц, «верю — не верю») или лимит на задание
 // («10 вопросов»), штраф и пауза после ошибки, полоса соперника по его таймлайну (бот — opponentAt). Соперник для экрана —
@@ -63,10 +64,13 @@ export function DuelRun({
   timeline,
   onFinish,
   onQuit,
+  rival,
 }: {
   items: DuelItem[];
   mode: DuelModeId;
   timeline: OpponentTimeline;
+  /** Соперник (Ф3): запись друга (ghost) или никого (solo); по умолчанию — Бит. */
+  rival?: Rival;
   onFinish: (run: RunState, oppEvents: DuelEvent[]) => void;
   onQuit: () => void;
 }) {
@@ -215,6 +219,7 @@ export function DuelRun({
           them={{ score: them.score, answered: them.answered, correct: them.correct }}
           n={items.length}
           perItem={!onClock}
+          rival={rival}
         />
 
         {itemLeft != null && item?.limitMs != null && (
@@ -227,7 +232,7 @@ export function DuelRun({
         )}
 
         {waiting ? (
-          <WaitPanel answered={opp.answered} total={onClock ? null : items.length} onSkip={finish} />
+          <WaitPanel answered={opp.answered} total={onClock ? null : items.length} onSkip={finish} rival={rival} />
         ) : item ? (
           <ItemCard key={shownIdx} item={item} index={shownIdx} total={items.length} perItem={!onClock} fb={fb && fb.i === shownIdx ? fb : null} onAnswer={onAnswer} />
         ) : null}
@@ -256,13 +261,16 @@ function ScoreBoard({
   them,
   n,
   perItem,
+  rival,
 }: {
   you: { score: number; answered: number; correct: number; events: DuelEvent[] };
   them: { score: number; answered: number; correct: number };
   n: number;
   perItem: boolean;
+  rival?: Rival;
 }) {
   const { t } = useT();
+  const rivalName = useRivalName();
   const name = useApp((s) => s.profile.name);
   const avatar = useApp((s) => s.profile.avatar);
   // На часах набор с запасом (40–50 заданий): полоса — доля верных от «шкалы» (не меньше 10).
@@ -287,21 +295,38 @@ function ScoreBoard({
           <span key={k} className={cn("h-1.5 flex-1 rounded-full", !e ? "bg-surface-2" : e.ok ? "bg-success" : "bg-danger")} />
         ))}
       </div>
-      <div className="mt-1 flex items-center gap-2" aria-label={t("duel.opp.aria", { n: them.answered, c: them.correct })} role="group" data-testid="duel-opp">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2">
-          <Mascot mood="neutral" size={26} />
-        </span>
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-extrabold">
-          <span className="truncate">{t("duel.bot.name")}</span>
-          <BotChip />
-        </span>
-        <span className="font-mono text-lg font-extrabold tabular-nums text-muted" data-testid="duel-opp-score">
-          {them.score}
-        </span>
-      </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
-        <div className="h-full rounded-full bg-muted/60 transition-[width] duration-300" style={{ width: width(perItem ? them.answered : them.correct) }} />
-      </div>
+      {/* Запись своего вызова (solo) — соперника нет, полосы тоже. */}
+      {rival?.kind !== "solo" && (
+        <>
+          <div className="mt-1 flex items-center gap-2" aria-label={t("duel.opp.aria", { n: them.answered, c: them.correct })} role="group" data-testid="duel-opp">
+            {rival && rival.kind !== "bot" ? (
+              <>
+                <RivalAvatar rival={rival} size={28} />
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-extrabold">
+                  <span className="truncate">{rivalName(rival)}</span>
+                  <RivalChip rival={rival} />
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2">
+                  <Mascot mood="neutral" size={26} />
+                </span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-extrabold">
+                  <span className="truncate">{t("duel.bot.name")}</span>
+                  <BotChip />
+                </span>
+              </>
+            )}
+            <span className="font-mono text-lg font-extrabold tabular-nums text-muted" data-testid="duel-opp-score">
+              {them.score}
+            </span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+            <div className="h-full rounded-full bg-muted/60 transition-[width] duration-300" style={{ width: width(perItem ? them.answered : them.correct) }} />
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -384,14 +409,15 @@ const ItemCard = memo(function ItemCard({
 });
 
 /** Ученик доиграл, Бит ещё отвечает: его таймлайн известен заранее — итоги можно показать сразу (результат тот же). */
-function WaitPanel({ answered, total, onSkip }: { answered: number; total: number | null; onSkip: () => void }) {
+function WaitPanel({ answered, total, onSkip, rival }: { answered: number; total: number | null; onSkip: () => void; rival?: Rival }) {
   const { t } = useT();
+  const ghost = rival?.kind === "ghost";
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
       <Mascot mood="thinking" size={88} />
       <p className="flex items-center gap-2 font-extrabold">
-        {total != null ? t("duel.wait", { n: answered, total }) : t("duel.wait.clock", { n: answered })}
-        <BotChip />
+        {ghost && total != null ? t("duel.ghost.wait", { n: answered, total }) : total != null ? t("duel.wait", { n: answered, total }) : t("duel.wait.clock", { n: answered })}
+        {ghost ? <RivalChip rival={rival} /> : <BotChip />}
       </p>
       <Button onClick={onSkip}>{t("duel.wait.skip")}</Button>
     </div>
