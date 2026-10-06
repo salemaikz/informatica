@@ -663,7 +663,8 @@ describe("чипы: заработок", () => {
   });
 
   it("PERFECT_DROP: шанс 20% на пол-сердечка, 20% на 3 чипа (этап 16В, решение B)", () => {
-    expect(PERFECT_DROP).toEqual({ heartChance: 0.2, chipsChance: 0.2, chips: 3, heart: 0.5 });
+    // testsPerDay (E8): мини-тест, тест по теме и по разделу бросают сюрприз не больше 3 раз в день; уроки — без предела
+    expect(PERFECT_DROP).toEqual({ heartChance: 0.2, chipsChance: 0.2, chips: 3, heart: 0.5, testsPerDay: 3 });
     // шанс «ничего» — остаток: 60%
     expect(1 - PERFECT_DROP.heartChance - PERFECT_DROP.chipsChance).toBeCloseTo(0.6, 10);
   });

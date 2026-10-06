@@ -88,6 +88,11 @@ export interface PlayerProps {
   /** Цена входа в сердечках (#40): списывается, когда урок начался — первый переход «дальше», первый ответ или «Пропустить». Нет или 0 — бесплатно (тренировка). */
   entryCost?: number;
   /**
+   * Ключ тренировки (lib/drill-paid.ts → drillPaidKey): плата за вход запоминается под ним, и та же тренировка в течение 20 минут
+   * (перезагрузка, случайный выход) открывается бесплатно — как продолжение урока. Только для kind="drill".
+   */
+  drillKey?: string;
+  /**
    * Вход уже оплачен до плеера (мини-тест: «Начать» на экране старта) — сколько сердечек списано (0 — безлимит).
    * Плеер не списывает, показывает счётчик с «−N», а окно выхода предупреждает, что плата не вернётся.
    */
@@ -199,6 +204,7 @@ export function LessonPlayer({
   onSessionFinish,
   resultsExtra,
   entryCost = 0,
+  drillKey,
   prepaid,
   resume,
   saveRun = false,
@@ -404,7 +410,9 @@ export function LessonPlayer({
   // Не хватает сердечек — шторка «Не хватает сердечек», шаг не двигаем (после покупки ученик нажмёт кнопку снова).
   const ensurePaid = useCallback((): boolean => {
     if (entryCost <= 0 || paidAtRef.current !== null) return true;
-    const res = useApp.getState().payEntry(entryCost);
+    // Тренировка платит через payDrill: он помнит оплату 20 минут, и перезагрузка не списывает сердечко второй раз (E7).
+    const app = useApp.getState();
+    const res = kind === "drill" && drillKey ? app.payDrill(drillKey, entryCost) : app.payEntry(entryCost);
     if (!res.ok) {
       setOutOpen(true);
       track({ e: "hearts_out", where: playerHeartsWhere({ via, mode }) });
@@ -416,7 +424,7 @@ export function LessonPlayer({
     // возврат в течение RUN_GRACE_MS не спишет вход второй раз. Ответ потом перезапишет снимок шагом дальше.
     persistRun({ queue, pos, done, records, xp, combo, maxCombo });
     return true;
-  }, [entryCost, persistRun, queue, pos, done, records, xp, combo, maxCombo, via, mode]);
+  }, [entryCost, kind, drillKey, persistRun, queue, pos, done, records, xp, combo, maxCombo, via, mode]);
 
   // Переход к следующему шагу: doneNow — сколько шагов пройдено после него (теория засчитывается здесь, задание — при ответе).
   // recs — ответы с учётом только что записанного пропуска (state обновится позже, чем нужен итог).

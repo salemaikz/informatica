@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import { ENT_TOPICS, entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import { ENTRY_COST } from "@/lib/economy";
+import { drillPaidActive, drillPaidKey } from "@/lib/drill-paid";
 import { useT } from "@/i18n/useT";
 import {
   buildHistoryRedo,
@@ -118,7 +119,7 @@ function drillExitHref(mode: DrillMode): string {
 }
 
 /** Экран старта мини-теста (#95): сердечко списывается по «Начать», а не при первом ответе. */
-function MiniStart({ title, count, onStart }: { title: string; count: number; onStart: () => boolean }) {
+function MiniStart({ title, count, free, onStart }: { title: string; count: number; free: boolean; onStart: () => boolean }) {
   const { t } = useT();
   const router = useRouter();
   const [noHearts, setNoHearts] = useState(false);
@@ -130,7 +131,7 @@ function MiniStart({ title, count, onStart }: { title: string; count: number; on
       </div>
       <p className="flex flex-wrap items-center gap-1.5">
         <Pill tone="muted">{t("exam.fmt.questions", { n: count })}</Pill>
-        <HeartCost n={ENTRY_COST.check} />
+        {!free && <HeartCost n={ENTRY_COST.check} />}
       </p>
       <p className="rounded-2xl border-2 border-border bg-surface p-4 text-[15px] font-semibold">{t("unittest.mini.desc")}</p>
       <Button
@@ -142,7 +143,7 @@ function MiniStart({ title, count, onStart }: { title: string; count: number; on
         }}
       >
         {t("common.start")}
-        <HeartCost n={ENTRY_COST.check} variant="solid" />
+        {!free && <HeartCost n={ENTRY_COST.check} variant="solid" />}
       </Button>
       <ButtonLink href="/learn" variant="ghost">
         {t("common.cancel")}
@@ -155,6 +156,9 @@ function MiniStart({ title, count, onStart }: { title: string; count: number; on
 export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area }: { mode: DrillMode } & Params) {
   const { t, l } = useT();
   const [session] = useState(() => buildSession(mode, { skill, unit, topic, entry, node, item, area }));
+  // Ключ тренировки (E7): оплата запоминается под ним — перезагрузка и случайный выход в течение 20 минут не списывают сердечко снова.
+  const payKey = drillPaidKey(mode, { skill, unit, topic, entry, node, item, area });
+  const [alreadyPaid] = useState(() => drillPaidActive(useApp.getState().drillPaid, payKey, Date.now()));
   const recordCourseNode = useApp((s) => s.recordCourseNode);
   // Мини-тест: вход оплачен кнопкой «Начать» (плеер дальше не списывает).
   const [started, setStarted] = useState(false);
@@ -165,7 +169,7 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   const markReviewed = useApp((s) => s.markReviewed);
   // Мини-тест группы — как «Проверить себя»: 1 сердечко (этап 14), списывается по «Начать» (#95).
   // Любая другая тренировка (этап 16В, решение F) — тоже 1 сердечко, но при первом ответе, как у урока: плеер списывает сам.
-  const entryNeed = !session.steps.length ? 0 : mode === "minitest" ? ENTRY_COST.check : ENTRY_COST.drill;
+  const entryNeed = !session.steps.length || alreadyPaid ? 0 : mode === "minitest" ? ENTRY_COST.check : ENTRY_COST.drill;
   useHeartsOutOnEntry(entryNeed, mode === "minitest" ? "check" : "drill");
 
   const onSessionFinish = useCallback(
@@ -260,12 +264,13 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
   // Нет сердечек на входе — «Сердечки закончились» (EntryGate). Остальные режимы — вход списывает плеер при первом ответе.
   if (mode === "minitest" && !started) {
     return (
-      <EntryGate need={ENTRY_COST.check} exitHref="/learn">
+      <EntryGate need={alreadyPaid ? 0 : ENTRY_COST.check} exitHref="/learn">
         <MiniStart
           title={title}
           count={session.steps.length}
+          free={alreadyPaid}
           onStart={() => {
-            const res = useApp.getState().payEntry(ENTRY_COST.check);
+            const res = useApp.getState().payDrill(payKey, ENTRY_COST.check);
             if (!res.ok) return false;
             setPrepaid(res.paid);
             setStarted(true);
@@ -286,13 +291,14 @@ export function DrillScreen({ mode, skill, unit, topic, entry, node, item, area 
       resultsExtra={extra}
       testMode={mode === "minitest"}
       entryCost={mode === "minitest" ? undefined : ENTRY_COST.drill}
+      drillKey={mode === "minitest" ? undefined : payKey}
       prepaid={mode === "minitest" ? prepaid : undefined}
     />
   );
   // Минитест оплачен «Начать» (плеер не списывает); остальные режимы — нет сердечек на входе: «Сердечки закончились» (EntryGate).
   if (mode === "minitest") return player;
   return (
-    <EntryGate need={ENTRY_COST.drill} exitHref={drillExitHref(mode)}>
+    <EntryGate need={alreadyPaid ? 0 : ENTRY_COST.drill} exitHref={drillExitHref(mode)}>
       {player}
     </EntryGate>
   );

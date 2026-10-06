@@ -5,7 +5,7 @@ import { BookOpen, Library, Clock, Cpu, Flame, Map as MapIcon, Repeat, RotateCcw
 import { m } from "motion/react";
 import { AchievementBadge } from "@/components/app/AchievementBadge";
 import { LevelBadge, TierPill } from "@/components/app/LevelBadge";
-import { RARITY_BORDER, RARITY_SOFT } from "@/components/ui/rarity";
+import { RARITY_BORDER, RARITY_LABEL, RARITY_SOFT, RARITY_TEXT } from "@/components/ui/rarity";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Lesson, LessonVia, SessionResult } from "@/lib/types";
@@ -15,7 +15,6 @@ import { feedback as giveFeedback } from "@/lib/feedback";
 import { lessonFeedback } from "@/lib/ai";
 import { buildStudentContext } from "@/lib/student-context";
 import { achievementById, levelInfo, levelTitle, newTierOnLevelUp } from "@/lib/gamification";
-import { ACHIEVEMENT_CHIPS, earnAmount } from "@/lib/economy";
 import { encodeShare, SHARE_MAX_XP, type ShareResult } from "@/lib/share-code";
 import { isPerfectSession, PERFECT_RUN_SHOW_FROM, type PerfectDrop } from "@/lib/perfect";
 import { DAY_MS, REPLAY_XP } from "@/lib/review";
@@ -384,11 +383,9 @@ export function Results({
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-extrabold uppercase text-muted">{t("res.achievement")}</p>
                   <p className="font-extrabold leading-tight">{l(a.title)}</p>
-                  <p className="text-xs font-bold text-muted">{t(`gamify.kind.${a.rarity}`)}</p>
+                  {/* Редкость вместо числа чипов: выданное зависит от множителя и могло не совпасть с показанным (E4). */}
+                  <p className={clsx("text-xs font-extrabold", RARITY_TEXT[a.rarity])}>{t(RARITY_LABEL[a.rarity])}</p>
                 </div>
-                <Pill tone="gold" className="shrink-0" icon={<Cpu size={12} aria-hidden />}>
-                  {t("gamify.chips", { n: earnAmount(ACHIEVEMENT_CHIPS[a.rarity], chipMult) })}
-                </Pill>
               </m.div>
             );
           })}

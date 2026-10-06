@@ -3,9 +3,15 @@
 // Тесты — tests/achievement-rules.test.ts.
 
 import { levelInfo } from "./gamification";
-import { unitPassed } from "./exam-pass";
+import { fullExamCounts, unitPassed } from "./exam-pass";
 import { masteryLevel } from "./mastery";
-import type { AppState } from "./store";
+import type { AppState, ExamSummary } from "./store";
+
+/**
+ * Версия правил достижений. Правила 16В считаются задним числом: старый ученик при загрузке получает всё, что уже выполнено,
+ * молча — без чипов и показа (mergeState в store.ts). Нет поля в сохранении или оно меньше — миграция один раз.
+ */
+export const ACH_RULES_VERSION = 2;
 
 /** Из чего считаются условия (часть AppState). */
 export type AchievementSource = Pick<AppState, "xp" | "streak" | "lessons" | "maxCombo" | "exams" | "codeTasks" | "skills" | "history">;
@@ -17,10 +23,10 @@ export interface AchievementFacts {
   streakBest: number;
   /** Уроки, пройденные хотя бы раз (в плеере, игрой или тестом по разделу). */
   lessonsDone: number;
-  /** Уроки, которые хотя бы раз пройдены на 100% (все задания с первой попытки). */
+  /** Уроки, хотя бы раз пройденные идеально: все задания с первой попытки и без подсказок (флаг LessonStat.perfect). */
   lessonsPerfect: number;
   maxCombo: number;
-  /** Полные пробные ЕНТ. */
+  /** Завершённые полные пробные ЕНТ (отвечено не меньше половины заданий). */
   fullExams: number;
   /** Лучшая доля баллов в полном пробном ЕНТ (0..1). */
   bestFullExam: number;
@@ -32,14 +38,24 @@ export interface AchievementFacts {
   mistakesFixed: number;
 }
 
+/**
+ * Полный пробный ЕНТ засчитывается, если отвечено не меньше половины заданий — то же правило, что у чипов за пробный ЕНТ.
+ * У старых записей числа ответов нет (поле `answered`): считаем их по баллам — хоть один балл значит, что отвечали.
+ */
+export function fullExamDone(e: Pick<ExamSummary, "kind" | "points" | "maxPoints" | "answered" | "questions">): boolean {
+  if (e.kind !== "full" || !(e.maxPoints > 0)) return false;
+  if (typeof e.answered === "number") return fullExamCounts(e.answered, Math.max(e.answered, e.questions ?? 0));
+  return e.points > 0;
+}
+
 export function achievementFacts(s: AchievementSource): AchievementFacts {
   const lessons = Object.values(s.lessons);
-  const full = s.exams.filter((e) => e.kind === "full" && e.maxPoints > 0);
+  const full = s.exams.filter(fullExamDone);
   return {
     level: levelInfo(s.xp).level,
     streakBest: Math.max(s.streak.best, s.streak.current),
     lessonsDone: lessons.filter((l) => (l?.completions ?? 0) > 0).length,
-    lessonsPerfect: lessons.filter((l) => (l?.bestAccuracy ?? 0) >= 1).length,
+    lessonsPerfect: lessons.filter((l) => l?.perfect === true).length,
     maxCombo: s.maxCombo,
     fullExams: full.length,
     bestFullExam: full.reduce((best, e) => Math.max(best, e.points / e.maxPoints), 0),

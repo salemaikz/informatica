@@ -30,7 +30,7 @@ export function entryRules(): { id: EntryRuleId; cost: number }[] {
   ];
 }
 
-/** Что бесплатно: практикум кода, шпаргалка и формулы, чат с Битом (теория урока — за 0,5, тренировка любого вида — за 1). */
+/** Что бесплатно: задачи практикума в редакторе кода, шпаргалка и формулы, чат с Битом (теория урока — за 0,5, тренировка любого вида, в том числе «Чтение кода» и контекстные задания, — за 1). */
 export const FREE_ENTRIES = ["code", "cheatsheet", "chat"] as const;
 export type FreeEntryId = (typeof FREE_ENTRIES)[number];
 

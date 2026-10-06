@@ -34,7 +34,9 @@ function prefersReducedMotion(): boolean {
  * «Сюрприз за идеальный урок» (этап 16В, решение B): капсула «раскрывается» и показывает то, что УЖЕ выдано стором
  * (пол-сердечка, чипы или «пусто»). Бросок и выдача — в действии стора, здесь только показ.
  * - animate: свежий результат — капсула раскрывается (~0,8 с после появления), играют звук и полёт чипов; «Меньше анимаций» — сразу итог.
- *   Не свежий (итоги тестов открыты из истории) — сразу итог, без звука и полёта.
+ *   Не свежий (итоги тестов открыты из истории, капсула уже показана) — сразу итог, без звука и полёта.
+ *   Звуки (E9): чипы — `chips` (играет ChipFlight вместе с полётом), пол-сердечка — `pop`, «пусто» — без звука.
+ * - onSeen: вызывается один раз, когда капсула раскрыта на глазах (из таймера, не синхронно в эффекте) — стор запоминает «показана».
  * - delay: задержка появления плитки, с (лесенка плиток итогов).
  * - flightTarget: куда летят чипы (на итогах урока — `[data-chip-target]`; по умолчанию — счётчик в шапке).
  */
@@ -44,30 +46,36 @@ export function PerfectDropTile({
   animate = true,
   delay = 0,
   flightTarget,
+  onSeen,
 }: {
   drop: PerfectDrop;
   variant?: "lesson" | "test";
   animate?: boolean;
   delay?: number;
   flightTarget?: string;
+  onSeen?: () => void;
 }) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const [opened, setOpened] = useState(() => !animate || prefersReducedMotion());
-  // Чипы летят только когда капсула раскрылась на глазах: при «сразу итоге» — один звук монетки, без повторного показа.
+  // Звук, полёт чипов и отметка «показана» — только когда результат свежий (animate при создании плитки); «сразу итог» из истории — тихо.
   const [live] = useState(() => animate);
 
   useEffect(() => {
     if (!live) return;
-    const play = () => feedback(drop.kind === "heart" ? "perfect" : drop.kind === "chips" ? "pop" : "tap");
-    if (opened) {
-      play();
-      return;
-    }
-    const id = setTimeout(() => {
-      setOpened(true);
-      play();
-    }, (delay + REVEAL_AFTER) * 1000);
+    // Раскрытие: звук пол-сердечка (у чипов звук `chips` играет ChipFlight, у «пусто» звука нет) и отметка «показана».
+    const reveal = () => {
+      if (drop.kind === "heart") feedback("pop");
+      onSeen?.();
+    };
+    // «Сразу итог» (меньше анимаций) — тоже из таймера, а не синхронно в эффекте.
+    const id = setTimeout(
+      () => {
+        setOpened(true);
+        reveal();
+      },
+      opened ? 0 : (delay + REVEAL_AFTER) * 1000,
+    );
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- раскрытие запускаем один раз при показе плитки
   }, []);
