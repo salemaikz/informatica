@@ -79,12 +79,15 @@ export async function joinRoom(kv: CountingKv, rawCode: string, guest: { pid: st
   if (m.deckTag !== deckTag) return { ok: false, status: 409, error: "update_needed" };
   if (m.b) {
     if (m.b.pid !== guest.pid) return { ok: false, status: 409, error: "full" };
-    return { ok: true, join: joinOf(seatClaims(m, "b", guest.pid), secret) };
+    if (m.startAt) return { ok: true, join: joinOf(seatClaims(m, "b", guest.pid), secret) };
+    // Место за этим гостем, а расписание не записалось (сбой второй записи или параллельный повтор входа) — дописываем
+    // заново: сюда попадает только выигравший HSETNX b, запись идемпотентна.
+  } else {
+    if (m.a.left || now >= m.created + ROOM_TTL_SEC * 1000) return { ok: false, status: 404, error: "expired" };
+    // Заблокированный хозяином не может вызвать его на бой (3-safety §3) — ответ как у закрытой комнаты.
+    if (await kv.sismember(keys.blocked(m.a.pid), guest.pid)) return { ok: false, status: 404, error: "expired" };
+    if (!(await kv.hsetnx(matchKey(id), "b", guest.pid))) return { ok: false, status: 409, error: "full" };
   }
-  if (m.a.left || now >= m.created + ROOM_TTL_SEC * 1000) return { ok: false, status: 404, error: "expired" };
-  // Заблокированный хозяином не может вызвать его на бой (3-safety §3) — ответ как у закрытой комнаты.
-  if (await kv.sismember(keys.blocked(m.a.pid), guest.pid)) return { ok: false, status: 404, error: "expired" };
-  if (!(await kv.hsetnx(matchKey(id), "b", guest.pid))) return { ok: false, status: 409, error: "full" };
   const band = Math.min(m.band, bandOf(guest.lv)) as DuelBand;
   const sched = roomScheduleFrom(m.mode, band, now);
   await kv.pipeline([

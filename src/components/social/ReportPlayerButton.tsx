@@ -14,8 +14,9 @@ import { useShowName } from "./PlayerCard";
 // «Пожаловаться» на игрока (docs/specs/duels.md §7; 3-safety.md §4): иконка Flag приглушённым цветом (не danger — это не ошибка
 // ученика), шторка с готовыми причинами, без свободного текста. Имя у пожаловавшегося скрывается сразу (стор hiddenNames),
 // затем предлагается «Заблокировать». У бота кнопки нет.
-// Живой матч (Ф4): seat — подписанное место; адресата сервер находит по матчу и месту. Случайному сопернику (метка «~…»)
-// «Заблокировать» не предлагаем: кода друга у него нет, а добавить в друзья или найти его снова нельзя.
+// Живой матч (Ф4): seat — подписанное место; адресата сервер находит по матчу и месту — и для жалобы, и для блока. Случайного
+// соперника (метка «~…») блокируем только по месту: кода друга у него нет; подбор его больше не сведёт, а в списке
+// «Заблокированные» его нет (снять такой блок нельзя — незнакомец).
 
 const REASONS: { id: ReportReason; key: "social.report.name" | "social.report.cheat" | "social.report.other" }[] = [
   { id: "name", key: "social.report.name" },
@@ -57,7 +58,8 @@ export function ReportPlayerButton({
   };
 
   const block = async () => {
-    const r = await blockPlayer(card.code);
+    // Друг в комнате (настоящий код) — обычный блок по коду, виден в списке; случайный соперник — по месту в матче.
+    const r = await blockPlayer(card.code, false, card.code.startsWith("~") && seat && matchId ? { matchId, seat } : undefined);
     if (r.ok) {
       setBlocked(true);
       onBlocked?.();
@@ -92,12 +94,12 @@ export function ReportPlayerButton({
                 <Check size={18} className="mt-0.5 shrink-0" aria-hidden />
                 {t("social.report.done")}
               </p>
-              {card.code.startsWith("~") ? null : !blocked ? (
-                <Button variant="secondary" block onClick={block}>
+              {card.code.startsWith("~") && !(seat && matchId) ? null : !blocked ? (
+                <Button variant="secondary" block onClick={block} data-testid="report-block">
                   {t("social.friend.block")}
                 </Button>
               ) : (
-                <p className="text-center text-sm font-extrabold text-muted">{t("social.blocked")}</p>
+                <p className="text-center text-sm font-extrabold text-muted">{t("social.blocked.done")}</p>
               )}
               <Button variant="ghost" block onClick={() => setOpen(false)}>
                 {t("common.close")}

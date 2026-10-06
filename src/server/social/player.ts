@@ -43,6 +43,8 @@ export const keys = {
   friends: (pid: string) => `pl:fr:${pid}`,
   requests: (pid: string) => `pl:frq:${pid}`,
   blocked: (pid: string) => `pl:blk:${pid}`,
+  /** Заблокированные случайные соперники (их pid есть и в pl:blk): в списке «Заблокированные» не показываем — их кода друга нет. */
+  blockedAnon: (pid: string) => `pl:blkx:${pid}`,
   inbox: (pid: string) => `pl:inbox:${pid}`,
   history: (pid: string) => `du:h:${pid}`,
   topWeek: (week: string) => `top:w:${week}`,
@@ -360,6 +362,7 @@ export async function deletePlayer(kv: CountingKv, pid: string, now: number): Pr
         keys.friends(pid),
         keys.requests(pid),
         keys.blocked(pid),
+        keys.blockedAnon(pid),
         keys.inbox(pid),
         keys.history(pid),
         ...(code && owner === pid ? [keys.code(code)] : []),

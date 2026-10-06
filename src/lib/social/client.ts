@@ -69,7 +69,24 @@ export async function saveMe(input: ProfileInput): Promise<Res<{ player: MyPlaye
   return { ...r, ok: r.ok && !!player, data: player ? { player, ...(typeof r.data?.hint === "string" ? { hint: r.data.hint } : {}) } : null };
 }
 
-export const deleteMe = () => call<{ ok: true }>("/api/social/me", { method: "DELETE" });
+/** Отметка вкладки «профиль игрока на сервере свежий» (lib/duel/live.ts → ensurePlayer). */
+export const PLAYER_MARK = "informatica-duel-player";
+
+export function forgetPlayerMark(): void {
+  try {
+    sessionStorage.removeItem(PLAYER_MARK);
+  } catch {
+    // нет хранилища — отметки и не было
+  }
+}
+
+/** Удалить профиль соревнований; отметка «профиль свежий» снимается сразу (иначе живой вход час считал бы его живым). */
+export async function deleteMe() {
+  forgetPlayerMark();
+  const r = await call<{ ok: true }>("/api/social/me", { method: "DELETE" });
+  forgetPlayerMark();
+  return r;
+}
 
 export interface HomeData {
   player: MyPlayer | null;
@@ -117,8 +134,11 @@ export async function removeFriend(code: string): Promise<Res<unknown>> {
   return r;
 }
 
-export async function blockPlayer(code: string, off = false): Promise<Res<unknown>> {
-  const r = await call("/api/social/block", { method: "POST", body: off ? { code, off: true } : { code } });
+/** Заблокировать (off — снять блок). live — живой матч: цель сервер находит по подписанному месту (у случайного соперника кода нет). */
+export async function blockPlayer(code: string, off = false, live?: { matchId: string; seat: string }): Promise<Res<unknown>> {
+  const r = live
+    ? await call("/api/social/block", { method: "POST", body: { matchId: live.matchId }, headers: { "x-duel-seat": live.seat } })
+    : await call("/api/social/block", { method: "POST", body: off ? { code, off: true } : { code } });
   if (r.ok) invalidateTop();
   return r;
 }

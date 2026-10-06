@@ -8,7 +8,9 @@ import { ALL_TIPS } from "./tour";
 //    и стартует, когда хозяин вернулся; оба отвечают, полоса соперника обновляется ≤ 3 с после приёма ответа,
 //    перемотка часов → итоги совпадают с обеих сторон, сердечко −1 у каждого;
 // 2) случайный соперник: оба ищут → матч, на VS — имя соперника;
-// 3) один в поиске → кнопка Бита с 3 с → матч с ботом, чип «бот».
+// 3) один в поиске → кнопка Бита с 3 с → матч с ботом, чип «бот»;
+// 4) комната истекла → «Создать свою комнату» открывает лобби на той же странице; «Без имени» не заменяется именем профиля.
+// Первый живой вход без профиля соцчасти — экран имени (имя из профиля подставлено, ученик подтверждает).
 
 type Item = { shape: "choice" | "statement"; step?: { correct: number }; statement?: { value: boolean } };
 type Join = { matchId: string; seed: number; band: number; mode: string; startAt: number };
@@ -56,6 +58,12 @@ async function answer(page: Page, it: Item) {
   else await page.locator(`[data-option="${it.step!.correct}"]`).click();
 }
 
+/** Экран имени при первом живом входе: подтвердить подставленное имя профиля. */
+async function confirmName(page: Page) {
+  await expect(page.getByTestId("duel-live-name")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("social-name-save").click();
+}
+
 async function socialOn(page: Page): Promise<boolean> {
   const res = await page.request.get("/api/social/home");
   return res.status() === 200;
@@ -69,6 +77,7 @@ test("комната по ссылке: двое отвечают, полоса 
 
   await A.page.goto("/duel");
   await A.page.getByTestId("duel-room").click();
+  await confirmName(A.page);
   await A.page.waitForURL(/\/duel\/live\?m=/);
   const code = (await A.page.getByTestId("duel-room-code").textContent())!.trim();
   expect(code).toMatch(/^[0-9A-Z]{6}$/);
@@ -85,6 +94,7 @@ test("комната по ссылке: двое отвечают, полоса 
   await B.page.goto(`/duel/r/${code}`);
   await expect(B.page.getByTestId("duel-room-invite")).toBeVisible();
   await B.page.getByTestId("duel-room-enter").click();
+  await confirmName(B.page);
   await expect(B.page.getByTestId("duel-opp-card")).toContainText("Аян", { timeout: 15_000 });
   // Дольше прежнего окна готовности (6 с): матч не отменён, друг ждёт хозяина.
   await B.page.waitForTimeout(8_000);
@@ -174,9 +184,11 @@ test("случайный соперник: двое ищут → матч", asyn
   test.skip(!(await socialOn(A.page)), "соцчасть выключена: нужен сервер playwright.duel-live.config.ts");
   await A.page.goto("/duel");
   await A.page.getByTestId("duel-find").click();
+  await confirmName(A.page);
   await expect(A.page.getByTestId("duel-search")).toBeVisible();
   await B.page.goto("/duel");
   await B.page.getByTestId("duel-find").click();
+  await confirmName(B.page);
   await expect(A.page.getByTestId("duel-opp-card")).toContainText("Ерлан", { timeout: 15_000 });
   await expect(B.page.getByTestId("duel-opp-card")).toContainText("Дана", { timeout: 15_000 });
   await expect(A.page.getByTestId("bot-chip")).toHaveCount(0);
@@ -198,6 +210,7 @@ test("один в поиске: кнопка Бита с 3 с → матч с б
   test.skip(!(await socialOn(A.page)), "соцчасть выключена: нужен сервер playwright.duel-live.config.ts");
   await A.page.goto("/duel");
   await A.page.getByTestId("duel-find").click();
+  await confirmName(A.page);
   await expect(A.page.getByTestId("duel-search")).toBeVisible();
   await expect(A.page.getByTestId("duel-search-bot")).toHaveCount(0);
   const bot = A.page.getByTestId("duel-search-bot");
@@ -207,6 +220,36 @@ test("один в поиске: кнопка Бита с 3 с → матч с б
   await A.page.waitForURL(/\/duel\/play\?mode=blitz&seed=\d+$/);
   await expect(A.page.getByTestId("duel-vs").getByTestId("bot-chip")).toBeVisible();
   expect(await hearts(A.page)).toBe(5);
+  expect(A.errors).toEqual([]);
+  await A.ctx.close();
+});
+
+test("комната истекла → «Создать свою комнату» открывает лобби; «Без имени» остаётся без имени", async ({ browser }) => {
+  test.setTimeout(60_000);
+  const A = await player(browser, "Аня");
+  test.skip(!(await socialOn(A.page)), "соцчасть выключена: нужен сервер playwright.duel-live.config.ts");
+  // Несуществующий матч — экран «комната истекла».
+  await A.page.goto("/duel/live?m=AAAAAAAAAAAA");
+  await expect(A.page.getByTestId("duel-live-error")).toBeVisible({ timeout: 15_000 });
+  await A.page.getByRole("button", { name: "Создать свою комнату" }).click();
+  // Тот же маршрут /duel/live, другой адрес — новый экран: сначала имя, ученик выбирает «Без имени».
+  await expect(A.page.getByTestId("duel-live-name")).toBeVisible({ timeout: 15_000 });
+  await A.page.getByRole("button", { name: "Без имени" }).click();
+  await expect(A.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 15_000 });
+  const me1 = (await (await A.page.request.get("/api/social/me")).json()) as { player: { nameState: string; name: string | null } };
+  expect(me1.player).toMatchObject({ nameState: "none", name: null });
+  // Новый уровень (профиль на сервере устарел) и новый живой вход: имя «Аня» из профиля приложения не публикуется.
+  await A.page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("informatica-v1") ?? "{}");
+    raw.state.xp = 5_000;
+    localStorage.setItem("informatica-v1", JSON.stringify(raw));
+    sessionStorage.removeItem("informatica-duel-player");
+  });
+  await A.page.goto("/duel/live?room=blitz");
+  await expect(A.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 15_000 });
+  const me2 = (await (await A.page.request.get("/api/social/me")).json()) as { player: { nameState: string; name: string | null; lv: number } };
+  expect(me2.player).toMatchObject({ nameState: "none", name: null });
+  expect(me2.player.lv).toBeGreaterThan(1);
   expect(A.errors).toEqual([]);
   await A.ctx.close();
 });

@@ -154,7 +154,10 @@ describe("pending-link: ссылки соцчасти (Ф3 дуэлей)", () =>
   it("слияние Ф3+Ф4: и ссылки соцчасти, и комната живой дуэли /duel/r/<код>", () => {
     expect(pendingLinkOf(`/f/${TOKEN}`)).toBe(`/f/${TOKEN}`);
     expect(pendingLinkOf("/duel/r/abc12z")).toBe("/duel/r/ABC12Z");
-    expect(pendingLinkOf("/duel/r/ABC12Z#x")).toBeNull();
+    // Хвосты (метки рекламы мессенджеров, якорь) отбрасываются — как у ссылок соцчасти.
+    expect(pendingLinkOf("/duel/r/ABC12Z#x")).toBe("/duel/r/ABC12Z");
+    expect(pendingLinkOf("/duel/r/K7Q2XM?fbclid=IwAR0abc")).toBe("/duel/r/K7Q2XM");
+    expect(pendingLinkOf(`/duel/c/${CH}?fbclid=IwAR0abc`)).toBe(`/duel/c/${CH}`);
   });
 
   it("сохраняется и возвращается после онбординга", () => {

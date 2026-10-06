@@ -52,7 +52,7 @@ describe("код комнаты, ссылки, имя", () => {
   });
   it("онбординг запоминает только комнату с кодом (и вызов на пробник)", () => {
     expect(pendingLinkOf("/duel/r/abc12z")).toBe("/duel/r/ABC12Z");
-    expect(pendingLinkOf("/duel/r/ABC12Z?x=1")).toBeNull();
+    expect(pendingLinkOf("/duel/r/ABC12Z?x=1")).toBe("/duel/r/ABC12Z");
     expect(pendingLinkOf("/duel/r/ABC")).toBeNull();
     expect(pendingLinkOf("/duel/r/ABC12Z/../../evil")).toBeNull();
     expect(pendingLinkOf("/duel/play?mode=blitz")).toBeNull();

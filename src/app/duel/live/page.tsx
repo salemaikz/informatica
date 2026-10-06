@@ -22,5 +22,7 @@ export default async function DuelLivePage(props: PageProps<"/duel/live">) {
     if (DUEL_MODES[room].needsTopic && !isDuelTopic(topic)) redirect("/duel");
     start = { kind: "room", mode: room, ...(DUEL_MODES[room].needsTopic ? { topic } : {}) };
   } else redirect("/duel");
-  return <LivePlay start={start} />;
+  // Ключ — из адреса: переход внутри /duel/live (например, «Создать свою комнату» с экрана ошибки ?m=…) — новый экран
+  // со своим стартом, а не тот же смонтированный автомат (сегмент страницы в Next не зависит от query).
+  return <LivePlay key={JSON.stringify(start)} start={start} />;
 }

@@ -1,4 +1,5 @@
 import { FRIEND_CODE_ALPHABET } from "../friend-code";
+import { PLAYER_MARK, forgetPlayerMark } from "../social/client";
 import { sanitizePlayer } from "../social/view";
 import { DUEL_MODES, isDuelBand, isDuelMode } from "./modes";
 import type { RunState } from "./run";
@@ -238,49 +239,55 @@ export function liveHref(p: { find: true } | { room: DuelModeId; topic?: DuelTop
 
 // ---------- профиль игрока на сервере ----------
 
+/** Что ensurePlayer обновляет у существующего профиля (имя — никогда: его выбирает ученик на экране имени). */
 export interface PlayerInput {
-  name: string;
   lang: "ru" | "kk";
   lv: number;
   frame: string | null;
   title: string | null;
 }
 
-const PLAYER_MARK = "informatica-duel-player";
 /** Профиль на сервере обновляем не чаще раза в час на вкладку (уровень и украшения), иначе — по ошибке no_player. */
 const PLAYER_FRESH_MS = 3_600_000;
 
+/** Итог ensurePlayer: ok — профиль есть и свежий; no_player — профиля нет (сначала экран имени); down — сервер недоступен. */
+export type EnsurePlayer = "ok" | "no_player" | "down";
+
 /**
- * Игрок соцчасти есть (cookie inf_pl и профиль на сервере). Профиля нет — POST /api/social/me с именем из профиля, языком,
- * уровнем и украшениями (ft — по умолчанию «показывать»). Профиль есть — его имя и переключатель «Показывать мои очки»
- * (Ф3) не трогаем: POST только если устарели уровень или украшения, с тем же именем (скрытое модерацией — null, остаётся
- * скрытым). Повторный вызов в течение часа ничего не отправляет (force — после ответа no_player). false — сервер недоступен.
+ * Игрок соцчасти есть (cookie inf_pl и профиль на сервере)? Профиль здесь не создаётся никогда: его создаёт ученик
+ * на экране имени (NameForm, docs/specs/duels.md §7) — без профиля ответ no_player. Профиль есть — имя и переключатель
+ * «Показывать мои очки» не трогаем: POST только если устарели уровень или украшения, с сохранённым именем (null у «без
+ * имени», скрытого и отклонённого — сервер их не меняет; имя из профиля приложения сюда не попадает). Повторный вызов
+ * в течение часа ничего не отправляет (force — после ответа no_player).
  */
-export async function ensurePlayer(p: PlayerInput, force = false): Promise<boolean> {
+export async function ensurePlayer(p: PlayerInput, force = false): Promise<EnsurePlayer> {
   const now = Date.now();
   if (!force) {
     try {
       const at = Number(sessionStorage.getItem(PLAYER_MARK));
-      if (at && now - at < PLAYER_FRESH_MS) return true;
+      if (at && now - at < PLAYER_FRESH_MS) return "ok";
     } catch {
       // нет хранилища — просто проверим
     }
   }
   const me = await duelFetch<{ player?: unknown }>("GET", "/api/social/me");
-  if (me.status !== 200) return false;
+  if (me.status !== 200) return "down";
   const cur = sanitizePlayer(me.data?.player ?? null);
-  const fresh = cur && cur.lv === p.lv && cur.frame === p.frame && cur.title === p.title;
+  if (!cur) {
+    forgetPlayerMark();
+    return "no_player";
+  }
+  const fresh = cur.lv === p.lv && cur.frame === p.frame && cur.title === p.title;
   if (!fresh) {
-    const name = !cur ? p.name : cur.nameState === "ok" ? cur.name : cur.nameState === "hidden" ? null : p.name;
     const res = await duelFetch<unknown>("POST", "/api/social/me", {
-      body: { name: name ? name.trim().slice(0, 30) : null, lang: p.lang, lv: p.lv, cosmetics: { frame: p.frame, title: p.title }, ft: cur ? cur.ft : true },
+      body: { name: cur.nameState === "ok" ? cur.name : null, lang: p.lang, lv: p.lv, cosmetics: { frame: p.frame, title: p.title }, ft: cur.ft },
     });
-    if (res.status !== 200) return false;
+    if (res.status !== 200) return "down";
   }
   try {
     sessionStorage.setItem(PLAYER_MARK, String(now));
   } catch {
     // ничего
   }
-  return true;
+  return "ok";
 }

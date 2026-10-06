@@ -9,6 +9,7 @@ import { ENTRY_COST } from "@/lib/economy";
 import { duelEntryKey } from "@/lib/entry-paid";
 import { levelInfo } from "@/lib/gamification";
 import { absoluteUrl } from "@/lib/share";
+import { forgetPlayerMark } from "@/lib/social/client";
 import { duelPlayHref, duelPlayed, duelPlayId, fetchDuelDeck, markDuelStarted, newDuelSeed, type DuelDeckResponse } from "@/lib/duel/api";
 import { DUEL_MODES } from "@/lib/duel/modes";
 import { IDLE_NOTICE_MS } from "@/lib/duel/score";
@@ -45,6 +46,7 @@ import { DuelResult } from "./DuelResult";
 import { DuelRun } from "./DuelRun";
 import { MODE_TITLE } from "./mode-meta";
 import { PlayerAvatar } from "@/components/social/PlayerCard";
+import { NameForm } from "@/components/social/NameForm";
 import { ReportPlayerButton } from "@/components/social/ReportPlayerButton";
 import type { Rival } from "./rival";
 import { useDuel, useDuelSearch, type DuelPhase } from "./useDuel";
@@ -66,6 +68,10 @@ type LiveError = "expired" | "full" | "update_needed" | "unavailable" | "lost" |
 
 type Phase =
   | { name: "prep" }
+  /** Профиля соцчасти нет: ученик сам выбирает имя (или «Без имени») — до поиска и входа в комнату. */
+  | { name: "name" }
+  /** Сердечек на вход нет — до поиска и комнаты (иначе соперник ждал бы готовности, которой не будет). */
+  | { name: "noHearts" }
   | { name: "search" }
   | { name: "lobby"; code: string; matchId: string; mode: DuelModeId }
   | { name: "loading"; join: MatchJoin }
@@ -132,15 +138,18 @@ export function LivePlay({ start }: { start: LiveStart }) {
   const [ended, setEnded] = useState<string | null>(null);
   /** Реванш: матч, в котором ученик нажал «Реванш», а соперник не ответил за 20 с. */
   const [rematchLapsed, setRematchLapsed] = useState<string | null>(null);
-  /** Имя соперника скрыто жалобой — перерисовать карточку. */
+  /** Повторный старт экрана после экрана имени или «нет сердечек». */
+  const [attempt, setAttempt] = useState(0);
   const phaseRef = useRef(phase);
-  useEffect(() => {
-    phaseRef.current = phase;
-  });
+  const canPayRef = useRef(false);
   const recorded = useRef<string | null>(null);
   const [lv] = useState(() => levelInfo(useApp.getState().xp).level);
 
   const canPay = hearts.unlimited || hearts.count >= ENTRY_COST.duel;
+  useEffect(() => {
+    phaseRef.current = phase;
+    canPayRef.current = canPay;
+  });
   const join = "join" in phase ? phase.join : null;
   const matchId = join?.matchId ?? (phase.name === "lobby" ? phase.matchId : null);
 
@@ -200,7 +209,11 @@ export function LivePlay({ start }: { start: LiveStart }) {
       else setEnded(p.join.matchId);
       return;
     }
-    if (p.name === "result" && v.rematch?.next && v.rematch.next.matchId !== p.join.matchId) void enterMatch(v.rematch.next);
+    if (p.name === "result" && v.rematch?.next && v.rematch.next.matchId !== p.join.matchId) {
+      // Пояснение «соперник нашёлся в последний момент» относилось к прошлому матчу.
+      setNote(null);
+      void enterMatch(v.rematch.next);
+    }
   };
 
   const conn = useDuel(matchId, join, pollOf(phase, canPay), onView);
@@ -262,21 +275,25 @@ export function LivePlay({ start }: { start: LiveStart }) {
     setPhase({ name: "play", join: p.join, deck: p.deck });
   };
 
-  // Старт экрана: профиль игрока на сервере, затем поиск / комната / вход / возврат в матч. Состояние меняется только
-  // после ответов сети (не синхронно в эффекте).
+  // Старт экрана: сердечки на вход, профиль игрока на сервере (нет — экран имени), затем поиск / комната / вход / возврат
+  // в матч. Состояние меняется только после ответов сети (не синхронно в эффекте); attempt — повтор после экрана имени
+  // или пополнения сердечек.
   useEffect(() => {
     let alive = true;
     const begin = async () => {
       const s = useApp.getState();
       const ok = await ensurePlayer({
-        name: s.profile.name ?? "",
         lang: s.profile.lang === "kk" ? "kk" : "ru",
         lv,
         frame: s.cosmetics.equipped.frame ?? null,
         title: s.cosmetics.equipped.title ?? null,
       });
       if (!alive) return;
-      if (!ok) return setPhase({ name: "error", error: "unavailable" });
+      if (ok === "down") return setPhase({ name: "error", error: "unavailable" });
+      if (start.kind !== "match") {
+        if (ok === "no_player") return setPhase({ name: "name" });
+        if (!canPayRef.current) return setPhase({ name: "noHearts" });
+      }
       if (start.kind === "find") {
         setPhase({ name: "search" });
         return void search.start();
@@ -284,6 +301,7 @@ export function LivePlay({ start }: { start: LiveStart }) {
       if (start.kind === "room") {
         const res = await duelFetch<{ code: string; matchId: string }>("POST", roomUrl(), { body: { mode: start.mode, topic: start.topic, lv, deckTag: CLIENT_DECK_TAG } });
         if (!alive) return;
+        if (res.status === 401) return needName();
         if (res.status !== 200 || !res.data) return setPhase({ name: "error", error: res.status === 409 ? "update_needed" : res.status === 429 ? "rate_limited" : "unavailable" });
         saveRoom(res.data.matchId, res.data.code, start.mode);
         setAddress(liveHref({ match: res.data.matchId }));
@@ -293,6 +311,7 @@ export function LivePlay({ start }: { start: LiveStart }) {
         const res = await duelFetch<{ join: unknown }>("POST", roomUrl(start.code), { body: { lv, deckTag: CLIENT_DECK_TAG } });
         if (!alive) return;
         if (res.status === 200 && res.data && isMatchJoin(res.data.join)) return void enterMatch(res.data.join);
+        if (res.status === 401) return needName();
         if (res.status === 409 && res.error === "self") {
           // Своя ссылка: хозяин возвращается в своё лобби (код и режим — в sessionStorage этой вкладки).
           const own = typeof (res.raw as { matchId?: unknown } | null)?.matchId === "string" ? (res.raw as { matchId: string }).matchId : null;
@@ -322,9 +341,20 @@ export function LivePlay({ start }: { start: LiveStart }) {
     return () => {
       alive = false;
     };
-    // Один раз на экран: start приходит из адреса страницы.
+    // Один раз на экран (и на каждый повтор attempt): start приходит из адреса страницы, новый адрес — новый экран (key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
+
+  /** Сервер не знает игрока (профиль удалён в другой вкладке, cookie пропала): отметку «свежий» снять, спросить имя. */
+  function needName() {
+    forgetPlayerMark();
+    setPhase({ name: "name" });
+  }
+
+  const retryStart = () => {
+    setPhase({ name: "prep" });
+    setAttempt((n) => n + 1);
+  };
 
   const playBot = async (mode: DuelModeId = "blitz", topic?: string) => {
     if (phaseRef.current.name === "search") {
@@ -362,7 +392,16 @@ export function LivePlay({ start }: { start: LiveStart }) {
   };
   // Матч пропал (истёк) или сборка устарела — экран ошибки поверх любой фазы матча.
   const fatal: LiveError | null =
-    phase.name === "error" || phase.name === "search" || phase.name === "prep" ? null : conn.error === "update_needed" ? "update_needed" : conn.error === "not_found" ? "expired" : null;
+    phase.name === "error" || phase.name === "search" || phase.name === "prep" || phase.name === "name" || phase.name === "noHearts"
+      ? null
+      : conn.error === "update_needed"
+        ? "update_needed"
+        : conn.error === "not_found"
+          ? "expired"
+          : // Игрок пропал (профиль удалён в другой вкладке, cookie потеряна) или место чужое — опрос не поможет.
+            conn.error === "no_player" || conn.error === "forbidden"
+            ? "lost"
+            : null;
   if (fatal) return <ErrorScreen error={fatal} onBot={() => void playBot()} onHub={toHub} />;
 
   return (
@@ -377,7 +416,19 @@ export function LivePlay({ start }: { start: LiveStart }) {
         </Centered>
       ) : null}
 
-      {phase.name === "search" && (
+      {phase.name === "name" && <NameStep onDone={retryStart} onCancel={toHub} />}
+
+      {phase.name === "search" && search.state.name === "error" && search.state.error === "no_player" && (
+        <NameStep
+          onDone={() => {
+            forgetPlayerMark();
+            searchAgain();
+          }}
+          onCancel={toHub}
+        />
+      )}
+
+      {phase.name === "search" && !(search.state.name === "error" && search.state.error === "no_player") && (
         <SearchScreen
           state={search.state}
           onBot={() => void playBot()}
@@ -491,6 +542,13 @@ export function LivePlay({ start }: { start: LiveStart }) {
       {phase.name === "error" && <ErrorScreen error={phase.error} onBot={() => void playBot()} onHub={toHub} />}
 
       <OutOfHearts
+        open={phase.name === "noHearts"}
+        need={ENTRY_COST.duel}
+        onClose={toHub}
+        onResume={retryStart}
+        onExit={toHub}
+      />
+      <OutOfHearts
         open={phase.name === "vs" && (noHearts || !canPay)}
         need={ENTRY_COST.duel}
         onClose={() => void leaveMatch()}
@@ -559,6 +617,8 @@ function SearchScreen({
   const offer = searching && elapsed >= SEARCH.offerMs && !stay;
   const none = state.name === "none";
   const error = state.name === "error";
+  // Сборка устарела (409 от очереди): поможет только перезагрузка страницы (§2.9, §10).
+  const update = state.name === "error" && state.error === "update_needed";
 
   return (
     <div className="flex min-h-dvh flex-col" data-testid="duel-search">
@@ -609,11 +669,17 @@ function SearchScreen({
 
         {(none || error) && (
           <section className="flex w-full max-w-sm flex-col gap-3 rounded-3xl border-2 border-border bg-surface p-4" data-testid="duel-search-none">
-            <p className="font-extrabold">{error ? t("duel.live.unavailable") : t("duel.search.none")}</p>
+            <p className="font-extrabold">{update ? t("duel.update") : error ? t("duel.live.unavailable") : t("duel.search.none")}</p>
             {!error && <p className="text-sm font-semibold text-muted">{t("duel.search.none.desc")}</p>}
-            <Button block icon={<Bot size={18} />} onClick={onBot}>
-              {t("duel.playBot")}
-            </Button>
+            {update ? (
+              <Button block onClick={() => window.location.reload()} data-testid="duel-update-reload">
+                {t("duel.update.btn")}
+              </Button>
+            ) : (
+              <Button block icon={<Bot size={18} />} onClick={onBot}>
+                {t("duel.playBot")}
+              </Button>
+            )}
             {!error && (
               <Button variant="secondary" block icon={<Search size={18} />} onClick={onAgain}>
                 {t("duel.search.again")}
@@ -635,6 +701,17 @@ function SearchScreen({
           </Button>
         </div>
       </main>
+    </div>
+  );
+}
+
+/** Первый живой вход без профиля соцчасти: имя для соревнований (или «Без имени») — как у вызова (ChallengePlay). */
+function NameStep({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-4 px-4 py-8" data-testid="duel-live-name">
+      <NameForm player={null} onDone={() => onDone()} onCancel={onCancel} />
+      <p className="text-center text-xs font-semibold text-muted">{t("social.device")}</p>
     </div>
   );
 }

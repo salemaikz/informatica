@@ -148,7 +148,8 @@ describe("заявки в друзья по коду", () => {
     const la = (await lists(a)).json;
     expect(codes(la.friends)).toEqual([b.code]);
     expect(la.requests).toEqual([]);
-    expect(cmdsOf("friends.list")).toBe(4);
+    // SMEMBERS друзей, заблокированных и скрытых (случайные соперники) + ZRANGE заявок + MGET карточек — один конвейер и MGET.
+    expect(cmdsOf("friends.list")).toBe(5);
     expect(codes((await lists(b)).json.friends)).toEqual([a.code]);
     // Карточка друга — только публичные поля.
     expect(Object.keys((await lists(b)).json.friends[0]).sort()).toEqual(["code", "frame", "lv", "name", "title"]);

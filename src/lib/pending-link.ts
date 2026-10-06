@@ -20,8 +20,8 @@ export function pendingLinkOf(href: unknown): string | null {
   if (typeof href !== "string" || href.length > 300) return null;
   const path = href.split(/[?#]/)[0];
   if (SOCIAL_LINKS.some((re) => re.test(path))) return path;
-  // Комната живой дуэли с другом: /duel/r/<код из 6 знаков> — только сам код, без хвостов.
-  const room = /^\/duel\/r\/([A-Za-z0-9-]{1,12})$/.exec(href);
+  // Комната живой дуэли с другом: /duel/r/<код из 6 знаков> — только сам код (метки рекламы вроде ?fbclid= отбрасываем).
+  const room = /^\/duel\/r\/([A-Za-z0-9-]{1,12})$/.exec(path);
   if (room) {
     const code = normalizeRoomCode(room[1]);
     return code ? roomPath(code) : null;

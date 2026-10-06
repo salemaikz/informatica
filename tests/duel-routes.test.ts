@@ -30,6 +30,8 @@ const leave = await import("@/app/api/duel/m/[id]/leave/route");
 const rematch = await import("@/app/api/duel/m/[id]/rematch/route");
 const testClock = await import("@/app/api/duel/test/clock/route");
 const reportRoute = await import("@/app/api/social/report/route");
+const blockRoute = await import("@/app/api/social/block/route");
+const friendsRoute = await import("@/app/api/social/friends/route");
 const { PLAYER_COOKIE } = await import("@/server/social/player");
 const { DECK_TAG, buildDeck } = await import("@/lib/duel/deck");
 const { correctAnswer } = await import("@/lib/duel/check");
@@ -816,5 +818,70 @@ describe("жалоба на живого соперника (слияние Ф3+
     expect((await report(B, { matchId: "abcdefabcdef", reason: "name", where: "result" }, jb.seat)).status).toBe(400);
     expect((await report(B, { matchId: jb.matchId, reason: "name", where: "result" }, "garbage")).status).toBe(400);
     expect(await holder.kv!.zcard(`mod:rep:${A.pid}:name`)).toBe(0);
+  });
+});
+
+describe("ревью интеграции: вход в комнату и блок случайного соперника", () => {
+  it("комната: место гостя занято (HSETNX b), а расписание не записалось — повторный вход дописывает его, 200 и рабочее место", async () => {
+    const A = await player("Аян", 5);
+    const B = await player("Әсем", 3);
+    const r = (await (await room.POST(req("POST", "/api/duel/room", { cookie: A.cookie, body: { mode: "blitz", lv: 5, deckTag: DECK_TAG } }))).json()) as {
+      code: string;
+      matchId: string;
+    };
+    // Первая запись входа прошла, вторая (band/startAt/endsAt…) — нет.
+    expect(await holder.kv!.hsetnx(`du:m:${r.matchId}`, "b", B.pid)).toBe(true);
+    const jr = await roomJoin.POST(req("POST", `/api/duel/room/${r.code}/join`, { cookie: B.cookie, body: { lv: 3, deckTag: DECK_TAG } }), params({ code: r.code }));
+    expect(jr.status).toBe(200);
+    const jb = ((await jr.json()) as { join: MatchJoin }).join;
+    expect(jb.startAt).toBeGreaterThan(0);
+    expect(jb.endsAt).toBeGreaterThan(jb.startAt);
+    // Место настоящее: по нему виден матч, у хозяина появилось своё место.
+    expect((await getView(B, r.matchId, jb.seat)).state).toBe("lobby");
+    expect((await getView(A, r.matchId)).join?.matchId).toBe(r.matchId);
+    // Ещё один повтор — то же расписание (уже записано), а не новое.
+    const again = ((await (await roomJoin.POST(req("POST", `/api/duel/room/${r.code}/join`, { cookie: B.cookie, body: { lv: 3, deckTag: DECK_TAG } }), params({ code: r.code }))).json()) as { join: MatchJoin }).join;
+    expect(again.startAt).toBe(jb.startAt);
+  });
+
+  const block = (p: Player, body: unknown, seat?: string) =>
+    blockRoute.POST(req("POST", "/api/social/block", { cookie: p.cookie, seat, body, headers: { origin: "http://localhost" } }));
+
+  it("блок по месту в матче: цель — другая сторона, код из тела игнорируется; подбор их больше не сводит; в списке не виден", async () => {
+    const { A, B, ja, jb } = await pairUp();
+    const C = await player("Дана");
+    // Код C в теле не принимается: блокируется соперник по матчу (A).
+    expect((await block(B, { matchId: jb.matchId, code: C.code }, jb.seat)).status).toBe(200);
+    expect(await holder.kv!.sismember(`pl:blk:${B.pid}`, A.pid)).toBe(true);
+    expect(await holder.kv!.sismember(`pl:blk:${B.pid}`, C.pid)).toBe(false);
+    // Чужое место, место другого матча, мусор, «снять блок» по месту — 400.
+    expect((await block(B, { matchId: jb.matchId }, ja.seat)).status).toBe(400);
+    expect((await block(B, { matchId: "abcdefabcdef" }, jb.seat)).status).toBe(400);
+    expect((await block(B, { matchId: jb.matchId }, "garbage")).status).toBe(400);
+    expect((await block(B, { matchId: jb.matchId, off: true }, jb.seat)).status).toBe(400);
+    // Список «Заблокированные» не раскрывает код друга случайного соперника.
+    const lists = (await (await friendsRoute.GET(req("GET", "/api/social/friends", { cookie: B.cookie }))).json()) as { blocked: { code: string }[] };
+    expect(lists.blocked).toEqual([]);
+    // Подбор: A и B больше не сводятся (оба ждут).
+    const ra = (await join(A)) as { state: string; ticket: string };
+    const rb = (await join(B)) as { state: string; ticket: string };
+    expect(ra.state).toBe("waiting");
+    expect(rb.state).toBe("waiting");
+    expect((await poll(A, ra.ticket, true)).state).toBe("waiting");
+    // Удаление профиля стирает и скрытый список.
+    expect(await holder.kv!.smembers(`pl:blkx:${B.pid}`)).toEqual([A.pid]);
+    await me.DELETE(req("DELETE", "/api/social/me", { cookie: B.cookie, headers: { origin: "http://localhost" } }));
+    expect(await holder.kv!.smembers(`pl:blkx:${B.pid}`)).toEqual([]);
+  });
+
+  it("блок по месту, а соперник — друг: обычный блок (виден в списке, дружба снята)", async () => {
+    const { A, B, jb } = await pairUp();
+    await holder.kv!.sadd(`pl:fr:${B.pid}`, [A.pid]);
+    await holder.kv!.sadd(`pl:fr:${A.pid}`, [B.pid]);
+    expect((await block(B, { matchId: jb.matchId }, jb.seat)).status).toBe(200);
+    expect(await holder.kv!.smembers(`pl:blkx:${B.pid}`)).toEqual([]);
+    expect(await holder.kv!.sismember(`pl:fr:${B.pid}`, A.pid)).toBe(false);
+    const lists = (await (await friendsRoute.GET(req("GET", "/api/social/friends", { cookie: B.cookie }))).json()) as { blocked: { code: string }[] };
+    expect(lists.blocked.map((c) => c.code)).toEqual([A.code]);
   });
 });

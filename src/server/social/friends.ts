@@ -126,13 +126,18 @@ export async function removeFriend(kv: CountingKv, me: string, other: string): P
 }
 
 /** Заблокировать (дружба и заявки с обеих сторон снимаются) или разблокировать. */
-export async function blockPlayer(kv: CountingKv, me: string, other: string, on: boolean): Promise<void> {
+export async function blockPlayer(kv: CountingKv, me: string, other: string, on: boolean, anon = false): Promise<void> {
   if (!on) {
-    await kv.srem(keys.blocked(me), [other]);
+    await kv.pipeline([
+      { op: "srem", key: keys.blocked(me), members: [other] },
+      { op: "srem", key: keys.blockedAnon(me), members: [other] },
+    ]);
     return;
   }
   await kv.pipeline([
     { op: "sadd", key: keys.blocked(me), members: [other], ttlSec: PROFILE_TTL_SEC },
+    // Случайный соперник (блок по месту в матче): подбор и всё остальное смотрят pl:blk, а список его не покажет.
+    ...(anon ? [{ op: "sadd" as const, key: keys.blockedAnon(me), members: [other], ttlSec: PROFILE_TTL_SEC }] : []),
     { op: "srem", key: keys.friends(me), members: [other] },
     { op: "srem", key: keys.friends(other), members: [me] },
     { op: "zrem", key: keys.requests(me), members: [other] },
@@ -147,15 +152,19 @@ export interface FriendLists {
 }
 
 /**
- * Друзья, входящие заявки (только действующие, новые первыми) и заблокированные с карточками: SMEMBERS ×2 + ZRANGE + MGET =
- * 4 команды. Удалившиеся — пропускаются.
+ * Друзья, входящие заявки (только действующие, новые первыми) и заблокированные с карточками: SMEMBERS ×3 + ZRANGE + MGET =
+ * 5 команд. Удалившиеся — пропускаются.
  */
 export async function friendLists(kv: CountingKv, me: string, now = serverNow()): Promise<FriendLists> {
-  const [fr, rq, bl] = await kv.pipeline([
+  const [fr, rq, blAll, anon] = await kv.pipeline([
     { op: "smembers", key: keys.friends(me) },
     { op: "zrange", key: keys.requests(me), start: 0, stop: -1 },
     { op: "smembers", key: keys.blocked(me) },
+    { op: "smembers", key: keys.blockedAnon(me) },
   ] as const);
+  // Случайных соперников в списке нет: их код друга ученику не раскрываем (в матче была только «~метка»).
+  const anonSet = new Set(anon);
+  const bl = blAll.filter((id) => !anonSet.has(id));
   const groups = [fr.slice(0, FRIENDS_MAX), freshRequests(rq, now).slice(0, REQUESTS_MAX), bl.slice(0, FRIENDS_MAX)];
   const ids = [...new Set(groups.flat())];
   const raw = ids.length ? await kv.mget(ids.map(keys.card)) : [];
