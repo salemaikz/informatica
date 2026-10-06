@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { fadeMask, scrollEdges, type ScrollEdges } from "./scroll-hint";
+import { fadeMask, fadeWidths, scrollEdges, type FadeWidths, type ScrollEdges } from "./scroll-hint";
 
 /**
  * Горизонтально прокручиваемый блок с видимой подсказкой: край, за которым есть скрытое содержимое, плавно гаснет,
@@ -29,6 +29,8 @@ export function ScrollHintBox({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<ScrollEdges>({ left: false, right: false });
+  // Ширина затухания — по реальному остатку прокрутки: у блока, который «не влез» на пару пикселей, гаснут они, а не 36 px
+  const [fade, setFade] = useState<FadeWidths>({ left: 0, right: 0 });
 
   useEffect(() => {
     const el = ref.current;
@@ -37,6 +39,8 @@ export function ScrollHintBox({
     const update = () => {
       const next = scrollEdges(el);
       setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+      const w = fadeWidths(el);
+      setFade((prev) => (prev.left === w.left && prev.right === w.right ? prev : w));
     };
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -48,7 +52,7 @@ export function ScrollHintBox({
     };
   }, []);
 
-  const mask = fadeMask(edges);
+  const mask = fadeMask(edges, fade);
   const pos = arrow === "top" ? "top-2" : arrow === "bottom" ? "bottom-2" : "top-1/2 -translate-y-1/2";
   return (
     <div className={cn("relative", className)}>

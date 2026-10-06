@@ -104,63 +104,70 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
   const feedsOutput = new Set(layout.outputs.map((o) => o.gate));
   const G = CIRCUIT_GEO;
 
-  // Схема не сжимается мельче CIRCUIT_MIN_SCALE (подписи вентилей и плашки 0/1 остаются читаемыми, ≈ 11 px): в узком блоке
-  // она прокручивается по горизонтали, а ScrollHintBox показывает стрелку и гасит край, за которым есть продолжение.
-  return (
+  const svg = (
+    <svg
+      role="img"
+      aria-label={multi ? t("scene.circuit.ariaOutputs") : t("scene.circuit.aria")}
+      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      className="mx-auto block h-auto w-full"
+      style={{ maxWidth: Math.round(layout.width * 1.6), minWidth: multi ? Math.round(layout.width * CIRCUIT_MIN_SCALE) : undefined }}
+    >
+      {/* Провода — под узлами. Цвет — по значению источника. */}
+      {layout.wires.map((w) => (
+        <polyline
+          key={`${w.from}>${w.to}:${w.port}`}
+          points={pointsAttr(w.points)}
+          fill="none"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={cn("transition-colors duration-200", wireClass(valueOf(w.from)))}
+        />
+      ))}
+
+      {/* Ответвления проводов одного источника (схемы с несколькими выходами). */}
+      {layout.junctions.map(([x, y], i) => (
+        <circle key={`j:${x},${y}`} cx={x} cy={y} r={3.2} className={cn("transition-colors duration-200", valueOf(layout.junctionFrom[i]) === 1 ? "fill-success" : "fill-muted")} />
+      ))}
+
+      {layout.nodes.map((n) => {
+        if (n.kind === "gate") return <GateShape key={n.id} node={n} label={labels[n.op!]} v={valueOf(n.id)} />;
+        return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} />;
+      })}
+
+      {/* Значения: по одной плашке на выходе каждого источника (вход или вентиль). */}
+      {hasValues &&
+        layout.nodes
+          .filter((n) => n.kind !== "output" && !(multi && feedsOutput.has(n.id)))
+          .map((n) => {
+            const v = valueOf(n.id);
+            if (v === undefined) return null;
+            const px = n.x + n.w / 2 + (n.op && GATE_STYLE[n.op].inverted ? G.bubble * 2 : 0) + 12;
+            // Плашка — с той стороны провода, куда не уходит вертикальный излом.
+            const goesUp = layout.wires.some((w) => w.from === n.id && w.points.length > 2 && w.points[2][1] < n.y);
+            return <ValueChip key={`v:${n.id}`} x={px} y={n.y} v={v} below={goesUp} />;
+          })}
+
+      {/* Значения выходов — плашка справа от каждого выходного кружка. */}
+      {hasValues &&
+        multi &&
+        layout.nodes
+          .filter((n) => n.kind === "output")
+          .map((n) => {
+            const v = valueOf(n.id);
+            return v === undefined ? null : <ValueChip key={`o:${n.id}`} x={n.x + G.r + OUT_CHIP_W / 2 + 1} y={n.y} v={v} below={false} inline />;
+          })}
+    </svg>
+  );
+
+  // Схемы с несколькими выходами (сумматор) не сжимаются мельче CIRCUIT_MIN_SCALE (подписи вентилей и плашки 0/1 остаются
+  // читаемыми, ≈ 11 px): в узком блоке они прокручиваются по горизонтали, а ScrollHintBox показывает стрелку и гасит край, за которым
+  // есть продолжение. Схемы без `outputs` (уроки, банк, ЕНТ; до 420 в ширину) рисуются как раньше — по ширине блока, без прокрутки.
+  return multi ? (
     <ScrollHintBox className="mx-auto w-full" arrow="bottom" scrollerAttrs={{ "data-circuit-scroll": "" }}>
-      <svg
-        role="img"
-        aria-label={multi ? t("scene.circuit.ariaOutputs") : t("scene.circuit.aria")}
-        viewBox={`0 0 ${layout.width} ${layout.height}`}
-        className="mx-auto block h-auto w-full"
-        style={{ maxWidth: Math.round(layout.width * 1.6), minWidth: Math.round(layout.width * CIRCUIT_MIN_SCALE) }}
-      >
-        {/* Провода — под узлами. Цвет — по значению источника. */}
-        {layout.wires.map((w) => (
-          <polyline
-            key={`${w.from}>${w.to}:${w.port}`}
-            points={pointsAttr(w.points)}
-            fill="none"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={cn("transition-colors duration-200", wireClass(valueOf(w.from)))}
-          />
-        ))}
-
-        {/* Ответвления проводов одного источника (схемы с несколькими выходами). */}
-        {layout.junctions.map(([x, y], i) => (
-          <circle key={`j:${x},${y}`} cx={x} cy={y} r={3.2} className={cn("transition-colors duration-200", valueOf(layout.junctionFrom[i]) === 1 ? "fill-success" : "fill-muted")} />
-        ))}
-
-        {layout.nodes.map((n) => {
-          if (n.kind === "gate") return <GateShape key={n.id} node={n} label={labels[n.op!]} v={valueOf(n.id)} />;
-          return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} />;
-        })}
-
-        {/* Значения: по одной плашке на выходе каждого источника (вход или вентиль). */}
-        {hasValues &&
-          layout.nodes
-            .filter((n) => n.kind !== "output" && !(multi && feedsOutput.has(n.id)))
-            .map((n) => {
-              const v = valueOf(n.id);
-              if (v === undefined) return null;
-              const px = n.x + n.w / 2 + (n.op && GATE_STYLE[n.op].inverted ? G.bubble * 2 : 0) + 12;
-              // Плашка — с той стороны провода, куда не уходит вертикальный излом.
-              const goesUp = layout.wires.some((w) => w.from === n.id && w.points.length > 2 && w.points[2][1] < n.y);
-              return <ValueChip key={`v:${n.id}`} x={px} y={n.y} v={v} below={goesUp} />;
-            })}
-
-        {/* Значения выходов — плашка справа от каждого выходного кружка. */}
-        {hasValues &&
-          multi &&
-          layout.nodes
-            .filter((n) => n.kind === "output")
-            .map((n) => {
-              const v = valueOf(n.id);
-              return v === undefined ? null : <ValueChip key={`o:${n.id}`} x={n.x + G.r + OUT_CHIP_W / 2 + 1} y={n.y} v={v} below={false} inline />;
-            })}
-      </svg>
+      {svg}
     </ScrollHintBox>
+  ) : (
+    svg
   );
 }

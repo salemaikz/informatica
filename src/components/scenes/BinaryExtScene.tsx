@@ -20,6 +20,9 @@ import {
   shiftResultChunks,
   weightLabel,
   weightMode,
+  weightShift,
+  weightTier,
+  weightWidth,
   type PlacedCell,
   type RowsLayout,
 } from "./numbers";
@@ -50,7 +53,7 @@ interface LineProps {
   tone: (c: PlacedCell) => Tone;
   /** Смещение блока по вертикали. */
   dy?: number;
-  weights?: { cross: boolean; mode: "value" | "pow"; font: number; digits: (c: PlacedCell) => boolean };
+  weights?: { cross: boolean; mode: "value" | "pow"; font: number; tiers: 1 | 2; digits: (c: PlacedCell) => boolean };
   brackets?: boolean;
   /** Цифра плитки (режим and: геометрия общая, цифры у каждой строки свои). */
   chars?: (c: PlacedCell) => string;
@@ -98,7 +101,7 @@ function Rows({ lay, tone, dy = 0, weights, brackets, chars, reduce, id }: LineP
                   </>
                 )}
                 {weights && c.exp !== undefined && !c.pad && c.kind === "digit" && (
-                  <WeightText lay={lay} exp={c.exp} cfg={weights} crossed={weights.cross && !weights.digits(c)} />
+                  <WeightText lay={lay} exp={c.exp} cx={c.x} cfg={weights} crossed={weights.cross && !weights.digits(c)} />
                 )}
               </m.g>
             );
@@ -131,11 +134,16 @@ function Rows({ lay, tone, dy = 0, weights, brackets, chars, reduce, id }: LineP
   );
 }
 
-function WeightText({ lay, exp, cfg, crossed }: { lay: RowsLayout; exp: number; cfg: NonNullable<LineProps["weights"]>; crossed: boolean }) {
-  const y = lay.weightsDy + 8;
+function WeightText({ lay, exp, cx, cfg, crossed }: { lay: RowsLayout; exp: number; cx: number; cfg: NonNullable<LineProps["weights"]>; crossed: boolean }) {
+  // Плотная строка (16 плиток по 16–17 px): подписи в два яруса, нижний ярус связан с плиткой тонкой чёрточкой
+  const tier = weightTier(exp, cfg.tiers);
+  const y = lay.weightsDy + 8 + tier * lay.weightH;
+  // У крайних плиток подпись шире плитки: сдвигаем её внутрь рисунка, чтобы край SVG не обрезал число
+  const tx = lay.tileW / 2 + weightShift(cx + lay.tileW / 2, weightWidth(exp, cfg.mode, cfg.font));
   return (
     <g>
-      <text x={lay.tileW / 2} y={y} textAnchor="middle" dominantBaseline="central" fontSize={cfg.font} fontWeight={700} className={crossed ? "fill-muted font-mono" : "fill-ink-primary font-mono"} opacity={crossed ? 0.7 : 1}>
+      {tier === 1 && <line x1={lay.tileW / 2} x2={lay.tileW / 2} y1={lay.weightsDy - 1} y2={y - cfg.font * 0.6} strokeWidth={1} className="stroke-border" />}
+      <text x={tx} y={y} textAnchor="middle" dominantBaseline="central" fontSize={cfg.font} fontWeight={700} className={crossed ? "fill-muted font-mono" : "fill-ink-primary font-mono"} opacity={crossed ? 0.7 : 1}>
         {cfg.mode === "pow" ? (
           <>
             2
@@ -192,13 +200,12 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
   const cross = !!scene.cross;
   const hi = new Set(scene.highlight ?? []);
   const units = binaryUnits(bits, { groups: scene.groups, gap: scene.gap, shift: scene.shift });
-  const lay = layoutRows(units, {
-    weights: showWeights,
-    brackets: !!scene.groups && !isAnd,
-    maxTiles: scene.shift && !scene.groups ? 17 : undefined,
-  });
+  const layOpts = { weights: showWeights, brackets: !!scene.groups && !isAnd, maxTiles: scene.shift && !scene.groups ? 17 : undefined };
   const exps = units.flatMap((u) => u.cells.flatMap((c) => (c.kind === "digit" && !c.pad && c.exp !== undefined ? [c.exp] : [])));
-  const wm = weightMode(exps, lay.tileW);
+  // Ширина плитки от весов не зависит, а ярусов подписей зависят от ширины плитки: считаем раскладку дважды (второй раз — с ярусами)
+  const flat = layoutRows(units, layOpts);
+  const wm = weightMode(exps, flat.tileW);
+  const lay = showWeights && wm.tiers > 1 ? layoutRows(units, { ...layOpts, weightTiers: wm.tiers }) : flat;
 
   const tone = (c: PlacedCell): Tone => {
     if (c.mark === "dropped") return "dropped";
@@ -263,7 +270,7 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
           reduce={reduce}
           id="b"
           brackets={!!scene.groups}
-          weights={showWeights ? { cross, mode: wm.mode, font: wm.font, digits: (c) => c.ch === "1" } : undefined}
+          weights={showWeights ? { cross, mode: wm.mode, font: wm.font, tiers: wm.tiers, digits: (c) => c.ch === "1" } : undefined}
         />
         {scene.shift && (
           <g>

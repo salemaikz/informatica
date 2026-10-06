@@ -54,10 +54,23 @@ export function markNotes(marks: MessageData["marks"], lang: Lang): { n: number;
   return (marks ?? []).flatMap((m, i) => (m.note !== undefined ? [{ n: i + 1, note: tx(m.note as Text, lang) }] : []));
 }
 
-/** Признак делится на начало и последнее слово: слово держится вместе с номером признака при переносе строки. */
+/** Самое длинное последнее слово, которое держится вместе с номером целиком (дальше — длинный токен вроде адреса). */
+export const TAIL_MAX = 18;
+/** У длинного токена вместе с номером остаётся только хвост этой длины, остальное переносится как обычно. */
+export const TAIL_KEEP = 4;
+
+/**
+ * Признак делится на начало и хвост: хвост держится вместе с номером признака при переносе строки (whitespace-nowrap).
+ * Хвост — последнее слово; если слово длиннее TAIL_MAX (адрес «http://kaspi-bonus.top/verify-account»), неразрывен только его
+ * конец из TAIL_KEEP знаков, иначе токен шире пузыря вылез бы за край.
+ */
 export function splitTail(text: string): { head: string; tail: string } {
   const m = /\s(?=\S+$)/.exec(text);
-  return m ? { head: text.slice(0, m.index + 1), tail: text.slice(m.index + 1) } : { head: "", tail: text };
+  const cut = m ? m.index + 1 : 0;
+  const word = [...text.slice(cut)];
+  if (word.length <= TAIL_MAX) return { head: text.slice(0, cut), tail: word.join("") };
+  const keep = word.length - TAIL_KEEP;
+  return { head: text.slice(0, cut) + word.slice(0, keep).join(""), tail: word.slice(keep).join("") };
 }
 
 /** Первая буква отправителя — для кружка-аватара. */

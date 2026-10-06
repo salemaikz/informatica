@@ -23,8 +23,8 @@ import {
   valueInBase,
   weightLabel,
   weightMode,
+  weightWidth,
 } from "@/components/scenes/numbers";
-import { estimateTextWidth } from "@/components/scenes/text-width";
 import type { Scene } from "@/lib/types";
 import { validateScene } from "./validate";
 
@@ -202,12 +202,13 @@ describe("binary: группы вместе со сдвигом влево", () 
     const last = lay.rows[1].units.find((u) => u.bracket);
     expect(last).toBeTruthy();
   });
-  it("подписи степеней «2ⁿ» соседних плиток не пересекаются", () => {
+  it("подписи степеней «2ⁿ» одного яруса не пересекаются (в плотной строке подписи в два яруса)", () => {
     const exps = Array.from({ length: 32 }, (_, i) => 31 - i);
     const wm = weightMode(exps, 16);
     expect(wm.mode).toBe("pow");
-    const widest = Math.max(...exps.map((e) => estimateTextWidth(weightLabel(e, "pow"), wm.font)));
-    expect(widest).toBeLessThanOrEqual(16 + 3);
+    expect(wm.tiers).toBe(2);
+    const widest = Math.max(...exps.map((e) => weightWidth(e, wm.mode, wm.font)));
+    expect(widest).toBeLessThanOrEqual((16 + 3) * wm.tiers);
   });
 });
 

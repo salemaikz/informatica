@@ -9,9 +9,9 @@ import { SAMPLES as WEB } from "@/components/scenes/samples/web";
 import { SAMPLES as GATES } from "@/components/scenes/samples/gates";
 import { CIRCUIT_MIN_SCALE, ROW_SPREADS, layoutCircuit, type CircuitScene, type CircuitWire } from "@/components/scenes/circuit";
 import { RULER_MAX_W, boxRuler, rulerRows } from "@/components/scenes/box";
-import { splitTail } from "@/components/scenes/message";
-import { CELL_GAP, NUM_W, WEIGHT_GAP, binaryUnits, expFont, layoutRows, shiftBits, shiftResultChunks, weightMode, weightWidth } from "@/components/scenes/numbers";
-import { FADE_PX, fadeMask, scrollEdges } from "@/components/scenes/scroll-hint";
+import { TAIL_KEEP, TAIL_MAX, splitTail } from "@/components/scenes/message";
+import { CELL_GAP, NUM_W, WEIGHT_GAP, binaryUnits, expFont, layoutRows, shiftBits, shiftResultChunks, weightMode, weightShift, weightTier, weightWidth } from "@/components/scenes/numbers";
+import { FADE_PX, fadeMask, fadeWidths, scrollEdges } from "@/components/scenes/scroll-hint";
 import { arrowGeometry, arrowSlots, arrowTargets, type Rect, type TableScene } from "@/components/scenes/table";
 import { dict } from "@/i18n/dict";
 import { translate } from "@/i18n/useT";
@@ -81,35 +81,91 @@ describe("binary: результат сдвига не рвётся посред
 
 describe("binary: подписи весов", () => {
   const exps32 = Array.from({ length: 32 }, (_, i) => 31 - i);
+  const exps16 = Array.from({ length: 16 }, (_, i) => 15 - i);
 
-  it("соседние подписи не касаются: зазор не меньше WEIGHT_GAP при любой ширине плитки", () => {
+  it("подписи одного яруса не касаются: зазор не меньше WEIGHT_GAP при любой ширине плитки (в двух ярусах места вдвое больше)", () => {
     for (const tileW of [12, 14, 16, 17, 20, 22, 26, 30, 37, 40]) {
-      for (const exps of [exps32, exps32.slice(0, 8), [9, 8, 7, 2, 1, 0], [3, 2, 1, 0]]) {
+      for (const exps of [exps32, exps16, exps32.slice(0, 8), [9, 8, 7, 2, 1, 0], [3, 2, 1, 0]]) {
         const wm = weightMode(exps, tileW);
         const widest = Math.max(...exps.map((e) => weightWidth(e, wm.mode, wm.font)));
-        // 8 — нижний предел кегля у степеней, при нём плитки уже 12 px не поддерживаются
-        if (wm.font > 8) expect(tileW + CELL_GAP - widest, `плитка ${tileW}`).toBeGreaterThanOrEqual(WEIGHT_GAP - 1e-6);
+        expect((tileW + CELL_GAP) * wm.tiers - widest, `плитка ${tileW}, ${exps.length} разрядов`).toBeGreaterThanOrEqual(WEIGHT_GAP - 1e-6);
       }
     }
   });
 
-  it("кегль основания степени не меньше 10 на обычной плитке; показатель — настоящий индекс крупнее юникод-надстрочных", () => {
+  it("кегль подписей не мельче 10 (число) и показатель не мельче 10 (степень) на любой плитке образцов: плотная строка — два яруса", () => {
+    for (const tileW of [12, 14, 16, 17, 20, 22, 26, 30, 37, 40]) {
+      for (const exps of [exps32, exps16, exps32.slice(0, 12), [9, 8, 7, 2, 1, 0]]) {
+        const wm = weightMode(exps, tileW);
+        if (wm.mode === "value") expect(wm.font, `плитка ${tileW}`).toBeGreaterThanOrEqual(10);
+        else expect(expFont(wm.font), `плитка ${tileW}`).toBeGreaterThanOrEqual(10);
+        expect(wm.font).toBeGreaterThanOrEqual(10);
+      }
+    }
+    // обычная плитка (22 px, группы по 3): степень в один ярус
     const lay = layoutRows(binaryUnits(IP, { groups: 3 }), { weights: true, brackets: true });
-    const wm = weightMode(exps32, lay.tileW);
-    expect(wm.mode).toBe("pow");
-    expect(wm.font).toBeGreaterThanOrEqual(10);
-    expect(expFont(wm.font)).toBeGreaterThanOrEqual(8);
-    // 16-битная строка (плитка 17–18 px): основание ≥ 9, показатель ≥ 7
-    const tight = weightMode(Array.from({ length: 16 }, (_, i) => 15 - i), 17);
-    expect(tight.font).toBeGreaterThanOrEqual(9);
-    expect(expFont(tight.font)).toBeGreaterThanOrEqual(7);
+    expect(weightMode(exps32, lay.tileW)).toMatchObject({ mode: "pow", tiers: 1 });
+    // плотная строка (16 плиток по 16–17 px): два яруса, а не кегль 7–9
+    for (const groups of [4, 8] as const) {
+      const dense = layoutRows(binaryUnits(IP, { groups }), { weights: true, brackets: true });
+      expect(dense.tileW).toBeLessThanOrEqual(17);
+      const wm = weightMode(exps32, dense.tileW);
+      expect(wm).toMatchObject({ mode: "pow", tiers: 2 });
+      expect(wm.font).toBeGreaterThanOrEqual(13);
+    }
+    // 16 разрядов: число вместо степени, в два яруса и не мельче 10
+    const sixteen = weightMode(exps16, layoutRows(binaryUnits("1".repeat(16), { groups: 4 }), { weights: true }).tileW);
+    expect(sixteen).toMatchObject({ mode: "value", tiers: 2 });
+    expect(sixteen.font).toBeGreaterThanOrEqual(10);
   });
 
-  it("в рисунке: показатель — tspan с меньшим кеглем, юникод-степеней «2³¹» в подписях нет", () => {
+  it("два яруса: чётные степени вверху, нечётные внизу; высота блока растёт на ярус, скобки уезжают ниже", () => {
+    expect([weightTier(30, 2), weightTier(31, 2), weightTier(31, 1), weightTier(0, 2)]).toEqual([0, 1, 0, 0]);
+    const units = binaryUnits(IP, { groups: 4 });
+    const one = layoutRows(units, { weights: true, brackets: true });
+    const two = layoutRows(units, { weights: true, weightTiers: 2, brackets: true });
+    expect(two.bracketDy - one.bracketDy).toBe(two.weightH);
+    expect(two.height - one.height).toBe(two.weightH * two.rows.length);
+    // подписи соседних плиток (разных ярусов) по вертикали разнесены на ярус; одного яруса — через плитку
+    const row = two.rows[0].cells;
+    for (let i = 1; i < row.length; i++) expect(weightTier(row[i].exp!, 2)).not.toBe(weightTier(row[i - 1].exp!, 2));
+  });
+
+  it("подпись крайней плитки не выходит за края рисунка (weightShift)", () => {
+    expect(weightShift(11, 30)).toBe(4);
+    expect(weightShift(NUM_W - 11, 30)).toBe(-4);
+    expect(weightShift(100, 30)).toBe(0);
+    for (const s of EXTENDED) {
+      if (s.kind !== "binary" || !s.weights) continue;
+      const units = binaryUnits(s.bits, { groups: s.groups, gap: s.gap, shift: s.shift });
+      const flat = layoutRows(units, { weights: true, brackets: !!s.groups, maxTiles: s.shift && !s.groups ? 17 : undefined });
+      const exps = units.flatMap((u) => u.cells.flatMap((c) => (c.kind === "digit" && !c.pad && c.exp !== undefined ? [c.exp] : [])));
+      const wm = weightMode(exps, flat.tileW);
+      for (const row of flat.rows)
+        for (const c of row.cells) {
+          if (c.kind !== "digit" || c.pad || c.exp === undefined) continue;
+          const w = weightWidth(c.exp, wm.mode, wm.font);
+          const center = c.x + flat.tileW / 2 + weightShift(c.x + flat.tileW / 2, w);
+          expect(center - w / 2).toBeGreaterThanOrEqual(-1e-6);
+          expect(center + w / 2).toBeLessThanOrEqual(NUM_W + 1e-6);
+        }
+    }
+  });
+
+  it("в рисунке: показатель — tspan с кеглем не мельче 10, юникод-степеней «2³¹» в подписях нет; в плотной строке нижний ярус связан чёрточкой", () => {
     const out = html({ kind: "binary", bits: "1".repeat(32), groups: 3, weights: true });
     expect(out).toContain("<tspan");
     expect(out).not.toMatch(/2[⁰¹²³⁴⁵⁶⁷⁸⁹]/);
     expect(out).toContain("fill-ink-primary");
+    const sizes = [...out.matchAll(/<tspan font-size="(\d+)"/g)].map((m) => Number(m[1]));
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const sz of sizes) expect(sz).toBeGreaterThanOrEqual(10);
+    // группы по 3 — один ярус, чёрточек нет
+    expect(out).not.toContain('stroke-width="1" class="stroke-border"');
+    const dense = html({ kind: "binary", bits: IP, groups: 4, weights: true });
+    for (const m of dense.matchAll(/<tspan font-size="(\d+)"/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(10);
+    // 16 нижних подписей (нечётные степени) — по чёрточке у каждой
+    expect((dense.match(/<line x1="[\d.]+" x2="[\d.]+" y1="[\d.]+" y2="[\d.]+" stroke-width="1" class="stroke-border">/g) ?? []).length).toBe(16);
   });
 
   it("все образцы binary/decimal укладываются в ширину рисунка (плитки внутри NUM_W)", () => {
@@ -186,6 +242,31 @@ describe("circuit: сумматор читается", () => {
     expect(out).toContain("overflow-x-auto");
   });
 
+  it("схемы без outputs (уроки, банк, ЕНТ) рисуются как раньше: по ширине блока, без min-width и без прокрутки", () => {
+    // шесть вентилей, раскладка шире блока 304 px (как в уроке «Законы логики»): раньше сжималась до ≈ 0,72, не прокручивалась
+    const six: CircuitScene = {
+      kind: "circuit",
+      inputs: ["A", "B", "C"],
+      gates: [
+        { id: "g1", op: "not", in: ["A"] },
+        { id: "g2", op: "and", in: ["g1", "B"] },
+        { id: "g3", op: "or", in: ["g2", "C"] },
+        { id: "g4", op: "not", in: ["g3"] },
+        { id: "g5", op: "and", in: ["g4", "A"] },
+        { id: "g6", op: "or", in: ["g5", "B"] },
+      ],
+      output: "g6",
+    };
+    expect(layoutCircuit(six, { labelLines: 1, labels: LABELS.ru }).width).toBeGreaterThan(304 / CIRCUIT_MIN_SCALE);
+    const out = html(six);
+    expect(out).not.toContain("min-width");
+    expect(out).not.toContain("overflow-x-auto");
+    expect(out).not.toContain("data-circuit-scroll");
+    expect(out).toMatch(/<svg[^>]*class="mx-auto block h-auto w-full"/);
+    // а сумматор (outputs) — в блоке с подсказкой прокрутки
+    expect(html(adder)).toContain("data-circuit-scroll");
+  });
+
   it("плашки значений: зелёный текст — токен ink (читается в тёмной теме на success-soft)", () => {
     expect(html(adder)).toContain("fill-ink-success");
     expect(html(adder)).not.toContain("fill-success-strong");
@@ -211,6 +292,35 @@ describe("scroll-hint: подсказка прокрутки", () => {
     expect(left).not.toContain("calc(100%");
     expect(fadeMask({ left: true, right: true })).toContain("calc(100%");
     for (const m of [right, left]) expect(m).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("fadeWidths: затухание не шире реально скрытого остатка (скрыто 6 px — гаснут 6 px, а не 36)", () => {
+    expect(fadeWidths({ scrollLeft: 0, clientWidth: 300, scrollWidth: 300 })).toEqual({ left: 0, right: 0 });
+    expect(fadeWidths({ scrollLeft: 0, clientWidth: 300, scrollWidth: 301.5 })).toEqual({ left: 0, right: 0 });
+    expect(fadeWidths({ scrollLeft: 0, clientWidth: 300, scrollWidth: 306 })).toEqual({ left: 0, right: 6 });
+    expect(fadeWidths({ scrollLeft: 6, clientWidth: 300, scrollWidth: 306 })).toEqual({ left: 6, right: 0 });
+    // много скрытого — полная ширина, у конца прокрутки сужается плавно
+    expect(fadeWidths({ scrollLeft: 0, clientWidth: 300, scrollWidth: 500 })).toEqual({ left: 0, right: FADE_PX });
+    expect(fadeWidths({ scrollLeft: 100, clientWidth: 300, scrollWidth: 500 })).toEqual({ left: FADE_PX, right: FADE_PX });
+    expect(fadeWidths({ scrollLeft: 190, clientWidth: 300, scrollWidth: 500 })).toEqual({ left: FADE_PX, right: 10 });
+    // согласовано с scrollEdges: край гаснет ровно тогда, когда подсказка показана
+    for (const m of [{ scrollLeft: 0, clientWidth: 300, scrollWidth: 306 }, { scrollLeft: 3, clientWidth: 300, scrollWidth: 306 }, { scrollLeft: 100, clientWidth: 300, scrollWidth: 500 }]) {
+      const e = scrollEdges(m);
+      const w = fadeWidths(m);
+      expect(w.left > 0).toBe(e.left);
+      expect(w.right > 0).toBe(e.right);
+    }
+  });
+
+  it("fadeMask с ширинами: градиент берёт реальный остаток, а не FADE_PX; без ширин — как раньше", () => {
+    const right = fadeMask({ left: false, right: true }, { left: 0, right: 6 })!;
+    expect(right).toContain("calc(100% - 6px)");
+    expect(right).not.toContain(`${FADE_PX}px`);
+    const both = fadeMask({ left: true, right: true }, { left: 12, right: 4 })!;
+    expect(both).toContain("black 12px");
+    expect(both).toContain("calc(100% - 4px)");
+    expect(fadeMask({ left: false, right: true })).toContain(`calc(100% - ${FADE_PX}px)`);
+    expect(fadeMask({ left: false, right: false }, { left: 0, right: 0 })).toBeNull();
   });
 });
 
@@ -372,6 +482,39 @@ describe("message: номер признака не отрывается от ф
     expect(splitTail("Құпия сөзді жауап хатта жіберіңіз")).toEqual({ head: "Құпия сөзді жауап хатта ", tail: "жіберіңіз" });
     expect(splitTail("kaspi-bonus.top")).toEqual({ head: "", tail: "kaspi-bonus.top" });
     expect(splitTail("Срочно")).toEqual({ head: "", tail: "Срочно" });
+  });
+
+  it("splitTail: длинный токен (адрес) не склеивается целиком — неразрывен только хвост, остальное переносится", () => {
+    const url = "http://kaspi-bonus.top/verify-account";
+    expect(url.length).toBeGreaterThan(TAIL_MAX);
+    const one = splitTail(url);
+    expect(one.tail).toBe(url.slice(-TAIL_KEEP));
+    expect(one.head + one.tail).toBe(url);
+    const sentence = splitTail(`Перейдите по ссылке ${url}`);
+    expect(sentence.head).toBe(`Перейдите по ссылке ${url.slice(0, -TAIL_KEEP)}`);
+    expect(sentence.tail).toBe(url.slice(-TAIL_KEEP));
+    // слово ровно TAIL_MAX знаков ещё держится целиком, TAIL_MAX + 1 — уже нет
+    expect(splitTail("a".repeat(TAIL_MAX)).tail).toHaveLength(TAIL_MAX);
+    expect(splitTail("a".repeat(TAIL_MAX + 1)).tail).toHaveLength(TAIL_KEEP);
+    // склейка всегда даёт исходный текст (в том числе с казахскими буквами)
+    for (const t of ["Құпия сөзді жауап хатта жіберіңіз", "ә", "", "a b", url]) {
+      const { head, tail } = splitTail(t);
+      expect(head + tail).toBe(t);
+    }
+  });
+
+  it("в рисунке: признак с длинным адресом — неразрывен только хвост с номером, адрес переносится [overflow-wrap:anywhere]", () => {
+    const sms: Scene = {
+      kind: "message",
+      channel: "sms",
+      from: "Kaspi",
+      text: { ru: "Бонус: http://kaspi-bonus.top/verify-account", kk: "Бонус: http://kaspi-bonus.top/verify-account" },
+      marks: [{ text: "http://kaspi-bonus.top/verify-account", note: { ru: "Подозрительный адрес", kk: "Күдікті мекенжай" } }],
+    } as Scene;
+    const out = html(sms);
+    const nowrap = [...out.matchAll(/<span class="whitespace-nowrap"><mark[^>]*>([^<]*)<\/mark>/g)].map((m) => m[1]);
+    expect(nowrap).toEqual(["http://kaspi-bonus.top/verify-account".slice(-TAIL_KEEP)]);
+    expect(out).toContain("[overflow-wrap:anywhere]");
   });
 
   it("в рисунке: номер стоит в одном неразрывном блоке с последним словом признака", () => {
