@@ -2,7 +2,7 @@
 // Строго по типам из lib/analytics.ts: неизвестное событие, лишнее поле или значение не того вида — отбрасываются.
 // Чистая логика без React и без сервера: покрыта tests/analytics-schema.test.ts.
 
-import type { AnalyticsEvent, BreakReason, ChallengeStep, HeartOutWhere, PaywallFrom, ShareHow, ShareWhat } from "@/lib/analytics";
+import type { AnalyticsEvent, BreakReason, ChallengeStep, ChipOutWhere, HeartOutWhere, PaywallFrom, ShareHow, ShareWhat, ShortPick } from "@/lib/analytics";
 
 /** Не больше стольких событий в одной пачке (лишние отбрасываются до проверки). */
 export const MAX_BATCH = 30;
@@ -35,8 +35,10 @@ export const isSafeId = (v: unknown): v is string => typeof v === "string" && ID
 
 // ---------- Допустимые значения ----------
 
-export const PAYWALL_FROMS: readonly PaywallFrom[] = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "other"];
-export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game", "drill"];
+export const PAYWALL_FROMS: readonly PaywallFrom[] = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "chips", "other"];
+export const HEART_OUT_WHERES: readonly HeartOutWhere[] = ["lesson", "check", "extern", "exam", "checkpoint", "game", "drill", "theory"];
+export const CHIP_OUT_WHERES: readonly ChipOutWhere[] = ["ai", "shop", "cosmetic", "hearts"];
+export const SHORT_PICKS: readonly ShortPick[] = ["heart", "pack", "refill", "all", "plan", "trial", "earn", "exit"];
 export const BREAK_REASONS: readonly BreakReason[] = ["time", "hard", "boring", "forgot", "other_prep", "other"];
 export const SHARE_WHATS: readonly ShareWhat[] = ["exam", "course", "streak", "lesson", "challenge", "report"];
 export const SHARE_HOWS: readonly ShareHow[] = ["native", "copy", "wa", "tg", "save", "manual"];
@@ -87,6 +89,8 @@ export const EVENT_SCHEMA: Record<AnalyticsEvent["e"], Schema> = {
   trial_start: { from: oneOf(PAYWALL_FROMS) },
   shop_click: { item: id },
   hearts_out: { where: oneOf(HEART_OUT_WHERES) },
+  chips_out: { where: oneOf(CHIP_OUT_WHERES) },
+  short_pick: { need: oneOf(["chips", "hearts"]), pick: oneOf(SHORT_PICKS) },
   onb_step: { step: id },
   onb_done: { track: oneOf(["ent", "school"]) },
   diag: { done: flag, pct: percent },

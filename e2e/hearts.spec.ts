@@ -193,6 +193,12 @@ test("урок: сердечек нет — на входе «Сердечки �
   await expect(page.getByText(/Следующее сердечко через/)).toBeVisible();
   await expect(page.getByRole("button", { name: /\+1 сердечко/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Безлимит/ })).toBeVisible();
+  // Этап 16Г: чипов нет — окно предлагает купить чипы (₸ → «Оплата скоро»), пополнить всё и пробный период.
+  await expect(page.getByRole("button", { name: /7 дней бесплатно/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Пополнить все сердечки/ })).toBeVisible();
+  await page.getByRole("button", { name: /100 чипов/ }).click();
+  await expect(page.getByRole("dialog", { name: "Оплата скоро появится" })).toBeVisible();
+  await page.getByRole("button", { name: "Понятно" }).click();
   await expect(page.getByRole("link", { name: /Тренировка вернёт сердечко/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Тренировка — бесплатно" })).toHaveCount(0);
   await expect(page.getByText("Пока почитай теорию урока")).toHaveCount(0);

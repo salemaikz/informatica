@@ -75,6 +75,12 @@ export function fieldsOf(ev: AnalyticsEvent): Record<string, number> {
     case "hearts_out":
       f[`ho:${ev.where}`] = 1;
       break;
+    case "chips_out":
+      f[`co:${ev.where}`] = 1;
+      break;
+    case "short_pick":
+      f[`sp:${ev.need}:${ev.pick}`] = 1;
+      break;
     case "onb_step":
       f[`ob:${ev.step}`] = 1;
       break;

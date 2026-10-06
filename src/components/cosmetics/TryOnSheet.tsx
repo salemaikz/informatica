@@ -13,11 +13,12 @@ import { RARITY_LABEL, RARITY_SOFT, RARITY_TEXT } from "@/components/ui/rarity";
 import { Shake } from "@/components/motion/Shake";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { formatNum } from "@/components/economy/shop-helpers";
+import { ShortfallSheet } from "@/components/economy/ShortfallSheet";
 import { cosmeticConfetti } from "./confetti";
 import { cosmeticWhat } from "./names";
 import { ProfileCard, type ProfilePreview } from "./ProfileCard";
 
-function TryOnBody({ id, onClose }: { id: CosmeticId; onClose: () => void }) {
+function TryOnBody({ id, onClose, onShort }: { id: CosmeticId; onClose: () => void; onShort: () => void }) {
   const { t } = useT();
   const reduce = useReduceMotion();
   const def = cosmeticDef(id);
@@ -41,6 +42,14 @@ function TryOnBody({ id, onClose }: { id: CosmeticId; onClose: () => void }) {
   const missing = def.price === null ? 0 : Math.max(0, def.price - chips);
 
   const onBuy = () => {
+    // Не хватает чипов — окно «Не хватает» поверх примерки (купить чипы, «Безлимит», заработать); тряска — отклик.
+    if (missing > 0) {
+      setShake(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setShake(false), 400);
+      onShort();
+      return;
+    }
     const res = useApp.getState().buyCosmetic(id);
     if (res.ok) {
       feedback("chips");
@@ -109,7 +118,7 @@ function TryOnBody({ id, onClose }: { id: CosmeticId; onClose: () => void }) {
       ) : (
         <div className="flex flex-col gap-2">
           <Shake active={shake}>
-            <Button variant="primary" size="lg" block disabled={missing > 0} onClick={onBuy} icon={<Cpu size={19} aria-hidden="true" />}>
+            <Button variant="primary" size="lg" block onClick={onBuy} icon={<Cpu size={19} aria-hidden="true" />}>
               {t("cosmetics.act.buy", { n: formatNum(def.price) })}
             </Button>
           </Shake>
@@ -132,14 +141,21 @@ function TryOnBody({ id, onClose }: { id: CosmeticId; onClose: () => void }) {
 
 /**
  * Шторка «Примерка»: крупная карточка профиля с выбранным украшением и действие — «Купить за N» / «Надеть» / «Снять».
- * Не хватает чипов — кнопка неактивна, ниже «Не хватает N» и ссылка «Как заработать чипы». Легендарное — только пояснение про кейс.
+ * Не хватает чипов — кнопка активна: нажатие открывает окно «Не хватает» поверх примерки (купить чипы, «Безлимит», заработать);
+ * ниже остаётся «Не хватает N» и ссылка «Как заработать чипы». Легендарное — только пояснение про кейс.
  * Покупка: звук `chips`, лёгкое конфетти, украшение сразу надето.
  */
 export function TryOnSheet({ open, id, onClose }: { open: boolean; id: CosmeticId; onClose: () => void }) {
   const { t } = useT();
+  const [short, setShort] = useState(false);
+  const price = cosmeticDef(id)?.price ?? 0;
   return (
-    <Modal open={open} onClose={onClose} label={t("cosmetics.try.title")}>
-      <TryOnBody id={id} onClose={onClose} />
-    </Modal>
+    <>
+      <Modal open={open} onClose={onClose} label={t("cosmetics.try.title")}>
+        <TryOnBody id={id} onClose={onClose} onShort={() => setShort(true)} />
+      </Modal>
+      {/* Рядом с примеркой, а не внутри: у шторки есть transform, и вложенная шторка уехала бы */}
+      <ShortfallSheet need="chips" cost={price} where="cosmetic" plansFrom="chips" open={open && short} onClose={() => setShort(false)} onLeave={onClose} />
+    </>
   );
 }

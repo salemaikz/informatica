@@ -5,7 +5,7 @@ import { AI_DAILY_CAP, AI_UNITS, HOUR, PAID_TIERS, PLAN_FEATURES, aiFreeIsLifeti
 
 // Чистые помощники окна тарифов (без React): разбор адреса, сравнение тарифов, форматирование.
 
-export const PLANS_FROM = ["onboarding", "auto", "shop", "profile", "hearts", "ai"] as const;
+export const PLANS_FROM = ["onboarding", "auto", "shop", "profile", "hearts", "ai", "chips"] as const;
 export type PlansFrom = (typeof PLANS_FROM)[number];
 
 /** Откуда открыли окно (параметр адреса — недоверенный). */
@@ -23,6 +23,7 @@ export function closeAction(from: PlansFrom | undefined, historyLength: number):
 export function subtitleKey(from: PlansFrom | undefined): DictKey {
   if (from === "hearts") return "plans.sub.hearts";
   if (from === "ai") return "plans.sub.ai";
+  if (from === "chips") return "plans.sub.chips";
   return "plans.sub.default";
 }
 

@@ -18,13 +18,26 @@ import { useNow } from "@/components/economy/useEconomy";
  * what — что выбрал ученик (название товара и цена), показывается подзаголовком.
  * from — откуда пришли (для статистики пробного периода, #69).
  */
-export function ComingSoonSheet({ open, onClose, what, from = "other" }: { open: boolean; onClose: () => void; what?: string; from?: PaywallFrom }) {
+export function ComingSoonSheet({
+  open,
+  onClose,
+  what,
+  from = "other",
+  hideTrial = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  what?: string;
+  from?: PaywallFrom;
+  /** Окно открыто поверх «Не хватает»: пробный период там уже предложен, а здесь он увёл бы со страницы. */
+  hideTrial?: boolean;
+}) {
   const { t } = useT();
   const router = useRouter();
   const plan = useApp((s) => s.plan);
   const startTrial = useApp((s) => s.startTrial);
   const now = useNow();
-  const trial = canStartTrial(plan, now);
+  const trial = !hideTrial && canStartTrial(plan, now);
 
   const onTrial = () => {
     if (startTrial()) {

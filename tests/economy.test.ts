@@ -8,7 +8,7 @@ import {
   CHIP_REWARD,
   CHIP_PACKS,
   DAY,
-  HEART_PASSES,
+  HEARTS_REFILL_KZT,
   HOUR,
   LEDGER_MERGE_MS,
   MAX_LEDGER,
@@ -585,14 +585,8 @@ describe("магазин: buyItem", () => {
     expect(packSaving({ id: "y", chips: 10, bonus: 0, price: 1000 })).toBe(0);
   });
 
-  it("HEART_PASSES: сердечки без ограничений на 24 часа и 7 дней", () => {
-    expect(HEART_PASSES.map((p) => [p.id, p.hours, p.price])).toEqual([
-      ["hearts-24h", 24, 149],
-      ["hearts-7d", 168, 590],
-    ]);
-    // неделя дешевле, чем семь суточных пропусков
-    const [day, week] = HEART_PASSES;
-    expect(week.price).toBeLessThan((week.hours / day.hours) * day.price);
+  it("«Пополнить все сердечки» за деньги — 490 ₸; временных пропусков 24 ч / 7 дней больше нет", () => {
+    expect(HEARTS_REFILL_KZT).toBe(490);
   });
 
   it("бустеры за деньги: ×2 на 24 часа и 7 дней", () => {

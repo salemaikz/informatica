@@ -33,6 +33,8 @@ describe("поля суточного хеша: что пишет каждое �
     expect(fieldsOf({ e: "trial_start", from: "shop" })).toEqual({ trial_start: 1, "ts:shop": 1 });
     expect(fieldsOf({ e: "shop_click", item: "chips-100" })).toEqual({ shop_click: 1, "sc:chips-100": 1 });
     expect(fieldsOf({ e: "hearts_out", where: "game" })).toEqual({ hearts_out: 1, "ho:game": 1 });
+    expect(fieldsOf({ e: "chips_out", where: "shop" })).toEqual({ chips_out: 1, "co:shop": 1 });
+    expect(fieldsOf({ e: "short_pick", need: "chips", pick: "pack" })).toEqual({ short_pick: 1, "sp:chips:pack": 1 });
     expect(fieldsOf({ e: "onb_step", step: "name" })).toEqual({ onb_step: 1, "ob:name": 1 });
     expect(fieldsOf({ e: "onb_done", track: "ent" })).toEqual({ onb_done: 1, "od:ent": 1 });
     expect(fieldsOf({ e: "diag", done: 0, pct: 0 })).toEqual({ diag: 1, "dg:0": 1 });

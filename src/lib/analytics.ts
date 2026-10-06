@@ -6,9 +6,13 @@
 // буфер, отправка пачкой на /api/events. Пока приёмника нет (выключено, тесты, сервер) — track ничего не делает.
 
 /** Откуда открыли окно тарифов (как PlansFrom). */
-export type PaywallFrom = "onboarding" | "auto" | "shop" | "profile" | "hearts" | "ai" | "other";
+export type PaywallFrom = "onboarding" | "auto" | "shop" | "profile" | "hearts" | "ai" | "chips" | "other";
 /** Где закончились сердечки. */
-export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill";
+export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill" | "theory";
+/** Где не хватило чипов: ИИ, магазин, примерка украшения, окно сердечек (показано «Купить чипы»). */
+export type ChipOutWhere = "ai" | "shop" | "cosmetic" | "hearts";
+/** Что выбрали в окне «Не хватает». */
+export type ShortPick = "heart" | "pack" | "refill" | "all" | "plan" | "trial" | "earn" | "exit";
 /** Ответ на «Что помешало?» после перерыва. */
 export type BreakReason = "time" | "hard" | "boring" | "forgot" | "other_prep" | "other";
 /** Чем поделились (#72): результат пробника, % курса, серия, вызов другу, отчёт родителю. */
@@ -44,6 +48,9 @@ export type AnalyticsEvent =
   | { e: "shop_click"; item: string }
   // Сердечки закончились (где)
   | { e: "hearts_out"; where: HeartOutWhere }
+  // Не хватило чипов (где) и выбор в окне «Не хватает»
+  | { e: "chips_out"; where: ChipOutWhere }
+  | { e: "short_pick"; need: "chips" | "hearts"; pick: ShortPick }
   // Онбординг: шаг (имя шага) и конец (трек); диагностика
   | { e: "onb_step"; step: string }
   | { e: "onb_done"; track: "ent" | "school" }
