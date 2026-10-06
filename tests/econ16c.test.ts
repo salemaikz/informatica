@@ -55,7 +55,7 @@ describe("список цен ИИ: «что это» под каждой стр
     expect(dict["shop.ai.voice.sub"].ru).toContain("{n}");
   });
   it("разница подсказки и сообщения в чате понятна из текстов", () => {
-    expect(dict["econ16c.ai.hint.desc"].ru).toBe("Намёк к заданию, на котором застрял. Ответ не называет.");
+    expect(dict["econ16c.ai.hint.desc"].ru).toBe("Намёк к заданию, которое не получается. Ответ не называет.");
     expect(dict["econ16c.ai.chat.desc"].ru).toBe("Одно сообщение в чате с Битом — на любую тему.");
     expect(dict["econ16c.ai.review.desc"].ru).toBe("Разбор всего пробного ЕНТ: ошибки, темы, что повторить.");
   });
