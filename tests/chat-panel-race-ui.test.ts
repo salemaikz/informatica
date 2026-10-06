@@ -44,7 +44,7 @@ const wait = (ms: number) =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
-const dock = () => document.querySelector<HTMLButtonElement>('[data-tour="bit-dock"]');
+const dock = () => document.querySelector<HTMLButtonElement>('[data-dock-button]');
 const dialogs = () => [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')];
 const chatOpen = () => useGuideUi.getState().chatOpen;
 const tapBit = () =>
