@@ -60,7 +60,7 @@ export function CoinsPanel({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, transition: { duration: 0.1 } }}
                           transition={{ ...springBouncy, delay: 0.1 + index * 0.1 }}
-                          className={cn("block font-mono text-xl font-extrabold leading-6", set.has(v) ? "text-warning-strong" : "text-muted")}
+                          className={cn("block font-mono text-xl font-extrabold leading-6", set.has(v) ? "text-ink-warning" : "text-muted")}
                         >
                           {set.has(v) ? 1 : 0}
                         </m.span>
@@ -80,7 +80,7 @@ export function CoinsPanel({
           before={pickedBefore}
           after={pickedAfter}
           value={sum}
-          numberClassName={reached ? "text-success-strong" : "text-text"}
+          numberClassName={reached ? "text-ink-success" : "text-text"}
           extra={target !== undefined ? <span className="font-mono text-2xl font-extrabold text-muted">/ {target}</span> : undefined}
         />
         {target !== undefined && (

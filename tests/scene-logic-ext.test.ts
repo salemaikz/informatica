@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OUT_ID, evalCircuit, layoutCircuit, wireStats, type CircuitScene } from "@/components/scenes/circuit";
+import { CHIP_SIZE, CIRCUIT_MIN_SCALE, CIRCUIT_WIDE, OUT_ID, WIRE_LANE_GAP, evalCircuit, isWideCircuit, layoutCircuit, terminalFont, valueChipBox, wireStats, type CircuitNode, type CircuitScene, type CircuitWire } from "@/components/scenes/circuit";
 import { GATE_FORMULA, gateGlyph, gatesColumns, longestWord } from "@/components/scenes/gates";
 import { SAMPLES as GATES_SAMPLES } from "@/components/scenes/samples/gates";
 import { SAMPLES as SWITCHES_SAMPLES } from "@/components/scenes/samples/switches";
@@ -344,5 +344,94 @@ describe("исправления ревью S9", () => {
     const bus = lay.wires.filter((w) => w.points[0][0] === w.points[1][0] && w.points[0][1] !== w.points[1][1]);
     expect(bus.some((w) => w.live)).toBe(true);
     expect(bus.some((w) => !w.live)).toBe(true);
+  });
+});
+
+describe("circuit: ревью v18b — сумматор (вертикали разведены, плашки не у проводов, «Ci» крупнее)", () => {
+  const multis = EXTENDED.filter((x): x is CircuitScene => x.kind === "circuit" && !!x.outputs);
+  const adder = multis.find((x) => x.inputs.includes("Ci"))!;
+  /** Вертикальные отрезки проводов: x, диапазон по y, источник. */
+  const verticals = (wires: CircuitWire[]) =>
+    wires.flatMap((w) => w.points.slice(0, -1).flatMap((p, i) => (p[0] === w.points[i + 1][0] && p[1] !== w.points[i + 1][1] ? [{ x: p[0], y0: Math.min(p[1], w.points[i + 1][1]), y1: Math.max(p[1], w.points[i + 1][1]), from: w.from }] : [])));
+  /** Расстояние от точки до прямоугольника. */
+  const distToRect = (px: number, py: number, r: { x0: number; x1: number; y0: number; y1: number }) => Math.hypot(Math.max(r.x0 - px, 0, px - r.x1), Math.max(r.y0 - py, 0, py - r.y1));
+  /** Расстояние от прямоугольника до отрезка (по горизонтали или вертикали). */
+  const segToRect = (a: [number, number], b: [number, number], r: { x0: number; x1: number; y0: number; y1: number }) => {
+    let best = Infinity;
+    for (let t = 0; t <= 1; t += 0.02) best = Math.min(best, distToRect(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r));
+    return best;
+  };
+
+  it("только схемы с outputs и четырьмя вентилями и больше раздвинуты: остальные раскладываются как раньше", () => {
+    expect(isWideCircuit(adder)).toBe(true);
+    for (const s of multis.filter((x) => x !== adder)) expect(isWideCircuit(s)).toBe(false);
+    expect(isWideCircuit({ ...adder, outputs: undefined })).toBe(false);
+    const wide = layoutCircuit(adder);
+    const narrow = layoutCircuit({ ...adder, gates: adder.gates.slice(0, 3), outputs: [{ gate: "s", name: "S" }] });
+    // шаг столбцов 80 (был 76), рамка уже, выход ближе; остальные схемы — как раньше
+    const node = (lay: ReturnType<typeof layoutCircuit>, id: string) => lay.nodes.find((n) => n.id === id)!;
+    expect(node(wide, "s").x - node(wide, "x1").x).toBe(CIRCUIT_WIDE.pitch);
+    expect(node(wide, "s").w).toBe(CIRCUIT_WIDE.gateW);
+    expect(wide.wide).toBe(true);
+    expect(node(narrow, "s").x - node(narrow, "x1").x).toBe(76);
+    expect(node(narrow, "s").w).toBe(40);
+    expect(narrow.wide).toBe(false);
+    // сумматор по-прежнему помещается на телефоне без прокрутки: ширина × CIRCUIT_MIN_SCALE ≤ 304
+    expect(Math.round(wide.width * CIRCUIT_MIN_SCALE)).toBeLessThanOrEqual(304);
+  });
+
+  it("вертикали проводов разных источников, идущие рядом (общая полоса по y), стоят не ближе WIRE_LANE_GAP друг от друга", () => {
+    for (const s of [adder]) {
+      const lay = layoutCircuit(s, { labelLines: 2 });
+      const v = verticals(lay.wires);
+      for (let i = 0; i < v.length; i++)
+        for (let j = i + 1; j < v.length; j++) {
+          if (v[i].from === v[j].from) continue;
+          const overlap = Math.min(v[i].y1, v[j].y1) - Math.max(v[i].y0, v[j].y0);
+          if (overlap <= 0) continue;
+          expect(Math.abs(v[i].x - v[j].x), `x=${v[i].x} (${v[i].from}) и x=${v[j].x} (${v[j].from})`).toBeGreaterThanOrEqual(WIRE_LANE_GAP - 1e-6);
+        }
+    }
+  });
+
+  it("провода одного источника в один столбец идут по одной вертикали (общий ствол), а не двумя параллельными", () => {
+    const lay = layoutCircuit(adder, { labelLines: 2 });
+    for (const src of ["x1", "Ci", "A", "B"]) {
+      const byCol = new Map<number, Set<number>>();
+      for (const w of lay.wires.filter((q) => q.from === src && q.points.length === 4)) {
+        const to = lay.nodes.find((n) => n.id === w.to)!;
+        byCol.set(to.col, (byCol.get(to.col) ?? new Set<number>()).add(w.points[1][0]));
+      }
+      if (src === "x1" || src === "Ci") for (const set of byCol.values()) expect(set.size, `источник ${src}`).toBe(1);
+    }
+  });
+
+  it("плашка 0/1 не ближе 5 px к проводам других источников и не ближе 3 px к своим, внутри рисунка", () => {
+    for (const s of multis) {
+      const lay = layoutCircuit(s, { labelLines: 2 });
+      const feeds = new Set(lay.outputs.map((o) => o.gate));
+      for (const n of lay.nodes as CircuitNode[]) {
+        if (n.kind === "output" || feeds.has(n.id)) continue;
+        const c = valueChipBox(lay.wires, n, lay.wide);
+        const r = { x0: c.cx - CHIP_SIZE / 2, x1: c.cx + CHIP_SIZE / 2, y0: c.top, y1: c.top + CHIP_SIZE };
+        expect(r.x1).toBeLessThanOrEqual(lay.width);
+        expect(r.y0).toBeGreaterThanOrEqual(0);
+        for (const w of lay.wires)
+          for (let i = 0; i + 1 < w.points.length; i++) {
+            const d = segToRect(w.points[i], w.points[i + 1], r);
+            expect(d, `плашка «${n.id}» и провод ${w.from}>${w.to}`).toBeGreaterThanOrEqual(w.from === n.id ? 2.9 : 4.9);
+          }
+      }
+    }
+  });
+
+  it("«Ci», «Co», «A» в кружках схем с несколькими выходами не мельче 11 px на экране (с учётом сжатия до CIRCUIT_MIN_SCALE); у старых схем прежние 15 / 11", () => {
+    for (const label of ["Ci", "Co", "Cn", "A", "B", "S", "F", "X"]) expect(terminalFont(label, true) * CIRCUIT_MIN_SCALE, label).toBeGreaterThanOrEqual(11);
+    expect(terminalFont("Ci", true)).toBeGreaterThanOrEqual(15);
+    for (const label of ["Sum", "Car"]) expect(terminalFont(label, true) * CIRCUIT_MIN_SCALE, label).toBeGreaterThanOrEqual(9);
+    expect(terminalFont("Ci", false)).toBe(15);
+    expect(terminalFont("Sum", false)).toBe(11);
+    // подпись помещается в кружок
+    for (const label of ["Ci", "Co", "Cn"]) expect(estimateTextWidth(label, terminalFont(label, true))).toBeLessThanOrEqual(22.4);
   });
 });

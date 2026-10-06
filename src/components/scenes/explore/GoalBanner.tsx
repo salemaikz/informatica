@@ -27,7 +27,7 @@ export function GoalBanner({ text, reached }: { text: string; reached: boolean }
       </m.span>
       <div className="min-w-0">
         <p className="text-base font-bold leading-snug">{text}</p>
-        <p className="text-sm font-extrabold text-success-strong" role="status" aria-live="polite">
+        <p className="text-sm font-extrabold text-ink-success" role="status" aria-live="polite">
           {reached ? t("lesson.goalDone") : null}
         </p>
       </div>

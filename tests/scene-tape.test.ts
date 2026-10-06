@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/tape";
-import { TAPE_ARC_GAP, TAPE_GROUP_ROW, TAPE_INDEX_FS, TAPE_LABEL_DESC, TAPE_LABEL_FS, TAPE_LEGIBLE_FONT, TAPE_SWAP_SHIFT, TAPE_W, arcPoint, arcSegments, assignLevels, clampCenter, indexLabel, sliceIndices, stopBoundary, tapeAria, tapeLayout, tapeLegible, textWidth, withBridges, type TapeArc, type TapeData } from "@/components/scenes/tape";
+import { TAPE_ARC_GAP, TAPE_CELL_GAP, TAPE_GROUP_ROW, TAPE_INDEX_FS, TAPE_LABEL_DESC, TAPE_LABEL_FS, TAPE_LEGIBLE_FONT, TAPE_SWAP_CLEAR, TAPE_SWAP_SHIFT, TAPE_TEXT_PAD, TAPE_W, arcHeightAt, arcPoint, arcSegments, assignLevels, clampCenter, indexLabel, raiseNestedSwaps, sliceIndices, stopBoundary, tapeAria, tapeLayout, tapeLegible, textWidth, withBridges, type TapeArc, type TapeData } from "@/components/scenes/tape";
 import { dict, type DictKey } from "@/i18n/dict";
 import { estimateTextWidth } from "@/components/scenes/text-width";
 import { fmt } from "@/lib/text";
@@ -174,12 +174,14 @@ describe("tape: раскладка", () => {
     }
     expect(tapeLegible(tape({ cells: Array.from({ length: 16 }, () => "12345678"), mono: true }))).toBe(false);
     expect(tapeLegible(tape({ cells: Array.from({ length: 8 }, () => "10110010"), mono: true }))).toBe(true);
-    // по три знака в 360 px (с именем «A =») читаемым кеглем помещаются 10–11 ячеек (предел), по два — 16, по одному — тоже 16
-    const row = (n: number, text: string) => tape({ cells: Array.from({ length: n }, () => text), name: "A" });
+    // по три знака в 360 px (с именем «A =») читаемым кеглем и с полем у рамки помещаются 10 ячеек (предел), по два — 15 (16 — без имени), по одному — 16
+    const row = (n: number, text: string, name: string | null = "A") => tape({ cells: Array.from({ length: n }, () => text), ...(name ? { name } : {}) });
     expect(tapeLegible(row(16, "120"))).toBe(false);
     expect(tapeLegible(row(12, "120"))).toBe(false);
     expect(tapeLegible(row(10, "120"))).toBe(true);
-    expect(tapeLegible(row(16, "99"))).toBe(true);
+    expect(tapeLegible(row(15, "99"))).toBe(true);
+    expect(tapeLegible(row(16, "99"))).toBe(false);
+    expect(tapeLegible(row(16, "99", null))).toBe(true);
     expect(tapeLegible(row(16, "x"))).toBe(true);
   });
   it("граница stop не рисуется на краю ленты", () => {
@@ -570,5 +572,97 @@ describe("tape: дуги шага и дуги обмена не сплетают
     expect(stems).toHaveLength(L.pointers.filter((p) => p.arrow).length);
     expect((html.match(/d="M -4\.5 6 L 0 0 L 4\.5 6 Z"/g) ?? []).length).toBe(L.pointers.length);
     expect(html).not.toContain('opacity="0.6"');
+  });
+});
+
+// ---------- Ревью v18b: поля у цифр и вложенные обмены ----------
+
+describe("tape: ревью v18b — поля у цифр в ячейке и вложенные дуги обмена", () => {
+  it("между текстом и рамкой ячейки не меньше TAPE_TEXT_PAD с каждой стороны — у всех образцов (в ленте из 16 «15 99» не читается как «1599»)", () => {
+    for (const s of SAMPLES) {
+      const L = layout(s);
+      for (const c of [...L.cells, ...(L.after?.cells ?? [])]) {
+        for (const line of c.lines) {
+          const margin = (L.cellW - TAPE_CELL_GAP - textWidth(line, L.cellFs, L.mono)) / 2;
+          expect(margin, `«${line}» в ленте ${s.cells.length} ячеек`).toBeGreaterThanOrEqual(TAPE_TEXT_PAD - 1e-6);
+        }
+      }
+    }
+    // конкретно: лента из 16 двузначных чисел (поле ≥ 2 px, было 1,4) и из 10 трёхзначных
+    const two = layout(SAMPLES.find((x) => x.cells.length === 16 && x.cells.some((c) => c.length === 2))!);
+    expect((two.cellW - TAPE_CELL_GAP - textWidth("99", two.cellFs, false)) / 2).toBeGreaterThanOrEqual(2);
+    const three = layout(SAMPLES.find((x) => x.cells.some((c) => c.length === 3))!);
+    expect((three.cellW - TAPE_CELL_GAP - textWidth("805", three.cellFs, false)) / 2).toBeGreaterThanOrEqual(2);
+    expect(three.cellFs).toBeGreaterThanOrEqual(TAPE_LEGIBLE_FONT);
+  });
+
+  const worst = SAMPLES.find((x) => x.swaps && x.slice && x.cells.length === 16)!;
+  /** Минимальный вертикальный зазор между внешней и вложенной дугой обмена по всему пролёту внутренней. */
+  const gapOver = (outer: TapeArc, inner: TapeArc) => {
+    let min = Infinity;
+    const [i0, i1] = [Math.min(inner.xa, inner.xb), Math.max(inner.xa, inner.xb)];
+    for (let j = 0; j <= 60; j++) {
+      const x = i0 + ((i1 - i0) * j) / 60;
+      min = Math.min(min, arcHeightAt(outer, x) - arcHeightAt(inner, x));
+    }
+    return min;
+  };
+
+  it("arcHeightAt: на концах 0, в середине — высота дуги, вне пролёта 0", () => {
+    const a = { xa: 10, xb: 110, height: 20 };
+    expect(arcHeightAt(a, 10)).toBeCloseTo(0, 6);
+    expect(arcHeightAt(a, 110)).toBeCloseTo(0, 6);
+    expect(arcHeightAt(a, 60)).toBeCloseTo(20, 4);
+    expect(arcHeightAt(a, 5)).toBe(0);
+    expect(arcHeightAt(a, 200)).toBe(0);
+    // согласовано с arcPoint
+    const [x, y] = arcPoint({ ...a, y: 50 }, 0.3);
+    expect(arcHeightAt(a, x)).toBeCloseTo(50 - y, 3);
+  });
+
+  it("вложенные обмены 1↔14 и 2↔3: внешняя дуга проходит над внутренней не ближе TAPE_SWAP_CLEAR на всём её пролёте (вершины не касаются)", () => {
+    const L = layout(worst);
+    const big = L.arcs.find((a) => a.key.startsWith("s1-14"))!;
+    const small = L.arcs.find((a) => a.key.startsWith("s2-3"))!;
+    expect(gapOver(big, small)).toBeGreaterThanOrEqual(TAPE_SWAP_CLEAR - 0.05);
+    expect(big.height).toBeGreaterThan(small.height);
+    // острия внешней дуги не в одном «узле» с внутренней: на высоте вершины малой дуги внешняя выше неё
+    expect(arcHeightAt(big, (small.xa + small.xb) / 2)).toBeGreaterThanOrEqual(small.height + TAPE_SWAP_CLEAR - 0.05);
+  });
+
+  it("общее правило: для любой пары вложенных обменов (концы на разных ячейках) зазор ≥ TAPE_SWAP_CLEAR; три уровня вложенности тоже", () => {
+    const cells = Array.from({ length: 12 }, (_, i) => String(i));
+    const variants: TapeData[] = [
+      tape({ cells, swaps: [[0, 11], [1, 10], [2, 9]] }),
+      tape({ cells, swaps: [[0, 11], [3, 4]] }),
+      tape({ cells, swaps: [[1, 8], [3, 4], [5, 6]] }),
+      tape({ cells, swaps: [[0, 9], [2, 7], [4, 5]], slice: { start: 0, stop: 12, step: 3 } }),
+    ];
+    for (const v of variants) {
+      const L = layout(v);
+      const swaps = L.arcs.filter((a) => a.kind === "swap");
+      for (const outer of swaps)
+        for (const inner of swaps) {
+          if (outer === inner) continue;
+          const [o0, o1] = [Math.min(outer.xa, outer.xb), Math.max(outer.xa, outer.xb)];
+          const [i0, i1] = [Math.min(inner.xa, inner.xb), Math.max(inner.xa, inner.xb)];
+          if (!(i0 > o0 + 4 && i1 < o1 - 4)) continue;
+          expect(gapOver(outer, inner), `${outer.key} над ${inner.key}`).toBeGreaterThanOrEqual(TAPE_SWAP_CLEAR - 0.05);
+        }
+    }
+  });
+
+  it("raiseNestedSwaps: невложенные и общий конец не трогает, вложенную поднимает только внешнюю", () => {
+    const mk = (xa: number, xb: number, height: number) => ({ kind: "swap" as const, xa, xb, height });
+    const apart = [mk(0, 40, 20), mk(60, 100, 20)];
+    raiseNestedSwaps(apart);
+    expect(apart.map((a) => a.height)).toEqual([20, 20]);
+    const shared = [mk(0, 100, 30), mk(0, 40, 20)];
+    raiseNestedSwaps(shared);
+    expect(shared.map((a) => a.height)).toEqual([30, 20]);
+    const nested = [mk(0, 200, 25), mk(80, 110, 20)];
+    raiseNestedSwaps(nested);
+    expect(nested[1].height).toBe(20);
+    expect(nested[0].height).toBeGreaterThan(25);
   });
 });

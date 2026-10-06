@@ -230,12 +230,19 @@ export function gridLayout(scene: GridData): GridLayout {
     const text = numberLabel(ns);
     numLabels.set(k, { text, font: fitFont(text, cell - 4, numFont0, 6) });
   }
-  // клетка с номером обхода и значением: значение чуть ниже и не крупнее 0.42 клетки, чтобы не касаться номера
-  for (const b of blocks) {
-    if (b.value === "" || !numbers.has(b.key)) continue;
-    const nf = numLabels.get(b.key)!.font;
-    b.fontSize = Math.min(b.fontSize, Math.max(6, cell * 0.42));
-    b.textY += nf * 0.3;
+  // путь с номерами поверх значений: номер стоит в углу клетки, значение чуть ниже и не крупнее 0.42 клетки, чтобы не касаться номера.
+  // Кегль и сдвиг — ОДНИ на все значения сетки (не только на клетки пути): иначе «0 1 2 3» выходит неровной строкой
+  // с разной высотой цифр (ревью v18b).
+  if (numbers.size > 0) {
+    const withValue = blocks.filter((b) => b.value !== "");
+    if (withValue.length > 0) {
+      const nf = Math.max(...[...numLabels.values()].map((nl) => nl.font));
+      const size = Math.min(Math.max(6, cell * 0.42), ...withValue.map((b) => b.fontSize));
+      for (const b of withValue) {
+        b.fontSize = size;
+        b.textY += nf * 0.3;
+      }
+    }
   }
   const nameFont = fitFont(axes?.row ?? "", AXIS_NAME - 2, 13, 7);
 

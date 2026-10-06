@@ -87,7 +87,7 @@ export function LampsTool({ size, onChange }: { size: number; onChange: (s: Sand
           {t("explore.signals", { n: signals })}
         </span>
         <div aria-hidden>
-          <NumberLabel before={before} after={after} value={signals} numberClassName="text-primary-strong" />
+          <NumberLabel before={before} after={after} value={signals} numberClassName="text-ink-primary" />
         </div>
         <SignalGrid n={n} current={value} />
       </div>

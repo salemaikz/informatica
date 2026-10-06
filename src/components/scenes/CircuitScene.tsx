@@ -5,8 +5,7 @@ import { cn } from "@/lib/cn";
 import type { DictKey } from "@/i18n/dict";
 import { translate, useT } from "@/i18n/useT";
 import { ScrollHintBox } from "./ScrollHintBox";
-import { estimateTextWidth } from "./text-width";
-import { CIRCUIT_GEO, CIRCUIT_MIN_SCALE, GATE_STYLE, OUT_CHIP_W, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
+import { CHIP_SIZE, CIRCUIT_GEO, CIRCUIT_MIN_SCALE, GATE_STYLE, OUT_CHIP_W, evalCircuit, gateLabelBaseline, gateLabelLines, layoutCircuit, pointsAttr, terminalFont, valueChipBox, type Bit, type CircuitScene as CircuitSceneData, type CircuitNode, type GateOp } from "./circuit";
 
 const OP_KEY: Record<GateOp, DictKey> = {
   and: "scene.op.and",
@@ -25,7 +24,7 @@ function ValueChip({ x, y, v, below, inline }: { x: number; y: number; v: Bit; b
   const top = inline ? y - 8 : below ? y + 3 : y - 19;
   return (
     <g>
-      <rect x={x - 8} y={top} width={16} height={16} rx={5} className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : "fill-surface-2 stroke-border")} strokeWidth={1.5} />
+      <rect x={x - CHIP_SIZE / 2} y={top} width={CHIP_SIZE} height={CHIP_SIZE} rx={5} className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : "fill-surface-2 stroke-border")} strokeWidth={1.5} />
       <text x={x} y={top + 12} textAnchor="middle" fontSize={13} fontWeight={800} className={cn("font-mono", v === 1 ? "fill-ink-success" : "fill-muted")}>
         {v}
       </text>
@@ -63,7 +62,8 @@ function GateShape({ node, label, v }: { node: CircuitNode; label: string[]; v: 
   );
 }
 
-function Terminal({ node, label, v }: { node: CircuitNode; label: string; v: Bit | undefined }) {
+function Terminal({ node, label, v, multi }: { node: CircuitNode; label: string; v: Bit | undefined; multi: boolean }) {
+  const font = terminalFont(label, multi);
   return (
     <g>
       <circle
@@ -73,7 +73,7 @@ function Terminal({ node, label, v }: { node: CircuitNode; label: string; v: Bit
         strokeWidth={2}
         className={cn("transition-colors duration-200", v === 1 ? "fill-success-soft stroke-success" : v === 0 ? "fill-surface-2 stroke-muted" : "fill-primary-soft stroke-primary")}
       />
-      <text x={node.x} y={node.y + 5} textAnchor="middle" fontSize={estimateTextWidth(label, 15) > CIRCUIT_GEO.r * 1.6 ? 11 : 15} fontWeight={800} className="fill-text">
+      <text x={node.x} y={node.y + Math.round(font / 3)} textAnchor="middle" fontSize={font} fontWeight={800} className="fill-text">
         {label}
       </text>
     </g>
@@ -132,7 +132,7 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
 
       {layout.nodes.map((n) => {
         if (n.kind === "gate") return <GateShape key={n.id} node={n} label={labels[n.op!]} v={valueOf(n.id)} />;
-        return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} />;
+        return <Terminal key={n.id} node={n} label={n.label} v={valueOf(n.id)} multi={multi} />;
       })}
 
       {/* Значения: по одной плашке на выходе каждого источника (вход или вентиль). */}
@@ -142,10 +142,9 @@ export function CircuitScene({ scene }: { scene: CircuitSceneData }) {
           .map((n) => {
             const v = valueOf(n.id);
             if (v === undefined) return null;
-            const px = n.x + n.w / 2 + (n.op && GATE_STYLE[n.op].inverted ? G.bubble * 2 : 0) + 12;
-            // Плашка — с той стороны провода, куда не уходит вертикальный излом.
-            const goesUp = layout.wires.some((w) => w.from === n.id && w.points.length > 2 && w.points[2][1] < n.y);
-            return <ValueChip key={`v:${n.id}`} x={px} y={n.y} v={v} below={goesUp} />;
+            // Плашка — с той стороны провода, куда не уходит вертикальный излом (valueChipBox).
+            const chip = valueChipBox(layout.wires, n, layout.wide);
+            return <ValueChip key={`v:${n.id}`} x={chip.cx} y={n.y} v={v} below={chip.below} />;
           })}
 
       {/* Значения выходов — плашка справа от каждого выходного кружка. */}

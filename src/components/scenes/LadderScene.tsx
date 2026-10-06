@@ -37,7 +37,7 @@ export function LadderScene({ scene }: { scene: LadderScene }) {
         <span>{t("tools.dividend")}</span>
         <span className="font-mono text-sm">÷{base}</span>
         <span>{t("tools.quotient")}</span>
-        <span className="text-primary-strong">{t("tools.remainder")}</span>
+        <span className="text-ink-primary">{t("tools.remainder")}</span>
         <span />
       </div>
 
@@ -109,8 +109,8 @@ export function LadderScene({ scene }: { scene: LadderScene }) {
             transition={springSoft}
             className="mt-4 flex flex-col items-center gap-1"
           >
-            <span className="text-sm font-extrabold text-primary-strong">{t("tools.readUp")}</span>
-            <div className="flex items-end font-mono font-extrabold leading-none text-primary-strong" style={{ fontSize: resultFont }} aria-label={digits.join("")}>
+            <span className="text-sm font-extrabold text-ink-primary">{t("tools.readUp")}</span>
+            <div className="flex items-end font-mono font-extrabold leading-none text-ink-primary" style={{ fontSize: resultFont }} aria-label={digits.join("")}>
               {digits.map((d, i) => (
                 <m.span
                   key={i}

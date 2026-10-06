@@ -49,7 +49,7 @@ export function LampColumn({
         <LampBulb on={on} size={size} />
       </m.div>
       <span
-        className={cn("mt-1 font-mono font-bold leading-none transition-colors duration-300", on ? "text-warning-strong" : "text-muted")}
+        className={cn("mt-1 font-mono font-bold leading-none transition-colors duration-300", on ? "text-ink-warning" : "text-muted")}
         style={{ fontSize: digitFont }}
       >
         {on ? 1 : 0}

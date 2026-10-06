@@ -5,7 +5,7 @@ import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene, SceneTone } from "@/lib/types";
-import { TAPE_LABEL_FS, arcSegments, tapeAria, tapeLayout, type TapeCell } from "./tape";
+import { TAPE_CELL_GAP, TAPE_LABEL_FS, arcSegments, tapeAria, tapeLayout, type TapeCell } from "./tape";
 
 type TapeSceneData = Extract<Scene, { kind: "tape" }>;
 
@@ -58,10 +58,10 @@ export function TapeScene({ scene }: { scene: TapeSceneData }) {
     return (
       <g key={`${prefix}${c.i}`} style={{ transition: fade }} opacity={dimmed ? 0.4 : 1}>
         <rect
-          x={c.x + 0.75}
-          y={c.y + 0.75}
-          width={L.cellW - 1.5}
-          height={L.cellH - 1.5}
+          x={c.x + TAPE_CELL_GAP / 2}
+          y={c.y + TAPE_CELL_GAP / 2}
+          width={L.cellW - TAPE_CELL_GAP}
+          height={L.cellH - TAPE_CELL_GAP}
           rx={Math.min(6, L.cellW / 4)}
           fill={fill}
           stroke={stroke}

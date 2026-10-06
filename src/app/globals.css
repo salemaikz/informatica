@@ -66,7 +66,7 @@
   /* Светлая: значения подобраны на контраст ≥ 4,5:1 к своей -soft-заливке (у success/warning/primary -strong для этого светлее нужного). */
   --ink-primary: #0f6aa0;
   --ink-success: #0f7a48;
-  --ink-danger: var(--danger-strong);
+  --ink-danger: #c42f2f;
   --ink-warning: #8a5a00;
   --ink-ai: var(--ai-strong);
   --ink-heart: var(--heart-strong);

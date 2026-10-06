@@ -38,6 +38,13 @@ export const TAPE_SWAP_SHIFT = 7;
 export const TAPE_ARC_GAP = 3.2;
 /** Подпись указателя: ширина стебля стрелки не ближе этого к краю чужой подписи, px. */
 const PTR_CLEAR = 2;
+/** Зазор между рамками соседних ячеек (рисуется как width = cellW − CELL_GAP) и поле между текстом и своей рамкой, px (ревью v18b: «15 99» читалось как «1599»). */
+export const TAPE_CELL_GAP = 1.5;
+export const TAPE_TEXT_PAD = 2.25;
+/** Сколько ширины ячейки не занимает текст: зазор между рамками и поля с обеих сторон. */
+const TEXT_INSET = TAPE_CELL_GAP + 2 * TAPE_TEXT_PAD;
+/** Зазор по вертикали между дугой обмена и вложенной в неё дугой обмена (внешняя не касается внутренней, острия не «сходятся в узел»), px. */
+export const TAPE_SWAP_CLEAR = 6;
 /** Зазор между подписями указателей одного уровня, px (в ширину подписи уже входят поля по 1 px). */
 const PTR_GAP = 0.5;
 /** Зазор между подписями указателей на одной ячейке, когда они стоят в ряд, px. */
@@ -147,6 +154,56 @@ export function arcSegments(a: Pick<TapeArc, "xa" | "xb" | "y" | "height" | "cut
 }
 
 const ARC_SAMPLES = 48;
+
+/** Параметр t кривой, у которой x(t) = x (x монотонна: ease 3t² − 2t³); 0..1, вне пролёта — край. */
+function arcParamAtX(a: { xa: number; xb: number }, x: number): number {
+  const span = a.xb - a.xa;
+  if (span === 0) return 0;
+  const u = Math.min(1, Math.max(0, (x - a.xa) / span));
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (3 * mid * mid - 2 * mid * mid * mid < u) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** Высота дуги над её нижней линией в точке x (px); вне пролёта — 0. */
+export function arcHeightAt(a: { xa: number; xb: number; height: number }, x: number): number {
+  if (x < Math.min(a.xa, a.xb) || x > Math.max(a.xa, a.xb)) return 0;
+  const t = arcParamAtX(a, x);
+  return 4 * a.height * t * (1 - t);
+}
+
+/**
+ * Вложенные обмены (внутренняя дуга целиком внутри пролёта внешней, концы не на одной ячейке): внешняя поднимается так, чтобы над всей внутренней
+ * проходить не ближе `clear` px. Иначе у крутых концов длинной дуги короткая вершиной касается её, и три острия сходятся в узел (ревью v18b).
+ * Идёт от коротких к длинным, поэтому поднятая внутренняя тянет за собой свои внешние. Меняет height на месте.
+ */
+export function raiseNestedSwaps(arcs: { kind: "jump" | "swap"; xa: number; xb: number; height: number }[], clear = TAPE_SWAP_CLEAR): void {
+  const swaps = arcs.filter((a) => a.kind === "swap").sort((p, q) => Math.abs(p.xb - p.xa) - Math.abs(q.xb - q.xa));
+  const ENDS = 4;
+  for (const outer of swaps) {
+    const o0 = Math.min(outer.xa, outer.xb);
+    const o1 = Math.max(outer.xa, outer.xb);
+    for (const inner of swaps) {
+      if (inner === outer) continue;
+      const i0 = Math.min(inner.xa, inner.xb);
+      const i1 = Math.max(inner.xa, inner.xb);
+      if (!(i0 > o0 + ENDS && i1 < o1 - ENDS)) continue;
+      for (let j = 0; j <= 24; j++) {
+        const x = i0 + ((i1 - i0) * j) / 24;
+        const t = arcParamAtX(outer, x);
+        const f = 4 * t * (1 - t);
+        if (f < 0.15) continue;
+        outer.height = Math.max(outer.height, (arcHeightAt(inner, x) + clear) / f);
+      }
+    }
+  }
+}
+
 
 /**
  * Мосты: где поверх дуги проходит другая (дуга обмена над дугой шага, длинный обмен над коротким), в нижней делается разрыв.
@@ -275,7 +332,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   const avail = TAPE_W - 2 * PAD - leftW;
   let cellW = Math.min(MAX_CELL, Math.max(MIN_CELL, Math.floor(avail / cols)));
   const baseCellW = cellW;
-  const fits = (fs: number, w: number) => allTexts.every((s) => textWidth(s, fs, mono) <= w - 4);
+  const fits = (fs: number, w: number) => allTexts.every((s) => textWidth(s, fs, mono) <= w - TEXT_INSET);
   // Желаемый кегль: от ширины ячейки, но не мельче читаемого — одиночные знаки и короткие числа в узких ячейках (16 в ряд) тоже крупные,
   // если помещаются; иначе кегль убавляется до влезающего.
   const idealFs = Math.min(MAX_FONT, Math.max(Math.floor(cellW * 0.52), TAPE_LEGIBLE_FONT));
@@ -310,7 +367,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
   if (!fits(cellFs, cellW) && textLines === 1) {
     // Даже самый мелкий шрифт не влезает — ячейка становится прямоугольной (высота прежняя, ширина по тексту);
     // рисунок целиком уменьшится вместе с viewBox. Такие сцены validate.ts не пропускает (tapeLegible: кегль не мельче 12).
-    cellW = Math.ceil(Math.max(...allTexts.map((s) => textWidth(s, cellFs, mono))) + 4);
+    cellW = Math.ceil(Math.max(...allTexts.map((s) => textWidth(s, cellFs, mono))) + TEXT_INSET);
   }
   const lineH = Math.ceil(cellFs * 1.2);
   const cellH = Math.max(Math.min(MAX_CELL, Math.max(MIN_CELL, baseCellW)), textLines > 1 ? textLines * lineH + 10 : 0);
@@ -355,6 +412,7 @@ export function tapeLayout(scene: TapeData, txt: (v: Text) => string, t: Tr): Ta
     .forEach((s, level) => {
       arcSpec.push({ key: `s${s.a}-${s.b}-${s.k}`, xa: swapX(s.a), xb: swapX(s.b), kind: "swap", height: (jumpH ? jumpH + 4 : 0) + 14 + 9 * level + Math.min(10, s.span * 0.1) });
     });
+  raiseNestedSwaps(arcSpec);
   const arcZone = arcSpec.length ? Math.ceil(Math.max(...arcSpec.map((a) => a.height)) + 8) : 0;
 
   // ---- группы (скобки с подписью) ----

@@ -13,11 +13,11 @@ type Tone = NonNullable<CardsScene["items"][number]["tone"]>;
 
 /** Цвет значка по смыслу (токены темы): статические строки, чтобы Tailwind их увидел. */
 const TONE: Record<Tone, string> = {
-  primary: "bg-primary-soft text-primary",
-  success: "bg-success-soft text-success",
-  danger: "bg-danger-soft text-danger",
+  primary: "bg-primary-soft text-ink-primary",
+  success: "bg-success-soft text-ink-success",
+  danger: "bg-danger-soft text-ink-danger",
   warning: "bg-warning-soft text-ink-warning",
-  ai: "bg-ai-soft text-ai",
+  ai: "bg-ai-soft text-ink-ai",
   gold: "bg-gold-soft text-ink-warning",
   muted: "bg-surface-2 text-muted",
 };

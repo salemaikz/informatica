@@ -185,7 +185,7 @@ export function CpuCycleScene({ scene }: { scene: CpuCycleData }) {
 
       {step !== undefined && (
         <div className={cn("mx-auto mt-1 max-w-sm rounded-2xl bg-primary-soft px-4 py-2.5 text-center")}>
-          <div className="text-xs font-extrabold text-primary">
+          <div className="text-xs font-extrabold text-ink-primary">
             {t("basics.cpu.step", { n: step + 1 })} · {t(NAME_KEYS[step])}
           </div>
           <div className="mt-0.5 text-sm font-semibold leading-snug text-text">{t(DESC_KEYS[step])}</div>

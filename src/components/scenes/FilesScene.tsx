@@ -56,11 +56,11 @@ export function FilesScene({ scene }: { scene: FilesData }) {
               ))}
               <span className="flex min-w-0 items-center gap-2 pr-2">
                 <Icon
-                  className={cn("size-[18px] shrink-0", on || trail || r.isFolder ? "text-primary" : "text-muted")}
+                  className={cn("size-[18px] shrink-0", on || trail || r.isFolder ? "text-ink-primary" : "text-muted")}
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className={cn("truncate", on ? "font-extrabold text-primary" : trail ? "font-bold text-text" : r.isFolder ? "font-bold text-text" : "font-semibold text-text")}>
+                <span className={cn("truncate", on ? "font-extrabold text-ink-primary" : trail ? "font-bold text-text" : r.isFolder ? "font-bold text-text" : "font-semibold text-text")}>
                   {r.name}
                 </span>
               </span>

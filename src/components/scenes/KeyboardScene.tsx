@@ -129,7 +129,7 @@ export function KeyboardScene({ scene }: { scene: KeyboardData }) {
           {scene.keys.map((k, i) => (
             <Fragment key={i}>
               {i > 0 && isCombo && <span className="text-xl font-extrabold text-muted">+</span>}
-              <kbd className="rounded-xl border-2 border-primary bg-primary-soft px-3.5 py-1.5 font-sans text-xl font-extrabold leading-none text-primary shadow-[0_3px_0_var(--primary)]">
+              <kbd className="rounded-xl border-2 border-primary bg-primary-soft px-3.5 py-1.5 font-sans text-xl font-extrabold leading-none text-ink-primary shadow-[0_3px_0_var(--primary)]">
                 {keyCaption(k, space)}
               </kbd>
             </Fragment>

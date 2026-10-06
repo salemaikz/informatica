@@ -5,8 +5,11 @@ import { TableScene as TableView } from "@/components/scenes/TableScene";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES as EXTENDED } from "@/components/scenes/samples/extended";
 import {
+  END_INSET,
+  FLAT_PEAK,
   JOIN_WIDE_FROM,
   arrowGeometry,
+  arrowSlots,
   changeMap,
   joinLinkPath,
   JOIN_TONE,
@@ -493,5 +496,77 @@ describe("TableScene: отрисовка расширений", () => {
       expect(dict[k].kk.trim()).not.toBe("");
       expect(dict[k].kk).not.toBe(dict[k].ru);
     }
+  });
+});
+
+describe("ревью v18b: острие стрелки по строке — внутри целевой ячейки, а не на границе строк", () => {
+  /** Сетка строк × столбцов; ячейка w × h. */
+  const gridOf = (rows: number, cols: number, w: number, h: number) => ({
+    cell: (r: number, c: number): Rect => ({ x: c * w, y: r * h, w, h }),
+    bounds: { w: cols * w, h: rows * h },
+  });
+  const shapes: [number, number, number, number][] = [[4, 5, 80, 36], [3, 4, 100, 35], [6, 8, 64, 35], [2, 3, 90, 32]];
+
+  it("и острие, и весь наконечник лежат в целевой ячейке по вертикали: не ближе 8 px к её границе строк", () => {
+    let checked = 0;
+    for (const [rows, cols, w, h] of shapes) {
+      const { cell: c, bounds } = gridOf(rows, cols, w, h);
+      for (let r = 0; r < rows; r++)
+        for (let a = 0; a < cols; a++)
+          for (let b = 0; b < cols; b++) {
+            if (a === b) continue;
+            const g = arrowGeometry(c(r, a), c(r, b), bounds);
+            const to = c(r, b);
+            // только плоские дуги по строке (у однострочных и узких ячеек работают другие виды стрелок)
+            if (!g || Math.abs(g.start[1] - g.end[1]) > 1) continue;
+            if (g.end[1] < to.y + 3 || g.end[1] > to.y + to.h - 3) continue;
+            checked++;
+            const depth = Math.min(g.end[1] - to.y, to.y + to.h - g.end[1]);
+            expect(depth, `${rows}×${cols} ${r}:${a}→${r}:${b}: острие`).toBeGreaterThanOrEqual(8);
+            for (const p of g.head) {
+              expect(p[1], `наконечник сверху ${r}:${a}→${r}:${b}`).toBeGreaterThanOrEqual(to.y + 0.5);
+              expect(p[1], `наконечник снизу ${r}:${a}→${r}:${b}`).toBeLessThanOrEqual(to.y + to.h - 0.5);
+            }
+            expect(g.end[0]).toBeGreaterThanOrEqual(to.x + 6);
+            expect(g.end[0]).toBeLessThanOrEqual(to.x + to.w - 6);
+          }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("вершина дуги стоит не на линии между строками: от неё не менее 3 px и не дальше, чем нижний отступ соседней строки (цифры не задеты)", () => {
+    expect(END_INSET - FLAT_PEAK).toBeLessThanOrEqual(-3);
+    for (const [rows, cols, w, h] of shapes) {
+      const { cell: c, bounds } = gridOf(rows, cols, w, h);
+      for (let r = 1; r < rows - 1; r++) {
+        const g = arrowGeometry(c(r, 0), c(r, 2), bounds)!;
+        const apex = (g.start[1] + g.end[1]) / 4 + g.ctrl[1] / 2;
+        const border = c(r, 0).y;
+        expect(Math.abs(apex - border)).toBeGreaterThanOrEqual(3);
+        expect(Math.abs(apex - border)).toBeLessThanOrEqual(8);
+        // обратное направление и дуга под строкой в первой строке — то же
+        const back = arrowGeometry(c(r, 2), c(r, 0), bounds)!;
+        expect(Math.abs((back.start[1] + back.end[1]) / 4 + back.ctrl[1] / 2 - border)).toBeGreaterThanOrEqual(3);
+      }
+      const first = arrowGeometry(c(0, 0), c(0, 2), bounds)!;
+      const apex0 = (first.start[1] + first.end[1]) / 4 + first.ctrl[1] / 2;
+      expect(Math.abs(apex0 - (c(0, 0).y + h))).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("образец «=A2*B2» (две стрелки в C2 из A2 и B2): оба острия внутри C2, разведены по ширине ячейки, наконечники не пересекаются", () => {
+    const sc = EXTENDED.find((x): x is TableScene => x.kind === "table" && !!x.sheet && x.arrows?.length === 2)!;
+    expect(sc).toBeDefined();
+    const slots = arrowSlots(sc);
+    expect(slots.map((q) => q.slots)).toEqual([2, 2]);
+    const { cell: c, bounds } = gridOf(2, 3, 100, 36);
+    const [a1, a2] = sc.arrows!.map((a, i) => arrowGeometry(c(a.from[0], a.from[1]), c(a.to[0], a.to[1]), bounds, slots[i])!);
+    const to = c(1, 2);
+    for (const g of [a1, a2]) {
+      expect(g.end[1] - to.y).toBeGreaterThanOrEqual(8);
+      expect(g.end[0]).toBeGreaterThan(to.x);
+      expect(g.end[0]).toBeLessThan(to.x + to.w);
+    }
+    expect(Math.abs(a1.end[0] - a2.end[0])).toBeGreaterThanOrEqual(10);
   });
 });

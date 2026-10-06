@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Scene } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { CodeBlock } from "./CodeScene";
@@ -16,6 +17,11 @@ function PanelTitle({ children }: { children: string }) {
 export function WebScene({ scene }: { scene: WebScene }) {
   const { t, lang } = useT();
   const html = webHtml(scene, lang);
+  const doc = buildWebDoc(html, scene.css);
+  // Документ, который iframe уже отрисовал (событие load): пока он не отрисован, под iframe видна подложка.
+  // Если load пришёл до гидратации (iframe попал в серверный HTML) и событие потеряно, подложка просто остаётся под белой страницей — она её закрывает.
+  const [loadedDoc, setLoadedDoc] = useState<string | null>(null);
+  const loaded = loadedDoc === doc;
   const htmlLines = html.split("\n");
   const cssLines = scene.css?.split("\n");
   const browser = (
@@ -31,16 +37,19 @@ export function WebScene({ scene }: { scene: WebScene }) {
       {/* Подложка «страница загружается»: лежит под iframe и видна, пока документ не отрисован (или не отрисуется совсем):
           пустого окна браузера ученик не увидит. Страница в iframe белая и закрывает подложку целиком. */}
       <div className="relative bg-white" style={{ height: webFrameHeight(html) }}>
-        <div aria-hidden data-web-placeholder="" className="absolute inset-0 flex flex-col gap-2.5 p-3">
-          <div className="h-5 w-2/5 rounded bg-muted/25" />
-          <div className="h-3 w-3/5 rounded bg-muted/15" />
-          <div className="h-3 w-1/2 rounded bg-muted/15" />
-        </div>
+        {!loaded && (
+          <div aria-hidden data-web-placeholder="" className="absolute inset-0 flex flex-col gap-2.5 p-3">
+            <div className="h-5 w-2/5 rounded bg-muted/25" />
+            <div className="h-3 w-3/5 rounded bg-muted/15" />
+            <div className="h-3 w-1/2 rounded bg-muted/15" />
+          </div>
+        )}
         {/* sandbox="" — без allow-scripts: скрипты и обработчики в iframe не выполняются */}
         <iframe
           title={t("scene.browser")}
           sandbox=""
-          srcDoc={buildWebDoc(html, scene.css)}
+          srcDoc={doc}
+          onLoad={() => setLoadedDoc(doc)}
           className="relative block size-full border-0 bg-transparent"
         />
       </div>

@@ -63,7 +63,7 @@ export function WeightsTool({ size, target, onChange }: { size: number; target?:
             before={before}
             after={after}
             value={sum}
-            numberClassName={reached ? "text-success-strong" : "text-text"}
+            numberClassName={reached ? "text-ink-success" : "text-text"}
             extra={target !== undefined ? <span className="font-mono text-2xl font-extrabold text-muted">/ {target}</span> : undefined}
           />
         </div>
