@@ -17,7 +17,7 @@ async function seed(page: Page, lang: "ru" | "kk" = "ru", extra: Record<string, 
             // Окно тарифов уже показано — не всплывает в автотестах.
             paywall: { lastShownAt: 4102444800000, views: 1 },
             // Проводник первого входа (#104) уже пройден — не закрывает экран.
-            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
+            tips: { welcome: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
             hearts: { count: 5, updatedAt: 0, day: "" },
             ...more,
           },

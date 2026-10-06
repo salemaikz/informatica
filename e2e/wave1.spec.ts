@@ -67,7 +67,7 @@ test("проводник: школьник после онбординга ви�
 test("«Продолжить» ведёт в начатый урок, а не в первый на пути", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, {
-    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
+    tips: { welcome: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
   });
   // Начинаем не первый урок пути (первый — «Старт: компьютер с нуля»): ns-1-bits, два шага вперёд.
   await page.goto("/lesson/ns-1-bits");
@@ -88,7 +88,7 @@ test("«Продолжить» ведёт в начатый урок, а не в
 
 test("ИИ на «Бесплатном»: «осталось 3 из 3» без «сегодня»", async ({ page }) => {
   await seed(page, {
-    tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
+    tips: { welcome: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
   });
   await page.goto("/lesson/ns-1-bits");
   const ask = page.getByRole("button", { name: /^Спросить ИИ/ });

@@ -21,7 +21,7 @@ async function seed(page: Page, hearts = 5, extra: Record<string, unknown> = {})
             hearts: { count: n, updatedAt: Date.now(), day: "" },
             paywall: { lastShownAt: 4102444800000, views: 1 },
             // Проводник первого входа (#104) уже пройден — не закрывает экран.
-            tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
+            tips: { welcome: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 },
             ...(more as Record<string, unknown>),
           },
           version: 2,

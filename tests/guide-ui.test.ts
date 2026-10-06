@@ -6,7 +6,7 @@ import { GuideHost } from "@/components/guide/GuideHost";
 import { useGuideSpots } from "@/components/guide/GuideSpot";
 import { useGuideUi } from "@/components/guide/guide-state";
 import { PaywallAgent } from "@/components/plans/PaywallAgent";
-import { GUIDE_DELAY_MS } from "@/lib/guide";
+import { GUIDE_DELAY_MS, tourBlocking } from "@/lib/guide";
 import { TIP_IDS } from "@/lib/tips";
 import { FREE_PLAN } from "@/lib/economy";
 import { useApp } from "@/lib/store";
@@ -46,6 +46,10 @@ const click = (name: string) =>
 const dims = () => document.querySelectorAll("[data-guide-dim]");
 const tips = () => useApp.getState().tips;
 const doneLesson = () => useApp.setState({ lessons: { l1: { completions: 1 } } as never });
+/** Шаги без цели пропускаются по одному (каждый ждёт цель DEFAULT_WAIT_MS; act отдаёт перерисовку только в конце). */
+const skipSteps = async (n: number) => {
+  for (let i = 0; i < n; i++) await wait(2000);
+};
 /** Пауза перед сценой и первый замер цели. */
 const start = async () => {
   await render();
@@ -70,6 +74,25 @@ function addLessonCard(href = "/lesson/ns-1") {
   const cont = addTarget("continue", { href });
   card.appendChild(cont);
   return { card, cont };
+}
+
+/** Кнопка Бита: обёртка-цель `bit-dock` и сама кнопка `[data-dock-button]` (справа внизу). */
+function addDock() {
+  const wrap = addTarget("bit-dock", {}, "div", { x: 284, y: 600, w: 72, h: 56 });
+  const btn = document.createElement("button");
+  btn.dataset.dockButton = "";
+  btn.getBoundingClientRect = () => ({ left: 284, top: 600, width: 56, height: 56, right: 340, bottom: 656, x: 284, y: 600, toJSON: () => ({}) }) as DOMRect;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/** Цели знакомства, кроме карточки урока: шапка (огонь, сердечки, чипы), нижние вкладки, кнопка Бита. */
+function addIntroTargets() {
+  addTarget("hdr-streak", {}, "span", { x: 160, y: 10, w: 40, h: 40 });
+  addTarget("hdr-hearts", { href: "/shop" }, "a", { x: 200, y: 10, w: 60, h: 40 });
+  addTarget("hdr-chips", { href: "/shop" }, "a", { x: 260, y: 10, w: 60, h: 40 });
+  for (const [i, id] of ["nav-practice", "nav-materials", "nav-progress"].entries()) addTarget(id, {}, "a", { x: 90 * (i + 1), y: 580, w: 90, h: 64 });
+  addDock();
 }
 
 /** Варианты ответа: блок-цель с двумя кнопками и промежутком между ними (`gap`). */
@@ -113,10 +136,10 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe("welcome: приветствие и путь к первому уроку", () => {
-  it("после паузы Бит здоровается по имени — модально, на затемнённом экране; дальше показывает урок и сердечки и просит нажать «Начать»", async () => {
+describe("intro: знакомство до первого урока, конец — нажать «Начать»", () => {
+  it("после паузы Бит здоровается по имени — модально; дальше урок, шапка, вкладки, кнопка Бита и «Нажми «Начать»»", async () => {
     const { cont } = addLessonCard();
-    addTarget("hdr-hearts");
+    addIntroTargets();
     await render();
     expect(bubble()).toBeNull();
     await wait(GUIDE_DELAY_MS + 50);
@@ -135,10 +158,21 @@ describe("welcome: приветствие и путь к первому урок
 
     await click("Дальше");
     await wait(50);
-    expect(say()).toContain("Сердечки — входы в уроки");
+    expect(say()).toContain("Наверху: огонь — серия дней, сердечки — входы в уроки");
+    expect(say()).toContain("чипы — валюта для магазина");
 
     await click("Дальше");
     await wait(50);
+    expect(say()).toContain("Практика — тренировки и пробный ЕНТ");
+
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("А это я!");
+    expect(useGuideUi.getState().dockStep).toBe(true);
+
+    await click("Дальше");
+    await wait(50);
+    expect(useGuideUi.getState().dockStep).toBe(false);
     expect(say()).toContain("Нажми «Начать»");
     expect(say()).toContain("Нажми, куда показываю");
     // Подсказка — своей строкой над кнопками, а не в одном ряду с «Пропустить» (в узком пузыре ей там тесно).
@@ -147,12 +181,15 @@ describe("welcome: приветствие и путь к первому урок
     expect(hint.querySelector("button")).toBeNull();
     expect(hint.nextElementSibling?.contains(button("Пропустить")!)).toBe(true);
     expect(button("Дальше")).toBeUndefined();
-    expect(tips().welcome).toBeUndefined();
+    expect(tips().intro).toBeUndefined();
 
     // Нажатие в саму цель (внутрь неё) — сцена доиграна; переход по ссылке — дело самой ссылки.
     await act(async () => cont.querySelector("span")!.click());
     await wait(10);
-    expect(tips().welcome).toBeGreaterThan(0);
+    expect(tips().intro).toBeGreaterThan(0);
+    // Обучение ещё идёт (до learn-next): сцены страниц и окна тарифов ждут.
+    expect(tips()["learn-next"]).toBeUndefined();
+    expect(tips().welcome).toBeUndefined();
     expect(bubble()).toBeNull();
     expect(useGuideUi.getState().active).toBe(false);
   });
@@ -173,20 +210,45 @@ describe("welcome: приветствие и путь к первому урок
     });
     await wait(50);
     expect(say()).toBe(before);
-    expect(tips().welcome).toBeUndefined();
+    expect(tips().intro).toBeUndefined();
   });
 
   it("нет кнопки урока (школьный трек без урока) — шаги с ней пропускаются, в конце «Выбери раздел ниже» и «Понятно»", async () => {
     addTarget("hdr-hearts");
     await start();
     await click("Дальше");
-    await wait(2000); // «continue» так и не появилась — шаг пропущен
-    expect(say()).toContain("Сердечки");
+    await wait(2000); // карточки так и нет — шаг пропущен
+    expect(say()).toContain("Наверху: огонь");
     await click("Дальше");
-    await wait(2000);
+    await skipSteps(3); // нет вкладок, кнопки Бита и кнопки урока — пропуск, пропуск, запасная реплика
     expect(say()).toContain("Выбери раздел ниже");
     await click("Понятно");
-    expect(tips().welcome).toBeGreaterThan(0);
+    expect(tips().intro).toBeGreaterThan(0);
+  });
+
+  it("«Безлимит»: в шапке — сердечки на «Безлимите» не нужны", async () => {
+    useApp.setState({ plan: { tier: "unlimited" as const, until: Date.now() + 86_400_000 } });
+    addLessonCard();
+    addIntroTargets();
+    await start();
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("на «Безлимите» не нужны");
+  });
+
+  it("подсказки вернули после пройденных уроков — последний шаг без «Начать» (на кнопке «Продолжить»)", async () => {
+    doneLesson();
+    addLessonCard();
+    addIntroTargets();
+    await start();
+    for (let i = 0; i < 5; i++) {
+      await click("Дальше");
+      await wait(50);
+    }
+    expect(say()).toContain("Следующий урок — здесь. Нажми — и начнём!");
+    expect(say()).not.toContain("«Начать»");
   });
 
   it("без имени — «Привет! Я Бит.»", async () => {
@@ -217,15 +279,15 @@ describe("welcome: приветствие и путь к первому урок
     h.pathname = "/practice";
     await render();
     await wait(10);
-    expect(tips().welcome).toBeGreaterThan(0);
+    expect(tips().intro).toBeGreaterThan(0);
     expect(bubble()).toBeNull();
   });
 
-  it("до онбординга и уже закрытое приветствие — ничего", async () => {
+  it("до онбординга и уже закрытое знакомство — ничего", async () => {
     useApp.setState({ onboarded: false });
     await start();
     expect(bubble()).toBeNull();
-    useApp.setState({ onboarded: true, tips: { welcome: 1 } });
+    useApp.setState({ onboarded: true, tips: { intro: 1 } });
     await wait(GUIDE_DELAY_MS + 50);
     expect(bubble()).toBeNull();
   });
@@ -256,7 +318,7 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
     expect(e.defaultPrevented).toBe(true);
     expect(reached).not.toHaveBeenCalled();
     await wait(50);
-    expect(say()).toContain("Сердечки — входы в уроки");
+    expect(say()).toContain("Наверху: огонь");
 
     // Нажатие в вырез мимо самой цели (зазор рамки вокруг сердечек) — тоже «Дальше».
     let e2!: MouseEvent;
@@ -264,9 +326,9 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
       e2 = clickAt(document.body, 16, 96);
     });
     expect(e2.defaultPrevented).toBe(true);
-    await wait(50);
+    await skipSteps(2); // вкладок и кнопки Бита нет — их шаги пропущены
     expect(say()).toContain("Нажми «Начать»");
-    expect(tips().welcome).toBeUndefined();
+    expect(tips().intro).toBeUndefined();
     // Шаг «нажми» — палец есть, нажатие в цель проходит как обычно.
     expect(finger()).not.toBeNull();
     let e3!: MouseEvent;
@@ -276,7 +338,7 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
     expect(e3.defaultPrevented).toBe(false);
     expect(reached).toHaveBeenCalledTimes(1);
     await wait(10);
-    expect(tips().welcome).toBeGreaterThan(0);
+    expect(tips().intro).toBeGreaterThan(0);
   });
 
   it("нажатие мимо выреза на шаге «Дальше» не перехватывается (страница под затемнением его не получит — его ловит затемнение)", async () => {
@@ -319,10 +381,10 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
       bubble()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });
     await wait(50);
-    expect(say()).toContain("Сердечки — входы в уроки");
+    expect(say()).toContain("Наверху: огонь");
     await wait(50);
     await click("Дальше");
-    await wait(50);
+    await skipSteps(2);
     expect(say()).toContain("Нажми «Начать»");
     // Затемнение есть, но пузырь не модальный: нажимают саму цель, фокус на ней.
     expect(dims()).toHaveLength(4);
@@ -369,18 +431,27 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
 describe("lesson-first: первый урок", () => {
   beforeEach(() => {
     h.pathname = "/lesson/ns-1";
-    useApp.setState({ tips: { welcome: 1 } });
+    useApp.setState({ tips: { intro: 1 } });
     useGuideSpots.setState({ lesson: { cost: 1 } });
   });
 
-  it("сердечко → полоска → ждёт вариант (Бит спрятан) → «нажми вариант» → «нажми Проверить» → где подсказка", async () => {
+  it("сердечко → полоска → инструменты → ИИ → ждёт вариант (Бит спрятан) → «нажми вариант» → «нажми Проверить»", async () => {
     addTarget("lesson-hearts");
     addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    addTarget("lesson-ask", {}, "button");
     await start();
     expect(say()).toContain("Вход в урок списал 1 сердечко");
     await click("Дальше");
     await wait(50);
     expect(say()).toContain("Полоска сверху");
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это инструменты: калькулятор как на ЕНТ");
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это значок ИИ — тоже я");
+    expect(say()).toContain("сколько бесплатных вопросов осталось");
     await click("Дальше");
     // Шаги-рассказы: вариантов нет — Бит молчит и прячется, затемнения нет, страница работает.
     await wait(5000);
@@ -399,13 +470,59 @@ describe("lesson-first: первый урок", () => {
     const check = addTarget("lesson-check", {}, "button");
     await wait(200);
     expect(say()).toContain("Теперь нажми «Проверить»");
+    expect(tips()["lesson-first"]).toBeUndefined();
     await act(async () => check.click());
     await wait(10);
-    addTarget("lesson-ask", {}, "button");
-    await wait(200);
-    expect(say()).toContain("нажми на меня здесь");
-    await click("Понятно");
+    // Сцена кончается на «Проверить»; значки уже объяснены — lesson-icons отмечен вместе с ней.
     expect(tips()["lesson-first"]).toBeGreaterThan(0);
+    expect(tips()["lesson-icons"]).toBeGreaterThan(0);
+    await wait(GUIDE_DELAY_MS + 500);
+    expect(bubble()).toBeNull();
+  });
+
+  it("значка ИИ нет — шаг пропускается, «Выбери ответ» всё равно наступает", async () => {
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    addOptions();
+    await start();
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это инструменты");
+    await click("Дальше");
+    await skipSteps(1);
+    expect(say()).toContain("Выбери ответ");
+  });
+
+  it("«Безлимит»: на значке ИИ нет числа — реплика без фразы про бесплатные", async () => {
+    useApp.setState({ plan: { tier: "unlimited" as const, until: Date.now() + 86_400_000 } });
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    addTarget("lesson-ask", {}, "button");
+    await start();
+    for (let i = 0; i < 3; i++) {
+      await click("Дальше");
+      await wait(50);
+    }
+    expect(say()).toContain("Это значок ИИ — тоже я");
+    expect(say()).not.toContain("бесплатных");
+  });
+
+  it("школьный трек: инструменты — без ЕНТ", async () => {
+    useApp.setState((s) => ({ profile: { ...s.profile, track: "school" } }));
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    await start();
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это инструменты: калькулятор, перевод");
+    expect(say()).not.toContain("ЕНТ");
   });
 
   it("большой урок — «2 сердечка»", async () => {
@@ -433,6 +550,7 @@ describe("lesson-first: первый урок", () => {
     await click("Дальше");
     await wait(50);
     await click("Дальше");
+    await skipSteps(2); // нет инструментов и значка ИИ
     await wait(5000);
     expect(bubble()).toBeNull();
     await act(async () => {
@@ -487,46 +605,53 @@ describe("after-first: итоги первого урока", () => {
   });
 });
 
-describe("nav: после первого урока", () => {
-  it("следующий урок → панель → (нет кнопки Бита — пропуск) → «нажми на чипы»; школьному треку — без ЕНТ", async () => {
+describe("nav: короткая версия для видевших старое приветствие", () => {
+  it("вкладки → (нет кнопки Бита — пропуск) → «нажми» кнопку урока; школьному треку — без ЕНТ", async () => {
     doneLesson();
     useApp.setState((s) => ({ tips: { welcome: 1, "lesson-first": 1, "after-first": 1 }, profile: { ...s.profile, track: "school" } }));
-    addLessonCard("/lesson/ns-2");
+    const { cont } = addLessonCard("/lesson/ns-2");
     addTarget("nav-practice");
     addTarget("nav-materials");
     addTarget("nav-progress");
-    const chips = addTarget("hdr-chips", { href: "/shop" });
     await start();
-    expect(say()).toContain("Сюда я кладу следующий урок");
-    await click("Дальше");
-    await wait(50);
     expect(say()).toContain("Практика — тренировки и игры");
     expect(say()).not.toContain("ЕНТ");
     await click("Дальше");
-    await wait(2000);
-    expect(say()).toContain("нажми на чипы");
+    await skipSteps(1);
+    expect(say()).toContain("Нажми сюда — откроется урок");
+    expect(finger()).not.toBeNull();
     expect(tips().nav).toBeUndefined();
-    await act(async () => chips.click());
+    await act(async () => cont.click());
     await wait(10);
     expect(tips().nav).toBeGreaterThan(0);
+  });
+
+  it("ЕНТ-трек, урока ещё нет: последний шаг — «Следующий урок — здесь», без названия кнопки", async () => {
+    useApp.setState({ tips: { welcome: 1 } });
+    addLessonCard();
+    addIntroTargets();
+    await start();
+    expect(say()).toContain("Практика — тренировки и пробный ЕНТ");
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("А это я!");
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Следующий урок — здесь. Нажми — и начнём!");
   });
 
   it("на шаге про плавающую кнопку Бит её не прячет (active = false)", async () => {
     doneLesson();
     useApp.setState({ tips: { welcome: 1 } });
     addLessonCard("/lesson/ns-2");
-    addTarget("hdr-chips", { href: "/shop" });
-    const wrap = addTarget("bit-dock", {}, "div", { x: 284, y: 600, w: 72, h: 56 });
-    const btn = document.createElement("button");
-    btn.dataset.dockButton = "";
-    btn.getBoundingClientRect = () => ({ left: 284, top: 600, width: 56, height: 56, right: 340, bottom: 656, x: 284, y: 600, toJSON: () => ({}) }) as DOMRect;
-    wrap.appendChild(btn);
+    addTarget("nav-practice");
+    addDock();
     await start();
     expect(useGuideUi.getState().active).toBe(true);
     expect(useGuideUi.getState().dockStep).toBe(false);
     expect(document.querySelector("[data-guide-bit]")).not.toBeNull();
     await click("Дальше");
-    await wait(2000);
+    await wait(50);
     expect(say()).toContain("А это я!");
     expect(useGuideUi.getState().active).toBe(false);
     expect(useGuideUi.getState().dockStep).toBe(true);
@@ -540,9 +665,9 @@ describe("nav: после первого урока", () => {
     });
     await wait(50);
     expect(useGuideUi.getState().dockStep).toBe(false);
-    // Следующий шаг («нажми на чипы») — Бит снова на месте.
+    // Следующий шаг («нажми» кнопку урока) — Бит снова на месте.
     await wait(1000);
-    expect(say()).toContain("нажми на чипы");
+    expect(say()).toContain("Следующий урок — здесь");
     expect(document.querySelector("[data-guide-bit]")).not.toBeNull();
   });
 
@@ -550,14 +675,10 @@ describe("nav: после первого урока", () => {
     doneLesson();
     useApp.setState({ tips: { welcome: 1 } });
     addLessonCard("/lesson/ns-2");
-    addTarget("hdr-chips", { href: "/shop" });
+    addTarget("nav-practice");
     // Кнопка страницы там, где верхний край неподнятого пузыря разрезал бы её.
     addTarget("zz-page-button", {}, "button", { x: 300, y: 400, w: 200, h: 70 });
-    const wrap = addTarget("bit-dock", {}, "div", { x: 284, y: 600, w: 72, h: 56 });
-    const btn = document.createElement("button");
-    btn.dataset.dockButton = "";
-    btn.getBoundingClientRect = () => ({ left: 284, top: 600, width: 56, height: 56, right: 340, bottom: 656, x: 284, y: 600, toJSON: () => ({}) }) as DOMRect;
-    wrap.appendChild(btn);
+    addDock();
     await start();
     await click("Дальше");
     await wait(2000);
@@ -573,6 +694,64 @@ describe("nav: после первого урока", () => {
     expect(window.innerHeight - parseFloat(bubble()!.style.bottom)).toBeLessThan(594 - 14);
     // Клин — напротив кнопки (284 + 28).
     expect(parseFloat(bubble()!.style.left) + parseFloat(spike!.style.left) + 10).toBeCloseTo(312);
+  });
+});
+
+describe("learn-next: после первого урока — одна реплика и нажатие", () => {
+  it("на «Учиться» Бит показывает кнопку урока; нажатие — обучение закончено, страницы и тарифы больше не ждут", async () => {
+    doneLesson();
+    useApp.setState({ tips: { intro: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1 } });
+    const { cont } = addLessonCard("/lesson/ns-2");
+    addIntroTargets();
+    await start();
+    expect(say()).toContain("Следующий урок — здесь. Нажми — и начнём!");
+    expect(finger()).not.toBeNull();
+    expect(button("Дальше")).toBeUndefined();
+    await act(async () => cont.click());
+    await wait(10);
+    expect(tips()["learn-next"]).toBeGreaterThan(0);
+    expect(tourBlocking(tips())).toBe(false);
+    // Больше на «Учиться» ничего не играет.
+    await wait(GUIDE_DELAY_MS + 500);
+    expect(bubble()).toBeNull();
+  });
+
+  it("курс пройден (карточки урока нет) — шаг молча пропускается, обучение закончено", async () => {
+    doneLesson();
+    useApp.setState({ tips: { intro: 1, "lesson-first": 1, "after-first": 1 } });
+    await start();
+    await skipSteps(1);
+    expect(bubble()).toBeNull();
+    expect(tips()["learn-next"]).toBeGreaterThan(0);
+  });
+
+  it("знакомство показано, первый урок не пройден — страницы молчат", async () => {
+    h.pathname = "/practice";
+    useApp.setState({ tips: { intro: 1 } });
+    addTarget("practice-train");
+    await start();
+    expect(bubble()).toBeNull();
+  });
+});
+
+describe("lesson-icons: значки урока для прошедших старый lesson-first", () => {
+  it("один раз в следующем уроке: инструменты → ИИ; потом не возвращается", async () => {
+    h.pathname = "/lesson/ns-2";
+    doneLesson();
+    useApp.setState({ tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1 } });
+    useGuideSpots.setState({ lesson: { cost: 1 } });
+    addTarget("lesson-hearts");
+    addTarget("lesson-tools", {}, "button");
+    addTarget("lesson-ask", {}, "button");
+    await start();
+    expect(say()).toContain("Это инструменты");
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это значок ИИ — тоже я");
+    await click("Понятно");
+    expect(tips()["lesson-icons"]).toBeGreaterThan(0);
+    await wait(GUIDE_DELAY_MS + 500);
+    expect(bubble()).toBeNull();
   });
 });
 
@@ -601,7 +780,7 @@ describe("визуальное ревью: прокрутка к цели, сл�
       expect(scrollBy.mock.calls[0][0].top).toBeGreaterThan(50);
       await click("Дальше");
       await wait(50);
-      expect(say()).toContain("Сердечки");
+      expect(say()).toContain("Наверху: огонь");
       // Сердечки в шапке (sticky) — прокрутка их не сдвинет: страницу не трогаем.
       expect(scrollBy).toHaveBeenCalledTimes(1);
       header.remove();
@@ -775,8 +954,15 @@ describe("PaywallAgent и проводник", () => {
     expect(h.push).not.toHaveBeenCalled();
   });
 
-  it("проводник пройден — тарифы открываются по расписанию", async () => {
-    useApp.setState({ tips: { nav: 1 } });
+  it("знакомство показано, но обучение не кончено (нет learn-next) — тарифы ждут", async () => {
+    useApp.setState({ tips: { intro: 1, "lesson-first": 1, "after-first": 1 } });
+    await act(async () => root.render(createElement(PaywallAgent)));
+    await wait(10);
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it.each([["nav", { nav: 1 }], ["learn-next", { intro: 1, "learn-next": 1 }]])("проводник пройден (%s) — тарифы открываются по расписанию", async (_, t) => {
+    useApp.setState({ tips: t });
     await act(async () => root.render(createElement(PaywallAgent)));
     await wait(10);
     expect(h.push).toHaveBeenCalledWith("/plans?from=auto");

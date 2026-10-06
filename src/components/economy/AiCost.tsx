@@ -33,13 +33,20 @@ export function useAiQuotaText(kind: AiKind): string | null {
   return quotaSentence(t, kind, q);
 }
 
+/** Виден ли значок с числом бесплатных (AiFreeDot): у тарифа есть счёт и платит не тариф. Проводник по нему выбирает реплику. */
+export function useAiFreeDotShown(kind: AiKind = "ask"): boolean {
+  const { quote, tier } = useAiQuote(kind);
+  return Number.isFinite(PLAN_FEATURES[tier].aiFree) && quote.pay !== "plan";
+}
+
 /**
  * Значок на кнопке ИИ без текста (иконка «Спросить Бита»): сколько бесплатных осталось сегодня. Нет счёта (безлимит) — не рисуется.
  * Родитель — `relative`; подпись для скринридера и подсказка — на самой кнопке (useAiQuotaText).
  */
 export function AiFreeDot({ kind = "ask" }: { kind?: AiKind }) {
-  const { quote, freeLeft, tier } = useAiQuote(kind);
-  if (!Number.isFinite(PLAN_FEATURES[tier].aiFree) || quote.pay === "plan") return null;
+  const { quote, freeLeft } = useAiQuote(kind);
+  const shown = useAiFreeDotShown(kind);
+  if (!shown) return null;
   const out = quote.pay !== "free";
   return (
     <span

@@ -176,13 +176,13 @@ describe("кнопка Бита: прокрутка страницы, стрел
     expect(away()).toBe(false);
   });
 
-  it("стрелка «›» справа от кнопки — только пока проводник не показал обзор панели; потом её нет, а свайп и подпись для чтеца экрана остаются", async () => {
+  it.each(["intro", "nav"] as const)("стрелка «›» справа от кнопки — только пока проводник её не объяснил (%s); потом её нет, а свайп и подпись для чтеца экрана остаются", async (explains) => {
     h.pathname = "/shop";
-    // Обзор панели («nav») ещё не показан, остальные сцены уже сыграны — кнопка на странице есть.
-    useApp.setState({ tips: Object.fromEntries(TIP_IDS.filter((id) => id !== "nav").map((id) => [id, 1])) });
+    // Ни знакомство («intro»), ни обзор («nav») ещё не показаны, остальные сцены уже сыграны — кнопка на странице есть.
+    useApp.setState({ tips: Object.fromEntries(TIP_IDS.filter((id) => id !== "nav" && id !== "intro").map((id) => [id, 1])) });
     await render(createElement(BitDock));
     expect(arrow()).not.toBeNull();
-    await act(async () => useApp.getState().noteTip("nav"));
+    await act(async () => useApp.getState().noteTip(explains));
     expect(arrow()).toBeNull();
     expect(dock()!.getAttribute("aria-describedby")).toBeTruthy();
     expect(document.getElementById(dock()!.getAttribute("aria-describedby")!)!.textContent).toMatch(/Смахни вправо/);

@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Этап 16В: Бит-проводник (P2a) и плавающая кнопка Бита (P2b) вместе, на свежем профиле. Без обращений к ИИ.
-// Путь: приветствие на «Учиться» до шага «Нажми «Начать»» → (подставляем пройденный урок) → обзор nav целиком, включая
-// шаг про кнопку Бита → чат-панель открыть и закрыть → «Практика»: сцена page-practice появляется (закрытая панель
-// не считается открытым окном).
+// Этап 16Г: обучение заканчивается началом урока. Путь: знакомство на «Учиться» (привет → карточка → шапка → вкладки →
+// кнопка Бита → «Нажми «Начать»») → урок (сердечки, полоска, инструменты, ИИ) → (подставляем пройденный урок) →
+// learn-next «нажми» → урок → «Учиться» без сцены, чат-панель открыть и закрыть → «Практика»: сцена page-practice
+// появляется (закрытая панель не считается открытым окном).
 
 const STORE = "informatica-v1";
 const PROFILE = { name: "Т", lang: "ru", grade: "11", goal: "ent", style: "short", dailyGoalXp: 50, theme: "light", sound: false, createdAt: 1 };
@@ -46,8 +47,8 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("проводник и кнопка Бита: приветствие → обзор с шагом про кнопку → чат-панель → сцена «Практики»", async ({ page }) => {
-  test.setTimeout(90_000);
+test("проводник и кнопка Бита: знакомство → «Начать» → урок со значками → learn-next → чат-панель → сцена «Практики»", async ({ page }) => {
+  test.setTimeout(120_000);
   const errors = trackErrors(page);
   await page.goto("/onboarding");
   await writeSave(page, { tips: {} });
@@ -58,7 +59,7 @@ test("проводник и кнопка Бита: приветствие → о
   const finger = page.locator("[data-guide-finger]");
   const next = () => bubble.getByRole("button", { name: "Дальше" }).click();
 
-  // --- welcome: без цели — модальный диалог на затемнённом экране; кнопки Бита нет с самого начала (не выезжает на миг перед сценой).
+  // --- intro: без цели — модальный диалог на затемнённом экране; кнопки Бита нет с самого начала (не выезжает на миг перед сценой).
   await expect(bubble).toContainText("Привет, Т! Я Бит.");
   await expect(page.getByRole("dialog", { name: "Подсказка Бита" })).toBeVisible();
   await expect(page.locator("[data-guide-dim]")).toHaveCount(1);
@@ -70,35 +71,14 @@ test("проводник и кнопка Бита: приветствие → о
   await expect(page.getByRole("dialog", { name: "Подсказка Бита" })).toBeVisible();
   await expect(finger).toHaveCount(0);
   await page.locator('[data-tour="continue"]').first().click();
-  await expect(bubble).toContainText("Сердечки — входы в уроки");
+  await expect(bubble).toContainText("Наверху: огонь — серия дней");
   expect(new URL(page.url()).pathname).toBe("/learn");
 
-  // Сердечки — ссылка в магазин: нажатие на них тоже «Дальше», со страницы не уходим.
+  // Шапка одной рамкой; сердечки — ссылка в магазин: нажатие на них тоже «Дальше», со страницы не уходим.
   await page.locator('[data-tour="hdr-hearts"]:visible').first().click();
-  await expect(bubble).toContainText("Нажми «Начать»");
-  expect(new URL(page.url()).pathname).toBe("/learn");
-
-  // Шаг «нажми»: пузырь — статус (не модальный), палец есть, кнопки «Дальше» нет.
-  await expect(page.getByRole("status", { name: "Подсказка Бита" })).toBeVisible();
-  await expect(finger).toHaveCount(1);
-  await expect(bubble.getByRole("button", { name: "Дальше" })).toHaveCount(0);
-  expect(await dockSeen(page)).toBe(0);
-
-  // --- «Прошли» первый урок: подставляем сохранение. Уходим на файл того же сайта (уход посреди сцены записывает стор),
-  // там пишем новое сохранение и возвращаемся.
-  await page.goto("/og.png");
-  await writeSave(page, {
-    tips: { welcome: 1, "lesson-first": 1, "after-first": 1 },
-    lessons: { "ns-1-bits": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 20 } },
-  });
-  await page.goto("/learn");
-
-  // --- nav: следующий урок → панель → кнопка Бита → чипы.
-  await expect(bubble).toContainText("Сюда я кладу следующий урок");
-  await expect(dock).toHaveCount(0);
-  expect(await dockSeen(page)).toBe(0);
-  await next();
   await expect(bubble).toContainText("Практика — тренировки и пробный ЕНТ");
+  expect(new URL(page.url()).pathname).toBe("/learn");
+  expect(await dockSeen(page)).toBe(0);
   await next();
 
   // Шаг про кнопку Бита: кнопка видна, пузырь не мигает (держится дольше ожидания цели и задержки «спрятаться»).
@@ -113,22 +93,51 @@ test("проводник и кнопка Бита: приветствие → о
   await expect(finger).toHaveCount(0);
   // Нажатие на саму кнопку (она в вырезе) — «Дальше», чат-панель не открывается.
   await dock.click();
-  await expect(bubble).toContainText("нажми на чипы");
+  await expect(bubble).toContainText("Нажми «Начать»");
   await expect(page.locator("[data-bit-panel]")).toHaveCount(0);
 
-  // Шаг «нажми» — палец есть; нажатие на чипы уводит в магазин, там своя сцена (в порядке страницы: украшения, сердечки).
+  // Шаг «нажми»: пузырь — статус (не модальный), палец есть, кнопки «Дальше» нет; нажатие открывает урок.
+  await expect(page.getByRole("status", { name: "Подсказка Бита" })).toBeVisible();
   await expect(finger).toHaveCount(1);
-  await page.locator('[data-tour="hdr-chips"]:visible').first().click();
-  await page.waitForURL("**/shop");
-  await expect(bubble).toContainText("украшения профиля");
-  await expect(dock).toHaveCount(0);
-  await next();
-  await expect(bubble).toContainText("закончатся сердечки");
-  await bubble.getByRole("button", { name: "Понятно" }).click();
-  await expect(bubble).toBeHidden();
+  await expect(bubble.getByRole("button", { name: "Дальше" })).toHaveCount(0);
+  await page.locator('[data-tour="continue"]').first().click();
+  await page.waitForURL("**/lesson/**");
 
-  // --- Сцен больше нет: кнопка Бита выезжает. Чат-панель открыть и закрыть.
+  // --- lesson-first: сердечки → полоска → инструменты → значок ИИ (с числом бесплатных).
+  await expect(bubble).toContainText("Вход в урок списал");
+  await next();
+  await expect(bubble).toContainText("Полоска сверху");
+  await next();
+  await expect(bubble).toContainText("Это инструменты: калькулятор как на ЕНТ");
+  await expect(page.locator('[data-tour="lesson-tools"]')).toBeVisible();
+  await next();
+  await expect(bubble).toContainText("Это значок ИИ — тоже я");
+  await expect(bubble).toContainText("бесплатных вопросов");
+
+  // --- «Прошли» первый урок: подставляем сохранение. Уходим на файл того же сайта (уход посреди сцены записывает стор),
+  // там пишем новое сохранение и возвращаемся.
+  await page.goto("/og.png");
+  await writeSave(page, {
+    tips: { intro: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1 },
+    lessons: { "ns-1-bits": { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 20 } },
+  });
+  await page.goto("/learn");
+
+  // --- learn-next: одна реплика у кнопки урока, без названия кнопки (на ней уже «Продолжить»); нажатие — урок.
+  await expect(bubble).toContainText("Следующий урок — здесь. Нажми — и начнём!");
+  await expect(finger).toHaveCount(1);
+  await expect(dock).toHaveCount(0);
+  await page.locator('[data-tour="continue"]').first().click();
+  await page.waitForURL("**/lesson/**");
+  // В уроке значки уже объяснены — Бит молчит.
+  await page.waitForTimeout(1500);
+  await expect(bubble).toHaveCount(0);
+
+  // --- «Учиться»: обучение закончено, сцен нет — кнопка Бита на месте. Чат-панель открыть и закрыть.
+  await page.goto("/learn");
   await expect(dock).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(bubble).toHaveCount(0);
   await dock.click();
   const panel = page.getByRole("dialog", { name: "Чат с Битом" });
   await expect(panel).toBeVisible();
@@ -157,7 +166,7 @@ test("кнопка Бита и клавиатура: стрелка вправо
   await page.goto("/onboarding");
   await writeSave(page, {
     tips: Object.fromEntries(
-      ["welcome", "lesson-first", "after-first", "nav", "page-practice", "page-tutor", "page-materials", "page-progress", "page-school", "page-shop", "page-profile"].map((id) => [id, 1]),
+      ["intro", "welcome", "lesson-first", "lesson-icons", "after-first", "learn-next", "nav", "page-practice", "page-tutor", "page-materials", "page-progress", "page-school", "page-shop", "page-profile"].map((id) => [id, 1]),
     ),
   });
   await page.goto("/learn");
