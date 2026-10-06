@@ -101,9 +101,10 @@ export default function ProfilePage() {
       <h1 className="sr-only">{t("prof.title")}</h1>
       <CaseWaiting />
 
-      {/* Карточка профиля: фон, аватар с рамкой, имя, титул и уровень (украшения — из магазина и кейса) */}
+      {/* Карточка профиля: фон, аватар с рамкой, имя и титул (украшения — из магазина и кейса); уровень — в LevelCard ниже, не дублируем */}
       <ProfileCard
         tour
+        showLevel={false}
         onEditAvatar={() => setPickAvatar(true)}
         nameEditor={
           editingName ? (

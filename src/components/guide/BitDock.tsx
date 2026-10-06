@@ -1,12 +1,13 @@
 "use client";
 
 import { AnimatePresence, animate, m, useMotionValue, type MotionValue } from "motion/react";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "@/lib/cn";
-import { dockVisible, nextHopDelayMs, pickDockChat, releaseVelocity, swipeHidesDock, swipeRevealsDock, type Sample } from "@/lib/dock";
+import { dockVisible, nextHopDelayMs, pickDockChat, releaseVelocity, SCROLL_BACK_MS, scrollAwayStep, swipeHidesDock, swipeRevealsDock, type Sample } from "@/lib/dock";
+import { tourBlocking } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -114,9 +115,50 @@ function useSwipeX(x: MotionValue<number>, dir: 1 | -1, decide: (dx: number, vx:
   };
 }
 
+// ---------- прокрутка страницы ----------
+
+/**
+ * Страница прокручивается вниз — кнопка уходит в тень (бледнеет, уменьшается) и не закрывает правый край контента
+ * (значки, шевроны карточек); прокрутка вверх возвращает её сразу, остановка — через `SCROLL_BACK_MS`.
+ * Слушаем прокрутку страницы и вложенных областей (capture); горизонтальные ленты (сдвиг по вертикали 0) не в счёт.
+ */
+function useScrollAway(): boolean {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const tops = new WeakMap<EventTarget, number>([[window, window.scrollY]]);
+    let acc = 0;
+    let timer = 0;
+    const onScroll = (e: Event) => {
+      const el = e.target instanceof Element ? e.target : null;
+      const key: EventTarget = el ?? window;
+      const top = el ? el.scrollTop : window.scrollY;
+      const prev = tops.get(key) ?? top;
+      tops.set(key, top);
+      if (top === prev) return;
+      const r = scrollAwayStep(acc, top - prev);
+      acc = r.acc;
+      setAway(r.away);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        acc = 0;
+        setAway(false);
+      }, SCROLL_BACK_MS);
+    };
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return away;
+}
+
 // ---------- кнопка ----------
 
-/** Круглая кнопка Бита и стрелка «›» справа («смахни вправо»). */
+/**
+ * Круглая кнопка Бита. Пока проводник не показал обзор панели (`tourBlocking`), справа стрелка «›» («смахни вправо»);
+ * потом стрелки нет — реплика проводника уже объяснила жест, а постоянная стрелка читалась как «перейти дальше».
+ */
 function DockButton({
   onOpen,
   onHide,
@@ -132,6 +174,8 @@ function DockButton({
   const hintId = useId();
   const x = useMotionValue(0);
   const swipe = useSwipeX(x, 1, swipeHidesDock, () => onHide(false));
+  const away = useScrollAway();
+  const nudge = useApp((s) => tourBlocking(s.tips));
 
   // Раз в ~40 с Бит слегка подпрыгивает (настроение «радость» у маскота — его собственный прыжок). «Меньше анимаций» — без этого.
   const [hop, setHop] = useState(false);
@@ -166,11 +210,13 @@ function DockButton({
   return (
     <m.div
       {...swipe}
-      style={{ x }}
+      style={{ x, originX: 1, originY: 1 }}
+      data-away={away ? "" : undefined}
       initial={{ y: 90, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+      // «Меньше анимаций»: без уменьшения, бледнеет мгновенно.
+      animate={{ y: 0, opacity: away ? 0.25 : 1, scale: away && !reduce ? 0.8 : 1 }}
       exit={{ x: 150, opacity: 0, transition: { duration: 0.18, ease: "easeIn" } }}
-      transition={SPRING}
+      transition={{ ...SPRING, opacity: { duration: reduce ? 0 : 0.2 } }}
       className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] right-1 z-40 flex touch-pan-y select-none items-center lg:bottom-6 lg:right-3"
     >
       <button
@@ -198,22 +244,24 @@ function DockButton({
       <span id={hintId} className="sr-only">
         {t("dock.hideHint")}
       </span>
-      {/* Подсказка «смахни вправо»: стрелка изредка «кивает» вправо. */}
-      <m.span
-        aria-hidden
-        className="flex w-4 justify-center text-ai/70"
-        animate={reduce ? undefined : { x: [0, 3, 0] }}
-        transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity, repeatDelay: 5 }}
-      >
-        <ChevronRight size={16} strokeWidth={3} />
-      </m.span>
+      {/* Подсказка «смахни вправо» — только пока проводник не объяснил жест: стрелка изредка «кивает» вправо. */}
+      {nudge && (
+        <m.span
+          aria-hidden
+          className="flex w-4 justify-center text-ai/70"
+          animate={reduce ? undefined : { x: [0, 3, 0] }}
+          transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity, repeatDelay: 5 }}
+        >
+          <ChevronRight size={16} strokeWidth={3} />
+        </m.span>
+      )}
     </m.div>
   );
 }
 
 // ---------- язычок у края ----------
 
-/** Кнопка спрятана: у правого края остался язычок со стрелкой «‹». Касание или свайп влево возвращают кнопку. */
+/** Кнопка спрятана: у правого края остался язычок с тем же значком ИИ, что на кнопке Бита (не шеврон — он читался как «ещё»). Касание или свайп влево возвращают кнопку. */
 function DockTab({
   onShow,
 }: {
@@ -257,7 +305,7 @@ function DockTab({
           "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ai",
         )}
       >
-        <ChevronLeft size={18} strokeWidth={3} aria-hidden />
+        <Sparkles size={16} aria-hidden />
       </button>
       <span id={hintId} className="sr-only">
         {t("dock.showHint")}

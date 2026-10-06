@@ -259,6 +259,36 @@ describe("страница чтения (TheoryReader)", () => {
     expect(host.querySelector('[role="group"][aria-label="Как читать"]')).not.toBeNull();
   });
 
+  it("зоны касания ≥ 44 px: «Спросить Бита», кружки ленты, сегменты карточек; название раздела в крошках не обрезается", async () => {
+    await render(createElement(StrictMode, null, reader()));
+    await frame();
+    // «Спросить Бита»: кнопка 36 px + невидимая кромка 6 px со всех сторон.
+    const ask = host.querySelector<HTMLElement>("[data-tour=theory-ask]")!;
+    expect(ask.className).toContain("after:-inset-1.5");
+    expect(ask.className).toContain("relative");
+    // Кружки ленты уроков: 32 px + 6 px; лента с отступом 6 px (зону не обрезает прокрутка), между кружками — 12 px.
+    const strip = host.querySelector<HTMLElement>("[data-strip]");
+    if (strip) {
+      expect(strip.className).toContain("py-1.5");
+      const dots = [...strip.querySelectorAll("a")];
+      expect(dots.length).toBeGreaterThan(1);
+      for (const a of dots) expect(a.className).toContain("after:-inset-1.5");
+    }
+    // Сегменты прогресса: полоска 24 px + невидимые 10 px сверху и снизу; переключатель режима выше их зон.
+    const seg = [...host.querySelectorAll<HTMLElement>("ol button")].filter((b) => /^Карточка \d+$|^Конспект/.test(b.getAttribute("aria-label") ?? ""));
+    expect(seg.length).toBeGreaterThan(2);
+    for (const b of seg) {
+      expect(b.className).toContain("h-6");
+      expect(b.className).toContain("after:-inset-y-2.5");
+    }
+    expect(host.querySelector('[role="group"][aria-label="Как читать"]')!.parentElement!.className).toContain("z-10");
+    // Крошки: ссылка на раздел переносит длинное название, а не обрезает его многоточием.
+    const crumb = host.querySelector<HTMLElement>("header nav a")!;
+    expect(crumb.className).not.toMatch(/truncate|text-ellipsis|line-clamp/);
+    expect(crumb.querySelector("span")!.className).toContain("break-words");
+    expect(crumb.querySelector("span")!.className).not.toContain("truncate");
+  });
+
   it("P3: сердечек нет — окно «Сердечки закончились», текста темы нет, выход — к списку теории", async () => {
     useApp.setState({ hearts: { count: 0, updatedAt: Date.now(), day: todayKey() } });
     await render(reader());

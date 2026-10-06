@@ -234,7 +234,7 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
               icon={<Sparkles size={16} aria-hidden />}
               onClick={() => openChat(lesson)}
               aria-label={t("theory16c.ask.button")}
-              className="shrink-0"
+              className="relative shrink-0 after:absolute after:-inset-1.5 after:content-['']"
               data-tour="theory-ask"
             >
               {t("theory16c.ask.short")}

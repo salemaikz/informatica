@@ -81,6 +81,23 @@ export function releaseVelocity(samples: readonly Sample[], windowMs = 100): num
   return dt > 0 ? (last.v - first.v) / dt : 0;
 }
 
+// ---------- прокрутка страницы ----------
+
+/** Прокрутка вниз на столько px подряд — кнопка бледнеет и уменьшается, чтобы не закрывать правый край контента. */
+export const SCROLL_AWAY_PX = 24;
+/** Прокрутка остановилась на столько мс — кнопка возвращается (прокрутка вверх возвращает сразу). */
+export const SCROLL_BACK_MS = 700;
+
+/**
+ * Шаг по событию прокрутки: `acc` — сколько px страница ушла вниз подряд, `delta` — сдвиг по вертикали (вниз > 0).
+ * Прокрутка вверх (и пустой сдвиг — горизонтальная лента) сбрасывает счёт; кнопка «ушла», когда счёт дошёл до порога.
+ */
+export function scrollAwayStep(acc: number, delta: number): { acc: number; away: boolean } {
+  if (delta < 0) return { acc: 0, away: false };
+  const next = acc + delta;
+  return { acc: next, away: next >= SCROLL_AWAY_PX };
+}
+
 /** Через сколько мс Бит снова слегка подпрыгнет: 32–48 с (r — случайное число 0…1). */
 export function nextHopDelayMs(r: number): number {
   return Math.round(32_000 + Math.min(1, Math.max(0, r)) * 16_000);

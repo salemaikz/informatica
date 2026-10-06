@@ -23,6 +23,8 @@ export type ProfilePreview = Partial<Record<CosmeticSlot, CosmeticId | null>>;
  * `preview` — примерка: показывает выбранное украшение вместо надетого, ничего не меняя в сторе.
  * `onEditAvatar` — кнопка-карандаш на аватаре; `nameEditor` — вместо имени (форма изменения имени); `children` — под именем.
  * `tour` ставит метку `data-tour="profile-card"` для проводника (нужна только на странице профиля).
+ * `showLevel={false}` убирает уровень справа от аватара: на странице профиля сразу под карточкой стоит LevelCard
+ * (число, звание, полоса XP, серия) — уровень не повторяем; в превью и примерке уровень остаётся.
  */
 export function ProfileCard({
   preview,
@@ -31,6 +33,7 @@ export function ProfileCard({
   nameEditor,
   children,
   className,
+  showLevel = true,
 }: {
   preview?: ProfilePreview;
   tour?: boolean;
@@ -38,6 +41,7 @@ export function ProfileCard({
   nameEditor?: ReactNode;
   children?: ReactNode;
   className?: string;
+  showLevel?: boolean;
 }) {
   const { t, l } = useT();
   const name = useApp((s) => s.profile.name);
@@ -68,14 +72,16 @@ export function ProfileCard({
               </button>
             )}
           </div>
-          <div className="-mb-1 flex min-w-0 items-center gap-2.5">
-            <LevelBadge level={level} size="md" className="shrink-0" />
-            <div className="min-w-0 leading-tight">
-              <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("stats.level")}</p>
-              {/* Звание не обрезаем: «Жаңадан бастаушы» (~158 px) не влезает в ~130 px рядом с аватаром — переносится на вторую строку. */}
-              <p className="break-words font-extrabold">{l(levelTitle(level))}</p>
+          {showLevel && (
+            <div className="-mb-1 flex min-w-0 items-center gap-2.5">
+              <LevelBadge level={level} size="md" className="shrink-0" />
+              <div className="min-w-0 leading-tight">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{t("stats.level")}</p>
+                {/* Звание не обрезаем: «Жаңадан бастаушы» (~158 px) не влезает в ~130 px рядом с аватаром — переносится на вторую строку. */}
+                <p className="break-words font-extrabold">{l(levelTitle(level))}</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <div className="mt-2.5 flex min-w-0 flex-col items-start gap-2">
           {nameEditor ?? <p className="max-w-full break-words text-2xl font-extrabold leading-tight">{name || "—"}</p>}

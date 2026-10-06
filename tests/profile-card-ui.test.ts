@@ -49,3 +49,15 @@ describe("ProfileCard: звание уровня", () => {
     expect(line.className).not.toMatch(/truncate|text-ellipsis|line-clamp|whitespace-nowrap/);
   });
 });
+
+describe("ProfileCard: уровень не повторяется на странице профиля", () => {
+  it("по умолчанию (превью, примерка) уровень справа от аватара есть; showLevel={false} — его нет (на странице профиля ниже LevelCard)", async () => {
+    useApp.setState((s) => ({ profile: { ...s.profile, lang: "ru" } }));
+    await act(async () => root.render(createElement(ProfileCard)));
+    expect(host.textContent).toContain("Новичок");
+    expect(host.textContent).toContain("Уровень");
+    await act(async () => root.render(createElement(ProfileCard, { showLevel: false })));
+    expect(host.textContent).not.toContain("Новичок");
+    expect(host.textContent).not.toContain("Уровень");
+  });
+});
