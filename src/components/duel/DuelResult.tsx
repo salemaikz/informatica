@@ -2,7 +2,6 @@
 
 import { Check, ListChecks, RotateCcw, Swords, Trophy, X } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { ENTRY_COST } from "@/lib/economy";
 import { correctAnswer } from "@/lib/duel/check";
@@ -161,7 +160,7 @@ function ReviewList({ items, wrong, answers, onClose }: { items: DuelItem[]; wro
     <div className="flex max-h-[80dvh] flex-col gap-4 overflow-y-auto pb-[max(8px,env(safe-area-inset-bottom))]">
       <div className="flex items-center gap-2">
         <h2 className="flex-1 text-xl font-extrabold">{t("duel.review")}</h2>
-        <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
+        <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
           <X size={22} />
         </button>
       </div>
@@ -183,7 +182,11 @@ function ReviewList({ items, wrong, answers, onClose }: { items: DuelItem[]; wro
             <p className="rounded-2xl bg-success-soft px-3 py-2 text-sm font-bold text-ink-success [overflow-wrap:anywhere]">
               {t("duel.review.right")}: <InlineMarkdown>{say(item, correctAnswer(item))}</InlineMarkdown>
             </p>
-            {why && <p className={cn("text-sm font-semibold text-muted")}>{l(why)}</p>}
+            {why && (
+              <p className="text-sm font-semibold text-muted [overflow-wrap:anywhere]">
+                <InlineMarkdown>{l(why)}</InlineMarkdown>
+              </p>
+            )}
             <div className="text-sm">
               <Markdown>{l(explanation)}</Markdown>
             </div>

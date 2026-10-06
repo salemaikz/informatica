@@ -1,7 +1,7 @@
 "use client";
 
 import { ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
@@ -14,6 +14,8 @@ import { InlineMarkdown } from "@/components/Markdown";
 import { SceneView } from "@/components/scenes/SceneView";
 import { Option, type OptionState } from "@/components/lesson/steps/Option";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { useHearts } from "@/components/economy/useEconomy";
 import { MusicToggle } from "@/components/music/MusicToggle";
 import { Avatar } from "@/components/app/Avatar";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -30,6 +32,8 @@ const TICK_MS = 100;
 /** «10 вопросов»: сколько показываем разбор ответа (часы матча стоят), мс. */
 export const FEEDBACK_OK_MS = 650;
 export const FEEDBACK_WRONG_MS = 1600;
+/** Блиц и «верю — не верю»: после верного ответа следующее задание сразу на том же месте — столько нажатия не принимаем (двойной тап). */
+export const ANSWER_LOCK_MS = 180;
 
 interface Feedback {
   i: number;
@@ -73,13 +77,16 @@ export function DuelRun({
 
   const [ui, setUi] = useState<Ui>(() => ({ run: startRun(), now: 0, fb: null, opp: opponentAt(timeline, 0) }));
   // Ход игры — в ref (меняют обработчики и таймер), экран рисует копию из состояния.
-  const game = useRef<{ run: RunState; clock: MatchClock | null; fb: Feedback | null; oppAnswered: number; finished: boolean }>({
+  const game = useRef<{ run: RunState; clock: MatchClock | null; fb: Feedback | null; oppAnswered: number; finished: boolean; lockUntil: number }>({
     run: ui.run,
     clock: null,
     fb: null,
     oppAnswered: 0,
     finished: false,
+    lockUntil: 0,
   });
+  const hearts = useHearts();
+  const [quitAsk, setQuitAsk] = useState(false);
   const props = useRef({ items, timeline, onFinish, sound, onClock });
   useEffect(() => {
     props.current = { items, timeline, onFinish, sound, onClock };
@@ -146,6 +153,7 @@ export function DuelRun({
     const g = game.current;
     if (g.finished || g.fb || g.run.done || !g.clock) return;
     const real = Date.now();
+    if (real < g.lockUntil) return;
     const now = clockNow(g.clock, real);
     const before = g.run;
     g.run = runAnswer(g.run, items, a, now);
@@ -155,12 +163,20 @@ export function DuelRun({
     if (onClock) {
       // Блиц и «верю — не верю»: после ошибки — пауза режима с верным ответом, часы идут.
       if (!ev.ok) g.fb = { i: before.i, answer: a, ok: false, until: real + meta.errorPauseMs };
+      else g.lockUntil = real + ANSWER_LOCK_MS;
     } else {
       g.fb = { i: before.i, answer: a, ok: ev.ok, until: real + (ev.ok ? FEEDBACK_OK_MS : FEEDBACK_WRONG_MS) };
       g.clock = clockPause(g.clock, real);
     }
     commit(now);
   };
+
+  // Ответ — через ref, чтобы карточка задания (memo) не перерисовывалась на каждом шаге часов.
+  const answerRef = useRef<(a: DuelAnswer) => void>(() => {});
+  useEffect(() => {
+    answerRef.current = answer;
+  });
+  const onAnswer = useCallback((a: DuelAnswer) => answerRef.current(a), []);
 
   const { run, now, fb, opp } = ui;
   const shownIdx = fb ? fb.i : run.i;
@@ -176,7 +192,7 @@ export function DuelRun({
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-2 px-4">
-          <button type="button" onClick={onQuit} aria-label={t("common.close")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
+          <button type="button" onClick={() => setQuitAsk(true)} aria-label={t("common.close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
             <X size={24} />
           </button>
           <span className="min-w-0 flex-1 truncate text-lg font-extrabold">{t(MODE_TITLE[mode])}</span>
@@ -213,9 +229,23 @@ export function DuelRun({
         {waiting ? (
           <WaitPanel answered={opp.answered} total={onClock ? null : items.length} onSkip={finish} />
         ) : item ? (
-          <ItemCard key={shownIdx} item={item} index={shownIdx} total={items.length} perItem={!onClock} fb={fb && fb.i === shownIdx ? fb : null} onAnswer={answer} />
+          <ItemCard key={shownIdx} item={item} index={shownIdx} total={items.length} perItem={!onClock} fb={fb && fb.i === shownIdx ? fb : null} onAnswer={onAnswer} />
         ) : null}
       </div>
+
+      {/* Выход посреди матча: сердечко уже списано, матч не засчитается — спрашиваем. */}
+      <Modal open={quitAsk} onClose={() => setQuitAsk(false)} label={t("duel.quit.title")}>
+        <h2 className="mb-2 text-xl font-extrabold">{t("duel.quit.title")}</h2>
+        <p className="mb-4 font-semibold text-muted">{hearts.unlimited ? t("duel.quit.descFree") : t("duel.quit.desc")}</p>
+        <div className="flex flex-col gap-2">
+          <Button size="lg" block onClick={() => setQuitAsk(false)}>
+            {t("duel.quit.stay")}
+          </Button>
+          <Button variant="secondary" block onClick={onQuit} data-testid="duel-quit">
+            {t("duel.quit.leave")}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

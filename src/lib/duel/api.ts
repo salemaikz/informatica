@@ -62,12 +62,58 @@ export function newDuelSeed(): number {
   }
 }
 
-/** Адрес экрана матча с ботом. */
-export function duelPlayHref(mode: DuelModeId, seed: number, topic?: DuelTopic): string {
+/**
+ * Адрес экрана матча с ботом. entry — seed прерванного оплаченного матча: новый матч (другой набор) идёт по его оплате
+ * (один бесплатный перезапуск после перезагрузки или выхода, см. DuelPlay).
+ */
+export function duelPlayHref(mode: DuelModeId, seed: number, topic?: DuelTopic, entry?: number): string {
   const p = new URLSearchParams({ mode });
   if (DUEL_MODES[mode].needsTopic && topic) p.set("topic", topic);
   p.set("seed", String(seed >>> 0));
+  if (entry !== undefined) p.set("entry", String(entry >>> 0));
   return `/duel/play?${p}`;
+}
+
+/** seed из адреса: uint32 десятичной записью, иначе null. */
+export function parseDuelSeed(raw: string | undefined): number | null {
+  return raw && /^\d{1,10}$/.test(raw) && Number(raw) <= 0xffff_ffff ? Number(raw) : null;
+}
+
+/** id записи истории сыгранного матча: id матча + момент старта (по префиксу узнаём, что матч уже сыгран). */
+export function duelPlayId(matchId: string, startedAt: number): string {
+  return `${matchId}.${startedAt.toString(36)}`;
+}
+
+/** Матч уже сыгран и записан в историю (перезагрузка итогов не должна запускать его снова). */
+export function duelPlayed(history: readonly { id: string }[], matchId: string): boolean {
+  return history.some((r) => r.id.startsWith(`${matchId}.`));
+}
+
+const STARTED_KEY = "informatica-duel-started";
+const STARTED_MAX = 20;
+
+const readStarted = (): string[] => {
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(STARTED_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Матч начался (сердечко списано, задания открыты) — отметка вкладки: перезагрузка не даёт сыграть тот же набор заново. */
+export function markDuelStarted(matchId: string): void {
+  try {
+    const list = [matchId, ...readStarted().filter((x) => x !== matchId)].slice(0, STARTED_MAX);
+    sessionStorage.setItem(STARTED_KEY, JSON.stringify(list));
+  } catch {
+    // хранилище недоступно (приватный режим) — остаётся проверка по оплаченному входу
+  }
+}
+
+/** Этот матч уже начинался в этой вкладке. */
+export function duelStartedHere(matchId: string): boolean {
+  return readStarted().includes(matchId);
 }
 
 /** id матча с ботом: один и тот же для перезагрузки страницы (оплата входа по нему не повторяется 20 минут). */

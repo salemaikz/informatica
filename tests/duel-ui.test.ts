@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DuelPlay } from "@/components/duel/DuelPlay";
 import { COUNT_STEP_MS, VS_INTRO_MS } from "@/components/duel/VsScreen";
+import { ANSWER_LOCK_MS } from "@/components/duel/DuelRun";
 import { buildDeck, correctAnswer } from "@/lib/duel/deck";
 import { DUEL_MODES } from "@/lib/duel/modes";
 import { duelEntryKey } from "@/lib/entry-paid";
@@ -46,13 +47,16 @@ beforeEach(() => {
     profile: { ...s.profile, name: "Аян", lang: "ru", sound: false },
     hearts: { count: 3, updatedAt: Date.now(), day: "2027-01-15" },
   }));
+  sessionStorage.clear();
   deckMode = "blitz";
   deck = buildDeck("blitz", SEED, 1);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      expect(url).toBe(`/api/duel/deck?mode=${deckMode}&band=1&seed=${SEED}`);
-      return new Response(JSON.stringify({ mode: deckMode, band: 1, seed: SEED, deckTag: "dev", items: deck }), { status: 200 });
+      const seed = Number(new URL(url, "http://x").searchParams.get("seed"));
+      expect(url).toBe(`/api/duel/deck?mode=${deckMode}&band=1&seed=${seed}`);
+      const items = seed === SEED ? deck : buildDeck(deckMode, seed, 1);
+      return new Response(JSON.stringify({ mode: deckMode, band: 1, seed, deckTag: "dev", items }), { status: 200 });
     }),
   );
   host = document.createElement("div");
@@ -170,5 +174,117 @@ describe("DuelPlay: матч с Битом", () => {
     await act(async () => skip.click());
     expect(host.querySelector('[data-testid="duel-result"]')).not.toBeNull();
     expect(useApp.getState().duels.history[0]).toMatchObject({ mode: "ten", you: { correct: 9, answered: 10, score: 9 } });
+  });
+});
+
+describe("DuelPlay: перезагрузка, выход, двойной тап", () => {
+  const mount = async (props: { seed: number; entry?: number | null }) => {
+    await act(async () => root.render(createElement(DuelPlay, { key: `${props.seed}.${props.entry ?? "-"}`, mode: "blitz", ...props })));
+    await flush();
+    await flush();
+  };
+  const remount = async (props: { seed: number; entry?: number | null }) => {
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await mount(props);
+  };
+  const button = (label: string) => [...document.body.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
+  const startMatch = () => advance(VS_INTRO_MS + 3 * COUNT_STEP_MS + 100);
+
+  it("перезагрузка итогов: «Матч уже сыгран», отсчёт не идёт, сердечко не списано", async () => {
+    await mount({ seed: SEED });
+    await startMatch();
+    await advance(1_000);
+    await answer(true);
+    await advance(DUEL_MODES.blitz.clockMs!);
+    expect(host.querySelector('[data-testid="duel-result"]')).not.toBeNull();
+    expect(useApp.getState().hearts.count).toBe(2);
+    await remount({ seed: SEED });
+    expect(text()).toContain("Этот матч уже сыгран");
+    expect(host.querySelector('[data-testid="duel-vs"]')).toBeNull();
+    await advance(VS_INTRO_MS + 3 * COUNT_STEP_MS + 2_000);
+    expect(useApp.getState().hearts.count).toBe(2);
+    expect(item()).toBeNull();
+    expect(useApp.getState().duels.history).toHaveLength(1);
+    await act(async () => button("Реванш")!.click());
+    expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/duel\/play\?mode=blitz&seed=\d+$/));
+  });
+
+  it("перезагрузка посреди матча: тот же набор не повторяется; один бесплатный перезапуск с новым набором", async () => {
+    await mount({ seed: SEED });
+    await startMatch();
+    expect(item()).not.toBeNull();
+    expect(useApp.getState().hearts.count).toBe(2);
+    // перезагрузка
+    await remount({ seed: SEED });
+    expect(text()).toContain("Матч прерван");
+    expect(host.querySelector('[data-testid="duel-vs"]')).toBeNull();
+    await advance(VS_INTRO_MS + 3 * COUNT_STEP_MS + 2_000);
+    expect(item()).toBeNull();
+    expect(useApp.getState().hearts.count).toBe(2);
+    await act(async () => button("Сыграть заново")!.click());
+    const href = replace.mock.calls.at(-1)![0] as string;
+    expect(href).toMatch(new RegExp(`^/duel/play\\?mode=blitz&seed=\\d+&entry=${SEED}$`));
+    const seed2 = Number(new URL(href, "http://x").searchParams.get("seed"));
+    // новый набор по той же оплате: сердечко не списывается
+    await remount({ seed: seed2, entry: SEED });
+    expect(host.querySelector('[data-testid="duel-vs"]')).not.toBeNull();
+    await startMatch();
+    expect(item()).not.toBeNull();
+    expect(useApp.getState().hearts.count).toBe(2);
+    // второй перезапуск по той же оплате (другой адрес с тем же entry) — уже нет
+    await remount({ seed: seed2 + 1, entry: SEED });
+    expect(text()).toContain("Матч прерван");
+    expect(button("Новый матч")).toBeDefined();
+    expect(button("Сыграть заново")).toBeUndefined();
+    // и сам перезапуск после перезагрузки тоже не повторяется
+    await remount({ seed: seed2, entry: SEED });
+    expect(text()).toContain("Матч прерван");
+    expect(useApp.getState().hearts.count).toBe(2);
+  });
+
+  it("доигранный перезапуск снимает оплату прерванного матча", async () => {
+    await mount({ seed: SEED });
+    await startMatch();
+    await remount({ seed: SEED + 1, entry: SEED });
+    await startMatch();
+    expect(useApp.getState().hearts.count).toBe(2);
+    await advance(DUEL_MODES.blitz.clockMs! + 500);
+    expect(host.querySelector('[data-testid="duel-result"]')).not.toBeNull();
+    expect(useApp.getState().entryPaid[duelEntryKey(`bot.blitz.-.1.${SEED}`)]).toBeUndefined();
+    expect(useApp.getState().duels.history[0].id.startsWith(`bot.blitz.-.1.${SEED + 1}.`)).toBe(true);
+  });
+
+  it("крестик посреди матча спрашивает подтверждение; «Продолжить матч» — матч идёт", async () => {
+    await mount({ seed: SEED });
+    await startMatch();
+    const close = host.querySelector<HTMLElement>('button[aria-label="Закрыть"]')!;
+    expect(close.className).toContain("h-11");
+    await act(async () => close.click());
+    expect(document.body.textContent).toContain("Выйти из матча?");
+    expect(document.body.textContent).toContain("сердечко за него уже списано");
+    expect(replace).not.toHaveBeenCalled();
+    await act(async () => button("Продолжить матч")!.click());
+    await advance(500);
+    expect(item()).not.toBeNull();
+    await act(async () => close.click());
+    await act(async () => document.body.querySelector<HTMLElement>('[data-testid="duel-quit"]')!.click());
+    expect(replace).toHaveBeenCalledWith("/duel");
+  });
+
+  it("двойной тап после верного ответа не отвечает на следующее задание", async () => {
+    await mount({ seed: SEED });
+    await startMatch();
+    await advance(1_000);
+    await answer(true);
+    expect(item()!.dataset.item).toBe("1");
+    // сразу второй тап (в пределах ANSWER_LOCK_MS) — не засчитан
+    await answer(false);
+    expect(item()!.dataset.item).toBe("1");
+    expect(host.querySelector('[data-testid="duel-you-score"]')!.textContent).toBe("2");
+    await advance(ANSWER_LOCK_MS + 20);
+    await answer(true);
+    expect(item()!.dataset.item).toBe("2");
+    expect(host.querySelector('[data-testid="duel-you-score"]')!.textContent).toBe("4");
   });
 });

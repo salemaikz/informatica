@@ -78,7 +78,7 @@ export function VsScreen({
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex h-14 w-full max-w-2xl items-center px-4">
-        <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
+        <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2">
           <X size={24} />
         </button>
       </header>

@@ -1,9 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mergeState, useApp, type DuelFinish } from "@/lib/store";
 import { DUEL_WIN_XP, ENTRY_COST, FREE_PLAN, MINUTE } from "@/lib/economy";
-import { XP } from "@/lib/gamification";
+import { GAME_XP } from "@/lib/games";
 import { duelEntryKey } from "@/lib/entry-paid";
-import { DUEL_HISTORY_MAX, botResults, duelOutcome, duelXpBase, pushDuel, sanitizeDuels, type DuelRecord } from "@/lib/duel/record";
+import {
+  DUEL_HISTORY_MAX,
+  DUEL_MISTAKES_MAX,
+  botResults,
+  duelOutcome,
+  duelXpAnswers,
+  duelXpBase,
+  pickDuelMistakes,
+  pushDuel,
+  sanitizeDuels,
+  type DuelRecord,
+} from "@/lib/duel/record";
+import { DUEL_MODES } from "@/lib/duel/modes";
+import type { DuelModeId } from "@/lib/duel/types";
 import { ADJ_STEP } from "@/lib/duel/bot";
 
 // Этап 16Д, Ф1: срез стора `duels` (история, «резинка» бота), recordDuel (XP с бустером, освоение, ошибки), вход 1 сердечко.
@@ -70,13 +83,13 @@ describe("вход в дуэль: 1 сердечко один раз", () => {
 });
 
 describe("recordDuel", () => {
-  it("победа над ботом: XP.correct за верный + 2, история, освоение, ошибка в «Ошибках», без чипов за матч", () => {
+  it("победа над ботом: опыт как у мини-игры + 2, история, освоение, ошибка в «Ошибках», без чипов за матч", () => {
     // Дневная цель не достигается (её чипы — общее правило, не награда за матч).
     useApp.setState((st) => ({ profile: { ...st.profile, dailyGoalXp: 10_000 } }));
     const chips0 = useApp.getState().wallet.chips;
     const r = useApp.getState().recordDuel(finish());
     expect(r.result).toBe("win");
-    expect(r.xp).toBe(6 * XP.correct + DUEL_WIN_XP.bot);
+    expect(r.xp).toBe(6 * GAME_XP.perCorrect + DUEL_WIN_XP.bot);
     expect(DUEL_WIN_XP.bot).toBe(2);
     const s = useApp.getState();
     expect(s.xp).toBe(r.xp);
@@ -99,14 +112,14 @@ describe("recordDuel", () => {
   it("бустер умножает опыт (#122)", () => {
     useApp.setState({ boost: { mult: 2, until: Date.now() + 15 * MINUTE } });
     const r = useApp.getState().recordDuel(finish());
-    expect(r.xp).toBe(2 * (6 * XP.correct + DUEL_WIN_XP.bot));
+    expect(r.xp).toBe(2 * (6 * GAME_XP.perCorrect + DUEL_WIN_XP.bot));
   });
 
   it("поражение и ничья — без бонуса; повтор того же id ничего не начисляет", () => {
     const loss = useApp.getState().recordDuel(finish({ id: "a", you: side(2, 2), rival: side(9, 5) }));
-    expect(loss).toMatchObject({ result: "loss", xp: 2 * XP.correct, duplicate: false });
+    expect(loss).toMatchObject({ result: "loss", xp: 2 * GAME_XP.perCorrect, duplicate: false });
     const draw = useApp.getState().recordDuel(finish({ id: "b", you: side(4, 3, 3, 20_000), rival: side(4, 3, 3, 20_500) }));
-    expect(draw).toMatchObject({ result: "draw", xp: 3 * XP.correct });
+    expect(draw).toMatchObject({ result: "draw", xp: 3 * GAME_XP.perCorrect });
     const xp = useApp.getState().xp;
     const again = useApp.getState().recordDuel(finish({ id: "a", you: side(2, 2), rival: side(9, 5) }));
     expect(again.duplicate).toBe(true);
@@ -122,6 +135,59 @@ describe("recordDuel", () => {
     expect(useApp.getState().duels.history[0]).toMatchObject({ opp: "human", oppName: "Ерлан", oppLevel: 7 });
     for (let k = 0; k < 3; k++) useApp.getState().recordDuel(finish({ you: side(0, 0), rival: side(5, 3) }));
     expect(useApp.getState().duels.botAdj).toBe(0);
+  });
+
+  it("ошибки матча: в «Ошибки» не больше DUEL_MISTAKES_MAX, разные навыки первыми; ошибки уроков не вытесняются", () => {
+    const lesson = Array.from({ length: 10 }, (_, k) => ({ id: `L${k}`, stepId: `lesson-step-${k}`, skill: "ns.bin2dec", prompt: "p", given: "a", expected: "b", at: 1, misses: 1 }));
+    useApp.setState({ mistakes: lesson });
+    const wrong = Array.from({ length: 25 }, (_, k) => ({ stepId: `st:${k}`, skill: k % 2 ? "ns.dec2bin" : k % 3 ? "ns.add" : "ns.bin2dec", prompt: `p${k}`, given: "x", expected: "y" }));
+    useApp.getState().recordDuel(finish({ mode: "truth", wrong }));
+    useApp.getState().recordDuel(finish({ mode: "truth", wrong: wrong.map((w) => ({ ...w, stepId: `${w.stepId}b` })) }));
+    const s = useApp.getState();
+    const fromDuels = s.mistakes.filter((m) => m.stepId.startsWith("st:"));
+    expect(fromDuels).toHaveLength(2 * DUEL_MISTAKES_MAX);
+    expect(s.mistakes.filter((m) => m.stepId.startsWith("lesson-step-"))).toHaveLength(10);
+    // первый матч: три разных навыка
+    expect(new Set(fromDuels.slice(DUEL_MISTAKES_MAX).map((m) => m.skill)).size).toBe(3);
+  });
+
+  it("pickDuelMistakes: без повторов задания, разные навыки первыми, порядок матча", () => {
+    const w = (stepId: string, skill: string) => ({ stepId, skill, prompt: "p", given: "a", expected: "b" });
+    const out = pickDuelMistakes([w("a", "s1"), w("a", "s1"), w("b", "s1"), w("c", "s2"), w("d", "s1"), w("e", "s3")]);
+    expect(out.map((x) => x.stepId)).toEqual(["a", "c", "e"]);
+    expect(pickDuelMistakes([w("a", "s1"), w("b", "s1"), w("c", "s1"), w("d", "s1")]).map((x) => x.stepId)).toEqual(["a", "b", "c"]);
+    expect(pickDuelMistakes([])).toEqual([]);
+  });
+
+  it("нажатия наугад не дают опыта больше мини-игры (блиц, «верю — не верю»)", () => {
+    // Наугад: в «верю — не верю» половина верных, в блице — четверть; ответ раз в ~1,5 с плюс пауза после ошибки.
+    const tapper = (mode: DuelModeId, pRight: number, seed: number) => {
+      let x = seed;
+      const rnd = () => ((x = (x * 1103515245 + 12345) % 2147483648) / 2147483648);
+      const { clockMs, errorPauseMs, pts } = DUEL_MODES[mode];
+      let t = 0, correct = 0, answered = 0, score = 0;
+      while (t < clockMs!) {
+        t += 600;
+        const ok = rnd() < pRight;
+        answered++;
+        if (ok) correct++;
+        score += ok ? pts.ok : pts.bad;
+        if (!ok) t += errorPauseMs;
+      }
+      return side(score, correct, answered, clockMs!);
+    };
+    for (let k = 0; k < 20; k++) {
+      for (const [mode, p] of [["truth", 0.5], ["blitz", 0.25]] as const) {
+        useApp.getState().resetProgress();
+        useApp.setState({ boost: null });
+        const r = useApp.getState().recordDuel(finish({ mode, you: tapper(mode, p, 7 + k), rival: side(30, 30, 30) }));
+        expect(r.result).toBe("loss");
+        expect(r.xp).toBeLessThanOrEqual(GAME_XP.cap);
+      }
+    }
+    // средний случай «верю — не верю» наугад — почти без опыта
+    const r = useApp.getState().recordDuel(finish({ mode: "truth", you: side(0, 14, 29), rival: side(20, 22, 24) }));
+    expect(r.xp).toBe(0);
   });
 
   it("история — не больше 50, новые первыми", () => {
@@ -140,8 +206,13 @@ describe("чистые функции и санитайзер", () => {
     expect(duelOutcome(side(3, 3), side(2, 2))).toBe("win");
     expect(duelOutcome(side(3, 3, 3, 10_000), side(3, 3, 3, 10_400))).toBe("draw");
     expect(duelOutcome(side(-1, 0), side(0, 0))).toBe("loss");
-    expect(duelXpBase(3, "win", "human")).toBe(3 * XP.correct + DUEL_WIN_XP.human);
-    expect(duelXpBase(-2, "loss", "bot")).toBe(0);
+    expect(duelXpBase("ten", side(3, 3), "win", "human")).toBe(3 * GAME_XP.perCorrect + DUEL_WIN_XP.human);
+    expect(duelXpBase("blitz", side(-2, 4, 14), "loss", "bot")).toBe(0);
+    // «10 вопросов»: все верные; часы: не больше очков со штрафом; потолок — как у мини-игры
+    expect(duelXpAnswers("ten", side(7, 7, 10))).toBe(7);
+    expect(duelXpAnswers("truth", side(22, 25, 28))).toBe(22);
+    expect(duelXpAnswers("blitz", side(38, 20, 22))).toBe(20);
+    expect(duelXpBase("blitz", side(60, 30, 30), "win", "bot")).toBe(GAME_XP.cap + DUEL_WIN_XP.bot);
     const rec = (id: string, result: DuelRecord["result"], opp: DuelRecord["opp"] = "bot"): DuelRecord => ({
       id, at: 1, mode: "ten", opp, result, you: side(1, 1), rival: side(0, 0), xp: 0,
     });
@@ -172,5 +243,20 @@ describe("чистые функции и санитайзер", () => {
     expect(m.duels.history).toHaveLength(1);
     expect(m.duels.history[0].xp).toBe(0);
     expect(m.duels.botAdj).toBe(-0.05);
+  });
+});
+
+describe("адрес матча и отметки перезагрузки (lib/duel/api.ts)", () => {
+  it("parseDuelSeed / duelPlayHref с entry / duelPlayed по префиксу id матча", async () => {
+    const { duelPlayHref, duelPlayId, duelPlayed, parseDuelSeed } = await import("@/lib/duel/api");
+    expect(parseDuelSeed("42")).toBe(42);
+    expect(parseDuelSeed("4294967296")).toBeNull();
+    expect(parseDuelSeed("-1")).toBeNull();
+    expect(parseDuelSeed(undefined)).toBeNull();
+    expect(duelPlayHref("blitz", 7)).toBe("/duel/play?mode=blitz&seed=7");
+    expect(duelPlayHref("topic", 7, "t03", 5)).toBe("/duel/play?mode=topic&topic=t03&seed=7&entry=5");
+    const id = duelPlayId("bot.blitz.-.1.42", 1_000);
+    expect(duelPlayed([{ id }], "bot.blitz.-.1.42")).toBe(true);
+    expect(duelPlayed([{ id }], "bot.blitz.-.1.4")).toBe(false);
   });
 });

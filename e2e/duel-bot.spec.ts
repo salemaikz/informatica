@@ -85,6 +85,13 @@ test("дуэль с Битом: «Практика» → хаб → Блиц →
   // Сердечко — ровно одно за матч
   expect(await savedHearts(page)).toBe(4);
 
+  // Перезагрузка итогов (потянуть вниз на телефоне) не запускает тот же матч и не списывает сердечко
+  await page.reload();
+  await expect(page.getByTestId("duel-stale")).toContainText("Этот матч уже сыгран");
+  await page.clock.runFor(6_000);
+  await expect(page.getByTestId("duel-vs")).toHaveCount(0);
+  expect(await savedHearts(page)).toBe(4);
+
   await page.getByRole("button", { name: "К дуэлям" }).click();
   await page.waitForURL(/\/duel$/);
   const recent = page.getByTestId("duel-recent");

@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/lib/store";
 import { ENTRY_COST } from "@/lib/economy";
-import { duelEntryKey } from "@/lib/entry-paid";
+import { duelEntryKey, entryPaidActive } from "@/lib/entry-paid";
 import { levelInfo } from "@/lib/gamification";
 import { decayedMastery } from "@/lib/mastery";
 import { plainText } from "@/lib/text";
 import { track } from "@/lib/analytics";
-import { botMatchId, duelPlayHref, fetchDuelDeck, newDuelSeed, type DuelDeckResponse } from "@/lib/duel/api";
+import { botMatchId, duelPlayed, duelPlayHref, duelPlayId, duelStartedHere, fetchDuelDeck, markDuelStarted, newDuelSeed, type DuelDeckResponse } from "@/lib/duel/api";
 import { botProfile, botTimeline } from "@/lib/duel/bot";
 import { correctAnswer } from "@/lib/duel/check";
 import { bandOf } from "@/lib/duel/modes";
@@ -33,10 +33,15 @@ import { topicTitle } from "./mode-meta";
 // Матч с Битом (этап 16Д, Ф1): набор с сервера → «VS» и отсчёт → сердечко в конце отсчёта (payEntryOnce по ключу матча,
 // из таймера, не из эффекта; не хватает — окно «Сердечки закончились») → матч → итоги (recordDuel). Реванш — новый seed,
 // новый матч, новое сердечко. Бот считается целиком на устройстве: ни одного запроса, кроме набора заданий.
+// Перезагрузка: сыгранный матч (есть в истории) не начинается снова — «Матч уже сыгран»; начатый и брошенный — «Матч прерван»
+// без повтора того же набора: пока вход оплачен (20 минут), один раз можно сыграть новый набор бесплатно (?entry=<seed>).
 
 type Phase =
   | { name: "loading" }
   | { name: "error" }
+  | { name: "played" }
+  /** replay — вход ещё оплачен: новый набор бесплатно (один раз). */
+  | { name: "cut"; replay: boolean }
   | { name: "vs"; deck: DuelDeckResponse }
   | { name: "play"; deck: DuelDeckResponse; tl: OpponentTimeline; playId: string }
   | {
@@ -76,7 +81,26 @@ export function duelWrongItems(items: readonly DuelItem[], run: RunState, lang: 
     });
 }
 
-export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: string; seed: number | null }) {
+/**
+ * Набор пришёл: обычный вход — «VS»; уже сыгран — «Матч уже сыгран»; начат и брошен — «Матч прерван» (тот же набор
+ * не повторяем). entry — seed прерванного матча, по оплате которого идёт этот.
+ */
+/** Отметка «перезапуск по оплате прерванного матча entry уже был». */
+const replayMark = (mode: DuelModeId, band: DuelBand, topic: string | undefined, entry: number) => `replay:${botMatchId(mode, entry, band, topic)}`;
+
+function entryPhase(deck: DuelDeckResponse, mode: DuelModeId, band: DuelBand, topic: string | undefined, entry: number | null): Phase {
+  const s = useApp.getState();
+  const id = botMatchId(mode, deck.seed, band, topic);
+  if (duelPlayed(s.duels.history, id)) return { name: "played" };
+  // Свой оплаченный вход ещё действует — матч уже начинался (платим в конце отсчёта и сразу начинаем).
+  const paidOwn = entry === null && entryPaidActive(s.entryPaid, duelEntryKey(id), Date.now());
+  // Бесплатный перезапуск по оплате прерванного матча — один: второй адрес с тем же entry уже не бесплатен.
+  const replayUsed = entry !== null && duelStartedHere(replayMark(mode, band, topic, entry));
+  if (duelStartedHere(id) || paidOwn || replayUsed) return { name: "cut", replay: paidOwn };
+  return { name: "vs", deck };
+}
+
+export function DuelPlay({ mode, topic, seed, entry = null }: { mode: DuelModeId; topic?: string; seed: number | null; entry?: number | null }) {
   const router = useRouter();
   const { t, l, lang } = useT();
   // Полоса — по уровню ученика при входе: от неё зависят набор и бот.
@@ -95,14 +119,17 @@ export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: stri
     if (seed === null) return;
     const ctl = new AbortController();
     fetchDuelDeck({ mode, band, seed, topic }, ctl.signal)
-      .then((deck) => setPhase({ name: "vs", deck }))
+      .then((deck) => setPhase(entryPhase(deck, mode, band, topic, entry)))
       .catch(() => {
         if (!ctl.signal.aborted) setPhase({ name: "error" });
       });
     return () => ctl.abort();
-  }, [mode, band, seed, topic, attempt]);
+  }, [mode, band, seed, topic, entry, attempt]);
 
   const matchId = (deck: DuelDeckResponse) => botMatchId(mode, deck.seed, band, topic);
+  /** Матч, чьей оплатой идёт вход: свой или прерванный (entry). */
+  const entryKey = (deck: DuelDeckResponse) => duelEntryKey(botMatchId(mode, entry ?? deck.seed, band, topic));
+
 
   /** Матч начинается: таймлайн бота по набору, освоению ученика и «резинке». */
   const startPlay = (deck: DuelDeckResponse) => {
@@ -113,12 +140,14 @@ export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: stri
     const profile = botProfile(band, { mastery, adj: s.duels.botAdj });
     const tl: OpponentTimeline = { kind: "bot", events: botTimeline(deck.items, profile, matchId(deck)), complete: true };
     recorded.current = false;
-    setPhase({ name: "play", deck, tl, playId: `${matchId(deck)}.${now.toString(36)}` });
+    markDuelStarted(matchId(deck));
+    if (entry !== null) markDuelStarted(replayMark(mode, band, topic, entry));
+    setPhase({ name: "play", deck, tl, playId: duelPlayId(matchId(deck), now) });
   };
 
   /** Конец отсчёта: одно сердечко за матч (повторный вход в тот же матч 20 минут бесплатен). */
   const pay = (deck: DuelDeckResponse): boolean => {
-    if (!useApp.getState().payEntryOnce(duelEntryKey(matchId(deck)), ENTRY_COST.duel).ok) {
+    if (!useApp.getState().payEntryOnce(entryKey(deck), ENTRY_COST.duel).ok) {
       setNoHearts(true);
       track({ e: "hearts_out", where: "duel" });
       return false;
@@ -135,7 +164,8 @@ export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: stri
     const rival = sideStat(mode, opp);
     const res = useApp.getState().recordDuel({
       id: playId,
-      matchId: matchId(deck),
+      // Снимаем оплату того входа, по которому шёл матч (свой или прерванный).
+      matchId: botMatchId(mode, entry ?? deck.seed, band, topic),
       mode,
       topic,
       opp: "bot",
@@ -149,6 +179,10 @@ export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: stri
 
   const toHub = () => router.replace("/duel");
   const rematch = () => router.replace(duelPlayHref(mode, newDuelSeed(), topic));
+  /** Прерванный оплаченный матч: новый набор по той же оплате. */
+  const replay = () => {
+    if (seed !== null) router.replace(duelPlayHref(mode, newDuelSeed(), topic, seed));
+  };
   const title = topic ? topicTitle(topic) : null;
   const topicLabel = title === "school" ? t("duel.topic.school") : title ? l(title) : undefined;
 
@@ -178,6 +212,29 @@ export function DuelPlay({ mode, topic, seed }: { mode: DuelModeId; topic?: stri
           <Button variant="ghost" onClick={toHub}>
             {t("duel.toHub")}
           </Button>
+        </div>
+      )}
+      {(phase.name === "played" || phase.name === "cut") && (
+        <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 pb-[max(16px,env(safe-area-inset-bottom))] text-center" data-testid="duel-stale">
+          <Mascot mood={phase.name === "played" ? "happy" : "thinking"} size={88} />
+          <h1 className="text-2xl font-extrabold">{phase.name === "played" ? t("duel.played.title") : t("duel.cut.title")}</h1>
+          <p className="max-w-sm font-semibold text-muted">
+            {phase.name === "played" ? t("duel.played.desc") : phase.replay ? t("duel.cut.replay") : t("duel.cut.desc")}
+          </p>
+          <div className="flex w-full max-w-sm flex-col gap-2">
+            {phase.name === "cut" && phase.replay ? (
+              <Button size="lg" block onClick={replay}>
+                {t("duel.cut.again")}
+              </Button>
+            ) : (
+              <Button size="lg" block onClick={rematch}>
+                {phase.name === "played" ? t("duel.rematch") : t("duel.newMatch")}
+              </Button>
+            )}
+            <Button variant="ghost" block onClick={toHub}>
+              {t("duel.toHub")}
+            </Button>
+          </div>
         </div>
       )}
       {phase.name === "vs" && (

@@ -1,7 +1,8 @@
 import { DUEL_WIN_XP } from "../economy";
-import { XP } from "../gamification";
+import { GAME_XP } from "../games";
+import type { WrongItem } from "../history";
 import { ADJ_MAX, nextBotAdj, type DuelOutcome } from "./bot";
-import { isDuelMode } from "./modes";
+import { DUEL_MODES, isDuelMode } from "./modes";
 import { winner } from "./score";
 import type { DuelModeId } from "./types";
 
@@ -63,10 +64,50 @@ export function duelOutcome(you: DuelSideStat, rival: DuelSideStat): DuelOutcome
   return w === "draw" ? "draw" : w === "a" ? "win" : "loss";
 }
 
-/** Опыт до бустера: XP.correct за каждый верный ответ + бонус за победу (над ботом +2, над человеком +5, §8). */
-export function duelXpBase(correct: number, result: DuelOutcome, opp: DuelOppKind): number {
-  const right = Math.max(0, Math.floor(correct));
-  return right * XP.correct + (result === "win" ? DUEL_WIN_XP[opp === "bot" ? "bot" : "human"] : 0);
+/**
+ * Сколько ответов матча оплачиваются опытом. «10 вопросов» и «по теме» (штрафа нет) — все верные. На часах (блиц,
+ * «верю — не верю») — не больше очков со штрафом: нажатия наугад дают очки около нуля и опыта не приносят.
+ */
+export function duelXpAnswers(mode: DuelModeId, you: Pick<DuelSideStat, "score" | "correct">): number {
+  const right = Math.max(0, Math.floor(you.correct));
+  return DUEL_MODES[mode].pts.bad < 0 ? Math.min(right, Math.max(0, Math.floor(you.score))) : right;
+}
+
+/**
+ * Опыт до бустера — как у мини-игры (§8: «как у мини-игры той же длины»): GAME_XP.perCorrect за оплачиваемый ответ
+ * (duelXpAnswers), не больше GAME_XP.cap, плюс бонус за победу (над ботом +2, над человеком +5).
+ */
+export function duelXpBase(mode: DuelModeId, you: Pick<DuelSideStat, "score" | "correct">, result: DuelOutcome, opp: DuelOppKind): number {
+  const base = Math.min(GAME_XP.cap, duelXpAnswers(mode, you) * GAME_XP.perCorrect);
+  return base + (result === "win" ? DUEL_WIN_XP[opp === "bot" ? "bot" : "human"] : 0);
+}
+
+/** Сколько ошибок одного матча попадает в «Ошибки»: быстрые режимы не должны вытеснять ошибки уроков и пробников. */
+export const DUEL_MISTAKES_MAX = 3;
+
+/** Ошибки матча для «Ошибок»: без повторов задания, сначала разные навыки, не больше max (порядок матча сохраняется). */
+export function pickDuelMistakes(wrong: readonly WrongItem[], max = DUEL_MISTAKES_MAX): WrongItem[] {
+  const uniq: WrongItem[] = [];
+  const steps = new Set<string>();
+  for (const w of wrong) {
+    if (steps.has(w.stepId)) continue;
+    steps.add(w.stepId);
+    uniq.push(w);
+  }
+  const picked = new Set<WrongItem>();
+  const skills = new Set<string>();
+  for (const w of uniq) {
+    if (picked.size >= max) break;
+    const skill = w.skill ?? `step:${w.stepId}`;
+    if (skills.has(skill)) continue;
+    skills.add(skill);
+    picked.add(w);
+  }
+  for (const w of uniq) {
+    if (picked.size >= max) break;
+    picked.add(w);
+  }
+  return uniq.filter((w) => picked.has(w));
 }
 
 /** Исходы матчей с ботом от старых к новым (для «резинки»). */

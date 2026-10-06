@@ -40,7 +40,7 @@ import {
   type PerfectDrop,
 } from "./perfect";
 import { checkEntryKey, dropEntryPaid, duelEntryKey, entryPaidActive, lessonEntryKey, putEntryPaid, sanitizeEntryPaid, type EntryPaid } from "./entry-paid";
-import { botAdjAfter, duelOutcome, duelXpBase, EMPTY_DUELS, pushDuel, sanitizeDuels, type DuelOppKind, type DuelRecord, type DuelSideStat, type DuelsState } from "./duel/record";
+import { botAdjAfter, duelOutcome, duelXpBase, EMPTY_DUELS, pickDuelMistakes, pushDuel, sanitizeDuels, type DuelOppKind, type DuelRecord, type DuelSideStat, type DuelsState } from "./duel/record";
 import type { DuelOutcome } from "./duel/bot";
 import type { DuelModeId } from "./duel/types";
 import { fullExamChipsAllowed, fullExamCounts, lessonCounted, unitPassed } from "./exam-pass";
@@ -1677,15 +1677,16 @@ export const useApp = create<AppState & AppActions>()(
         const today = todayKey();
         const result = duelOutcome(f.you, f.rival);
         // Бустер умножает только опыт (#122).
-        const xp = Math.round(duelXpBase(f.you.correct, result, f.opp) * xpMultiplier(s.boost, now));
+        const xp = Math.round(duelXpBase(f.mode, f.you, result, f.opp) * xpMultiplier(s.boost, now));
         // Освоение — как у мини-игры (#67): навык с ≥ 3 ответами, одна запись на навык, не самостоятельный успех.
         const { skillScores } = gameReward({ score: 0, correct: f.you.correct, total: f.attempts.length, attempts: f.attempts }, undefined, "normal");
         let skills = s.skills;
         for (const [skill, score] of Object.entries(skillScores)) skills = { ...skills, [skill]: updateSkill(skills[skill], score, now, { day: today }) };
-        // Ошибки — в общую работу над ошибками (как у пробного ЕНТ): одна запись на задание, счётчик повторов.
+        // Ошибки — в общую работу над ошибками (как у пробного ЕНТ): одна запись на задание, счётчик повторов. Не больше
+        // DUEL_MISTAKES_MAX за матч (разные навыки первыми): блиц на 20 ошибок не вытесняет ошибки уроков. Остальные — в разборе на итогах.
         let mistakes = s.mistakes;
         let missLog = s.missLog;
-        for (const w of [...f.wrong].reverse()) {
+        for (const w of [...pickDuelMistakes(f.wrong)].reverse()) {
           const existing = mistakes.find((m) => m.stepId === w.stepId);
           missLog = bumpMissLog(missLog, w.stepId, w.prompt, w.lessonId, now);
           mistakes = [
