@@ -8,6 +8,7 @@ import { TheoryCost } from "@/components/theory/TheoryCost";
 import { useTheoryAccess } from "@/components/theory/useTheoryAccess";
 import { DAY, FREE_PLAN, HOUR, heartsView } from "@/lib/economy";
 import { useApp } from "@/lib/store";
+import { useNow } from "@/components/economy/useEconomy";
 import { todayKey } from "@/lib/text";
 
 // Теория 2.0, плата (решение #113, ТЗ §10.1): ½ сердечка списывается при открытии темы; повтор за сутки и «Безлимит» — бесплатно;
@@ -99,15 +100,29 @@ describe("P1: открыл тему — сразу списано ½ серде�
     expect(hearts()).toBe(4.5);
   });
 
-  it("лента уроков: A → B → A — A и B по ½, возврат к A в течение суток не списывает и открывается сразу", async () => {
-    await render(createElement(Probe, { id: A }));
+  it("лента уроков (страница перемонтируется по key): A → B → A — A и B по ½, возврат к A в течение суток не списывает и открывается сразу", async () => {
+    const probe = (id: string) => createElement(Probe, { id, key: id });
+    await render(probe(A));
     await frame();
-    await render(createElement(Probe, { id: B }));
+    await render(probe(B));
     await frame();
     expect(hearts()).toBe(4);
-    await unmount();
-    await render(createElement(Probe, { id: A }));
+    await render(probe(A));
     expect(access()).toBe("open"); // без ожидания кадра
+    await frame();
+    expect(hearts()).toBe(4);
+  });
+
+  it("тот же компонент без key: другая тема получает свою метку, платится один раз и не открывается по чужой оплате", async () => {
+    await render(createElement(Probe, { id: A }));
+    await frame();
+    expect(hearts()).toBe(4.5);
+    await render(createElement(Probe, { id: B }));
+    expect(access()).toBe("wait");
+    await frame();
+    await frame();
+    expect(access()).toBe("open");
+    expect(hearts()).toBe(4);
     await frame();
     expect(hearts()).toBe(4);
   });
@@ -133,6 +148,24 @@ describe("P2: повтор за сутки и «Безлимит» — бесп�
     useApp.setState({ theoryPaid: { [A]: Date.now() - DAY - 1000 } });
     await render(createElement(Probe, { id: A }));
     expect(access()).toBe("wait");
+    await frame();
+    expect(access()).toBe("open");
+    expect(hearts()).toBe(4.5);
+  });
+
+  it("решение по настоящему времени, а не по отставшим часам интерфейса: оплата устарела, пока часы стояли", async () => {
+    // Подписчик часов интерфейса: useNow закэшировал «сейчас» = T0, а тик (15 с) не сработал — вкладка «заморожена».
+    function Clock() {
+      useNow();
+      return null;
+    }
+    const withProbe = (probe: boolean) => createElement("div", null, createElement(Clock), probe ? createElement(Probe, { id: A }) : null);
+    await render(withProbe(false));
+    useApp.setState({ theoryPaid: { [A]: Date.now() - 23 * HOUR } }); // по часам интерфейса оплата свежая
+    vi.setSystemTime(Date.now() + 2 * HOUR); // по настоящему времени ей уже 25 часов (таймеры не сдвигаем)
+    await render(withProbe(true));
+    expect(access()).toBe("wait"); // бесплатно не открыли
+    expect(hearts()).toBe(5);
     await frame();
     expect(access()).toBe("open");
     expect(hearts()).toBe(4.5);
