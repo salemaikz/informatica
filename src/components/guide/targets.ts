@@ -1,6 +1,6 @@
 "use client";
 
-import type { Rect } from "@/lib/guide";
+import { BUBBLE_TEXT, type Rect } from "@/lib/guide";
 
 // Поиск целей проводника на странице: элементы `[data-tour=…]`, их рамки, «занятый» низ экрана и чужие окна поверх.
 
@@ -32,6 +32,53 @@ export function radiusOf(el: Element | null, depth = 0): number {
   if (Number.isFinite(v) && v > 0) return v;
   if (depth < 3 && el.children.length === 1) return radiusOf(el.children[0], depth + 1);
   return 16;
+}
+
+/** У элемента своя «коробка»: фон, рамка или тень. */
+function boxed(el: Element): boolean {
+  const s = getComputedStyle(el);
+  const bg = s.backgroundColor;
+  const paint = !!bg && bg !== "transparent" && !/^rgba\(.*,\s*0\)$/.test(bg);
+  const image = !!s.backgroundImage && s.backgroundImage !== "none";
+  const shadow = !!s.boxShadow && s.boxShadow !== "none";
+  return paint || image || shadow || parseFloat(s.borderTopWidth) > 0;
+}
+
+/**
+ * Цель — «голый» заголовок: у неё нет своей карточки (фона, рамки, тени), а заголовок стоит у самого её левого края.
+ * Рамке проводника тогда нужен зазор побольше, иначе она ложится вплотную к буквам («Мини-игры», «Сердечки»).
+ */
+export function bareHeading(el: Element): boolean {
+  if (boxed(el)) return false;
+  const h = el.matches("h1, h2, h3") ? el : el.querySelector("h1, h2, h3");
+  if (!h) return false;
+  return h.getBoundingClientRect().left - el.getBoundingClientRect().left < 8;
+}
+
+/** «Линейка» для реплики Бита: та же вёрстка текста, что в пузыре, вне экрана. */
+let ruler: HTMLParagraphElement | null = null;
+/** Замеры: «ширина|текст» → высота. Пока шрифт не загружен, не запоминаем — с запасным шрифтом высота другая. */
+const textHeights = new Map<string, number>();
+
+/** Высота текста реплики при ширине `w` (как в пузыре); null — замерить нельзя (нет вёрстки), берётся оценка. */
+export function textHeight(text: string, w: number): number | null {
+  if (!text || w <= 0) return null;
+  const key = `${Math.round(w)}|${text}`;
+  const known = textHeights.get(key);
+  if (known !== undefined) return known;
+  if (!ruler || !ruler.isConnected) {
+    ruler = document.createElement("p");
+    ruler.setAttribute("aria-hidden", "true");
+    ruler.className = BUBBLE_TEXT;
+    ruler.style.cssText = "position:fixed;left:-10000px;top:0;margin:0;visibility:hidden;pointer-events:none";
+    document.body.appendChild(ruler);
+  }
+  ruler.style.width = `${Math.round(w)}px`;
+  ruler.textContent = text;
+  const h = ruler.offsetHeight;
+  if (!h) return null;
+  if (document.fonts?.status === "loaded") textHeights.set(key, h);
+  return h;
 }
 
 /**
@@ -117,9 +164,9 @@ export function scrollPage(el: Element, dy: number, smooth: boolean): () => numb
 const CONTROLS = 'a[href], button, [role="button"], [role="radio"], [role="tab"], input, select, textarea';
 
 /**
- * Кнопки и ссылки на экране, кроме целей и самого проводника: поднятый над целью Бит на них не садится, а пузырь шага
- * без цели их не режет. `ahead` — сколько ещё проедет плавная прокрутка: кнопки страницы — там, где окажутся после неё
- * (приколотые к экрану — где есть).
+ * Кнопки и ссылки на экране, кроме целей и самого проводника: край пузыря их не режет, поднятый над целью Бит на них
+ * не садится (3D-грань кнопок добавляет lib/guide.ts). `ahead` — сколько ещё проедет плавная прокрутка: кнопки
+ * страницы — там, где окажутся после неё (приколотые к экрану — где есть).
  */
 export function obstacles(targets: readonly Element[], vw: number, vh: number, ahead = 0): Rect[] {
   const out: Rect[] = [];

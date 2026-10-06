@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { TIP_IDS, sanitizeTips, type TipsState } from "@/lib/tips";
 import {
   BIT_SIZE,
+  BUTTON_EDGE,
   FINGER_ROOM,
   GUIDE_SCENES,
   completedLessonsCount,
   aimFinger,
+  bubbleH,
+  dockTail,
   estimateBubbleH,
   fingerPose,
   fingerRect,
@@ -19,6 +22,8 @@ import {
   placementRects,
   roomBelow,
   sameRect,
+  sideTail,
+  TAIL_TIP,
   tailLeft,
   sceneFor,
   sceneSteps,
@@ -26,7 +31,9 @@ import {
   tourBlocking,
   unionRect,
   unseenTips,
+  type BitPlacement,
   type Rect,
+  type Say,
   type SceneCtx,
 } from "@/lib/guide";
 import { dict } from "@/i18n/dict";
@@ -443,6 +450,16 @@ describe("сцены после ревью: цели и порядок", () => {
     expect(hi.targets).toEqual(["tutor-free"]);
     expect(stepText(hi, { fallback: true })).toBe("guide.tutor.hi");
   });
+  it("карточка профиля: реплика называет то, что в рамке (фон, рамка, имя, титул), — уровня в карточке нет", () => {
+    const card = GUIDE_SCENES["page-profile"].steps[0];
+    expect(card.targets).toEqual(["profile-card"]);
+    const { ru, kk } = dict[card.text];
+    expect(ru).toBe("Это твоя карточка: фон, рамка, имя и титул. Украшения подбираются в магазине.");
+    expect(kk).toContain("фон, жақтау, атың мен атағың");
+    expect(kk).toContain("дүкен");
+    expect(ru).not.toMatch(/уров/i);
+    expect(kk).not.toMatch(/деңгей/i);
+  });
   it("тире не уезжает в начало строки: пробел перед ним неразрывный, длина та же", () => {
     const s = "Привет! Я Бит. Покажу, что тут где, — это быстро.";
     expect(keepDash(s)).toBe("Привет! Я Бит. Покажу, что тут где, — это быстро.");
@@ -695,5 +712,220 @@ describe("V6: палец", () => {
       else expect(f.flip).toBeUndefined();
     }
     expect(Math.abs(aimFinger(target, { x: 180, y: 0 }, [], 360, 640).angle)).toBeLessThanOrEqual(90);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Перепроверка v18b: 3D-грань кнопок (F1), края пузыря на шагах с целью и у пузыря из кнопки Бита (F2), Бит на нижней
+// панели (F3), высота пузыря по замеру текста.
+
+describe("v18b: края пузыря и нижняя панель", () => {
+  const vp640 = { vw: 360, vh: 640, bottomInset: 64, safeBottom: 0 };
+  const vp760 = { vw: 360, vh: 760, bottomInset: 64, safeBottom: 0 };
+  const nav = (vh: number): Rect[] => [0, 90, 180, 270].map((x) => ({ x, y: vh - 64, w: 90, h: 64 }));
+  const header: Rect[] = [
+    { x: 12, y: 10, w: 40, h: 40 },
+    { x: 238, y: 12, w: 64, h: 36 },
+    { x: 312, y: 12, w: 36, h: 36 },
+  ];
+  /** «Учиться» по скриншотам v18b (прокрутка `-dy`): режимы, «Курс», «Другие режимы», «Начать», карточка плана. */
+  const learn = (dy = 0): Rect[] =>
+    [
+      { x: 24, y: 84, w: 152, h: 44 },
+      { x: 184, y: 84, w: 152, h: 44 },
+      { x: 16, y: 156, w: 120, h: 50 },
+      { x: 144, y: 156, w: 136, h: 50 },
+      { x: 288, y: 156, w: 72, h: 50 },
+      { x: 16, y: 230, w: 328, h: 50 },
+      { x: 158, y: 405, w: 168, h: 40 },
+      { x: 38, y: 459, w: 288, h: 52 },
+      { x: 18, y: 558, w: 324, h: 62 },
+      { x: 30, y: 628, w: 300, h: 56 },
+    ].map((r) => ({ ...r, y: r.y + dy }));
+  const START = 7;
+  /** Реплика с замером текста: строк над Битом (текст шириной 300 px) и сбоку (220 px). */
+  const say = (len: number, wide: number, narrow: number, tap = false): Say => ({ len, tap, textH: (w) => (w >= 290 ? wide : narrow) * 21 });
+  /** Кнопка (с 3D-гранью) пузырём не задета или закрыта целиком — край её не режет. */
+  const clean = (bubble: Rect, a: Rect) => {
+    const b = { ...a, h: a.h + BUTTON_EDGE };
+    const o = overlapArea(bubble, b);
+    return o === 0 || o >= b.w * b.h - 1;
+  };
+
+  it("высота пузыря — по замеру текста (а нет его — на глаз); на шаге «нажми» выше: строка-подсказка над кнопками", () => {
+    // 2 строки по 20,6 px: 26 (поля) + 41 + 52 (ряд с «Дальше») = 119 — как пузырь приветствия на скриншоте.
+    expect(bubbleH({ len: 56, textH: () => 41 }, 336)).toBe(119);
+    expect(bubbleH({ len: 56, textH: () => null }, 336)).toBe(estimateBubbleH(56, 336));
+    expect(bubbleH({ len: 47, tap: true, textH: () => 41 }, 256)).toBe(bubbleH({ len: 47, textH: () => 41 }, 256) + 11);
+    expect(estimateBubbleH(47, 256, true)).toBeGreaterThan(estimateBubbleH(47, 256));
+  });
+
+  it("F1: грань кнопки — часть кнопки: пузырь, закрывший кнопку без грани, сдвигается — полоска грани не торчит", () => {
+    const s: Say = { len: 57, textH: () => 42 };
+    const plain = placementRects(placeBit(null, vp760, s), 760, s);
+    // Кнопка кончается за 2 px до низа пузыря, а её грань — на 2 px ниже него.
+    const btn = { x: 40, y: plain.bubble.y + plain.bubble.h - 46, w: 200, h: 44 };
+    expect(overlapArea(plain.bubble, btn)).toBe(btn.w * btn.h);
+    expect(clean(plain.bubble, btn)).toBe(false);
+    const r = placementRects(placeBit(null, vp760, s, { avoid: [btn] }), 760, s);
+    expect(clean(r.bubble, btn)).toBe(true);
+  });
+
+  it("F1, 640, приветствие (ru и kk): пузырь закрывает «Другие режимы» и «Начать» целиком — вместе с гранью", () => {
+    for (const s of [say(56, 2, 3), say(70, 3, 4)]) {
+      const p = placeBit(null, vp640, s, { avoid: [...header, ...learn(), ...nav(640)] });
+      const r = placementRects(p, 640, s);
+      for (const a of learn()) expect(clean(r.bubble, a), `len ${s.len}, y ${a.y}`).toBe(true);
+      const start = learn()[START];
+      expect(r.bubble.y + r.bubble.h).toBeGreaterThanOrEqual(start.y + start.h + BUTTON_EDGE);
+      expect(r.bubble.y).toBeGreaterThanOrEqual(0);
+      expect(p.corner).toBe("br");
+    }
+  });
+
+  it("F1: закрыть кнопку целиком — хуже, чем не задеть её совсем: есть такое место — пузырь встаёт туда", () => {
+    const s: Say = { len: 57, textH: () => 42 };
+    const btn = { x: 20, y: 520, w: 60, h: 30 };
+    // Обычное место (левый угол, пузырь над Битом) закрыло бы кнопку целиком, с запасом.
+    const plain = placementRects(placeBit(null, vp760, s, { prev: "bl" }), 760, s);
+    expect(overlapArea(plain.bubble, btn)).toBe(btn.w * btn.h);
+    const p = placeBit(null, vp760, s, { prev: "bl", avoid: [btn] });
+    const r = placementRects(p, 760, s);
+    expect(overlaps(r.bubble, btn, 7)).toBe(false);
+    expect(overlaps(r.bit, btn)).toBe(false);
+    expect(p.corner).toBe("bl");
+  });
+
+  it("F2, шаг с целью вверху (сердечки), 760: край пузыря не режет «Начать» — Бит чуть опускается", () => {
+    const s = say(73, 2, 3);
+    const target = { x: 180, y: 6, w: 64, h: 48 };
+    const start = { x: 38, y: 440, w: 288, h: 52 };
+    const plain = placementRects(placeBit(target, vp760, s, { prev: "br" }), 760, s);
+    expect(clean(plain.bubble, start)).toBe(false);
+    const p = placeBit(target, vp760, s, { prev: "br", avoid: [start, ...nav(760)] });
+    const r = placementRects(p, 760, s);
+    expect(clean(r.bubble, start)).toBe(true);
+    expect(overlaps(r.bubble, { ...start, h: start.h + BUTTON_EDGE }, 7)).toBe(false);
+    expect(overlaps(r.bubble, target)).toBe(false);
+    expect(overlaps(r.bit, target)).toBe(false);
+    expect(p.corner).toBe("br");
+  });
+
+  it("F2, шаг про кнопку Бита (640 и 760): пузырь поднимается, пока его края не перестанут резать кнопки; хвостик — к кнопке", () => {
+    const s = say(76, 3, 4);
+    for (const [vp, dy] of [
+      [vp640, -139],
+      [vp760, -19],
+    ] as const) {
+      const anchor = { x: 278, y: vp.vh - 64 - 12 - 56 - 6, w: 79, h: 68 };
+      const aimX = 284 + 28;
+      const page = learn(dy);
+      const p0 = placeFromDock(anchor, vp, aimX);
+      const plain = placementRects(p0, vp.vh, s);
+      expect(page.every((a) => clean(plain.bubble, a))).toBe(false);
+      const p = placeFromDock(anchor, vp, aimX, { avoid: [...header, ...page, ...nav(vp.vh)], say: s });
+      const r = placementRects(p, vp.vh, s);
+      for (const a of page) expect(clean(r.bubble, a), `${vp.vh}: y ${a.y}`).toBe(true);
+      expect(r.bubble.y).toBeGreaterThanOrEqual(0);
+      expect(r.bubble.y + r.bubble.h).toBeLessThanOrEqual(anchor.y - 9);
+      expect(p.dock).toBe(true);
+      expect(p.bubbleX + tailLeft(p) + 8).toBeCloseTo(aimX);
+      // Пузырь поднят — хвостик вытянут до кнопки: его кончик там же, где у неподнятого (над рамкой кнопки, 2–6 px).
+      expect(p.lift).toBe(p.bubbleBottom - p0.bubbleBottom);
+      expect(p.lift).toBeGreaterThan(0);
+      expect(dockTail(p0)).toBe(TAIL_TIP);
+      const tip = vp.vh - p.bubbleBottom + dockTail(p);
+      expect(tip).toBe(vp.vh - p0.bubbleBottom + dockTail(p0));
+      expect(tip).toBeLessThanOrEqual(anchor.y - 2);
+      expect(tip).toBeGreaterThanOrEqual(anchor.y - 6);
+    }
+  });
+
+  it("F2: кнопок вокруг нет — пузырь из кнопки Бита на обычном месте, хвостик обычный", () => {
+    const anchor = { x: 278, y: 760 - 64 - 12 - 56 - 6, w: 79, h: 68 };
+    const p = placeFromDock(anchor, vp760, 312, { avoid: nav(760), say: 76 });
+    expect(p).toEqual(placeFromDock(anchor, vp760, 312));
+    expect(p.lift).toBeUndefined();
+    expect(dockTail(p)).toBe(TAIL_TIP);
+    // У говорящего Бита хвостик не вытягивается никогда.
+    expect(dockTail({ ...placeBit(null, vp760), lift: 40 })).toBe(TAIL_TIP);
+  });
+
+  it("F3: Бит на затемнённой нижней панели — нижний край пузыря сбоку над панелью, хвостик у низа пузыря", () => {
+    // Под целью (низ — 440) Бит с пузырём над панелью не помещается — Бит садится на панель.
+    const target = { x: 10, y: 300, w: 340, h: 140 };
+    const s: Say = { len: 40, textH: () => 42 };
+    const p = placeBit(target, vp640, s);
+    const r = placementRects(p, 640, s);
+    expect(p.bitBottom).toBe(12);
+    expect(p.bubble).toBe("side");
+    expect(r.bubble.y + r.bubble.h).toBeLessThanOrEqual(640 - 64 - 6);
+    expect(overlaps(r.bubble, target)).toBe(false);
+    expect(sideTail(p)).toBe(10);
+    // Обычный пузырь сбоку (Бит над панелью) — хвостик на прежнем месте.
+    expect(sideTail({ ...p, bitBottom: 76, bubbleBottom: 86 })).toBe(22);
+  });
+
+  it("F3, «Нажми «Начать»» (640 и 760, ru и kk): пузырь сбоку не кончается на высоте подписей вкладок; цель и место пальца открыты", () => {
+    for (const vp of [vp640, vp760]) {
+      for (const s of [say(47, 2, 2, true), say(56, 2, 3, true)]) {
+        const btn = learn()[START];
+        const spot0 = { x: btn.x - 6, y: btn.y - 6, w: btn.w + 12, h: btn.h + 12 + FINGER_ROOM };
+        const dy = guideScroll(spot0, vp, 58, s);
+        const spot = { ...spot0, y: spot0.y - dy };
+        const page = learn(-dy).filter((_, i) => i !== START);
+        const p: BitPlacement = placeBit(spot, vp, s, { prev: "br", avoid: [...header, ...page, ...nav(vp.vh)] });
+        const r = placementRects(p, vp.vh, s);
+        const tag = `${vp.vh}, len ${s.len}`;
+        expect(overlaps(r.bubble, spot), tag).toBe(false);
+        expect(overlaps(r.bit, spot), tag).toBe(false);
+        expect(r.bubble.y, tag).toBeGreaterThanOrEqual(0);
+        if (p.bubble === "side" && p.bitBottom < 64) expect(p.bubbleBottom >= 64 + 6 || p.bubbleBottom <= p.bitBottom, tag).toBe(true);
+        else expect(r.bubble.y + r.bubble.h, tag).toBeLessThanOrEqual(vp.vh - 64);
+      }
+    }
+  });
+
+  /** Низ подписей вкладок нижней панели: pt-[7px] + значок h-8 + gap-0.5 + строка 11 px (~16,5) — ~6,5 px над низом панели. */
+  const LABEL_GAP = 6.5;
+
+  it("F3: над панелью пузырю места нет — он закрывает полосу панели целиком, до её низа (подписи вкладок не торчат)", () => {
+    const target = { x: 10, y: 300, w: 340, h: 195 };
+    const s: Say = { len: 30, textH: () => 42 };
+    for (const avoid of [undefined, [...header, ...nav(640)]]) {
+      const p = placeBit(target, vp640, s, { avoid });
+      const r = placementRects(p, 640, s);
+      expect(p.bitBottom).toBe(12);
+      expect(p.bubble).toBe("side");
+      expect(p.bubbleBottom).toBe(0);
+      expect(r.bubble.y + r.bubble.h).toBeGreaterThanOrEqual(640 - LABEL_GAP);
+      expect(overlaps(r.bubble, target)).toBe(false);
+      expect(overlaps(r.bit, target)).toBe(false);
+      // Хвостик — напротив лица Бита, на той же высоте, что у обычного пузыря сбоку (низ Бита + 10 + 22).
+      expect(p.bubbleBottom + sideTail(p)).toBe(p.bitBottom + 10 + 22);
+    }
+  });
+
+  it("F3: то же с полоской «домой» (safe-area 34 px): пузырь — до низа панели, над полоской", () => {
+    const vp = { vw: 360, vh: 700, bottomInset: 64 + 34, safeBottom: 34 };
+    const target = { x: 10, y: 300, w: 340, h: 230 };
+    const s: Say = { len: 30, textH: () => 42 };
+    const p = placeBit(target, vp, s);
+    const r = placementRects(p, vp.vh, s);
+    expect(p.bitBottom).toBe(34 + 12);
+    expect(p.bubbleBottom).toBe(34);
+    expect(r.bubble.y + r.bubble.h).toBeGreaterThanOrEqual(vp.vh - 34 - LABEL_GAP);
+    expect(overlaps(r.bubble, target)).toBe(false);
+  });
+
+  it("кнопки затемнённой нижней панели не влияют на выбор, когда чисто не помещается ничего (Бит не лезет на цель)", () => {
+    // Узкая высокая цель справа: и пузырь, и Бит задевают её где угодно — выбирается «наименьшее зло».
+    const target = { x: 250, y: 100, w: 100, h: 400 };
+    const s: Say = { len: 90, textH: () => 63 };
+    for (const prev of [undefined, "br", "bl"] as const) {
+      const p = placeBit(target, vp640, s, { prev, avoid: nav(640) });
+      expect(p).toEqual(placeBit(target, vp640, s, { prev }));
+      expect(overlaps(placementRects(p, 640, s).bit, target)).toBe(false);
+    }
   });
 });

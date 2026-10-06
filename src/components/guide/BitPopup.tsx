@@ -3,7 +3,7 @@
 import { Pointer } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BIT_SIZE, keepDash, tailLeft, type BitPlacement, type GuideAction } from "@/lib/guide";
+import { BIT_SIZE, BUBBLE_TEXT, TAIL_TIP, dockTail, keepDash, sideTail, tailLeft, type BitPlacement, type GuideAction } from "@/lib/guide";
 import { playSound } from "@/lib/sound";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -19,6 +19,9 @@ const LETTER = /\p{L}|\p{N}/u;
 
 /** Покачивание головой «нет». */
 const SHAKE = [0, -14, 12, -8, 5, 0];
+
+/** Вытянутый хвостик пузыря из кнопки Бита: ширина у пузыря (как у квадратика-хвостика на его краю), px. */
+const SPIKE_W = 20;
 
 /** Пружина выезда Бита: из-за нижнего края с лёгким «прыжком» и наклоном. */
 const BIT_SPRING = { type: "spring", stiffness: 320, damping: 15, mass: 0.9 } as const;
@@ -146,13 +149,26 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
   );
 
   const right = place.corner === "br";
-  // Хвостик пузыря смотрит на Бита (или на его кнопку): над Битом — снизу, сбоку — с его стороны.
+  // Хвостик пузыря смотрит на Бита (или на его кнопку): над Битом — снизу, сбоку — с его стороны (пузырь поднят над
+  // нижней панелью — хвостик у самого низа пузыря, ближе к Биту).
   const tail =
     place.bubble === "above"
       ? { left: tailLeft(place), bottom: -9, cls: "border-b-2 border-r-2" }
       : right
-        ? { right: -9, bottom: 22, cls: "border-r-2 border-t-2" }
-        : { left: -9, bottom: 22, cls: "border-b-2 border-l-2" };
+        ? { right: -9, bottom: sideTail(place), cls: "border-r-2 border-t-2" }
+        : { left: -9, bottom: sideTail(place), cls: "border-b-2 border-l-2" };
+  // Пузырь из кнопки Бита поднят (его края не режут кнопки страницы): хвостик вытянут до кнопки — пузырь не «висит».
+  const reach = place.dock ? dockTail(place) : 0;
+  const spike =
+    reach > TAIL_TIP
+      ? {
+          left: tailLeft(place) + 8 - SPIKE_W / 2,
+          // Кончик — напротив центра кнопки (у края пузыря квадратик-хвостик мог упереться в поле).
+          tipX: SPIKE_W / 2 + (place.bitX + BIT_SIZE / 2 - place.bubbleX - tailLeft(place) - 8),
+          // От внутреннего края рамки пузыря (2 px) до кончика.
+          h: reach + 2,
+        }
+      : null;
 
   return (
     <>
@@ -223,22 +239,37 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
             transition={{ type: "spring", stiffness: 420, damping: 26, delay: delay / 1000 - 0.1 }}
             onClick={typing.finish}
           >
-            <span aria-hidden className={cn("absolute h-4 w-4 rotate-45 border-border bg-surface", tail.cls)} style={{ left: tail.left, right: tail.right, bottom: tail.bottom }} />
-            {/* Печать: невидимый «хвост» текста уже занимает место — строки не прыгают, пузырь не растёт. */}
-            <p aria-hidden className="relative text-[15px] font-semibold leading-snug">
+            {spike ? (
+              // Клин закрывает рамку пузыря под собой (заливка) и продолжает её двумя сторонами до кнопки.
+              <svg
+                aria-hidden
+                data-guide-spike=""
+                className="pointer-events-none absolute top-full overflow-visible"
+                style={{ left: spike.left, width: SPIKE_W, height: spike.h }}
+                viewBox={`0 0 ${SPIKE_W} ${spike.h}`}
+              >
+                <path d={`M0 0L${spike.tipX} ${spike.h}L${SPIKE_W} 0Z`} className="fill-surface" />
+                <path d={`M0 0L${spike.tipX} ${spike.h}L${SPIKE_W} 0`} fill="none" strokeWidth={2} strokeLinejoin="round" className="stroke-border" />
+              </svg>
+            ) : (
+              <span aria-hidden className={cn("absolute h-4 w-4 rotate-45 border-border bg-surface", tail.cls)} style={{ left: tail.left, right: tail.right, bottom: tail.bottom }} />
+            )}
+            {/* Печать: невидимый «хвост» текста уже занимает место — строки не прыгают, пузырь не растёт.
+                Классы текста — общие с «линейкой» проводника (BUBBLE_TEXT): по ней считается высота пузыря. */}
+            <p aria-hidden className={cn("relative", BUBBLE_TEXT)}>
               <span>{shown.slice(0, typing.n)}</span>
               <span className="text-transparent">{shown.slice(typing.n)}</span>
             </p>
             <span className="sr-only">{text}</span>
-            <div className="relative mt-2 flex items-center gap-2">
-              {action === "tap" ? (
-                // Подсказка, а не действие: текст приглушённый (синий — цвет кнопок), синяя только иконка пальца.
-                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-bold leading-tight text-muted">
-                  <Pointer size={14} aria-hidden className="shrink-0 text-primary" /> {t("guide.tapHint")}
-                </span>
-              ) : (
-                <span className="flex-1" />
-              )}
+            {action === "tap" && (
+              // Подсказка, а не действие: своей строкой над кнопками (рядом с «Пропустить» в узком пузыре ей тесно),
+              // текст приглушённый (синий — цвет кнопок), синяя только иконка пальца. Высота строки — ROW_TAP в lib/guide.ts.
+              <p data-guide-tap-hint="" className="relative mt-2 flex items-center gap-1.5 text-xs font-bold leading-tight text-muted">
+                <Pointer size={14} aria-hidden className="shrink-0 text-primary" />
+                <span className="min-w-0">{t("guide.tapHint")}</span>
+              </p>
+            )}
+            <div className={cn("relative flex items-center justify-end gap-2", action === "tap" ? "mt-1" : "mt-2")}>
               <Button
                 variant="ghost"
                 size="sm"

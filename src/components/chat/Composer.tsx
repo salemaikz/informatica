@@ -73,19 +73,28 @@ export function Composer({
           <ImagePlus size={22} />
         </button>
         <VoiceButton onText={onVoiceText} onError={onVoiceError} disabled={streaming} />
-        <textarea
-          value={draft}
-          onChange={(e) => onDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              onSend();
-            }
-          }}
-          rows={1}
-          placeholder={placeholder}
-          className="max-h-40 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 font-semibold outline-none"
-        />
+        {/* Подсказка в пустом поле — в одну строку с многоточием: родной placeholder у textarea переносится, и на 360 px
+            вторая строка («…сұрақ қой…») торчала срезанной. Родной остаётся для читалок, но прозрачный. */}
+        <div className="relative min-w-0 flex-1">
+          <textarea
+            value={draft}
+            onChange={(e) => onDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+            rows={1}
+            placeholder={placeholder}
+            className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-1 py-2.5 font-semibold outline-none placeholder:text-transparent"
+          />
+          {!draft && (
+            <span data-composer-hint="" aria-hidden className="pointer-events-none absolute inset-x-1 top-2.5 truncate font-semibold text-muted">
+              {placeholder}
+            </span>
+          )}
+        </div>
         {streaming ? (
           <button
             type="button"

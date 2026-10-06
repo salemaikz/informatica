@@ -141,6 +141,11 @@ describe("welcome: приветствие и путь к первому урок
     await wait(50);
     expect(say()).toContain("Нажми «Начать»");
     expect(say()).toContain("Нажми, куда показываю");
+    // Подсказка — своей строкой над кнопками, а не в одном ряду с «Пропустить» (в узком пузыре ей там тесно).
+    const hint = bubble()!.querySelector("[data-guide-tap-hint]")!;
+    expect(hint.textContent).toContain("Нажми, куда показываю");
+    expect(hint.querySelector("button")).toBeNull();
+    expect(hint.nextElementSibling?.contains(button("Пропустить")!)).toBe(true);
     expect(button("Дальше")).toBeUndefined();
     expect(tips().welcome).toBeUndefined();
 
@@ -539,6 +544,35 @@ describe("nav: после первого урока", () => {
     await wait(1000);
     expect(say()).toContain("нажми на чипы");
     expect(document.querySelector("[data-guide-bit]")).not.toBeNull();
+  });
+
+  it("пузырь из кнопки Бита поднят над кнопкой страницы — хвостик вытянут до кнопки Бита (пузырь не «висит»)", async () => {
+    doneLesson();
+    useApp.setState({ tips: { welcome: 1 } });
+    addLessonCard("/lesson/ns-2");
+    addTarget("hdr-chips", { href: "/shop" });
+    // Кнопка страницы там, где верхний край неподнятого пузыря разрезал бы её.
+    addTarget("zz-page-button", {}, "button", { x: 300, y: 400, w: 200, h: 70 });
+    const wrap = addTarget("bit-dock", {}, "div", { x: 284, y: 600, w: 72, h: 56 });
+    const btn = document.createElement("button");
+    btn.dataset.dockButton = "";
+    btn.getBoundingClientRect = () => ({ left: 284, top: 600, width: 56, height: 56, right: 340, bottom: 656, x: 284, y: 600, toJSON: () => ({}) }) as DOMRect;
+    wrap.appendChild(btn);
+    await start();
+    await click("Дальше");
+    await wait(2000);
+    expect(say()).toContain("А это я!");
+    const spike = bubble()!.querySelector<SVGElement>("svg[data-guide-spike]");
+    expect(spike).not.toBeNull();
+    expect(bubble()!.querySelector("span.rotate-45")).toBeNull();
+    // Кончик — над рамкой кнопки Бита (рамка: 600 − 6), как у обычного хвостика: низ пузыря + длина клина (без 2 px рамки).
+    const tip = window.innerHeight - parseFloat(bubble()!.style.bottom) + parseFloat(spike!.style.height) - 2;
+    expect(tip).toBeLessThanOrEqual(594 - 2);
+    expect(tip).toBeGreaterThanOrEqual(594 - 6);
+    // Пузырь при этом выше обычного места (низ рамки − 14 px).
+    expect(window.innerHeight - parseFloat(bubble()!.style.bottom)).toBeLessThan(594 - 14);
+    // Клин — напротив кнопки (284 + 28).
+    expect(parseFloat(bubble()!.style.left) + parseFloat(spike!.style.left) + 10).toBeCloseTo(312);
   });
 });
 
