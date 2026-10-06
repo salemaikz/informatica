@@ -79,7 +79,9 @@ test("подразделы «Практики»: Пробный ЕНТ и Пра
   await seed(page);
   await page.goto("/practice");
   const tabs = page.getByRole("navigation", { name: "Подразделы" });
-  await expect(tabs.getByRole("link")).toHaveCount(4);
+  // Тренировка, Дуэли (этап 16Д), Пробный ЕНТ, Практикум кода, История.
+  await expect(tabs.getByRole("link")).toHaveCount(5);
+  await expect(tabs.getByRole("link", { name: "Дуэли" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Тренировка" })).toHaveAttribute("aria-current", "page");
 
   await tabs.getByRole("link", { name: "Пробный ЕНТ" }).click();
