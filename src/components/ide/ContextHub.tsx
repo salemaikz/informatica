@@ -3,12 +3,14 @@
 import { ArrowLeft, ChevronRight, FileCode } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { Mascot } from "@/components/mascot/Mascot";
 import { ButtonLink } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { LESSONS } from "@/content/course";
 import { skillById } from "@/content/skills";
 import { contextItems, contextLessonId } from "@/lib/context-drill";
+import { ENTRY_COST } from "@/lib/economy";
 import { plain } from "@/lib/text";
 import type { EntContext } from "@/lib/types";
 import { useT } from "@/i18n/useT";
@@ -83,6 +85,13 @@ export function ContextHub() {
             </li>
           ))}
         </ul>
+      )}
+
+      {items.length > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-muted">
+          {t("econ16c.context.note")}
+          <HeartCost n={ENTRY_COST.drill} />
+        </p>
       )}
     </div>
   );

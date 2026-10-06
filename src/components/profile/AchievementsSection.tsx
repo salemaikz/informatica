@@ -53,14 +53,18 @@ export function AchievementsSection() {
         {t("gamify.collected", { a: total.got, b: total.total })} · {pct(total.ratio)}%
       </p>
 
-      {/* Четыре мини-полоски — по одной на редкость, в порядке групп ниже. */}
-      <div className="mt-3 grid grid-cols-4 gap-2">
+      {/* Четыре мини-полоски — по одной на редкость, в порядке групп ниже. У каждой подпись: точка цвета редкости, название и «N/M». */}
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
         {ORDER.map((r) => {
           const tally = tallyAchievements(earned, r);
           return (
             <div key={r} className="min-w-0">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-extrabold">
+                <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", RARITY_BG[r])} />
+                <span className="min-w-0 flex-1 truncate">{t(GROUP_KEY[r])}</span>
+                <span className="shrink-0 tabular-nums text-muted">{t("gamify.of", { a: tally.got, b: tally.total })}</span>
+              </div>
               <ProgressBar value={tally.ratio} color={RARITY_VAR[r]} height={8} label={t("gamify.barAria", { name: t(GROUP_KEY[r]), p: pct(tally.ratio) })} />
-              <p className="mt-1 text-center text-[11px] font-extrabold tabular-nums text-muted">{pct(tally.ratio)}%</p>
             </div>
           );
         })}

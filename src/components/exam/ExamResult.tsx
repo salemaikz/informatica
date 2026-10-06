@@ -203,10 +203,10 @@ export function ExamResult({ id }: { id: string }) {
 
   const ratio = ratioOf(points, maxPoints);
   const tone = toneOf(ratio);
-  // «Сюрприз» за тест на 100% (этап 16В): уже выдан в recordExam; показываем то же. Капсула раскрывается, только пока результат свежий
-  // (итоги открыты сразу после теста) — из истории показываем исход без звука и полёта чипов.
+  // «Сюрприз» за тест на 100% (этап 16В): уже выдан в recordExam; показываем то же. Капсула раскрывается со звуком и полётом чипов
+  // один раз — пока не отмечена «показана» (markDropSeen после раскрытия); из истории и при повторном открытии — сразу исход.
   const drop = kind === "topic" || kind === "unit" ? sanitizePerfectDrop(summary?.drop) : null;
-  const dropFresh = !!summary && now - summary.at < 3 * 60_000;
+  const dropFresh = !!summary && !summary.dropSeen;
   const durationSec = result?.timeSec ?? summary?.durationSec ?? 0;
   const at = attempt?.finishedAt ?? summary?.at ?? 0;
   const topicRows = (
@@ -345,7 +345,7 @@ export function ExamResult({ id }: { id: string }) {
 
       {drop && (
         <div className="mx-auto w-full max-w-sm">
-          <PerfectDropTile drop={drop} variant="test" animate={dropFresh} delay={0.3} />
+          <PerfectDropTile drop={drop} variant="test" animate={dropFresh} delay={0.3} onSeen={() => useApp.getState().markDropSeen(id)} />
         </div>
       )}
 

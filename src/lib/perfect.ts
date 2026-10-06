@@ -70,3 +70,32 @@ export function sanitizePerfectDrop(raw: unknown): PerfectDrop | null {
   }
   return null;
 }
+
+// ---------- Предел сюрпризов от тестов (этап 16В, E8) ----------
+
+/** Сколько раз за день тесты уже бросали сюрприз: счётчик сбрасывается со сменой даты. Уроки в счётчик не входят. */
+export interface DropDay {
+  day: string;
+  count: number;
+}
+
+export const EMPTY_DROP_DAY: DropDay = { day: "", count: 0 };
+
+/** Сколько бросков сюрприза за тесты осталось на сегодня (мини-тест, тест по теме, тест по разделу; PERFECT_DROP.testsPerDay). */
+export function testDropsLeft(d: DropDay, today: string): number {
+  return Math.max(0, PERFECT_DROP.testsPerDay - (d.day === today ? d.count : 0));
+}
+
+/** Записать бросок сюрприза за тест: «ничего» тоже считается броском. */
+export function noteTestDrop(d: DropDay, today: string): DropDay {
+  return { day: today, count: (d.day === today ? d.count : 0) + 1 };
+}
+
+/** Из хранилища: день «ГГГГ-ММ-ДД» и счётчик 0…99 (данные недоверенные). */
+export function sanitizeDropDay(raw: unknown): DropDay {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...EMPTY_DROP_DAY };
+  const r = raw as { day?: unknown; count?: unknown };
+  if (typeof r.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { ...EMPTY_DROP_DAY };
+  if (typeof r.count !== "number" || !Number.isFinite(r.count) || r.count < 0) return { ...EMPTY_DROP_DAY };
+  return { day: r.day, count: Math.min(99, Math.floor(r.count)) };
+}

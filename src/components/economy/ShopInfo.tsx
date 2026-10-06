@@ -199,6 +199,7 @@ export function EarnList() {
                     h: pct(PERFECT_DROP.heartChance),
                     c: pct(PERFECT_DROP.chipsChance),
                     n: 100 - chancePct,
+                    d: PERFECT_DROP.testsPerDay,
                   })}
                 </span>
               )}

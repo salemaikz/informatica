@@ -22,8 +22,9 @@ function source(over: Partial<AchievementSource> = {}): AchievementSource {
   return { xp: 0, streak: { current: 0, best: 0, lastDay: null }, lessons: {}, maxCombo: 0, exams: [], codeTasks: {}, skills: {}, history: [], ...over };
 }
 
-const lessons = (n: number, bestAccuracy = 0.8) =>
-  Object.fromEntries(Array.from({ length: n }, (_, i) => [`l${i}`, { completions: 1, bestAccuracy, lastAt: 1, totalXp: 10 }]));
+/** perfect — флаг LessonStat.perfect: ставит только finishSession за идеальное прохождение (точность 100% его не заменяет). */
+const lessons = (n: number, bestAccuracy = 0.8, perfect = false) =>
+  Object.fromEntries(Array.from({ length: n }, (_, i) => [`l${i}`, { completions: 1, bestAccuracy, lastAt: 1, totalXp: 10, ...(perfect ? { perfect: true as const } : {}) }]));
 
 describe("achievementFacts: числа из стора", () => {
   it("пустой стор — нули", () => {
@@ -52,9 +53,18 @@ describe("achievementFacts: числа из стора", () => {
     expect(achievementFacts(source({ streak: { current: 5, best: 3, lastDay: "2026-10-01" } })).streakBest).toBe(5);
   });
 
-  it("уроки: пройденные хотя бы раз и пройденные на 100%", () => {
-    const f = achievementFacts(source({ lessons: { ...lessons(3), p1: { completions: 2, bestAccuracy: 1, lastAt: 1, totalXp: 1 } } }));
-    expect(f.lessonsDone).toBe(4);
+  it("уроки: пройденные хотя бы раз и пройденные идеально (по флагу, а не по точности)", () => {
+    const f = achievementFacts(
+      source({
+        lessons: {
+          ...lessons(3),
+          p1: { completions: 2, bestAccuracy: 1, lastAt: 1, totalXp: 1, perfect: true },
+          // точность 100% без флага (были подсказки или повторы) — не идеальный урок
+          p2: { completions: 1, bestAccuracy: 1, lastAt: 1, totalXp: 1 },
+        },
+      }),
+    );
+    expect(f.lessonsDone).toBe(5);
     expect(f.lessonsPerfect).toBe(1);
   });
 
@@ -62,6 +72,19 @@ describe("achievementFacts: числа из стора", () => {
     const f = achievementFacts(source({ exams: [exam({ points: 20 }), exam({ id: "b", points: 46 }), exam({ id: "c", kind: "mini", points: 10, maxPoints: 10 })] }));
     expect(f.fullExams).toBe(2);
     expect(f.bestFullExam).toBeCloseTo(0.92);
+  });
+
+  it("полный пробный ЕНТ засчитывается, только если отвечено не меньше половины заданий (как чипы за пробный)", () => {
+    const f = (e: Partial<ExamSummary>) => achievementFacts(source({ exams: [exam({ questions: 40, ...e })] })).fullExams;
+    expect(f({ answered: 20 })).toBe(1); // ровно половина
+    expect(f({ answered: 19 })).toBe(0);
+    expect(f({ answered: 0 })).toBe(0);
+    expect(f({ answered: 40, points: 0 })).toBe(1); // ответил на всё, но все неверно — завершил
+    // старая запись без числа ответов — по баллам: нет баллов, значит и ответов не было
+    expect(f({ points: 12 })).toBe(1);
+    expect(f({ points: 0 })).toBe(0);
+    // мини-ЕНТ в «полные» не идёт, даже если ответов много
+    expect(f({ kind: "mini", answered: 40 })).toBe(0);
   });
 
   it("тест по разделу сдан только от 80%", () => {
@@ -102,9 +125,12 @@ describe("правила достижений: пороги", () => {
 
   it("идеальные уроки 10 / 50 — по уроку, а не по числу прохождений", () => {
     expect(earned({ lessons: lessons(10, 0.95) }).has("perfect_10")).toBe(false);
-    expect(earned({ lessons: lessons(10, 1) }).has("perfect_10")).toBe(true);
-    expect(earned({ lessons: lessons(49, 1) }).has("perfect_50")).toBe(false);
-    expect(earned({ lessons: lessons(50, 1) }).has("perfect_50")).toBe(true);
+    // 100% точности без флага «идеально» (были подсказки) — не считается
+    expect(earned({ lessons: lessons(10, 1) }).has("perfect_10")).toBe(false);
+    expect(earned({ lessons: lessons(9, 1, true) }).has("perfect_10")).toBe(false);
+    expect(earned({ lessons: lessons(10, 1, true) }).has("perfect_10")).toBe(true);
+    expect(earned({ lessons: lessons(49, 1, true) }).has("perfect_50")).toBe(false);
+    expect(earned({ lessons: lessons(50, 1, true) }).has("perfect_50")).toBe(true);
   });
 
   it("серии 30 и 100 дней", () => {
@@ -124,6 +150,9 @@ describe("правила достижений: пороги", () => {
     const five = Array.from({ length: 5 }, (_, i) => exam({ id: `e${i}` }));
     expect(earned({ exams: five.slice(0, 4) }).has("exam_5")).toBe(false);
     expect(earned({ exams: five }).has("exam_5")).toBe(true);
+    // пять попыток, но одна — почти пустая (отвечено меньше половины): пять завершённых не набралось
+    const lazy = five.map((e, i) => ({ ...e, questions: 40, answered: i === 4 ? 5 : 30 }));
+    expect(earned({ exams: lazy }).has("exam_5")).toBe(false);
     // мини-ЕНТ в счёт «полных» не идёт
     expect(earned({ exams: [...five.slice(0, 4), exam({ id: "m", kind: "mini" })] }).has("exam_5")).toBe(false);
     expect(earned({ exams: [exam({ points: 44 })] }).has("exam_90")).toBe(false);

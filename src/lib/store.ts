@@ -17,14 +17,29 @@ import type {
   Track,
 } from "./types";
 import { achievementById, bumpStreak, levelInfo, rewardFactor, XP, type Streak } from "./gamification";
-import { earnedByState } from "./achievement-rules";
+import { ACH_RULES_VERSION, earnedByState } from "./achievement-rules";
 import { nextNodeStat, sanitizeCourseNodes, type CourseNodeRun, type CourseNodeStat } from "./course-nodes";
 import { sanitizeAvatar } from "./avatar";
 import { EMPTY_PUSH_ASK, sanitizePushAsk, type PushAskState } from "./push-ask";
 import { sanitizeTips, type TipId, type TipsState } from "./tips";
 import { EMPTY_PERFECT_RUN, sanitizePendingCases, sanitizePerfectRun, type PerfectRun } from "./rewards-state";
-import { dropRandom, isPerfectExam, isPerfectSession, nextPerfectRun, PERFECT_RUN_GOAL, rollPerfectDrop, type PerfectDrop } from "./perfect";
-import { unitPassed } from "./exam-pass";
+import {
+  dropRandom,
+  EMPTY_DROP_DAY,
+  isPerfectExam,
+  isPerfectSession,
+  nextPerfectRun,
+  noteTestDrop,
+  PERFECT_RUN_GOAL,
+  rollPerfectDrop,
+  sanitizeDropDay,
+  sanitizePerfectDrop,
+  testDropsLeft,
+  type DropDay,
+  type PerfectDrop,
+} from "./perfect";
+import { drillPaidActive, sanitizeDrillPaid, type DrillPaid } from "./drill-paid";
+import { fullExamCounts, unitPassed } from "./exam-pass";
 import { answerWeight, masteryLevel, migrateSkillStat, seedSkill, updateSkill, type SkillStat } from "./mastery";
 import { addSkillDay, sanitizeSkillDays, type SkillDays } from "./skill-days";
 import { todayKey } from "./text";
@@ -253,6 +268,10 @@ export interface ExamSummary {
   pool?: string;
   /** «Сюрприз» за тест на 100% (этап 16В): тест по теме и по разделу; бросок сделан и выдан в recordExam. Нет — не бросали. */
   drop?: PerfectDrop;
+  /** Капсула сюрприза уже показана на итогах (markDropSeen): из истории открывается сразу итог, без анимации и звука. */
+  dropSeen?: true;
+  /** Сколько заданий отвечено (ставит recordExam): по нему полный пробный ЕНТ засчитывается в достижения («не меньше половины»). */
+  answered?: number;
 }
 
 export interface AppState {
@@ -266,6 +285,8 @@ export interface AppState {
   mistakes: MistakeRecord[];
   achievements: Record<string, number>;
   newAchievements: string[];
+  /** Версия правил достижений (этап 16В, E1): у сохранения старше — выполненное молча записывается при загрузке (mergeState). */
+  achRules: number;
   /** Конспекты 2.0: папки и записи. */
   notebook: Notebook;
   /** Устарело (этап 16В, L): «память ИИ» убрана — не показывается и не отправляется. Поле оставлено пустым для совместимости сохранений. */
@@ -313,6 +334,10 @@ export interface AppState {
   perfectRun: PerfectRun;
   /** Неоткрытые кейсы за уровень — номера уровней (волна 1Б, R3). Меняет только пакет R3. */
   pendingCases: number[];
+  /** Оплаченный вход в тренировку (этап 16В, E7; lib/drill-paid.ts): та же тренировка в течение 20 минут — бесплатно. */
+  drillPaid: DrillPaid | null;
+  /** Сколько раз за день тесты бросали «сюрприз» (этап 16В, E8): не больше PERFECT_DROP.testsPerDay; уроки не считаются. */
+  dropDay: DropDay;
 
   /** История тестов (уроки, тренировки, пробный ЕНТ) — новые первыми. */
   history: HistoryEntry[];
@@ -399,6 +424,13 @@ export interface AppActions {
    * ok: false — сердечек не хватает, ничего не списано. view — запас после.
    */
   payEntry: (cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /**
+   * Плата за вход в тренировку (этап 16В, E7): как payEntry, но запоминает оплату под ключом тренировки (lib/drill-paid.ts) —
+   * та же тренировка в течение 20 минут (перезагрузка, случайный выход) бесплатна (paid 0). Закончилась тренировка — отметка снимается.
+   */
+  payDrill: (key: string, cost: number) => { ok: boolean; paid: number; view: HeartsView };
+  /** Капсула сюрприза за тест показана на итогах: при следующем открытии итогов из истории — сразу результат, без анимации и звука. */
+  markDropSeen: (examId: string) => void;
   /**
    * Плата за чтение конспекта урока (0,5 сердечка, lib/theory-pay.ts): бесплатно, если урок пройден, «Безлимит» или тот же
    * конспект уже оплачен за последние сутки (paid 0). Иначе списывает и запоминает в theoryPaid. ok: false — не хватает, ничего не списано.
@@ -513,6 +545,7 @@ const initialState: AppState = {
   mistakes: [],
   achievements: {},
   newAchievements: [],
+  achRules: ACH_RULES_VERSION,
   notebook: emptyNotebook(),
   memory: "",
   chat: [],
@@ -537,6 +570,8 @@ const initialState: AppState = {
   tips: {},
   perfectRun: { ...EMPTY_PERFECT_RUN },
   pendingCases: [],
+  drillPaid: null,
+  dropDay: { ...EMPTY_DROP_DAY },
   history: [],
   chats: [],
   codeTasks: {},
@@ -649,6 +684,8 @@ function nextLessonStat(prev: LessonStat | undefined, via: LessonVia, accuracy: 
     totalXp: (prev?.totalXp ?? 0) + xp,
     firstAt: prev?.firstAt ?? now,
     via: prev?.via ?? via,
+    // Флаг «идеально» (E2) раз полученный не теряется; ставит его только finishSession.
+    ...(prev?.perfect ? { perfect: true as const } : {}),
     stage: sched.stage,
     dueAt: sched.dueAt,
   };
@@ -755,20 +792,97 @@ function cleanSkills(raw: unknown): Record<string, SkillStat> {
   return out;
 }
 
+const EXAM_KINDS: readonly ExamKind[] = ["full", "mini", "topic", "unit"];
+
+/**
+ * Попытки пробных ЕНТ из сохранения (E6): только объекты с id, видом и конечными числами points/maxPoints/at — их читают
+ * правила достижений и история; остальные числа и byTopic приводятся к безопасным значениям, сюрприз проверяется как недоверенный.
+ */
+function cleanExams(raw: unknown): ExamSummary[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExamSummary[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    const e = v as Partial<ExamSummary>;
+    if (typeof e.id !== "string" || !e.id || !EXAM_KINDS.includes(e.kind as ExamKind)) continue;
+    if (!isNum(e.points) || !isNum(e.maxPoints) || !isNum(e.at)) continue;
+    const { drop: rawDrop, dropSeen, answered, ...rest } = e as ExamSummary;
+    const drop = sanitizePerfectDrop(rawDrop);
+    out.push({
+      ...rest,
+      id: e.id,
+      kind: e.kind as ExamKind,
+      points: e.points,
+      maxPoints: e.maxPoints,
+      at: e.at,
+      seed: isNum(e.seed) ? e.seed : 0,
+      durationSec: isNum(e.durationSec) ? e.durationSec : 0,
+      byTopic: e.byTopic && typeof e.byTopic === "object" && !Array.isArray(e.byTopic) ? e.byTopic : {},
+      ...(drop ? { drop } : {}),
+      ...(drop && dropSeen === true ? { dropSeen: true as const } : {}),
+      ...(isNum(answered) && answered >= 0 ? { answered: Math.floor(answered) } : {}),
+    });
+    if (out.length >= MAX_EXAMS) break;
+  }
+  return out;
+}
+
+/** Полученные достижения: id → время; чужие типы отбрасываются (по этой записи стор считает новые достижения и чипы). */
+function cleanAchievements(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([, v]) => isNum(v)) as [string, number][]);
+}
+
+/** Уроки из сохранения: только записи-объекты с конечным числом прохождений (по ним считаются достижения и расписание). */
+function cleanLessons(raw: unknown): Record<string, LessonStat> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(([, v]) => !!v && typeof v === "object" && !Array.isArray(v) && isNum((v as LessonStat).completions)),
+  ) as Record<string, LessonStat>;
+}
+
+/**
+ * Одноразовая миграция правил достижений (E1): сохранение старше ACH_RULES_VERSION получает всё, что уже выполнено по его данным,
+ * молча — время «сейчас», без чипов (чипы платит settleChips за НОВЫЕ записи после загрузки, а эти уже в prev), без строки в истории
+ * и без показа (newAchievements не трогаем). Новый профиль стартует сразу с актуальной версией.
+ * Сбой подсчёта (битые данные) загрузку не роняет: версия остаётся прежней, миграция повторится при следующей загрузке.
+ */
+function backfillAchievements(s: AppState & AppActions): AppState & AppActions {
+  if (s.achRules >= ACH_RULES_VERSION) return s;
+  try {
+    const now = Date.now();
+    const achievements = { ...s.achievements };
+    for (const id of earnedByState(s)) if (!achievements[id]) achievements[id] = now;
+    return { ...s, achievements, achRules: ACH_RULES_VERSION };
+  } catch {
+    return s;
+  }
+}
+
 /** Собирает состояние из сохранения поверх текущего (новые поля — значения по умолчанию). */
 export function mergeState(persisted: unknown, current: AppState & AppActions): AppState & AppActions {
   const p = { ...((persisted ?? {}) as Partial<AppState>) };
   // Этап 16В: возврата сердечка за тренировку больше нет — поле старых сохранений молча отбрасываем.
   delete (p as Record<string, unknown>).practiceHearts;
-  return {
+  const merged: AppState & AppActions = {
     ...current,
     ...p,
+    achievements: p.achievements === undefined ? current.achievements : cleanAchievements(p.achievements),
+    newAchievements: Array.isArray(p.newAchievements) ? p.newAchievements.filter((id): id is string => typeof id === "string").slice(0, 60) : current.newAchievements,
+    // Нет поля (сохранение до правил 2) — 0: миграция выполнится один раз (backfillAchievements).
+    achRules: isNum(p.achRules) ? p.achRules : 0,
+    drillPaid: sanitizeDrillPaid(p.drillPaid, Date.now()),
+    dropDay: sanitizeDropDay(p.dropDay),
     // «Память ИИ» убрана (этап 16В, L): старый текст из сохранения не оставляем.
     memory: "",
     profile: cleanProfile(p.profile),
     streak: { ...current.streak, ...(p.streak ?? {}) },
     notebook: repairNotebook(p.notebook ?? current.notebook),
-    exams: Array.isArray(p.exams) ? p.exams.slice(0, MAX_EXAMS) : [],
+    // Числа и уроки читают правила достижений при загрузке (backfillAchievements): нечисло или null не должны её ронять.
+    xp: isNum(p.xp) && p.xp >= 0 ? p.xp : current.xp,
+    maxCombo: isNum(p.maxCombo) && p.maxCombo >= 0 ? p.maxCombo : current.maxCombo,
+    lessons: p.lessons === undefined ? current.lessons : cleanLessons(p.lessons),
+    exams: cleanExams(p.exams),
     aiUsage: sanitizeAiUsage(p.aiUsage, todayKey()),
     plan: sanitizePlan(p.plan),
     hearts: sanitizeHearts(p.hearts),
@@ -801,6 +915,7 @@ export function mergeState(persisted: unknown, current: AppState & AppActions): 
           )
         : {},
   };
+  return backfillAchievements(merged);
 }
 
 export const useApp = create<AppState & AppActions>()(
@@ -919,9 +1034,12 @@ export const useApp = create<AppState & AppActions>()(
           },
         };
         if (isLesson) {
+          // Флаг «идеальный урок» (E2): любое идеальное прохождение обычного урока; игра и экстерн сюда не попадают (completeLessons).
+          const lessonVia = result.via ?? "learn";
+          const stat = nextLessonStat(prev, lessonVia, result.accuracy, result.xp + bonusXp, now);
           next.lessons = {
             ...s.lessons,
-            [result.lessonId!]: nextLessonStat(prev, result.via ?? "learn", result.accuracy, result.xp + bonusXp, now),
+            [result.lessonId!]: perfect && lessonVia !== "game" && lessonVia !== "extern" ? { ...stat, perfect: true } : stat,
           };
           // Урок пройден в режиме «Учиться» — сохранение незаконченного прохождения больше не нужно (#41).
           if ((result.via ?? "learn") === "learn") next.lessonRuns = dropRun(next.lessonRuns, result.lessonId!);
@@ -931,6 +1049,9 @@ export const useApp = create<AppState & AppActions>()(
           next = { ...next, perfectRun: nextPerfectRun(s.perfectRun, { perfect, first: !prev }) };
         }
         if (result.kind === "drill") next = { ...next, ...withAchievement(next, "drill") };
+        // Отметка оплаты (E7) снимается, только когда закончена именно оплаченная тренировка с экрана /drill (ключ совпал):
+        // квиз в чате тоже kind "drill", но ключа у него нет — выход из оплаченной тренировки и квиз её отметку не трогают.
+        if (result.drillKey && next.drillPaid?.key === result.drillKey) next = { ...next, drillPaid: null };
         next = { ...next, ...evaluate(next) };
 
         // История тестов.
@@ -949,12 +1070,15 @@ export const useApp = create<AppState & AppActions>()(
         }
         // «Сюрприз за идеальный урок» (этап 16В): идеальное первое прохождение урока и мини-тест группы на 100%.
         // Кубик бросаем один раз, выдаём сразу; итоги показывают то, что выдано.
-        const dropEligible = perfect && ((isLesson && !prev) || (result.kind === "drill" && result.mode === "minitest"));
+        // Мини-тест — не больше PERFECT_DROP.testsPerDay раз в день (E8; «ничего» тоже бросок); урок — без предела.
+        const lessonDrop = perfect && isLesson && !prev;
+        const testDrop = perfect && result.kind === "drill" && result.mode === "minitest" && testDropsLeft(s.dropDay, today) > 0;
         let perfectDrop: PerfectDrop | null = null;
-        if (dropEligible) {
+        if (lessonDrop || testDrop) {
           const dropped = applyPerfectDrop(next, dropRandom.next(), now);
           next = dropped.state;
           perfectDrop = dropped.drop;
+          if (testDrop) next = { ...next, dropDay: noteTestDrop(s.dropDay, today) };
         }
         next = settleChips(s, next, extra, now);
         set(next);
@@ -1147,6 +1271,26 @@ export const useApp = create<AppState & AppActions>()(
         set({ hearts });
         return { ok: true, paid: cost, view: heartsView(hearts, tier, now, today) };
       },
+
+      payDrill: (key, cost) => {
+        const s = get();
+        const now = Date.now();
+        // Та же тренировка уже оплачена не больше 20 минут назад (перезагрузка, случайный выход) — вход бесплатный.
+        if (drillPaidActive(s.drillPaid, key, now)) {
+          return { ok: true, paid: 0, view: heartsView(s.hearts, tierOf(s, now), now, todayKey()) };
+        }
+        const res = get().payEntry(cost);
+        // Безлимит и нулевая цена ничего не списывают — запоминать нечего.
+        if (res.ok && res.paid > 0) set({ drillPaid: { key, at: now } });
+        return res;
+      },
+
+      markDropSeen: (examId) =>
+        set((s) => {
+          const e = s.exams.find((x) => x.id === examId);
+          if (!e || !e.drop || e.dropSeen) return {};
+          return { exams: s.exams.map((x) => (x.id === examId ? { ...x, dropSeen: true as const } : x)) };
+        }),
 
       payTheory: (lessonId) => {
         const s = get();
@@ -1441,7 +1585,8 @@ export const useApp = create<AppState & AppActions>()(
             skills,
             mistakes,
             history: pushHistory(s.history, entry),
-            exams: [summary, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
+            // answered (E2): сколько заданий отвечено — по нему полный пробный ЕНТ идёт в достижение «Пять пробников».
+            exams: [{ ...summary, answered }, ...s.exams.filter((e) => e.id !== summary.id)].slice(0, MAX_EXAMS),
             streak: isNew && answered > 0 ? bumpStreak(s.streak, today) : s.streak,
             skillDays,
             days: isNew
@@ -1462,20 +1607,33 @@ export const useApp = create<AppState & AppActions>()(
           };
           // «Сюрприз» (этап 16В): тест по теме и тест по разделу на 100% — один бросок на попытку, выдача сразу.
           // Повторная запись той же попытки не бросает заново: результат берём из уже записанной попытки.
+          // Не больше PERFECT_DROP.testsPerDay бросков за день на все тесты (E8; «ничего» тоже бросок); сверх предела — без броска.
           let withDrop: AppState = next;
-          const prevDrop = s.exams.find((e) => e.id === summary.id)?.drop;
-          let drop: PerfectDrop | undefined = prevDrop;
-          if (isNew && (summary.kind === "topic" || summary.kind === "unit") && isPerfectExam(summary.points, summary.maxPoints) && answered > 0) {
+          const prevExam = s.exams.find((e) => e.id === summary.id);
+          let drop: PerfectDrop | undefined = prevExam?.drop;
+          if (
+            isNew &&
+            (summary.kind === "topic" || summary.kind === "unit") &&
+            isPerfectExam(summary.points, summary.maxPoints) &&
+            answered > 0 &&
+            testDropsLeft(s.dropDay, today) > 0
+          ) {
             const dropped = applyPerfectDrop(next, dropRandom.next(), now);
-            withDrop = dropped.state;
+            withDrop = { ...dropped.state, dropDay: noteTestDrop(s.dropDay, today) };
             drop = dropped.drop;
           }
-          if (drop) withDrop = { ...withDrop, exams: withDrop.exams.map((e) => (e.id === summary.id ? { ...e, drop } : e)) };
+          // Повторная запись той же попытки не теряет отметку «капсула показана» (E5).
+          if (drop) {
+            withDrop = {
+              ...withDrop,
+              exams: withDrop.exams.map((e) => (e.id === summary.id ? { ...e, drop, ...(prevExam?.dropSeen ? { dropSeen: true as const } : {}) } : e)),
+            };
+          }
           // Чипы (#105): 10 за завершённый пробный ЕНТ (отвечено не меньше половины заданий) и 10 за сданный тест раздела
           // (≥ 80% баллов) — только за первую сдачу раздела. Мини-ЕНТ и тест по теме чипов не дают: короткие, их легко повторять.
           const examChips: { base: number; reason: ChipReason }[] = [];
           if (isNew && answered > 0) {
-            if (summary.kind === "full" && answered >= Math.ceil(asked / 2)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
+            if (summary.kind === "full" && fullExamCounts(answered, asked)) examChips.push({ base: CHIP_REWARD.exam, reason: "exam" });
             else if (summary.kind === "unit" && unitPassed(summary.points, summary.maxPoints)) {
               const passedBefore = s.exams.some((e) => e.id !== summary.id && e.kind === "unit" && e.unit === summary.unit && unitPassed(e.points, e.maxPoints));
               if (!passedBefore) examChips.push({ base: CHIP_REWARD.unit, reason: "unit" });

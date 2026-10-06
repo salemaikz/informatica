@@ -153,6 +153,9 @@ export default function ProfilePage() {
       {/* Украшения: купленное и выпавшее из кейса — надеть / снять */}
       <MyCosmetics />
 
+      {/* Достижения — сразу после украшений: страница длинная, внизу их никто не увидит (этап 16В) */}
+      <AchievementsSection />
+
       {/* Цели */}
       {/* Тариф: бесплатный / Лайт / Безлимит (пробный) */}
       <PlanStatusCard />
@@ -262,8 +265,6 @@ export default function ProfilePage() {
         <h2 className="py-3 text-lg font-extrabold">{t("remind.title")}</h2>
         <ReminderSettings />
       </Card>
-
-      <AchievementsSection />
 
       <Card data-tour="profile-settings" className="divide-y-2 divide-border py-1">
         <Row label={t("prof.lang")}>
