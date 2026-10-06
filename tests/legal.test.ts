@@ -65,10 +65,10 @@ describe("правовые документы", () => {
     }
   });
 
-  it("дата редакции — 5 октября 2026, пометки «черновик» нет", () => {
+  it("дата редакции — 6 октября 2026, пометки «черновик» нет", () => {
     for (const doc of docs) {
-      expect(doc.updated.ru, doc.id).toBe("5 октября 2026");
-      expect(doc.updated.kk, doc.id).toBe("2026 жылғы 5 қазан");
+      expect(doc.updated.ru, doc.id).toBe("6 октября 2026");
+      expect(doc.updated.kk, doc.id).toBe("2026 жылғы 6 қазан");
     }
     expect(Object.keys(legalDict)).not.toContain("legal.draft");
     const page = readFileSync(join(root, "src/components/legal/LegalPage.tsx"), "utf8");
@@ -266,6 +266,37 @@ describe("правовые документы", () => {
     expect(brief.kk).toContain("автоматты есептер");
     // Старая формулировка «на сервер уходит немногое: … и сообщения об ошибках» убрана.
     expect(brief.ru).not.toContain("На сервер уходит немногое");
+  });
+
+  it("«Дуэли и друзья»: сроки хранения, кто видит имя, бот остаётся на устройстве, путь удаления — как в интерфейсе", () => {
+    const duels = (lang: Lang) => section(LEGAL.privacy, "Дуэли и друзья", lang);
+    // Раздел стоит сразу после «Что хранится у нас на сервере».
+    const titles = LEGAL.privacy.sections.map((s) => s.title.ru);
+    expect(titles.indexOf("Дуэли и друзья")).toBe(titles.indexOf("Что хранится у нас на сервере") + 1);
+    for (const lang of LANGS) {
+      const text = duels(lang);
+      expect(text, lang).toBeTruthy();
+      // Сроки — как в коде серверной части соревнований.
+      for (const n of ["400", "180", "14", "7", "30", "15"]) expect(text, `${lang}: ${n}`).toContain(n);
+      // Путь удаления — названия из словаря интерфейса.
+      expect(text, lang).toContain(`«${dict["duel.title"][lang]} → ${dict["social.friends.title"][lang]} → ${dict["social.delete"][lang]}»`);
+      // Переключатель топа — как в интерфейсе.
+      expect(text, lang).toContain(`«${dict["social.ft"][lang]}»`);
+      // Бот: матчи остаются на устройстве, метка «бот» — как в интерфейсе.
+      expect(text, lang).toContain(`«${dict["duel.bot.chip"][lang]}»`);
+      expect(text, lang).toContain(`«${dict["duel.bot.name"][lang]}»`);
+      // «Как удалить данные» и «Коротко» тоже говорят о соревнованиях.
+      expect(section(LEGAL.privacy, "Как удалить данные", lang), lang).toContain(dict["social.delete"][lang]);
+      expect(LEGAL.privacy.sections[0].body[lang], lang).toContain(lang === "ru" ? "Дуэли с людьми" : "Адамдармен жекпе-жек");
+      // Условия: правила честной игры и жалоб, цена матча — 1 сердечко.
+      expect(fullText(LEGAL.terms, lang), lang).toContain(lang === "ru" ? "В дуэлях играй честно" : "Жекпе-жекте адал ойна");
+      expect(section(LEGAL.terms, "Бесплатно, тарифы и чипы", lang), lang).toContain(lang === "ru" ? "стоят 1 сердечко" : "1 жүрек тұрады");
+    }
+    expect(duels("ru")).toContain("Матчи против бота «Бит» остаются на твоём устройстве, а бот всегда помечен словом «бот»");
+    expect(duels("kk")).toContain("«Бит» ботымен өтетін матчтар құрылғыңда қалады, ал бот әрқашан «бот» деп белгіленеді");
+    // Имя по профилю найти нельзя — только по коду друга.
+    expect(section(LEGAL.privacy, "Как удалить данные", "ru")).toContain("по имени из профиля соревнований найти тебя нельзя");
+    expect(section(LEGAL.privacy, "Как удалить данные", "kk")).toContain("жарыс профиліндегі ат бойынша сені табу мүмкін емес");
   });
 
   it("фото: проверка в уроке — без сведений об ученике, фото в чате — со сведениями", () => {
