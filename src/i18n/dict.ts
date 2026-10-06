@@ -10,6 +10,7 @@ import { remindersDict } from "./parts/reminders";
 import { canvasDict } from "./parts/canvas";
 import { videoDict } from "./parts/video";
 import { ui16dDict } from "./parts/ui16d";
+import { polish16dDict } from "./parts/polish16d";
 import { media16dDict } from "./parts/media16d";
 import { aiDict } from "./parts/ai";
 import { gamesDict } from "./parts/games";
@@ -86,7 +87,6 @@ import { shortfall16dDict } from "./parts/shortfall16d";
 import { hearts16dDict } from "./parts/hearts16d";
 import { ai16dDict } from "./parts/ai16d";
 import { guide16dDict } from "./parts/guide16d";
-import { polish16dDict } from "./parts/polish16d";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -505,7 +505,7 @@ const core = {
   "tools.backspace": { ru: "Стереть последний символ", kk: "Соңғы таңбаны өшіру" },
   "tools.equals": { ru: "Равно", kk: "Тең" },
   "tools.negative": { ru: "Результат отрицательный — здесь только числа от 0", kk: "Нәтиже теріс — мұнда тек 0 және одан үлкен сандар қолданылады" },
-  "theme.system": { ru: "Как в системе", kk: "Жүйедегідей" },
+  "theme.system": { ru: "Авто", kk: "Авто" },
   "theme.light": { ru: "Светлая", kk: "Ашық" },
   "theme.dark": { ru: "Тёмная", kk: "Қараңғы" },
 } satisfies Record<string, L>;
@@ -598,10 +598,10 @@ export const dict = {
   ...help16cDict,
   ...shortfall16dDict,
   ...ui16dDict,
+  ...polish16dDict,
   ...hearts16dDict,
   ...ai16dDict,
   ...guide16dDict,
-  ...polish16dDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

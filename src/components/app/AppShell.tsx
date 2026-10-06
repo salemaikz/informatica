@@ -149,7 +149,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <div className={clsx("mx-auto flex max-w-6xl gap-8 px-4 pt-5 sm:px-6 lg:pb-12 lg:pt-8", dockVisible(pathname) ? "pb-40" : "pb-28")}>
+        {/* Внизу — запас под кнопку Бита (она плавает над нижним меню): последний блок страницы прокручивается выше неё. */}
+        <div
+          className={clsx(
+            "mx-auto flex max-w-6xl gap-8 px-4 pt-5 sm:px-6 lg:pt-8",
+            dockVisible(pathname) ? "pb-[calc(10rem+env(safe-area-inset-bottom))] lg:pb-28" : "pb-28 lg:pb-12",
+          )}
+        >
           <main className={clsx("mx-auto w-full min-w-0 flex-1", wide ? "max-w-5xl" : "max-w-2xl")}>
             <SectionTabs />
             {/* «Что помешало?» после перерыва от 3 дней — только на «Учиться» и только при включённом сборе статистики (#69). */}

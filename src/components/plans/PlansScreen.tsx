@@ -87,17 +87,16 @@ export function PlansScreen() {
     <div className="relative isolate min-h-dvh overflow-x-clip">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-gradient-to-b from-gold-soft to-transparent" />
 
-      <div className={cn("mx-auto flex w-full max-w-lg flex-col gap-6 px-4 pt-3 md:max-w-3xl", trialAvailable ? "pb-40" : "pb-12")}>
-        <div className="flex h-11 items-center justify-end">
-          <button
-            type="button"
-            onClick={close}
-            aria-label={t("common.close")}
-            className="grid h-11 w-11 place-items-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-text focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <X size={26} strokeWidth={2.6} />
-          </button>
-        </div>
+      <div className={cn("relative mx-auto flex w-full max-w-lg flex-col gap-5 px-4 pt-3 sm:gap-6 md:max-w-3xl", trialAvailable ? "pb-40" : "pb-12")}>
+        {/* Крестик поверх шапки (не отдельной строкой): на 360×640 цена тарифа должна оказаться над кнопкой пробного периода. */}
+        <button
+          type="button"
+          onClick={close}
+          aria-label={t("common.close")}
+          className="absolute right-2 top-2 z-10 grid h-11 w-11 place-items-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-text focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <X size={26} strokeWidth={2.6} />
+        </button>
 
         <PlansHero subtitle={subtitleKey(from)} />
 
@@ -153,9 +152,9 @@ export function PlansScreen() {
         >
           <div className="mx-auto max-w-lg">
             <Button variant="primary" size="lg" block className="h-auto min-h-14 py-2" icon={<Sparkles size={22} fill="currentColor" />} onClick={onTrial}>
-              <span className="flex flex-col items-start text-left leading-tight">
-                <span className="text-base">{t("plans.trial.cta")}</span>
-                <span className="text-xs font-bold opacity-90">{t("plans.trial.sub", { days: daysText(TRIAL_DAYS, lang) })}</span>
+              <span className="flex min-w-0 flex-col items-start text-left leading-tight">
+                <span className="max-w-full truncate text-base">{t("plans.trial.cta")}</span>
+                <span className="max-w-full truncate text-xs font-bold opacity-90">{t("plans.trial.sub", { days: daysText(TRIAL_DAYS, lang) })}</span>
               </span>
             </Button>
           </div>
