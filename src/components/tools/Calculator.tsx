@@ -26,7 +26,7 @@ const KIND_CLASS: Record<Kind, string> = {
   num: "bg-surface-2 text-text",
   op: "bg-primary-soft text-primary font-sans text-3xl font-extrabold",
   fn: "bg-surface-2 text-muted",
-  eq: "bg-primary text-white",
+  eq: "bg-action-primary text-white",
 };
 
 const ROWS: KeyDef[][] = [

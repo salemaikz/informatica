@@ -44,7 +44,7 @@ function WrongCard({ item, fixed, index }: { item: WrongItem; fixed: boolean; in
           aria-hidden
           className={cn(
             "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-extrabold",
-            fixed ? "bg-success text-white" : "bg-danger-soft text-danger",
+            fixed ? "bg-action-success text-white" : "bg-danger-soft text-danger",
           )}
         >
           {fixed ? <Check size={14} strokeWidth={3} /> : index + 1}

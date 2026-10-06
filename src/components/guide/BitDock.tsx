@@ -240,7 +240,7 @@ function DockButton({
       >
         <Mascot size={44} mood={hop ? "happy" : "neutral"} className="pointer-events-none" />
         {/* Значок «Спросить ИИ» — всё, что делает ИИ, фиолетовое. */}
-        <span aria-hidden className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-ai text-white ring-2 ring-surface">
+        <span aria-hidden className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-action-ai text-white ring-2 ring-surface">
           <Sparkles size={12} />
         </span>
       </button>

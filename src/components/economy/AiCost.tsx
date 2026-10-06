@@ -46,7 +46,7 @@ export function AiFreeDot({ kind = "ask" }: { kind?: AiKind }) {
       aria-hidden
       className={cn(
         "pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-extrabold leading-none tabular-nums",
-        out ? "bg-surface-2 text-muted ring-2 ring-bg" : "bg-ai text-white ring-2 ring-bg",
+        out ? "bg-surface-2 text-muted ring-2 ring-bg" : "bg-action-ai text-white ring-2 ring-bg",
       )}
     >
       {out ? 0 : freeLeft}

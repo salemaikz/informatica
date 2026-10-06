@@ -436,7 +436,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                   style={(fb?.correct || revealing) && on ? { transitionDelay: `${i * 40}ms` } : undefined}
                   className={cn(
                     "flex h-16 w-full items-center justify-center rounded-xl border font-mono text-xl font-bold transition-[background-color,color,transform] duration-150 motion-reduce:transition-none motion-reduce:delay-0! focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.92] motion-reduce:active:scale-100",
-                    on ? "border-transparent bg-primary text-white shadow-md shadow-primary/30" : "border-border bg-surface-2 text-muted",
+                    on ? "border-transparent bg-action-primary text-white shadow-md shadow-primary/30" : "border-border bg-surface-2 text-muted",
                     (fb?.correct || revealing) && on && "bg-success",
                     wrongBit && "outline-2 outline-offset-1 outline-danger",
                     (locked || task.mode === "read") && "cursor-default",
@@ -513,7 +513,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                         key={i}
                         className={cn(
                           "flex h-7 w-7 items-center justify-center rounded-md font-mono text-sm font-bold",
-                          b ? "bg-success text-white" : "bg-surface-2 text-muted",
+                          b ? "bg-action-success text-white" : "bg-surface-2 text-muted",
                         )}
                       >
                         {b}
@@ -541,7 +541,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                 e.stopPropagation();
                 userNext();
               }}
-              className="h-full w-full rounded-xl bg-primary text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="h-full w-full rounded-xl bg-action-primary text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               {t("common.next")}
             </button>
@@ -580,7 +580,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
                 e.stopPropagation();
                 submit();
               }}
-              className="h-full flex-[2] rounded-xl bg-primary text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="h-full flex-[2] rounded-xl bg-action-primary text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               {tx(S.submit, lang)}
             </button>
@@ -606,7 +606,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
             type="button"
             autoFocus
             onClick={resume}
-            className="flex h-14 min-w-52 items-center justify-center gap-2 rounded-xl bg-primary px-8 text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex h-14 min-w-52 items-center justify-center gap-2 rounded-xl bg-action-primary px-8 text-lg font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <Play size={20} fill="currentColor" /> {t("common.continue")}
           </button>

@@ -32,7 +32,7 @@ export function IdeHub() {
       {target ? (
         <Link
           href={`/code/${target.task.lang}/${target.task.id}`}
-          className="flex items-center gap-3 rounded-3xl bg-primary p-4 text-white shadow-[0_5px_0_var(--primary-strong)] active:translate-y-1 active:shadow-none"
+          className="flex items-center gap-3 rounded-3xl bg-action-primary p-4 text-white shadow-[0_5px_0_var(--action-primary-edge)] active:translate-y-1 active:shadow-none"
         >
           <Play size={28} className="shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">

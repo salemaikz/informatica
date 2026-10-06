@@ -27,7 +27,7 @@ export function DirectionPicker({ className }: { className?: string }) {
             className={cn(
               "flex min-h-12 flex-col items-center justify-center rounded-xl border-2 px-2 py-1.5 text-center transition-[translate,box-shadow,background-color] duration-75 active:translate-y-[2px] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
               on
-                ? "border-primary bg-primary text-white shadow-[0_3px_0_var(--primary-strong)]"
+                ? "border-primary bg-action-primary text-white shadow-[0_3px_0_var(--action-primary-edge)]"
                 : "border-border bg-surface text-muted shadow-[0_3px_0_var(--border)] hover:bg-surface-2 hover:text-text",
             )}
           >

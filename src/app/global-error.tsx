@@ -39,7 +39,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
             <button
               type="button"
               onClick={() => retry()}
-              className="inline-flex h-13 w-full items-center justify-center rounded-2xl bg-primary px-6 text-base font-extrabold tracking-wide text-white shadow-[0_4px_0_var(--primary-strong)] active:translate-y-[3px] active:shadow-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="inline-flex h-13 w-full items-center justify-center rounded-2xl bg-action-primary px-6 text-base font-extrabold tracking-wide text-white shadow-[0_4px_0_var(--action-primary-edge)] active:translate-y-[3px] active:shadow-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               {dict["errors.retry"][lang]}
             </button>

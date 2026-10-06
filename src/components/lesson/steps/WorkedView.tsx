@@ -64,7 +64,7 @@ export function WorkedView({ step, revealed }: { step: WorkedStep; revealed: num
               <span
                 className={cn(
                   "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-extrabold transition-colors duration-300",
-                  latest ? "bg-primary text-white" : "bg-surface-2 text-muted",
+                  latest ? "bg-action-primary text-white" : "bg-surface-2 text-muted",
                 )}
               >
                 {i + 1}
@@ -81,7 +81,7 @@ export function WorkedView({ step, revealed }: { step: WorkedStep; revealed: num
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ ...springBouncy, delay: 0.08 }}
         >
-          <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-white">
+          <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-action-success text-white">
             <Check size={16} strokeWidth={3.5} />
           </span>
           <Markdown className="min-w-0 flex-1 text-[17px] font-bold">{l(step.result)}</Markdown>

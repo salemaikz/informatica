@@ -66,7 +66,7 @@ export function ProfileCard({
                 type="button"
                 onClick={onEditAvatar}
                 aria-label={t("prof2.avatar.edit")}
-                className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border-2 border-surface bg-primary text-white shadow transition-transform active:scale-95"
+                className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border-2 border-surface bg-action-primary text-white shadow transition-transform active:scale-95"
               >
                 <Pencil size={16} />
               </button>

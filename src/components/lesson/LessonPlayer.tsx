@@ -1140,10 +1140,10 @@ export function LessonPlayer({
         </div>
       </footer>
 
-      <Modal open={exitOpen} onClose={() => setExitOpen(false)} label={t("lesson.exitTitle")}>
+      <Modal open={exitOpen} onClose={() => setExitOpen(false)} label={t(kind === "drill" ? "drill.exitTitle" : "lesson.exitTitle")}>
         <div className="flex flex-col items-center gap-3 text-center">
           <Mascot mood="sad" size={72} />
-          <h3 className="text-xl font-extrabold">{t("lesson.exitTitle")}</h3>
+          <h3 className="text-xl font-extrabold">{t(kind === "drill" ? "drill.exitTitle" : "lesson.exitTitle")}</h3>
           <p className="text-muted">{persist ? t("lesson.exitSaved") : t("lesson.exitText")}</p>
           {/* Вход уже оплачен: с сохранением — вернуться без новой платы можно в пределах окна; без сохранения — сердечко не вернётся. */}
           {paid && (

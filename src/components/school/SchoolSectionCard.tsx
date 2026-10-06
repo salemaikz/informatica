@@ -22,7 +22,7 @@ function TopicRow({ topic, lessons }: { topic: SchoolTopic; lessons: LessonsDone
   const lesson = target ? LESSON_META[target] : undefined;
 
   const icon = p.complete ? (
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success text-white">
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-action-success text-white">
       <CircleCheckBig size={20} />
     </span>
   ) : p.ready ? (
@@ -110,7 +110,7 @@ export function SchoolSectionCard({
         onClick={onToggle}
         className="flex w-full items-center gap-3 bg-(--u-soft) p-3.5 text-left focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-primary"
       >
-        <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white shadow-[0_3px_0_var(--u-edge)]", complete ? "bg-success" : "bg-(--u-fill)")}>
+        <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white shadow-[0_3px_0_var(--u-edge)]", complete ? "bg-action-success" : "bg-(--u-fill)")}>
           {complete ? <CircleCheckBig size={22} /> : index + 1}
         </span>
         <span className="min-w-0 flex-1">

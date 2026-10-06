@@ -38,7 +38,7 @@ export const Navigator = memo(function Navigator({
               aria-label={`${t("exam.q.number", { n: i + 1 })}${done ? `, ${t("exam.nav.answered")}` : ""}${flagged ? `, ${t("exam.nav.flagged")}` : ""}`}
               className={cn(
                 "relative flex h-11 items-center justify-center rounded-xl border-2 text-sm font-extrabold transition-colors",
-                done ? "border-primary bg-primary text-white" : flagged ? "border-warning bg-warning-soft text-warning-strong" : "border-border bg-surface text-text hover:bg-surface-2",
+                done ? "border-primary bg-action-primary text-white" : flagged ? "border-warning bg-warning-soft text-warning-strong" : "border-border bg-surface text-text hover:bg-surface-2",
                 flagged && done && "border-warning",
                 i === current && "outline-3 outline-offset-2 outline-text",
               )}

@@ -436,7 +436,7 @@ export default function Game({ lang, mode, skills, onFinish }: GameProps) {
             type="button"
             autoFocus
             onClick={() => api.current?.advance()}
-            className="relative flex h-full w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-primary text-lg font-extrabold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none active:scale-[0.98]"
+            className="relative flex h-full w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-action-primary text-lg font-extrabold text-white focus-visible:ring-2 focus-visible:ring-primary-strong focus-visible:outline-none active:scale-[0.98]"
           >
             {cfg.revealMs !== null && (
               <div ref={nextBarRef} className="absolute inset-y-0 left-0 w-full bg-white/20" aria-hidden />

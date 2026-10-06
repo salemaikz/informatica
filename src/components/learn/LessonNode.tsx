@@ -73,9 +73,9 @@ export function LessonNode({
             <m.span
               aria-hidden
               className="absolute inset-0 rounded-full border-4 border-(--u)"
-              initial={{ scale: 1, opacity: 0.6 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+              initial={{ scale: 1, opacity: 0 }}
+              animate={{ scale: 1.5, opacity: [0, 0.6, 0] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", opacity: { duration: 2.2, times: [0, 0.18, 1], repeat: Infinity, ease: "easeInOut" } }}
             />
           )}
           <button

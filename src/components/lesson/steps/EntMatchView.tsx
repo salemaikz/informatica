@@ -165,7 +165,7 @@ export function EntMatchView({ step, answer, onAnswer, locked }: StepProps<EntMa
                   <InlineMarkdown>{l(item)}</InlineMarkdown>
                 </span>
                 {locked && (
-                  <span className={cn("mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white", rowRight ? "bg-success" : "bg-danger")}>
+                  <span className={cn("mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white", rowRight ? "bg-action-success" : "bg-action-danger")}>
                     {rowRight ? <Check size={14} strokeWidth={3.5} aria-hidden /> : <X size={14} strokeWidth={3.5} aria-hidden />}
                     <span className="sr-only">{t(rowRight ? "entfmt.match.rowRight" : "entfmt.match.rowWrong")}</span>
                   </span>

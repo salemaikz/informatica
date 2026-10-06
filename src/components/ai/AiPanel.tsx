@@ -146,7 +146,7 @@ export function AiPanel({
         )}
         {turns.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} className="self-end rounded-2xl rounded-br-md bg-primary px-3.5 py-2 font-semibold text-white">
+            <div key={i} className="self-end rounded-2xl rounded-br-md bg-action-primary px-3.5 py-2 font-semibold text-white">
               {m.content}
             </div>
           ) : (
@@ -230,7 +230,7 @@ export function AiPanel({
           type="submit"
           disabled={!draft.trim() || streaming}
           aria-label="send"
-          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ai text-white disabled:opacity-40"
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-action-ai text-white disabled:opacity-40"
         >
           <Send size={18} />
         </button>

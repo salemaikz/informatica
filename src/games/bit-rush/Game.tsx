@@ -125,7 +125,7 @@ function Keypad({
       aria-disabled={locked || !canSubmit}
       onClick={onOk}
       aria-label={tx(S.ok, lang)}
-      className={cn(key, "border-primary bg-primary font-sans text-white")}
+      className={cn(key, "border-primary bg-action-primary font-sans text-white")}
     >
       {tx(S.ok, lang)}
     </button>
@@ -484,7 +484,7 @@ export default function Game({ lang, sound, mode, onFinish }: GameProps) {
       type="button"
       onClick={() => apiRef.current?.advance(true)}
       className={cn(
-        "w-full rounded-xl bg-primary px-4 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        "w-full rounded-xl bg-action-primary px-4 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         richReveal ? "min-h-14 shrink-0" : "mt-1 min-h-12",
       )}
     >

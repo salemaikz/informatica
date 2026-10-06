@@ -8,7 +8,7 @@ import { useT } from "@/i18n/useT";
 import { springBouncy } from "./presets";
 
 /**
- * Серия дней в шапке урока: серая до засчитанного дня, оранжевая после (как в шапке приложения).
+ * Серия дней в шапке урока: оранжевая, пока серия идёт (точка — день ещё не засчитан), серая при нуле (как в шапке приложения).
  * Огонь — только про серию дней; комбо показывает `ComboBadge` на панели ответа.
  */
 export function StreakFlame() {
@@ -16,11 +16,12 @@ export function StreakFlame() {
   const { t } = useT();
   return (
     <div
-      className={cn("flex min-w-12 items-center justify-end gap-1 font-extrabold transition-colors", activeToday ? "text-streak" : "text-muted")}
+      className={cn("flex min-w-12 items-center justify-end gap-1 font-extrabold transition-colors", current > 0 ? "text-streak" : "text-muted")}
       title={t("stats.streak")}
     >
-      <Flame size={20} fill={activeToday ? "currentColor" : "none"} aria-hidden />
+      <Flame size={20} fill={current > 0 ? "currentColor" : "none"} aria-hidden />
       {current}
+      {current > 0 && !activeToday && <span aria-hidden data-testid="streak-reminder" className="h-1.5 w-1.5 rounded-full bg-streak" />}
     </div>
   );
 }

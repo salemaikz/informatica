@@ -243,7 +243,7 @@ describe("страница чтения (TheoryReader)", () => {
     const ask = host.querySelector<HTMLElement>("[data-tour=theory-ask]")!;
     expect(ask.textContent).toBe("Спросить Бита");
     expect(ask.getAttribute("aria-label")).toBe("Спросить Бита об этой теме");
-    expect(ask.className).toContain("bg-ai");
+    expect(ask.className).toContain("bg-action-ai");
     // Сводка «N карточек · M мин чтения» — одна строка текста, без пилюль.
     expect(host.querySelector("h1")!.nextElementSibling!.textContent).toMatch(/\d+ карточ\S* · \d+ мин чтения/);
     // Переключатель и подпись «Карточка 1 из N» — в одной строке; под ней сегменты.

@@ -83,7 +83,7 @@ export function WeekCard({ showEdit = false, className }: { showEdit?: boolean; 
             <span
               className={cn(
                 "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-extrabold",
-                d.lessons > 0 ? "border-primary bg-primary text-white" : d.today ? "border-primary text-primary" : "border-border text-muted",
+                d.lessons > 0 ? "border-primary bg-action-primary text-white" : d.today ? "border-primary text-primary" : "border-border text-muted",
                 d.future && "opacity-50",
               )}
               aria-label={`${dayLabels[i]}: ${d.lessons}`}

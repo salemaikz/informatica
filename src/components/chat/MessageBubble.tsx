@@ -13,7 +13,7 @@ import { SpeakButton } from "./voice/SpeakButton";
 export function UserBubble({ msg }: { msg: ChatMsg }) {
   const { t } = useT();
   return (
-    <div className="max-w-[85%] self-end whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-semibold text-white">
+    <div className="max-w-[85%] self-end whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-action-primary px-4 py-2.5 font-semibold text-white">
       {msg.hadImage && <Camera size={16} className="-mt-0.5 mr-1.5 inline" aria-label={t("chat2.msg.photo")} />}
       {msg.voice && <Mic size={16} className="-mt-0.5 mr-1.5 inline" aria-label={t("chat2.msg.voice")} />}
       {msg.content}

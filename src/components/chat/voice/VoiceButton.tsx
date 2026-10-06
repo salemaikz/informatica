@@ -212,7 +212,7 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
         title={label}
         className={cn(
           "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ai",
-          recording ? "bg-danger text-white" : "bg-ai-soft text-ai hover:brightness-95",
+          recording ? "bg-action-danger text-white" : "bg-ai-soft text-ai hover:brightness-95",
           (busy || (!recording && disabled)) && "cursor-not-allowed opacity-60",
         )}
       >

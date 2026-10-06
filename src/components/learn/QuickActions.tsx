@@ -37,7 +37,7 @@ export function QuickActions({ continueId, dueCount, firstTime, resuming }: { co
               className={cn(
                 "flex h-12 items-center gap-2 rounded-2xl pl-1.5 pr-4 text-[15px] font-extrabold transition-[translate,box-shadow] duration-75 active:translate-y-[3px] active:shadow-none",
                 tone === "main"
-                  ? "bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]"
+                  ? "bg-action-primary text-white shadow-[0_4px_0_var(--action-primary-edge)]"
                   : "border-2 border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
               )}
             >

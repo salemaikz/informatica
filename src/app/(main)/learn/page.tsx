@@ -32,7 +32,7 @@ function MiniExamCard() {
   return (
     <div className="flex flex-col gap-3 rounded-3xl border-2 border-primary/30 bg-primary-soft p-4 sm:flex-row sm:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_4px_0_var(--primary-strong)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-action-primary text-white shadow-[0_4px_0_var(--action-primary-edge)]">
           <Timer size={24} />
         </span>
         <div className="min-w-0">
