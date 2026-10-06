@@ -377,6 +377,8 @@ export interface BitPlacement {
   bubbleBottom: number;
   /** Пузырь выходит из плавающей кнопки Бита (шаг про неё): говорящего Бита нет, хвостик — к кнопке (`bitX` — её центр). */
   dock?: boolean;
+  /** Пузырь из кнопки Бита поднят над обычным местом на столько px (его края не режут кнопки): хвостик вытянут до кнопки. */
+  lift?: number;
 }
 
 type Corner = BitPlacement["corner"];
@@ -424,17 +426,29 @@ export function tailLeft(p: BitPlacement): number {
   return Math.max(18, Math.min(p.bitX + BIT_SIZE / 2 - p.bubbleX - 8, p.bubbleW - 34));
 }
 
+/** Кончик хвостика (квадратик 16 px, повёрнутый на 45°) — ниже низа пузыря на столько px. */
+export const TAIL_TIP = 10;
+
+/**
+ * Хвостик пузыря из кнопки Бита: на сколько px ниже низа пузыря его кончик. Пузырь поднят над кнопкой (`lift`) —
+ * хвостик вытянут до неё: кончик там же, где у неподнятого пузыря, — пузырь не «отрывается» от кнопки.
+ */
+export function dockTail(p: BitPlacement): number {
+  return TAIL_TIP + (p.dock ? Math.max(0, p.lift ?? 0) : 0);
+}
+
 /** Хвостик пузыря сбоку: обычно — на 22 px выше низа пузыря (напротив лица Бита). */
 const SIDE_TAIL = 22;
 /** Ниже хвостик не опускается: у скруглённого угла пузыря он отрывался бы от края. */
 const SIDE_TAIL_MIN = 10;
 
 /**
- * Хвостик пузыря сбоку: низ его квадратика от низа пузыря. Пузырь поднят над нижней панелью (Бит стоит на ней) —
- * хвостик опускается к самому низу пузыря, ближе к Биту.
+ * Хвостик пузыря сбоку: низ его квадратика от низа пузыря — напротив лица Бита, на той же высоте окна, что и у обычного
+ * пузыря. Пузырь поднят над нижней панелью (Бит стоит на ней) — хвостик опускается к самому низу пузыря; пузырь опущен
+ * до низа панели — хвостик выше от его низа (всё так же напротив лица).
  */
 export function sideTail(p: BitPlacement): number {
-  return Math.max(SIDE_TAIL_MIN, Math.min(SIDE_TAIL, p.bitBottom + SIDE_LIFT + SIDE_TAIL - p.bubbleBottom));
+  return Math.max(SIDE_TAIL_MIN, p.bitBottom + SIDE_LIFT + SIDE_TAIL - p.bubbleBottom);
 }
 
 /** Пересечение прямоугольников, px² (0 — не пересекаются). */
@@ -483,7 +497,7 @@ export const BUTTON_EDGE = 4;
 const PANEL_GAP = 6;
 /**
  * Пузырь из кнопки Бита: на столько он может подняться над кнопкой, чтобы его края не резали кнопки страницы (на
- * плотной «Учиться» чистое место бывает только ~на 90 px выше). Хвостик по-прежнему смотрит на кнопку.
+ * плотной «Учиться» чистое место бывает только ~на 90 px выше). Хвостик тогда вытягивается до кнопки (`dockTail`).
  */
 const DOCK_LIFT_MAX = 120;
 
@@ -631,7 +645,8 @@ export interface PlaceOpts {
  * (пузырь растёт вверх — его кнопки видны всегда).
  * Без цели (экран затемнён целиком) — прошлый угол, пузырь над Битом; есть `avoid` — Бит чуть поднимается или опускается
  * (до затемнённой панели), пока пузырь не перестанет резать кнопки и липнуть к ним (кнопки самой панели не в счёт).
- * Бит на затемнённой панели — пузырь сбоку всё равно над ней. `say` — реплика (или её длина): по ней — высота пузыря.
+ * Бит на затемнённой панели — пузырь сбоку всё равно над ней, а нет там места — закрывает её полосу целиком, до низа.
+ * `say` — реплика (или её длина): по ней — высота пузыря.
  */
 export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 90, opts: PlaceOpts = {}): BitPlacement {
   const { vw, vh } = vp;
@@ -685,9 +700,10 @@ export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 
     const r = rects(p);
     return overlaps(r.bit, target, CLEAR) || overlaps(r.bubble, target, CLEAR);
   };
+  // Кнопки затемнённой нижней панели — не помеха (как в `edges`): Бит садится на неё.
   const onAvoid = (p: BitPlacement) => {
     const r = rects(p);
-    return avoid.some((a) => overlaps(r.bit, a) || overlaps(r.bubble, a));
+    return zone.some((a) => overlaps(r.bit, a) || overlaps(r.bubble, a));
   };
   const cx = target.x + target.w / 2;
   const cy = target.y + target.h / 2;
@@ -743,10 +759,10 @@ export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 
     }
     return best;
   };
-  // Пузырь сбоку над нижней панелью (Бит стоит на ней) не помещается — он опускается до ног Бита и закрывает полосу
-  // панели целиком, а не наполовину (подписи вкладок не торчат из-под него).
+  // Пузырь сбоку над нижней панелью (Бит стоит на её низу) не помещается — он опускается до низа панели и закрывает её
+  // полосу целиком, а не наполовину: подписи вкладок (их низ — ~6 px над низом панели) не торчат из-под него.
   const deep = (p: BitPlacement): BitPlacement | null =>
-    p.bubble === "side" && p.bubbleBottom > p.bitBottom + SIDE_LIFT ? { ...p, bubbleBottom: p.bitBottom } : null;
+    p.bubble === "side" && p.bitBottom === low && p.bubbleBottom > p.bitBottom + SIDE_LIFT ? { ...p, bubbleBottom: safe } : null;
   const clean = pick((p) => p) ?? pick(deep);
   if (clean) return clean;
 
@@ -775,13 +791,14 @@ export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 
     }
   }
 
-  // Ничего не помещается чисто: где меньше всего закрыто цели (Бит поверх цели — вдвое хуже пузыря), потом — кнопок вокруг.
+  // Ничего не помещается чисто: где меньше всего закрыто цели (Бит поверх цели — вдвое хуже пузыря), потом — кнопок вокруг
+  // (кнопки затемнённой нижней панели не в счёт: Бит садится на неё).
   const cands = pool.length ? pool : order;
   let best = cands[0];
   let bestScore = Infinity;
   for (const p of cands) {
     const r = rects(p);
-    const score = overlapArea(r.bubble, target) + 2 * overlapArea(r.bit, target) + (coverArea(r.bubble, avoid) + coverArea(r.bit, avoid)) / 2;
+    const score = overlapArea(r.bubble, target) + 2 * overlapArea(r.bit, target) + (coverArea(r.bubble, zone) + coverArea(r.bit, zone)) / 2;
     if (score < bestScore) {
       best = p;
       bestScore = score;
@@ -793,8 +810,9 @@ export function placeBit(target: Rect | null, vp: GuideViewport, say: SayLike = 
 /**
  * Шаг про плавающую кнопку Бита: говорящий Бит прячется, пузырь выходит из самой кнопки — над её рамкой `anchor`,
  * хвостик смотрит на кнопку (`aimX` — её центр по горизонтали). Пузырь — во всю ширину пузыря, в пределах окна.
- * Есть `avoid` — пузырь поднимается (не больше DOCK_LIFT_MAX), пока его верхний край не перестанет резать кнопки
- * страницы и липнуть к ним; `say` — реплика (или её длина): по ней — высота пузыря.
+ * Есть `avoid` — пузырь поднимается (не больше DOCK_LIFT_MAX), пока его края не перестанут резать кнопки страницы
+ * и липнуть к ним; поднятый (`lift`) — с хвостиком, вытянутым до кнопки. `say` — реплика (или её длина): по ней — высота
+ * пузыря.
  */
 export function placeFromDock(
   anchor: Rect,
@@ -827,7 +845,7 @@ export function placeFromDock(
     if (r.bubble.y < TOP_MARGIN) break;
     const cost = edgeCost(r.bubble, zone, true) + lift * SHIFT_COST;
     if (cost < bestCost - 0.5) {
-      best = p;
+      best = lift ? { ...p, lift } : p;
       bestCost = cost;
     }
   }

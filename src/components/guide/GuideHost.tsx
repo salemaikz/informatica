@@ -154,7 +154,8 @@ const samePlace = (a: BitPlacement | null, b: BitPlacement | null) =>
     Math.round(a.bitBottom) === Math.round(b.bitBottom) &&
     Math.round(a.bubbleX) === Math.round(b.bubbleX) &&
     Math.round(a.bubbleW) === Math.round(b.bubbleW) &&
-    Math.round(a.bubbleBottom) === Math.round(b.bubbleBottom));
+    Math.round(a.bubbleBottom) === Math.round(b.bubbleBottom) &&
+    Math.round(a.lift ?? 0) === Math.round(b.lift ?? 0));
 
 const sameView = (a: View, b: View) =>
   a.idx === b.idx &&

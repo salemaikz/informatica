@@ -8,6 +8,7 @@ import {
   completedLessonsCount,
   aimFinger,
   bubbleH,
+  dockTail,
   estimateBubbleH,
   fingerPose,
   fingerRect,
@@ -22,6 +23,7 @@ import {
   roomBelow,
   sameRect,
   sideTail,
+  TAIL_TIP,
   tailLeft,
   sceneFor,
   sceneSteps,
@@ -818,7 +820,8 @@ describe("v18b: края пузыря и нижняя панель", () => {
       const anchor = { x: 278, y: vp.vh - 64 - 12 - 56 - 6, w: 79, h: 68 };
       const aimX = 284 + 28;
       const page = learn(dy);
-      const plain = placementRects(placeFromDock(anchor, vp, aimX), vp.vh, s);
+      const p0 = placeFromDock(anchor, vp, aimX);
+      const plain = placementRects(p0, vp.vh, s);
       expect(page.every((a) => clean(plain.bubble, a))).toBe(false);
       const p = placeFromDock(anchor, vp, aimX, { avoid: [...header, ...page, ...nav(vp.vh)], say: s });
       const r = placementRects(p, vp.vh, s);
@@ -827,12 +830,25 @@ describe("v18b: края пузыря и нижняя панель", () => {
       expect(r.bubble.y + r.bubble.h).toBeLessThanOrEqual(anchor.y - 9);
       expect(p.dock).toBe(true);
       expect(p.bubbleX + tailLeft(p) + 8).toBeCloseTo(aimX);
+      // Пузырь поднят — хвостик вытянут до кнопки: его кончик там же, где у неподнятого (над рамкой кнопки, 2–6 px).
+      expect(p.lift).toBe(p.bubbleBottom - p0.bubbleBottom);
+      expect(p.lift).toBeGreaterThan(0);
+      expect(dockTail(p0)).toBe(TAIL_TIP);
+      const tip = vp.vh - p.bubbleBottom + dockTail(p);
+      expect(tip).toBe(vp.vh - p0.bubbleBottom + dockTail(p0));
+      expect(tip).toBeLessThanOrEqual(anchor.y - 2);
+      expect(tip).toBeGreaterThanOrEqual(anchor.y - 6);
     }
   });
 
-  it("F2: кнопок вокруг нет — пузырь из кнопки Бита на обычном месте", () => {
+  it("F2: кнопок вокруг нет — пузырь из кнопки Бита на обычном месте, хвостик обычный", () => {
     const anchor = { x: 278, y: 760 - 64 - 12 - 56 - 6, w: 79, h: 68 };
-    expect(placeFromDock(anchor, vp760, 312, { avoid: nav(760), say: 76 })).toEqual(placeFromDock(anchor, vp760, 312));
+    const p = placeFromDock(anchor, vp760, 312, { avoid: nav(760), say: 76 });
+    expect(p).toEqual(placeFromDock(anchor, vp760, 312));
+    expect(p.lift).toBeUndefined();
+    expect(dockTail(p)).toBe(TAIL_TIP);
+    // У говорящего Бита хвостик не вытягивается никогда.
+    expect(dockTail({ ...placeBit(null, vp760), lift: 40 })).toBe(TAIL_TIP);
   });
 
   it("F3: Бит на затемнённой нижней панели — нижний край пузыря сбоку над панелью, хвостик у низа пузыря", () => {
@@ -870,14 +886,46 @@ describe("v18b: края пузыря и нижняя панель", () => {
     }
   });
 
-  it("F3: над панелью пузырю места нет — он закрывает полосу панели целиком (до ног Бита), а не наполовину", () => {
+  /** Низ подписей вкладок нижней панели: pt-[7px] + значок h-8 + gap-0.5 + строка 11 px (~16,5) — ~6,5 px над низом панели. */
+  const LABEL_GAP = 6.5;
+
+  it("F3: над панелью пузырю места нет — он закрывает полосу панели целиком, до её низа (подписи вкладок не торчат)", () => {
     const target = { x: 10, y: 300, w: 340, h: 195 };
     const s: Say = { len: 30, textH: () => 42 };
-    const p = placeBit(target, vp640, s);
-    const r = placementRects(p, 640, s);
-    expect(p.bitBottom).toBe(12);
-    expect(p.bubbleBottom).toBe(p.bitBottom);
+    for (const avoid of [undefined, [...header, ...nav(640)]]) {
+      const p = placeBit(target, vp640, s, { avoid });
+      const r = placementRects(p, 640, s);
+      expect(p.bitBottom).toBe(12);
+      expect(p.bubble).toBe("side");
+      expect(p.bubbleBottom).toBe(0);
+      expect(r.bubble.y + r.bubble.h).toBeGreaterThanOrEqual(640 - LABEL_GAP);
+      expect(overlaps(r.bubble, target)).toBe(false);
+      expect(overlaps(r.bit, target)).toBe(false);
+      // Хвостик — напротив лица Бита, на той же высоте, что у обычного пузыря сбоку (низ Бита + 10 + 22).
+      expect(p.bubbleBottom + sideTail(p)).toBe(p.bitBottom + 10 + 22);
+    }
+  });
+
+  it("F3: то же с полоской «домой» (safe-area 34 px): пузырь — до низа панели, над полоской", () => {
+    const vp = { vw: 360, vh: 700, bottomInset: 64 + 34, safeBottom: 34 };
+    const target = { x: 10, y: 300, w: 340, h: 230 };
+    const s: Say = { len: 30, textH: () => 42 };
+    const p = placeBit(target, vp, s);
+    const r = placementRects(p, vp.vh, s);
+    expect(p.bitBottom).toBe(34 + 12);
+    expect(p.bubbleBottom).toBe(34);
+    expect(r.bubble.y + r.bubble.h).toBeGreaterThanOrEqual(vp.vh - 34 - LABEL_GAP);
     expect(overlaps(r.bubble, target)).toBe(false);
-    expect(sideTail(p)).toBe(22);
+  });
+
+  it("кнопки затемнённой нижней панели не влияют на выбор, когда чисто не помещается ничего (Бит не лезет на цель)", () => {
+    // Узкая высокая цель справа: и пузырь, и Бит задевают её где угодно — выбирается «наименьшее зло».
+    const target = { x: 250, y: 100, w: 100, h: 400 };
+    const s: Say = { len: 90, textH: () => 63 };
+    for (const prev of [undefined, "br", "bl"] as const) {
+      const p = placeBit(target, vp640, s, { prev, avoid: nav(640) });
+      expect(p).toEqual(placeBit(target, vp640, s, { prev }));
+      expect(overlaps(placementRects(p, 640, s).bit, target)).toBe(false);
+    }
   });
 });
