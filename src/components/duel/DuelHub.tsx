@@ -1,0 +1,462 @@
+"use client";
+
+import { Check, ChevronRight, Radio, UserPlus, Users, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { cn } from "@/lib/cn";
+import { useApp } from "@/lib/store";
+import { shortDate } from "@/lib/date";
+import { ENTRY_COST } from "@/lib/economy";
+import { DUEL_MODE_IDS } from "@/lib/duel/modes";
+import { duelTopics, isDuelTopic, isEntTopic } from "@/lib/duel/topics";
+import { duelPlayHref, newDuelSeed } from "@/lib/duel/api";
+import { challengePath, recHref } from "@/lib/duel/challenge";
+import { liveHref } from "@/lib/duel/live";
+import type { DuelRecord } from "@/lib/duel/record";
+import type { DuelModeId } from "@/lib/duel/types";
+import { useT } from "@/i18n/useT";
+import { Modal } from "@/components/ui/Modal";
+import { Pill } from "@/components/ui/Pill";
+import { HeartCost } from "@/components/economy/HeartCost";
+import { Mascot } from "@/components/mascot/Mascot";
+import { useEntVisible } from "@/components/school/useEntVisible";
+import { useSocialHome } from "@/components/social/useSocial";
+import { useShowName } from "@/components/social/PlayerCard";
+import { GhostChip } from "./rival";
+import { BotChip } from "./BotChip";
+import { FriendsCard } from "./FriendsCard";
+import { MODE_ICON, MODE_TITLE, modeDesc, topicTitle } from "./mode-meta";
+
+// Хаб дуэлей /duel (этап 16Д; docs/specs/duels.md §9). Иерархия на 360 px:
+//   1) «Сыграть с Битом» — главная кнопка, выбранный режим (Ф1);
+//   2) «Найти соперника» — живой «Блиц» (Ф4), во всю ширину;
+//   3) «Вызвать друга» (запись вызова, Ф3) и «Играть с другом вживую» (комната по ссылке, Ф4) — в два столбца;
+//   4) карточка «Друзья» (входящие, заявки, топ-3; Ф3).
+// Люди — только когда соцчасть включена на сервере (GET /api/social/home), иначе «Скоро» / «временно недоступно».
+// Ниже — сетка режимов, тема для «По теме», последние 3 дуэли.
+
+/** Выбор режима и темы помним на этом устройстве (удобство, не прогресс). */
+const PICK_KEY = "informatica-duel-pick";
+
+interface Pick {
+  mode: DuelModeId;
+  topic?: string;
+}
+
+function readPick(): Pick {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(PICK_KEY) ?? "null") as Partial<Pick> | null;
+    const mode = raw && DUEL_MODE_IDS.includes(raw.mode as DuelModeId) ? (raw.mode as DuelModeId) : "blitz";
+    const topic = raw && isDuelTopic(raw.topic) ? raw.topic : undefined;
+    return mode === "topic" && !topic ? { mode: "blitz" } : { mode, topic };
+  } catch {
+    return { mode: "blitz" };
+  }
+}
+
+function savePick(p: Pick) {
+  try {
+    window.localStorage.setItem(PICK_KEY, JSON.stringify(p));
+  } catch {
+    // хранилище недоступно — выбор просто не запомнится
+  }
+}
+
+export function DuelHub() {
+  const { t, l } = useT();
+  const router = useRouter();
+  const [pick, setPick] = useState<Pick>(readPick);
+  const [topicsOpen, setTopicsOpen] = useState(false);
+  // Ф3: «Вызвать друга» — выбор режима → запись вызова (/duel/rec); тема — тем же листом тем.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [topicFor, setTopicFor] = useState<"bot" | "invite">("bot");
+  const social = useSocialHome();
+  const socialOn = social.state === "on";
+  const history = useApp((s) => s.duels.history);
+
+  const topicName = (topic: string | undefined): string => {
+    const title = topic ? topicTitle(topic) : null;
+    if (!title) return "";
+    return title === "school" ? t("duel.topic.school") : l(title);
+  };
+  const pickLabel = pick.mode === "topic" && pick.topic ? `${t(MODE_TITLE.topic)}: ${topicName(pick.topic)}` : t(MODE_TITLE[pick.mode]);
+
+  const choose = (p: Pick) => {
+    setPick(p);
+    savePick(p);
+  };
+
+  const start = () => {
+    if (pick.mode === "topic" && !pick.topic) {
+      setTopicsOpen(true);
+      return;
+    }
+    router.push(duelPlayHref(pick.mode, newDuelSeed(), pick.topic));
+  };
+
+  /** Комната для друга в выбранном режиме (живой бой по ссылке). */
+  const startRoom = () => {
+    if (pick.mode === "topic" && !pick.topic) {
+      setTopicsOpen(true);
+      return;
+    }
+    router.push(liveHref({ room: pick.mode, topic: pick.topic }));
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-2xl font-extrabold">{t("duel.title")}</h1>
+        <p className="font-semibold text-muted">{t("duel.subtitle")}</p>
+      </div>
+
+      {/* Главное действие: матч с Битом. Бит всегда помечен «бот». */}
+      <button
+        type="button"
+        onClick={start}
+        data-tour="duel-bot"
+        className="flex w-full items-center gap-3 rounded-3xl bg-action-primary p-4 text-left text-white shadow-[0_5px_0_var(--action-primary-edge)] transition-transform active:translate-y-1 active:shadow-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <span className="shrink-0 rounded-2xl bg-white/15 p-1">
+          <Mascot mood="happy" size={56} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex flex-wrap items-center gap-2 text-xl font-extrabold leading-tight">
+            {t("duel.playBot")}
+            <HeartCost n={ENTRY_COST.duel} variant="solid" />
+          </span>
+          <span className="flex flex-wrap items-center gap-1.5 text-sm font-bold">
+            {t("duel.playBot.mode", { mode: pickLabel })}
+          </span>
+          <span className="flex flex-wrap items-center gap-1.5 text-xs font-semibold opacity-90">
+            <BotChip className="border-white/30 bg-white/15 text-white" />
+            {t("duel.playBot.desc")}
+          </span>
+        </span>
+      </button>
+
+      {/* Люди: живой соперник (Ф4), вызов другу (Ф3), комната с другом (Ф4) — когда соцчасть включена; иначе «Скоро». */}
+      <section data-tour="duel-soon" className="flex flex-col gap-2">
+        {socialOn ? (
+          <>
+            <button
+              type="button"
+              onClick={() => router.push(liveHref({ find: true }))}
+              data-testid="duel-find"
+              className="flex min-h-16 w-full items-center gap-3 rounded-3xl border-2 border-primary/40 bg-primary-soft px-4 py-3 text-left shadow-[0_4px_0_var(--primary)] transition-transform active:translate-y-0.5 active:shadow-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-action-primary text-white">
+                <Users size={22} aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex flex-wrap items-center gap-2 text-lg font-extrabold leading-tight text-ink-primary">
+                  {t("duel.find")}
+                  <HeartCost n={ENTRY_COST.duel} />
+                </span>
+                <span className="text-xs font-semibold text-muted">{t("duel.find.desc")}</span>
+              </span>
+              <ChevronRight size={20} className="shrink-0 text-ink-primary" aria-hidden />
+            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <PeopleButton Icon={UserPlus} title={t("duel.invite")} desc={t("duel.invite.desc")} onClick={() => setInviteOpen(true)} testId="duel-invite" />
+              <PeopleButton Icon={Radio} title={t("duel.live.room")} desc={t("duel.live.room.desc")} onClick={startRoom} testId="duel-room" />
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "duel.find" as const, Icon: Users },
+              { key: "duel.invite" as const, Icon: UserPlus },
+            ].map(({ key, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                disabled
+                aria-disabled
+                className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
+              >
+                <span className="flex items-center gap-1.5 text-sm font-extrabold">
+                  <Icon size={18} aria-hidden />
+                  {t(key)}
+                </span>
+                <Pill>{t("duel.soon")}</Pill>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-xs font-semibold text-muted">
+          {t(socialOn ? "social.hub.hint" : social.state === "down" ? "duel.live.unavailable" : "duel.soon.hint")}
+        </p>
+      </section>
+
+      {socialOn && <FriendsCard home={social.home} />}
+
+      <section>
+        <h2 className="mb-3 text-lg font-extrabold">{t("duel.modes")}</h2>
+        <div role="radiogroup" aria-label={t("duel.modes")} className="grid grid-cols-2 gap-3">
+          {DUEL_MODE_IDS.map((mode) => {
+            const on = pick.mode === mode;
+            const Icon = MODE_ICON[mode];
+            const isTopic = mode === "topic";
+            return (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                data-mode={mode}
+                onClick={() => {
+                  if (!isTopic) return choose({ mode });
+                  setTopicFor("bot");
+                  setTopicsOpen(true);
+                }}
+                className={cn(
+                  "flex flex-col gap-2 rounded-3xl border-2 p-3.5 text-left transition-colors active:translate-y-0.5",
+                  on ? "border-primary bg-primary-soft shadow-[0_3px_0_var(--primary)]" : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", on ? "bg-action-primary text-white" : "bg-surface-2 text-muted")}>
+                    <Icon size={20} strokeWidth={2.4} aria-hidden />
+                  </span>
+                  {on && <Check size={18} strokeWidth={3} className="text-ink-primary" aria-hidden />}
+                </span>
+                <span className={cn("font-extrabold leading-tight", on && "text-ink-primary")}>{t(MODE_TITLE[mode])}</span>
+                <span className="text-xs font-semibold text-muted">
+                  {isTopic && on && pick.topic ? topicName(pick.topic) : modeDesc(t, mode)}
+                </span>
+                {isTopic && on && <span className="text-xs font-extrabold text-ink-primary">{t("duel.topic.change")}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <RecentDuels history={history} topicName={topicName} />
+
+      <TopicSheet
+        open={topicsOpen}
+        current={pick.mode === "topic" ? pick.topic : undefined}
+        onClose={() => setTopicsOpen(false)}
+        onPick={(topic) => {
+          setTopicsOpen(false);
+          if (topicFor === "invite") {
+            router.push(recHref("topic", topic));
+            return;
+          }
+          choose({ mode: "topic", topic });
+        }}
+        topicName={topicName}
+      />
+
+      <InviteModeSheet
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onPick={(mode) => {
+          setInviteOpen(false);
+          if (mode === "topic") {
+            setTopicFor("invite");
+            setTopicsOpen(true);
+            return;
+          }
+          router.push(recHref(mode));
+        }}
+      />
+    </div>
+  );
+}
+
+/** Кнопка второго ряда «людей» (вызов другу, комната): меньше «Найти соперника», но тем же голубым действием. */
+function PeopleButton({ Icon, title, desc, onClick, testId }: { Icon: LucideIcon; title: string; desc: string; onClick: () => void; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-border bg-surface px-3 py-2.5 text-left shadow-[0_3px_0_var(--border)] transition-transform hover:bg-surface-2 active:translate-y-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    >
+      <span className="flex items-start gap-1.5 text-sm font-extrabold leading-tight text-ink-primary">
+        <Icon size={18} className="mt-px shrink-0" aria-hidden />
+        {title}
+      </span>
+      <span className="text-xs font-semibold text-muted">{desc}</span>
+    </button>
+  );
+}
+
+/** «Вызвать друга»: выбор режима записи вызова (1 сердечко, как любой матч). */
+function InviteModeSheet({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (mode: DuelModeId) => void }) {
+  const { t } = useT();
+  return (
+    <Modal open={open} onClose={onClose} label={t("duel.invite.pick")}>
+      <div className="flex flex-col gap-3 pb-[max(8px,env(safe-area-inset-bottom))]" data-testid="duel-invite-sheet">
+        <h2 className="text-xl font-extrabold">{t("duel.invite.pick")}</h2>
+        <p className="-mt-1 text-sm font-semibold text-muted">{t("duel.rec.note")}</p>
+        {DUEL_MODE_IDS.map((mode) => {
+          const Icon = MODE_ICON[mode];
+          return (
+            <button
+              key={mode}
+              type="button"
+              data-mode={mode}
+              onClick={() => onPick(mode)}
+              className="flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2 text-left hover:bg-surface-2"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                <Icon size={20} aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="font-extrabold">{t(MODE_TITLE[mode])}</span>
+                <span className="text-xs font-semibold text-muted">{modeDesc(t, mode)}</span>
+              </span>
+              <HeartCost n={ENTRY_COST.duel} />
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+/** Последние 3 дуэли: режим, соперник (у бота — «Бит» и чип «бот»), счёт, исход. */
+function RecentDuels({ history, topicName }: { history: readonly DuelRecord[]; topicName: (topic: string | undefined) => string }) {
+  const { t, lang } = useT();
+  const last = history.slice(0, 3);
+  return (
+    <section data-testid="duel-recent">
+      <h2 className="mb-3 text-lg font-extrabold">{t("duel.recent")}</h2>
+      {last.length === 0 ? (
+        <p className="rounded-3xl border-2 border-dashed border-border px-4 py-5 text-center text-sm font-semibold text-muted">{t("duel.recent.empty")}</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {last.map((r) => {
+            const Icon = MODE_ICON[r.mode];
+            const date = shortDate(new Date(r.at), lang);
+            // Свой записанный вызов или игра против записи друга — строка ведёт на карточку вызова (поделиться ещё раз, итоги).
+            const href = r.chId && (r.opp === "solo" || r.opp === "ghost") ? challengePath(r.chId) : null;
+            const body = (
+              <>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                  <Icon size={20} aria-hidden />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-extrabold">
+                    {t(MODE_TITLE[r.mode])}
+                    {r.mode === "topic" && r.topic ? ` · ${topicName(r.topic)}` : ""}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-muted">
+                    {r.opp === "bot" ? (
+                      <>
+                        {t("duel.bot.name")} <BotChip />
+                      </>
+                    ) : (
+                      <OppLabel r={r} />
+                    )}
+                    <span aria-hidden>·</span>
+                    <span>{date}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end">
+                  <span className="font-mono text-base font-extrabold">{r.opp === "solo" ? r.you.score : `${r.you.score} : ${r.rival.score}`}</span>
+                  <span
+                    className={cn(
+                      "text-xs font-extrabold",
+                      r.opp === "solo" ? "text-ink-primary" : r.result === "win" ? "text-ink-success" : r.result === "draw" ? "text-ink-warning" : "text-muted",
+                    )}
+                  >
+                    {r.opp === "solo" ? t("social.solo.result") : r.result === "win" ? t("duel.result.win") : r.result === "draw" ? t("duel.result.draw") : t("duel.result.lossShort")}
+                  </span>
+                </span>
+              </>
+            );
+            const row = "flex items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2.5";
+            return (
+              <li key={r.id}>
+                {href ? (
+                  <Link href={href} className={cn(row, "hover:bg-surface-2")} data-testid="duel-recent-link">
+                    {body}
+                  </Link>
+                ) : (
+                  <div className={row}>{body}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Соперник в истории (Ф3): запись своего вызова, запись друга (имя на момент игры; скрытое жалобой — номером). */
+function OppLabel({ r }: { r: DuelRecord }) {
+  const { t } = useT();
+  const show = useShowName();
+  if (r.opp === "solo") return <span className="truncate">{t("social.solo.name")}</span>;
+  const name = r.oppCode ? show({ code: r.oppCode, name: r.oppName ?? null }) : (r.oppName ?? "");
+  return (
+    <>
+      <span className="truncate">{name}</span>
+      {r.opp === "ghost" && <GhostChip />}
+    </>
+  );
+}
+
+/** Выбор темы для «По теме»: темы ЕНТ (в школьном треке скрыты) и разделы курса. */
+function TopicSheet({
+  open,
+  current,
+  onClose,
+  onPick,
+  topicName,
+}: {
+  open: boolean;
+  current?: string;
+  onClose: () => void;
+  onPick: (topic: string) => void;
+  topicName: (topic: string | undefined) => string;
+}) {
+  const { t } = useT();
+  const ent = useEntVisible();
+  const all = useMemo(() => duelTopics().filter((x) => topicTitle(x) !== null), []);
+  const groups = [
+    { key: "duel.topic.ent" as const, items: ent ? all.filter(isEntTopic) : [] },
+    { key: "duel.topic.units" as const, items: all.filter((x) => !isEntTopic(x)) },
+  ].filter((g) => g.items.length > 0);
+  return (
+    <Modal open={open} onClose={onClose} label={t("duel.topic.pick")}>
+      <div className="flex max-h-[75dvh] flex-col gap-4 overflow-y-auto pb-[max(8px,env(safe-area-inset-bottom))]">
+        <h2 className="text-xl font-extrabold">{t("duel.topic.pick")}</h2>
+        <p className="-mt-2 text-sm font-semibold text-muted">{modeDesc(t, "topic")}</p>
+        {groups.map((g) => (
+          <section key={g.key}>
+            <h3 className="mb-2 text-sm font-extrabold text-muted">{t(g.key)}</h3>
+            <ul className="flex flex-col gap-2">
+              {g.items.map((topic) => {
+                const on = topic === current;
+                return (
+                  <li key={topic}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(topic)}
+                      aria-pressed={on}
+                      data-topic={topic}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left text-sm font-bold transition-colors",
+                        on ? "border-primary bg-primary-soft text-ink-primary" : "border-border bg-surface hover:bg-surface-2",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">{topicName(topic)}</span>
+                      {on ? <Check size={18} strokeWidth={3} aria-hidden /> : <ChevronRight size={18} className="text-muted" aria-hidden />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Modal>
+  );
+}

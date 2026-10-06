@@ -89,7 +89,7 @@ describe("конфигурация", () => {
   });
   it("подразделы в нужном порядке", () => {
     const ids = (g: string) => NAV_GROUPS.find((x) => x.id === g)!.subs.map((s) => s.id);
-    expect(ids("practice")).toEqual(["train", "exam", "code", "history"]);
+    expect(ids("practice")).toEqual(["train", "duel", "exam", "code", "history"]);
     expect(ids("materials")).toEqual(["notes", "theory", "cheat", "search"]);
     expect(ids("progress")).toEqual(["stats", "shop", "plans", "profile"]);
   });
@@ -124,15 +124,15 @@ describe("школьный трек: ЕНТ-подразделы скрыты (#
 
   it("трек ЕНТ: меню как было", () => {
     expect(visibleGroups(true)).toBe(NAV_GROUPS);
-    expect(ids({ subs: visibleSubs(practice) })).toEqual(["train", "exam", "code", "history"]);
+    expect(ids({ subs: visibleSubs(practice) })).toEqual(["train", "duel", "exam", "code", "history"]);
     expect(hubGroup("/practice")).toBe(practice);
   });
 
   it("школьный трек: в «Практике» нет «Пробного ЕНТ», остальные подразделы на месте", () => {
-    expect(ids({ subs: visibleSubs(practice, false) })).toEqual(["train", "code", "history"]);
+    expect(ids({ subs: visibleSubs(practice, false) })).toEqual(["train", "duel", "code", "history"]);
     const groups = visibleGroups(false);
     expect(groups.map((g) => g.id)).toEqual(NAV_GROUPS.map((g) => g.id));
-    expect(ids(groups.find((g) => g.id === "practice")!)).toEqual(["train", "code", "history"]);
+    expect(ids(groups.find((g) => g.id === "practice")!)).toEqual(["train", "duel", "code", "history"]);
     // остальные группы не тронуты
     for (const id of ["materials", "progress"] as const) expect(ids(groups.find((g) => g.id === id)!)).toEqual(ids(NAV_GROUPS.find((g) => g.id === id)!));
   });
@@ -140,7 +140,7 @@ describe("школьный трек: ЕНТ-подразделы скрыты (#
   it("исходный NAV_GROUPS не меняется при фильтрации", () => {
     visibleGroups(false);
     hubGroup("/practice", false);
-    expect(ids(practice)).toEqual(["train", "exam", "code", "history"]);
+    expect(ids(practice)).toEqual(["train", "duel", "exam", "code", "history"]);
   });
 
   it("hubGroup для школьного трека отдаёт ту же группу без ЕНТ-подраздела; страница /exam остаётся «хабом»", () => {

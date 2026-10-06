@@ -20,6 +20,7 @@ export const ALL_TIPS = Object.fromEntries(
     "page-school",
     "page-shop",
     "page-profile",
+    "page-duel",
   ].map(
     (id) => [id, 1],
   ),

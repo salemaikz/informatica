@@ -13,7 +13,7 @@ import { heartsGain } from "./shop-helpers";
 // Чистые помощники магазина про сердечки (без React): блок «Как работают сердечки» и цена «Полного запаса».
 // Все числа — из lib/economy.ts: в текстах и разметке они не вписываются.
 
-export type EntryRuleId = "lesson" | "drill" | "check" | "exam" | "checkpoint" | "game" | "theory" | "code";
+export type EntryRuleId = "lesson" | "drill" | "check" | "exam" | "checkpoint" | "game" | "duel" | "theory" | "code";
 
 /**
  * За что платятся сердечки и сколько (#40, #60; теория — этап 15; тренировка — этап 16В; практикум кода, без «большого урока» — этап 16Г):
@@ -27,6 +27,7 @@ export function entryRules(): { id: EntryRuleId; cost: number }[] {
     { id: "exam", cost: ENTRY_COST.exam },
     { id: "checkpoint", cost: ENTRY_COST.checkpoint },
     { id: "game", cost: ENTRY_COST.game },
+    { id: "duel", cost: ENTRY_COST.duel },
     { id: "theory", cost: ENTRY_COST.theory },
     { id: "code", cost: ENTRY_COST.code },
   ];
@@ -44,6 +45,7 @@ export const ENTRY_RULE_KEYS: Record<EntryRuleId, DictKey> = {
   exam: "shop.rules.exam",
   checkpoint: "shop.rules.checkpoint",
   game: "shop.rules.game",
+  duel: "duel.rules.entry",
   theory: "hearts15.rules.theory",
   code: "hearts16d.rules.code",
 };

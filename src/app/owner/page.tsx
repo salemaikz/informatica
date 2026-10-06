@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { loadOwnerData, ownerSession } from "@/server/owner-data";
 import { OwnerView } from "./OwnerView";
+import { SocialModeration } from "./SocialModeration";
 
 // Страница владельца (решение #69): статистика, жалобы, ошибки с телефонов. Только по-русски — исключение из правила двух языков.
 // Нет OWNER_SECRET в окружении — 404. Вход — форма с паролем → /api/owner/login → cookie inf_owner (12 часов).
@@ -109,6 +110,7 @@ export default async function OwnerPage({ searchParams }: { searchParams: Promis
       ) : (
         <OwnerView data={data} />
       )}
+      <SocialModeration />
     </main>
   );
 }

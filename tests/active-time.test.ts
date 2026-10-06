@@ -12,6 +12,17 @@ describe("активное время #68", () => {
     expect(studyKindOf("/theory/ns-1-bits")).toBe("theory");
     expect(studyKindOf("/tutor/abc")).toBe("tutor");
     expect(studyKindOf("/diagnostic")).toBe("diagnostic");
+    // Дуэли (16Д): матч с ботом, запись вызова и карточка/игра вызова — как игра; хаб и друзья — не учёба.
+    expect(studyKindOf("/duel/play")).toBe("game");
+    expect(studyKindOf("/duel/rec")).toBe("game");
+    expect(studyKindOf("/duel/c/Ab_-12cdEF")).toBe("game");
+    expect(studyKindOf("/duel/live")).toBe("game");
+    expect(studyKindOf("/duel/r/ABC12Z")).toBe("game");
+    expect(studyKindOf("/duel")).toBeNull();
+    expect(studyKindOf("/duel/friends")).toBeNull();
+    expect(studyKindOf("/duel")).toBeNull();
+    expect(studyKindOf("/duel/friends")).toBeNull();
+    expect(studyKindOf("/f/AbCdEfGhIjKlMnOpQrSt_-")).toBeNull();
     expect(studyKindOf("/learn")).toBeNull();
     expect(studyKindOf("/shop")).toBeNull();
     expect(studyKindOf(null)).toBeNull();

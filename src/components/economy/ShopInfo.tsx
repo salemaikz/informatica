@@ -13,6 +13,7 @@ import {
   Dumbbell,
   Flag,
   Gamepad2,
+  Swords,
   GraduationCap,
   Heart,
   Infinity as InfinityIcon,
@@ -53,6 +54,7 @@ const ENTRY_ICONS: Record<EntryRuleId, LucideIcon> = {
   exam: GraduationCap,
   checkpoint: Flag,
   game: Gamepad2,
+  duel: Swords,
   theory: BookText,
   code: Code2,
 };

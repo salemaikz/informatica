@@ -3,7 +3,7 @@
 // Чистые функции без React; поле стора `entryPaid` меняют только payEntryOnce / payEntryFresh / finishSession (store.ts).
 //
 // Ключи: `lesson:<id>` («Учиться»), `check:<id>` («Проверить себя»), ключ тренировки (lib/drill-paid.ts → drillPaidKey),
-// `code:<язык>:<задача>` (задача практикума кода), `quiz:<тема>` («Дай задачи» в чате).
+// `code:<язык>:<задача>` (задача практикума кода), `quiz:<тема>` («Дай задачи» в чате), `duel:<матч>` (дуэль, этап 16Д).
 // Закончил занятие (finishSession) — ключ снимается: следующее такое же снова платное. Обобщает `drillPaid` этапа 16В (E7).
 
 import { RUN_GRACE_MS } from "./lesson-run";
@@ -21,6 +21,8 @@ export const lessonEntryKey = (lessonId: string): string => `lesson:${lessonId}`
 export const checkEntryKey = (lessonId: string): string => `check:${lessonId}`;
 export const codeEntryKey = (lang: string, taskId: string): string => `code:${lang}:${taskId}`;
 export const quizEntryKey = (topic: string | undefined): string => `quiz:${topic ?? ""}`;
+/** Дуэль: один матч — одно сердечко; реванш — новый матч, новый ключ. */
+export const duelEntryKey = (matchId: string): string => `duel:${matchId}`;
 
 const fresh = (at: number, now: number) => now - at >= 0 && now - at <= ENTRY_PAID_GRACE_MS;
 
