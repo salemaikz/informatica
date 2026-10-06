@@ -232,13 +232,13 @@ describe("чистые функции и санитайзер", () => {
     expect(out.history[1].oppName).toBeUndefined();
     expect(out.history[0].topic).toBe("t03");
     expect(out.botAdj).toBe(0.1);
-    expect(sanitizeDuels(null)).toEqual({ history: [], botAdj: 0 });
-    expect(sanitizeDuels({ botAdj: Number.NaN, history: "x" })).toEqual({ history: [], botAdj: 0 });
+    expect(sanitizeDuels(null)).toEqual({ history: [], botAdj: 0, hiddenNames: [] });
+    expect(sanitizeDuels({ botAdj: Number.NaN, history: "x" })).toEqual({ history: [], botAdj: 0, hiddenNames: [] });
   });
 
   it("mergeState: срез duels проходит санитайзер; старое сохранение без поля — пустой срез", () => {
     const cur = useApp.getState();
-    expect(mergeState({}, cur).duels).toEqual({ history: [], botAdj: 0 });
+    expect(mergeState({}, cur).duels).toEqual({ history: [], botAdj: 0, hiddenNames: [] });
     const m = mergeState({ duels: { history: [{ id: "x", at: 1, mode: "ten", opp: "bot", result: "loss", you: side(1, 1), rival: side(2, 2) }], botAdj: -0.05 } }, cur);
     expect(m.duels.history).toHaveLength(1);
     expect(m.duels.history[0].xp).toBe(0);

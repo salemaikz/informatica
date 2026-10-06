@@ -120,9 +120,9 @@ export function profileFromHash(h: Record<string, string>, names = namesEnabled(
   };
 }
 
-/** Карточка для pl:c:{pid} (короткие поля: читается пачками). */
-export function cardJson(p: PublicCard): string {
-  return JSON.stringify({ c: p.code, n: p.name, lv: p.lv, fr: p.frame, ti: p.title });
+/** Карточка для pl:c:{pid} (короткие поля: читается пачками). h: 1 — игрок скрыл свои очки в топе друзей (ft = false, Ф3). */
+export function cardJson(p: PublicCard & { ft?: boolean }): string {
+  return JSON.stringify({ c: p.code, n: p.name, lv: p.lv, fr: p.frame, ti: p.title, ...(p.ft === false ? { h: 1 } : {}) });
 }
 
 /** Карточка из pl:c:{pid}; null — нет или мусор. Имена выключены — имени нет. */

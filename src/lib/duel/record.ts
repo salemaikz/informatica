@@ -9,8 +9,8 @@ import type { DuelModeId } from "./types";
 // История дуэлей и «резинка» бота в сторе (срез `duels`, docs/specs/duels.md §4, §8). Чистые функции без React:
 // стор их только вызывает (recordDuel), всё из хранилища — недоверенное (sanitizeDuels).
 
-/** Кто был соперником: живой игрок, запись друга (вызов) или бот. */
-export type DuelOppKind = "bot" | "human" | "ghost";
+/** Кто был соперником: живой игрок, запись друга (вызов), бот или никто («solo» — запись своего вызова другу, Ф3). */
+export type DuelOppKind = "bot" | "human" | "ghost" | "solo";
 
 /** Итоги одной стороны матча. */
 export interface DuelSideStat {
@@ -33,6 +33,10 @@ export interface DuelRecord {
   /** Имя соперника (у бота — нет: подпись «Бит» и чип «бот» даёт интерфейс). */
   oppName?: string;
   oppLevel?: number;
+  /** Код друга соперника-человека (для «Пожаловаться» и скрытых имён). */
+  oppCode?: string;
+  /** Вызов (Ф3): id записи, против которой шла игра, или записанного своего вызова (solo). */
+  chId?: string;
   result: DuelOutcome;
   you: DuelSideStat;
   /** Итоги соперника (поле `opp` занято видом соперника). */
@@ -46,12 +50,21 @@ export interface DuelsState {
   history: DuelRecord[];
   /** «Резинка» точности бота, −0,1…+0,1 (lib/duel/bot.ts → nextBotAdj). */
   botAdj: number;
+  /** Коды игроков, на которых ученик пожаловался: их имя у него скрыто сразу (Ф3, docs/specs/duels.md §7). */
+  hiddenNames: string[];
 }
 
 export const DUEL_HISTORY_MAX = 50;
-export const EMPTY_DUELS: DuelsState = { history: [], botAdj: 0 };
+export const EMPTY_DUELS: DuelsState = { history: [], botAdj: 0, hiddenNames: [] };
+/** Сколько скрытых имён помним (старые вытесняются). */
+export const HIDDEN_NAMES_MAX = 200;
 
-const OPP_KINDS: readonly DuelOppKind[] = ["bot", "human", "ghost"];
+/** Скрыть имя игрока (код друга) у себя: в начало списка, без повторов, не больше HIDDEN_NAMES_MAX. */
+export function hideName(list: readonly string[], code: string): string[] {
+  return [code, ...list.filter((c) => c !== code)].slice(0, HIDDEN_NAMES_MAX);
+}
+
+const OPP_KINDS: readonly DuelOppKind[] = ["bot", "human", "ghost", "solo"];
 const RESULTS: readonly DuelOutcome[] = ["win", "loss", "draw"];
 const MAX_MS = 24 * 3600_000;
 
@@ -79,7 +92,7 @@ export function duelXpAnswers(mode: DuelModeId, you: Pick<DuelSideStat, "score" 
  */
 export function duelXpBase(mode: DuelModeId, you: Pick<DuelSideStat, "score" | "correct">, result: DuelOutcome, opp: DuelOppKind): number {
   const base = Math.min(GAME_XP.cap, duelXpAnswers(mode, you) * GAME_XP.perCorrect);
-  return base + (result === "win" ? DUEL_WIN_XP[opp === "bot" ? "bot" : "human"] : 0);
+  return base + (result === "win" && opp !== "solo" ? DUEL_WIN_XP[opp === "bot" ? "bot" : "human"] : 0);
 }
 
 /** Сколько ошибок одного матча попадает в «Ошибки»: быстрые режимы не должны вытеснять ошибки уроков и пробников. */
@@ -149,15 +162,18 @@ function sanitizeRecord(raw: unknown): DuelRecord | null {
   if (!you || !rival) return null;
   const rec: DuelRecord = { id: r.id, at, mode: r.mode, opp: r.opp as DuelOppKind, result: r.result as DuelOutcome, you, rival, xp: int(r.xp, 0, 100_000) ?? 0 };
   if (typeof r.topic === "string" && r.topic && r.topic.length <= 32) rec.topic = r.topic;
-  if (rec.opp !== "bot" && typeof r.oppName === "string" && r.oppName.trim()) rec.oppName = r.oppName.trim().slice(0, 30);
+  const person = rec.opp === "human" || rec.opp === "ghost";
+  if (person && typeof r.oppName === "string" && r.oppName.trim()) rec.oppName = r.oppName.trim().slice(0, 30);
   const lv = int(r.oppLevel, 1, 999);
-  if (lv !== null && rec.opp !== "bot") rec.oppLevel = lv;
+  if (lv !== null && person) rec.oppLevel = lv;
+  if (person && typeof r.oppCode === "string" && /^[0-9A-Z]{8}$/.test(r.oppCode)) rec.oppCode = r.oppCode;
+  if (typeof r.chId === "string" && /^[A-Za-z0-9_-]{10}$/.test(r.chId)) rec.chId = r.chId;
   return rec;
 }
 
 /** Срез из хранилища (недоверенный): корректные записи без повторов id, новые первыми, «резинка» в пределах ±0,1. */
 export function sanitizeDuels(raw: unknown): DuelsState {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { history: [], botAdj: 0 };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { history: [], botAdj: 0, hiddenNames: [] };
   const r = raw as Record<string, unknown>;
   const seen = new Set<string>();
   const history: DuelRecord[] = [];
@@ -171,5 +187,8 @@ export function sanitizeDuels(raw: unknown): DuelsState {
   }
   history.sort((a, b) => b.at - a.at);
   const adj = typeof r.botAdj === "number" && Number.isFinite(r.botAdj) ? Math.min(ADJ_MAX, Math.max(-ADJ_MAX, r.botAdj)) : 0;
-  return { history: history.slice(0, DUEL_HISTORY_MAX), botAdj: Math.round(adj * 100) / 100 };
+  const hiddenNames = Array.isArray(r.hiddenNames)
+    ? [...new Set(r.hiddenNames.filter((c): c is string => typeof c === "string" && /^[0-9A-Z]{8}$/.test(c)))].slice(0, HIDDEN_NAMES_MAX)
+    : [];
+  return { history: history.slice(0, DUEL_HISTORY_MAX), botAdj: Math.round(adj * 100) / 100, hiddenNames };
 }

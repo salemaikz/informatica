@@ -10,6 +10,7 @@ import { ENTRY_COST } from "@/lib/economy";
 import { DUEL_MODE_IDS } from "@/lib/duel/modes";
 import { duelTopics, isDuelTopic, isEntTopic } from "@/lib/duel/topics";
 import { duelPlayHref, newDuelSeed } from "@/lib/duel/api";
+import { recHref } from "@/lib/duel/challenge";
 import type { DuelRecord } from "@/lib/duel/record";
 import type { DuelModeId } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
@@ -18,7 +19,11 @@ import { Pill } from "@/components/ui/Pill";
 import { HeartCost } from "@/components/economy/HeartCost";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useEntVisible } from "@/components/school/useEntVisible";
+import { useSocialHome } from "@/components/social/useSocial";
+import { useShowName } from "@/components/social/PlayerCard";
+import { GhostChip } from "./rival";
 import { BotChip } from "./BotChip";
+import { FriendsCard } from "./FriendsCard";
 import { MODE_ICON, MODE_TITLE, modeDesc, topicTitle } from "./mode-meta";
 
 // Хаб дуэлей /duel (этап 16Д, Ф1; docs/specs/duels.md §9): главная кнопка — «Сыграть с Битом» в выбранном режиме,
@@ -56,6 +61,11 @@ export function DuelHub() {
   const router = useRouter();
   const [pick, setPick] = useState<Pick>(readPick);
   const [topicsOpen, setTopicsOpen] = useState(false);
+  // Ф3: «Вызвать друга» — выбор режима → запись вызова (/duel/rec); тема — тем же листом тем.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [topicFor, setTopicFor] = useState<"bot" | "invite">("bot");
+  const social = useSocialHome();
+  const socialOn = social.state === "on";
   const history = useApp((s) => s.duels.history);
 
   const topicName = (topic: string | undefined): string => {
@@ -110,30 +120,53 @@ export function DuelHub() {
         </span>
       </button>
 
-      {/* Друзья и живые соперники — Ф3/Ф4. */}
+      {/* Живые соперники — Ф4; «Вызвать друга» (Ф3) — когда соцчасть включена. */}
       <section data-tour="duel-soon" className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">
-          {[
-            { key: "duel.find" as const, Icon: Users },
-            { key: "duel.invite" as const, Icon: UserPlus },
-          ].map(({ key, Icon }) => (
+          <button
+            type="button"
+            disabled
+            aria-disabled
+            className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-extrabold">
+              <Users size={18} aria-hidden />
+              {t("duel.find")}
+            </span>
+            <Pill>{t("duel.soon")}</Pill>
+          </button>
+          {socialOn ? (
             <button
-              key={key}
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              data-testid="duel-invite"
+              className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-primary/40 bg-primary-soft px-3 py-2.5 text-left shadow-[0_3px_0_var(--primary)] transition-transform active:translate-y-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <span className="flex items-center gap-1.5 text-sm font-extrabold text-ink-primary">
+                <UserPlus size={18} aria-hidden />
+                {t("duel.invite")}
+              </span>
+              <span className="text-xs font-semibold text-muted">{t("duel.invite.desc")}</span>
+            </button>
+          ) : (
+            <button
               type="button"
               disabled
               aria-disabled
               className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-dashed border-border bg-surface px-3 py-2.5 text-left text-muted"
             >
               <span className="flex items-center gap-1.5 text-sm font-extrabold">
-                <Icon size={18} aria-hidden />
-                {t(key)}
+                <UserPlus size={18} aria-hidden />
+                {t("duel.invite")}
               </span>
               <Pill>{t("duel.soon")}</Pill>
             </button>
-          ))}
+          )}
         </div>
-        <p className="text-xs font-semibold text-muted">{t("duel.soon.hint")}</p>
+        <p className="text-xs font-semibold text-muted">{t(socialOn ? "social.hub.hint" : "duel.soon.hint")}</p>
       </section>
+
+      {socialOn && <FriendsCard home={social.home} />}
 
       <section>
         <h2 className="mb-3 text-lg font-extrabold">{t("duel.modes")}</h2>
@@ -149,7 +182,11 @@ export function DuelHub() {
                 role="radio"
                 aria-checked={on}
                 data-mode={mode}
-                onClick={() => (isTopic ? setTopicsOpen(true) : choose({ mode }))}
+                onClick={() => {
+                  if (!isTopic) return choose({ mode });
+                  setTopicFor("bot");
+                  setTopicsOpen(true);
+                }}
                 className={cn(
                   "flex flex-col gap-2 rounded-3xl border-2 p-3.5 text-left transition-colors active:translate-y-0.5",
                   on ? "border-primary bg-primary-soft shadow-[0_3px_0_var(--primary)]" : "border-border bg-surface shadow-[0_3px_0_var(--border)] hover:bg-surface-2",
@@ -179,12 +216,64 @@ export function DuelHub() {
         current={pick.mode === "topic" ? pick.topic : undefined}
         onClose={() => setTopicsOpen(false)}
         onPick={(topic) => {
-          choose({ mode: "topic", topic });
           setTopicsOpen(false);
+          if (topicFor === "invite") {
+            router.push(recHref("topic", topic));
+            return;
+          }
+          choose({ mode: "topic", topic });
         }}
         topicName={topicName}
       />
+
+      <InviteModeSheet
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onPick={(mode) => {
+          setInviteOpen(false);
+          if (mode === "topic") {
+            setTopicFor("invite");
+            setTopicsOpen(true);
+            return;
+          }
+          router.push(recHref(mode));
+        }}
+      />
     </div>
+  );
+}
+
+/** «Вызвать друга»: выбор режима записи вызова (1 сердечко, как любой матч). */
+function InviteModeSheet({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (mode: DuelModeId) => void }) {
+  const { t } = useT();
+  return (
+    <Modal open={open} onClose={onClose} label={t("duel.invite.pick")}>
+      <div className="flex flex-col gap-3 pb-[max(8px,env(safe-area-inset-bottom))]" data-testid="duel-invite-sheet">
+        <h2 className="text-xl font-extrabold">{t("duel.invite.pick")}</h2>
+        <p className="-mt-1 text-sm font-semibold text-muted">{t("duel.rec.note")}</p>
+        {DUEL_MODE_IDS.map((mode) => {
+          const Icon = MODE_ICON[mode];
+          return (
+            <button
+              key={mode}
+              type="button"
+              data-mode={mode}
+              onClick={() => onPick(mode)}
+              className="flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 border-border bg-surface px-3 py-2 text-left hover:bg-surface-2"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                <Icon size={20} aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="font-extrabold">{t(MODE_TITLE[mode])}</span>
+                <span className="text-xs font-semibold text-muted">{modeDesc(t, mode)}</span>
+              </span>
+              <HeartCost n={ENTRY_COST.duel} />
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
 
@@ -218,23 +307,21 @@ function RecentDuels({ history, topicName }: { history: readonly DuelRecord[]; t
                         {t("duel.bot.name")} <BotChip />
                       </>
                     ) : (
-                      (r.oppName ?? "")
+                      <OppLabel r={r} />
                     )}
                     <span aria-hidden>·</span>
                     <span>{date}</span>
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end">
-                  <span className="font-mono text-base font-extrabold">
-                    {r.you.score} : {r.rival.score}
-                  </span>
+                  <span className="font-mono text-base font-extrabold">{r.opp === "solo" ? r.you.score : `${r.you.score} : ${r.rival.score}`}</span>
                   <span
                     className={cn(
                       "text-xs font-extrabold",
-                      r.result === "win" ? "text-ink-success" : r.result === "draw" ? "text-ink-warning" : "text-muted",
+                      r.opp === "solo" ? "text-ink-primary" : r.result === "win" ? "text-ink-success" : r.result === "draw" ? "text-ink-warning" : "text-muted",
                     )}
                   >
-                    {r.result === "win" ? t("duel.result.win") : r.result === "draw" ? t("duel.result.draw") : t("duel.result.lossShort")}
+                    {r.opp === "solo" ? t("social.solo.result") : r.result === "win" ? t("duel.result.win") : r.result === "draw" ? t("duel.result.draw") : t("duel.result.lossShort")}
                   </span>
                 </span>
               </li>
@@ -243,6 +330,20 @@ function RecentDuels({ history, topicName }: { history: readonly DuelRecord[]; t
         </ul>
       )}
     </section>
+  );
+}
+
+/** Соперник в истории (Ф3): запись своего вызова, запись друга (имя на момент игры; скрытое жалобой — номером). */
+function OppLabel({ r }: { r: DuelRecord }) {
+  const { t } = useT();
+  const show = useShowName();
+  if (r.opp === "solo") return <span className="truncate">{t("social.solo.name")}</span>;
+  const name = r.oppCode ? show({ code: r.oppCode, name: r.oppName ?? null }) : (r.oppName ?? "");
+  return (
+    <>
+      <span className="truncate">{name}</span>
+      {r.opp === "ghost" && <GhostChip />}
+    </>
   );
 }
 

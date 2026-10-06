@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, ListChecks, RotateCcw, Swords, Trophy, X } from "lucide-react";
-import { useState } from "react";
+import { Check, ListChecks, RotateCcw, Send, Swords, Trophy, UserPlus, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { ENTRY_COST } from "@/lib/economy";
 import { correctAnswer } from "@/lib/duel/check";
@@ -18,6 +18,7 @@ import { XpIcon } from "@/components/economy/XpIcon";
 import { Avatar } from "@/components/app/Avatar";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 import { BotChip } from "./BotChip";
+import { RivalAvatar, RivalChip, useRivalName, type Rival } from "./rival";
 
 // Итоги дуэли (этап 16Д, docs/specs/duels.md §9): победа — кубок золотом; проигрыш — мягко, без красного заголовка;
 // счёт, верные, время, опыт; «Реванш» (новый вход — новое сердечко), «Разобрать ошибки» (статические объяснения),
@@ -38,6 +39,11 @@ export function DuelResult({
   answers,
   onRematch,
   onHub,
+  opponent,
+  extra,
+  report,
+  onChallenge,
+  challengeLabel,
 }: {
   result: DuelOutcome;
   you: DuelSideStat;
@@ -46,10 +52,23 @@ export function DuelResult({
   items: DuelItem[];
   events: DuelEvent[];
   answers: (DuelAnswer | null)[];
-  onRematch: () => void;
+  /** Нет — без кнопки «Реванш» (запись друга, запись своего вызова). */
+  onRematch?: () => void;
   onHub: () => void;
+  /** Соперник (Ф3); по умолчанию — Бит. */
+  opponent?: Rival;
+  /** Блок над кнопками: ссылка вызова, очки недели, плашка «не попал в топ». */
+  extra?: ReactNode;
+  /** Кнопка «Пожаловаться» у соперника-человека (у бота её нет). */
+  report?: ReactNode;
+  /** «Вызвать друга на этот режим» / «Вызвать в ответ» (Ф3). */
+  onChallenge?: () => void;
+  challengeLabel?: string;
 }) {
   const { t } = useT();
+  const rivalName = useRivalName();
+  const solo = opponent?.kind === "solo";
+  const bot = !opponent || opponent.kind === "bot";
   const name = useApp((s) => s.profile.name);
   const avatar = useApp((s) => s.profile.avatar);
   const [review, setReview] = useState(false);
@@ -58,7 +77,14 @@ export function DuelResult({
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-5 px-4 pb-[max(20px,env(safe-area-inset-bottom))] pt-6 animate-fade-in" data-testid="duel-result">
       <div className="flex flex-col items-center gap-2 text-center">
-        {result === "win" ? (
+        {solo ? (
+          <>
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-soft animate-pop">
+              <Send size={40} className="text-ink-primary" aria-hidden />
+            </span>
+            <h1 className="text-2xl font-black">{t("duel.rec.title")}</h1>
+          </>
+        ) : result === "win" ? (
           <>
             <span className="flex h-20 w-20 items-center justify-center rounded-full bg-gold-soft animate-pop">
               <Trophy size={44} className="text-gold" aria-hidden />
@@ -84,17 +110,28 @@ export function DuelResult({
           <span className="w-full truncate text-center text-sm font-extrabold">{name || t("duel.you")}</span>
         </div>
         <span className="whitespace-nowrap font-mono text-3xl font-black tabular-nums" data-testid="duel-final-score">
-          {you.score} : {rival.score}
+          {solo ? you.score : `${you.score} : ${rival.score}`}
         </span>
-        <div className="flex min-w-0 flex-col items-center gap-1">
-          <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-2">
-            <Mascot mood="neutral" size={38} />
-          </span>
-          <span className="text-sm font-extrabold">{t("duel.bot.name")}</span>
-          <BotChip />
-        </div>
-        <Row label={t("duel.correct")} a={String(you.correct)} b={String(rival.correct)} />
-        <Row label={t("duel.time")} a={fmtTime(you.timeMs)} b={fmtTime(rival.timeMs)} />
+        {bot ? (
+          <div className="flex min-w-0 flex-col items-center gap-1">
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-2">
+              <Mascot mood="neutral" size={38} />
+            </span>
+            <span className="text-sm font-extrabold">{t("duel.bot.name")}</span>
+            <BotChip />
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col items-center gap-1" data-testid="duel-result-rival">
+            <RivalAvatar rival={opponent} size={40} />
+            <span className="line-clamp-2 w-full text-center text-sm font-extrabold [overflow-wrap:anywhere]">{rivalName(opponent)}</span>
+            <span className="flex items-center gap-1">
+              <RivalChip rival={opponent} />
+              {report}
+            </span>
+          </div>
+        )}
+        <Row label={t("duel.correct")} a={String(you.correct)} b={solo ? "—" : String(rival.correct)} />
+        <Row label={t("duel.time")} a={fmtTime(you.timeMs)} b={solo ? "—" : fmtTime(rival.timeMs)} />
       </section>
 
       <div className="flex items-center justify-center gap-2 rounded-2xl border-2 border-gold bg-surface p-3">
@@ -105,17 +142,29 @@ export function DuelResult({
         </span>
       </div>
 
-      <MascotSays mood={result === "loss" ? "happy" : result === "win" ? "celebrate" : "happy"} size={56}>
-        <span className="font-bold">{t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}</span>
-      </MascotSays>
-      <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>
+      {bot && (
+        <MascotSays mood={result === "loss" ? "happy" : result === "win" ? "celebrate" : "happy"} size={56}>
+          <span className="font-bold">{t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}</span>
+        </MascotSays>
+      )}
+      {bot && <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>}
+
+      {extra}
 
       <div className="flex-1" />
       <div className="flex flex-col gap-3">
-        <Button size="lg" block onClick={onRematch} icon={<RotateCcw size={20} />}>
-          {t("duel.rematch")}
-          <HeartCost n={ENTRY_COST.duel} variant="solid" />
-        </Button>
+        {onRematch && (
+          <Button size="lg" block onClick={onRematch} icon={<RotateCcw size={20} />}>
+            {t("duel.rematch")}
+            <HeartCost n={ENTRY_COST.duel} variant="solid" />
+          </Button>
+        )}
+        {onChallenge && (
+          <Button variant="secondary" block onClick={onChallenge} icon={<UserPlus size={18} />} data-testid="duel-challenge-mode">
+            {challengeLabel ?? t("duel.challengeMode")}
+            <HeartCost n={ENTRY_COST.duel} />
+          </Button>
+        )}
         {wrong.length > 0 ? (
           <Button variant="secondary" block onClick={() => setReview(true)} icon={<ListChecks size={18} />}>
             {t("duel.review")} · {wrong.length}

@@ -29,6 +29,8 @@ import { DuelResult } from "./DuelResult";
 import { DuelRun } from "./DuelRun";
 import { VsScreen } from "./VsScreen";
 import { topicTitle } from "./mode-meta";
+import { recHref } from "@/lib/duel/challenge";
+import { useSocialState } from "@/components/social/useSocial";
 
 // Матч с Битом (этап 16Д, Ф1): набор с сервера → «VS» и отсчёт → сердечко в конце отсчёта (payEntryOnce по ключу матча,
 // из таймера, не из эффекта; не хватает — окно «Сердечки закончились») → матч → итоги (recordDuel). Реванш — новый seed,
@@ -109,6 +111,8 @@ export function DuelPlay({ mode, topic, seed, entry = null }: { mode: DuelModeId
   const [attempt, setAttempt] = useState(0);
   const [noHearts, setNoHearts] = useState(false);
   const recorded = useRef(false);
+  // Ф3: на итогах матча с ботом — «Вызвать друга на этот режим» (новая записанная игра), если соцчасть включена.
+  const socialOn = useSocialState() === "on";
 
   // Без seed в адресе — новый матч: дописываем seed (перезагрузка не меняет набор и не платит второй раз).
   useEffect(() => {
@@ -261,6 +265,7 @@ export function DuelPlay({ mode, topic, seed, entry = null }: { mode: DuelModeId
           answers={phase.run.answers}
           onRematch={rematch}
           onHub={toHub}
+          onChallenge={socialOn ? () => router.replace(recHref(mode, topic)) : undefined}
         />
       )}
       <OutOfHearts
