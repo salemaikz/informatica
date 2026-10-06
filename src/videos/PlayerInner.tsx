@@ -1,17 +1,16 @@
 "use client";
 
-import { Player, type PlayerRef } from "@remotion/player";
-import { Captions, CaptionsOff, Gauge, Play, RotateCcw, RotateCw } from "lucide-react";
+import { Player, type CallbackListener, type PlayerRef } from "@remotion/player";
+import { Captions, CaptionsOff, Gauge, Maximize, Minimize, Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
-import { useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
 import type { Lang } from "@/lib/types";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { VIDEOS } from "./registry";
-import { RATES, RATE_STORAGE_KEY, SEEK_STEP_SEC, formatRate, sanitizeRate, seekFrame, stepRate } from "./seek";
+import { setMusicVideoPlaying } from "@/lib/music";
+import { RATES, RATE_STORAGE_KEY, SEEK_STEP_SEC, fitBox, formatClock, formatRate, sanitizeRate, seekFrame, stepRate } from "./seek";
 
-/** Нижняя полоса плеера Remotion (контролы) — её двойные касания не перехватываем. */
-const CONTROLS_SAFE_PX = 48;
 /** Окно двойного касания, мс. */
 const DOUBLE_TAP_MS = 320;
 /** Сколько висит всплывающее «−5 с», мс. */
@@ -46,10 +45,11 @@ function keysBelongElsewhere(target: EventTarget | null, wrap: HTMLElement): boo
   return false;
 }
 
-const barBtn =
-  "flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-1 text-sm font-bold text-muted hover:bg-surface-2 aria-pressed:text-primary";
-/** Перемотка: круглая стрелка с «5» внутри — компактно, чтобы панель влезала в 360 px в одну строку. */
-const seekBtn = "relative flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface-2";
+/** Кнопка панели: зона касания 44×44 px. */
+const ctl =
+  "flex h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-1 text-sm font-bold text-muted hover:bg-surface-2 hover:text-text focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary aria-pressed:text-primary";
+
+type FsEl = HTMLDivElement & { webkitRequestFullscreen?: () => void };
 
 export default function PlayerInner({ videoId, lang, title }: { videoId: string; lang: Lang; title?: string }) {
   const { t } = useT();
@@ -57,8 +57,16 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
   const [rate, setRate] = useState(readRate);
   const [rateOpen, setRateOpen] = useState(false);
   const [flash, setFlash] = useState<{ id: number; dir: -1 | 1 } | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [frame, setFrame] = useState(0);
+  // Полный экран: настоящий (Fullscreen API) или «псевдо» — фиксированный слой, если API нет (iPhone) или отказал.
+  const [realFs, setRealFs] = useState(false);
+  const [pseudoFs, setPseudoFs] = useState(false);
+  const [area, setArea] = useState({ w: 0, h: 0 });
   const playerRef = useRef<PlayerRef>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const lastTap = useRef<{
     at: number;
     dir: -1 | 1;
@@ -67,36 +75,150 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashId = useRef(0);
   const ratesId = useId();
+  const fullscreen = realFs || pseudoFs;
 
   const meta = VIDEOS[videoId];
   const fps = meta?.fps ?? 30;
   const duration = meta ? meta.durationInFrames(lang) : 0;
+  const last = Math.max(0, duration - 1);
 
   /** Перемотка на sec секунд; пауза/воспроизведение не меняются. */
   const seekBy = useCallback(
     (sec: number) => {
       const p = playerRef.current;
       if (!p) return;
-      p.seekTo(seekFrame(p.getCurrentFrame(), sec, fps, duration));
+      const f = seekFrame(p.getCurrentFrame(), sec, fps, duration);
+      p.seekTo(f);
+      setFrame(f);
     },
     [fps, duration],
   );
+
+  const seekTo = useCallback(
+    (f: number) => {
+      const p = playerRef.current;
+      if (!p) return;
+      const clamped = Math.min(last, Math.max(0, Math.round(f)));
+      p.seekTo(clamped);
+      setFrame(clamped);
+    },
+    [last],
+  );
+
+  const toggle = useCallback((e?: SyntheticEvent) => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (p.isPlaying()) p.pause();
+    else p.play(e);
+  }, []);
 
   const changeRate = useCallback((next: number) => {
     setRate(next);
     writeRate(next);
   }, []);
 
-  // Клавиатура: ←/→ — ±5 с, «<» / «>» — скорость. Не мешаем полям ввода и слайдерам; работаем, только пока плеер виден.
+  const enterFullscreen = useCallback(async () => {
+    const el = rootRef.current as FsEl | null;
+    if (!el) return;
+    try {
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+        return;
+      }
+      if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+        return;
+      }
+    } catch {
+      // отказ браузера — переходим к полному экрану слоем
+    }
+    setPseudoFs(true);
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    setPseudoFs(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+
+  // События плеера: воспроизведение, позиция, звук. Пока видео играет, фоновая музыка на паузе.
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    const onPlay: CallbackListener<"play"> = () => {
+      setPlaying(true);
+      setMusicVideoPlaying(true);
+    };
+    const onPause: CallbackListener<"pause"> = () => {
+      setPlaying(false);
+      setMusicVideoPlaying(false);
+    };
+    const onEnded: CallbackListener<"ended"> = () => {
+      setPlaying(false);
+      setMusicVideoPlaying(false);
+    };
+    const onTime: CallbackListener<"timeupdate"> = (e) => setFrame(e.detail.frame);
+    const onSeeked: CallbackListener<"seeked"> = (e) => setFrame(e.detail.frame);
+    const onMute: CallbackListener<"mutechange"> = (e) => setMuted(e.detail.isMuted);
+    p.addEventListener("play", onPlay);
+    p.addEventListener("pause", onPause);
+    p.addEventListener("ended", onEnded);
+    p.addEventListener("timeupdate", onTime);
+    p.addEventListener("seeked", onSeeked);
+    p.addEventListener("mutechange", onMute);
+    return () => {
+      p.removeEventListener("play", onPlay);
+      p.removeEventListener("pause", onPause);
+      p.removeEventListener("ended", onEnded);
+      p.removeEventListener("timeupdate", onTime);
+      p.removeEventListener("seeked", onSeeked);
+      p.removeEventListener("mutechange", onMute);
+      setMusicVideoPlaying(false);
+    };
+  }, [meta]);
+
+  // Настоящий полный экран: следим за состоянием (выход по Esc/жесту приходит отсюда).
+  useEffect(() => {
+    const onChange = () => setRealFs(document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // «Псевдо» полный экран: Esc закрывает слой.
+  useEffect(() => {
+    if (!pseudoFs) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPseudoFs(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pseudoFs]);
+
+  // В полном экране видео вписываем в оставшееся место над панелью (мерим область).
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!fullscreen || !el) return;
+    const measure = () => setArea({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fullscreen]);
+
+  // Клавиатура: ←/→ — ±5 с, «<» / «>» — скорость; Пробел/K, Home/End — когда фокус на плеере. Не мешаем полям и слайдерам.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-      const wrap = wrapRef.current;
+      const wrap = rootRef.current;
       if (!wrap || keysBelongElsewhere(e.target, wrap)) return;
       const r = wrap.getBoundingClientRect();
       if (r.bottom <= 0 || r.top >= window.innerHeight) return;
+      const inside = e.target instanceof Node && wrap.contains(e.target);
+      const onButton = e.target instanceof HTMLElement && !!e.target.closest("button, a");
       if (e.key === "ArrowLeft") seekBy(-SEEK_STEP_SEC);
       else if (e.key === "ArrowRight") seekBy(SEEK_STEP_SEC);
+      else if (inside && ((e.key === " " && !onButton) || e.code === "KeyK")) toggle();
+      else if (inside && e.key === "Home") seekTo(0);
+      else if (inside && e.key === "End") seekTo(last);
       // по e.code — чтобы «<»/«>» работали и в русской раскладке
       else if (e.shiftKey && (e.code === "Comma" || e.key === "<")) changeRate(stepRate(rate, -1));
       else if (e.shiftKey && (e.code === "Period" || e.key === ">")) changeRate(stepRate(rate, 1));
@@ -105,7 +227,7 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [seekBy, changeRate, rate]);
+  }, [seekBy, seekTo, toggle, changeRate, rate, last]);
 
   useEffect(
     () => () => {
@@ -123,17 +245,12 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
 
   // Двойное касание левой/правой половины (только touch): ±5 с. Одиночное касание проходит к Remotion (play/pause).
   // Remotion переключает play/pause уже на первом касании, поэтому при двойном возвращаем прежнее состояние
-  // и не пускаем второе касание дальше.
+  // и не пускаем второе касание дальше. Панель управления — вне этой области, её касания не перехватываем.
   const onTapCapture = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "touch" || !e.isPrimary || document.fullscreenElement) return;
+    if (e.pointerType !== "touch" || !e.isPrimary) return;
     const player = playerRef.current;
     if (!player) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    if (y < 0 || y > rect.height - CONTROLS_SAFE_PX) {
-      lastTap.current = null;
-      return;
-    }
     const dir: -1 | 1 = e.clientX < rect.left + rect.width / 2 ? -1 : 1;
     const prev = lastTap.current;
     if (prev && prev.dir === dir && e.timeStamp - prev.at < DOUBLE_TAP_MS) {
@@ -152,103 +269,168 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
   };
 
   if (!meta) return null;
+  const clockNow = formatClock(frame, fps);
+  const clockTotal = formatClock(duration, fps);
+  const box = fullscreen ? fitBox(area.w, area.h, meta.width / meta.height) : null;
   return (
-    <div className="overflow-hidden rounded-3xl border-2 border-border bg-surface">
-      {/* touch-manipulation — браузер не масштабирует страницу двойным касанием */}
-      <div ref={wrapRef} className="relative touch-manipulation" onPointerDownCapture={onTapCapture}>
-        <Player
-          ref={playerRef}
-          component={meta.component}
-          inputProps={{ lang, subtitles }}
-          durationInFrames={duration}
-          compositionWidth={meta.width}
-          compositionHeight={meta.height}
-          fps={meta.fps}
-          playbackRate={rate}
-          controls
-          clickToPlay
-          allowFullscreen
-          showVolumeControls
-          spaceKeyToPlayOrPause
-          acknowledgeRemotionLicense
-          showPosterWhenUnplayed
-          renderPoster={() => (
-            <div className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-4 bg-bg/80 backdrop-blur-[2px]">
-              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-white shadow-[0_6px_0_var(--primary-strong)]">
-                <Play size={36} fill="currentColor" className="ml-1" />
-              </span>
-              {title && <span className="px-6 text-center text-xl font-extrabold">{title}</span>}
-            </div>
-          )}
-          style={{
-            width: "100%",
-            aspectRatio: `${meta.width} / ${meta.height}`,
-          }}
-        />
-        <AnimatePresence>
-          {flash && (
-            <m.div
-              key={flash.id}
-              aria-hidden
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className={cn(
-                "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-4 py-2 text-base font-extrabold text-white",
-                flash.dir < 0 ? "left-[12%]" : "right-[12%]",
-              )}
-            >
-              {t(flash.dir < 0 ? "video.back5" : "video.fwd5")}
-            </m.div>
-          )}
-        </AnimatePresence>
+    <div
+      ref={rootRef}
+      data-testid="video-player"
+      data-fullscreen={fullscreen ? "true" : "false"}
+      className={cn(
+        "overflow-hidden bg-surface",
+        fullscreen ? "flex h-dvh w-full flex-col" : "rounded-3xl border-2 border-border",
+        pseudoFs && "fixed inset-0 z-[60]",
+      )}
+    >
+      {/* Сцена: касания (двойное касание ±5 с). touch-manipulation — браузер не масштабирует страницу двойным касанием */}
+      <div
+        ref={stageRef}
+        role="group"
+        tabIndex={0}
+        aria-label={title ?? t("video.controls")}
+        className={cn(
+          "relative touch-manipulation outline-none focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-primary",
+          fullscreen && "flex min-h-0 flex-1 items-center justify-center bg-black",
+        )}
+        onPointerDownCapture={onTapCapture}
+      >
+        <div className="relative" style={box ? { width: box.w, height: box.h } : { width: "100%" }}>
+          <Player
+            ref={playerRef}
+            component={meta.component}
+            inputProps={{ lang, subtitles }}
+            durationInFrames={duration}
+            compositionWidth={meta.width}
+            compositionHeight={meta.height}
+            fps={meta.fps}
+            playbackRate={rate}
+            controls={false}
+            clickToPlay
+            allowFullscreen={false}
+            showVolumeControls={false}
+            spaceKeyToPlayOrPause={false}
+            acknowledgeRemotionLicense
+            showPosterWhenUnplayed
+            renderPoster={() => (
+              <div className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-4 bg-bg/80 backdrop-blur-[2px]">
+                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-white shadow-[0_6px_0_var(--primary-strong)]">
+                  <Play size={36} fill="currentColor" className="ml-1" />
+                </span>
+                {title && <span className="px-6 text-center text-xl font-extrabold">{title}</span>}
+              </div>
+            )}
+            style={{
+              width: "100%",
+              aspectRatio: `${meta.width} / ${meta.height}`,
+            }}
+          />
+          <AnimatePresence>
+            {flash && (
+              <m.div
+                key={flash.id}
+                aria-hidden
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className={cn(
+                  "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-4 py-2 text-base font-extrabold text-white",
+                  flash.dir < 0 ? "left-[12%]" : "right-[12%]",
+                )}
+              >
+                {t(flash.dir < 0 ? "video.back5" : "video.fwd5")}
+              </m.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1 border-t-2 border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={() => seekBy(-SEEK_STEP_SEC)}
-          aria-label={t("video.back5.aria")}
-          className={seekBtn}
-        >
-          <RotateCcw size={28} strokeWidth={2} aria-hidden />
-          <span aria-hidden className="absolute pt-px text-[10px] font-extrabold">
-            {SEEK_STEP_SEC}
+      <div
+        role="group"
+        aria-label={t("video.controls")}
+        className={cn("shrink-0 border-t-2 border-border bg-surface px-2 py-1", fullscreen && "pb-[max(0.25rem,env(safe-area-inset-bottom))]")}
+      >
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={(e) => toggle(e)} aria-label={t(playing ? "video.pause" : "video.play")} title={t(playing ? "video.pause" : "video.play")} className={ctl}>
+            {playing ? <Pause size={22} fill="currentColor" aria-hidden /> : <Play size={22} fill="currentColor" aria-hidden />}
+          </button>
+          <span aria-hidden className="shrink-0 font-mono text-xs tabular-nums text-muted">
+            {clockNow} / {clockTotal}
           </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => seekBy(SEEK_STEP_SEC)}
-          aria-label={t("video.fwd5.aria")}
-          className={seekBtn}
-        >
-          <RotateCw size={28} strokeWidth={2} aria-hidden />
-          <span aria-hidden className="absolute pt-px text-[10px] font-extrabold">
-            {SEEK_STEP_SEC}
-          </span>
-        </button>
-        <div className="ml-auto flex items-center gap-1">
+          <input
+            type="range"
+            min={0}
+            max={last}
+            step={1}
+            value={Math.min(frame, last)}
+            onChange={(e) => seekTo(e.currentTarget.valueAsNumber)}
+            aria-label={t("video.seek")}
+            aria-valuetext={t("video.seek.value", { cur: clockNow, total: clockTotal })}
+            className="h-11 min-w-0 flex-1 cursor-pointer accent-primary focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-primary"
+          />
+        </div>
+        <div className="flex items-center">
+          <button type="button" onClick={() => seekBy(-SEEK_STEP_SEC)} aria-label={t("video.back5.aria")} title={t("video.back5.aria")} className={cn(ctl, "relative")}>
+            <RotateCcw size={26} strokeWidth={2} aria-hidden />
+            <span aria-hidden className="absolute pt-px text-[10px] font-extrabold">
+              {SEEK_STEP_SEC}
+            </span>
+          </button>
+          <button type="button" onClick={() => seekBy(SEEK_STEP_SEC)} aria-label={t("video.fwd5.aria")} title={t("video.fwd5.aria")} className={cn(ctl, "relative")}>
+            <RotateCw size={26} strokeWidth={2} aria-hidden />
+            <span aria-hidden className="absolute pt-px text-[10px] font-extrabold">
+              {SEEK_STEP_SEC}
+            </span>
+          </button>
           <button
             type="button"
-            onClick={() => setRateOpen((o) => !o)}
-            aria-expanded={rateOpen}
-            aria-controls={ratesId}
-            aria-label={t("video.speed.aria", { rate: formatRate(rate) })}
-            className={cn(barBtn, "aria-expanded:bg-surface-2 aria-expanded:text-primary")}
+            onClick={() => {
+              const p = playerRef.current;
+              if (p?.isMuted()) p.unmute();
+              else p?.mute();
+            }}
+            aria-label={t(muted ? "video.unmute" : "video.mute")}
+            title={t(muted ? "video.unmute" : "video.mute")}
+            className={ctl}
           >
-            <Gauge size={18} aria-hidden /> {formatRate(rate)}
+            {muted ? <VolumeX size={22} aria-hidden /> : <Volume2 size={22} aria-hidden />}
           </button>
-          <button type="button" onClick={() => setSubtitles((s) => !s)} aria-pressed={subtitles} className={barBtn}>
-            {subtitles ? <Captions size={18} /> : <CaptionsOff size={18} />} {t("video.subtitles")}
-          </button>
+          <div className="ml-auto flex items-center">
+            <button
+              type="button"
+              onClick={() => setSubtitles((s) => !s)}
+              aria-pressed={subtitles}
+              aria-label={t("video.subtitles")}
+              title={t("video.subtitles")}
+              className={ctl}
+            >
+              {subtitles ? <Captions size={22} aria-hidden /> : <CaptionsOff size={22} aria-hidden />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRateOpen((o) => !o)}
+              aria-expanded={rateOpen}
+              aria-controls={ratesId}
+              aria-label={t("video.speed.aria", { rate: formatRate(rate) })}
+              title={t("video.speed.aria", { rate: formatRate(rate) })}
+              className={cn(ctl, "aria-expanded:bg-surface-2 aria-expanded:text-primary")}
+            >
+              <Gauge size={18} aria-hidden /> {formatRate(rate)}
+            </button>
+            <button
+              type="button"
+              onClick={() => (fullscreen ? exitFullscreen() : void enterFullscreen())}
+              aria-label={t(fullscreen ? "video.exitFullscreen" : "video.fullscreen")}
+              title={t(fullscreen ? "video.exitFullscreen" : "video.fullscreen")}
+              data-testid="video-fullscreen"
+              className={ctl}
+            >
+              {fullscreen ? <Minimize size={22} aria-hidden /> : <Maximize size={22} aria-hidden />}
+            </button>
+          </div>
         </div>
         {rateOpen && (
-          <div
-            id={ratesId}
-            role="group"
-            aria-label={t("video.speed.pick")}
-            className="mt-1 flex w-full gap-1 rounded-2xl bg-surface-2 p-1"
-          >
+          <div id={ratesId} role="group" aria-label={t("video.speed.pick")} className="mb-1 mt-1 flex w-full gap-1 rounded-2xl bg-surface-2 p-1">
             {RATES.map((r) => (
               <button
                 key={r}
@@ -259,7 +441,7 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
                 }}
                 aria-pressed={r === rate}
                 className={cn(
-                  "min-h-10 flex-1 rounded-xl px-1 text-sm font-bold text-muted hover:text-text",
+                  "min-h-11 flex-1 rounded-xl px-1 text-sm font-bold text-muted hover:text-text",
                   r === rate && "bg-primary text-white hover:text-white",
                 )}
               >

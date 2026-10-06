@@ -38,3 +38,17 @@ export function stepRate(current: number, dir: 1 | -1): number {
 export function formatRate(rate: number): string {
   return `${rate}×`;
 }
+
+/** Время «м:сс» по номеру кадра (для подписи ползунка). */
+export function formatClock(frame: number, fps: number): string {
+  const f = Number.isFinite(frame) && frame > 0 ? frame : 0;
+  const total = Math.floor(f / Math.max(1, fps));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Самый большой прямоугольник с отношением сторон aspect (ширина/высота), помещающийся в areaW×areaH. */
+export function fitBox(areaW: number, areaH: number, aspect: number): { w: number; h: number } {
+  if (!(areaW > 0) || !(areaH > 0) || !(aspect > 0)) return { w: 0, h: 0 };
+  const w = Math.min(areaW, areaH * aspect);
+  return { w: Math.floor(w), h: Math.floor(w / aspect) };
+}

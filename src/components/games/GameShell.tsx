@@ -15,6 +15,8 @@ import { GAME_MIN_TOTAL, GAME_PASS, gameCanCredit, gamePassed, gameSkillsFor, ga
 import { entryCost } from "@/lib/economy";
 import { lessonMeta } from "@/content/catalog";
 import { playSound } from "@/lib/sound";
+import { ActivityMusic } from "@/components/music/ActivityMusic";
+import { MusicToggle } from "@/components/music/MusicToggle";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { cn } from "@/lib/cn";
@@ -134,6 +136,8 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
 
   return (
     <div className="flex min-h-dvh flex-col">
+      {/* Фоновая музыка игры (Bit Arcade): только пока идёт раунд. */}
+      <ActivityMusic mode="game" active={phase.name === "playing"} />
       <header className="sticky top-0 z-20 bg-bg/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4">
           <button
@@ -156,6 +160,7 @@ export function GameShell({ id, lessonId, skills }: { id: string; lessonId?: str
               </span>
             )}
           </span>
+          {phase.name === "playing" && <MusicToggle />}
           {phase.name === "playing" && <ToolboxButton variant="icon" />}
           {statKey && (
             <span className="flex items-center gap-1 text-sm font-extrabold text-warning-strong">

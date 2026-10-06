@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } 
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
+import { MusicToggle, useMusicState } from "@/components/music/MusicToggle";
 import { Calculator } from "./Calculator";
 import { tabsFor, TOOL_TABS, useToolbox, type ToolTab } from "./useToolbox";
 
@@ -107,6 +108,7 @@ export function ToolboxButton({ className, variant = "icon" }: { className?: str
  */
 export function Toolbox() {
   const { t } = useT();
+  const hasMusic = useMusicState().activity !== null;
   const open = useToolbox((s) => s.open);
   const level = useToolbox((s) => s.level);
   const tab = useToolbox((s) => s.tab);
@@ -326,7 +328,10 @@ export function Toolbox() {
 
           <div
             ref={bodyRef}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3",
+              hasMusic ? "pb-3" : "pb-[max(1rem,env(safe-area-inset-bottom))]",
+            )}
           >
             {TOOL_TABS.filter((id) => tabs.includes(id) && visited.includes(id)).map((id) => (
               <div key={id} id={`tools-pane-${id}`} role="tabpanel" aria-labelledby={`tools-tab-${id}`} hidden={tab !== id}>
@@ -338,6 +343,8 @@ export function Toolbox() {
               </div>
             ))}
           </div>
+          {/* Музыка урока и тренировки: выключатель живёт здесь, чтобы не трогать шапку (метки проводника). Нет музыки у экрана — пусто. */}
+          <MusicToggle variant="row" className="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" />
         </m.div>
       </div>
     </div>

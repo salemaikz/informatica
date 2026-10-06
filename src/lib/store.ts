@@ -129,6 +129,7 @@ import { entryFromSession, markFixed, pushHistory, sanitizeHistory, type History
 import { MAX_CHATS, sanitizeChats, TITLE_LEN, type ChatMeta, type ChatMode } from "./chats";
 import { CODE_XP, type CodeTaskStat, type IdeTask } from "./ide/types";
 import { beginHydration, finishHydration, safeStorage, STORAGE_KEY } from "./safe-storage";
+import { sanitizeMusic, type MusicPref } from "./music-pref";
 
 export type { LessonStat } from "./review";
 export type { HistoryEntry, WrongItem } from "./history";
@@ -156,6 +157,8 @@ export interface Profile {
   dailyGoalXp: number;
   theme: Theme;
   sound: boolean;
+  /** Фоновая музыка (этап 16Г, F2): выключена по умолчанию; работает только при включённом «Звуке». track: auto — по занятию. */
+  music: MusicPref;
   /** Вибрация при ответе (где поддерживается). */
   vibration: boolean;
   /** Меньше анимаций (плюс системная настройка prefers-reduced-motion). */
@@ -564,6 +567,7 @@ export const defaultProfile: Profile = {
   dailyGoalXp: 50,
   theme: "system",
   sound: true,
+  music: { enabled: false, track: "auto" },
   vibration: true,
   reduceMotion: false,
   bitHidden: false,
@@ -772,6 +776,7 @@ function cleanProfile(raw: unknown): Profile {
     dailyGoalXp: isNum(p.dailyGoalXp) && p.dailyGoalXp >= 0 && p.dailyGoalXp <= 1000 ? Math.round(p.dailyGoalXp) : d.dailyGoalXp,
     theme: pick(p.theme, THEMES, d.theme),
     sound: bool(p.sound, d.sound),
+    music: sanitizeMusic(p.music),
     vibration: bool(p.vibration, d.vibration),
     reduceMotion: bool(p.reduceMotion, d.reduceMotion),
     bitHidden: bool(p.bitHidden, d.bitHidden),
