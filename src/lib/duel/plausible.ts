@@ -7,7 +7,8 @@ import type { AnswerIn, DuelAnswer, DuelEvent, DuelItem, DuelModeId } from "./ty
 // - накопленное время клиента (Σms + паузы после ошибок) > прошедшее по серверу + 1,5 с → неверно + флаг sum;
 // - порядок: только следующее задание; повтор (dup) и пропуск вперёд (order) отбрасываются;
 // - поздно: после общих часов режима или после конца матча + 3 с — отбрасывается; дольше лимита задания — тайм-аут
-//   (неверно, флаг late, это не жульничество).
+//   (неверно, флаг late, это не жульничество). Срок задания i с лимитом проверяется и по часам сервера: ответ, пришедший
+//   позже Σ лимитов заданий 0…i + 3 с, — тоже тайм-аут, сколько бы ms ни прислал клиент.
 // Чистая функция: сервер передаёт уже принятые ответы (prior) и новую пачку.
 
 export type PlausibleFlag = "fast" | "sum" | "late";
@@ -57,6 +58,9 @@ export function judgeAnswers(
   let last: JudgedAnswer | undefined = prior[prior.length - 1];
   let expected = prior.length;
   let cheatFlags = 0;
+  // Серверный срок задания i с лимитом: Σ лимитов 0…i (мс от старта).
+  const deadline: number[] = [];
+  for (let k = 0, sum = 0; k < deck.length; k++) deadline.push((sum += deck[k].limitMs ?? 0));
 
   for (const raw of answers) {
     const i = raw?.i;
@@ -83,7 +87,7 @@ export function judgeAnswers(
     let { ok, pts } = checkAnswer(item, raw.a);
 
     // Тайм-аут задания («10 вопросов»): неверно, время — по лимиту.
-    if (item.limitMs != null && ms > item.limitMs + LIMIT_SLACK_MS) {
+    if (item.limitMs != null && (ms > item.limitMs + LIMIT_SLACK_MS || elapsedMs > deadline[i] + LATE_GRACE_MS)) {
       ms = item.limitMs;
       ok = false;
       pts = meta.pts.bad;

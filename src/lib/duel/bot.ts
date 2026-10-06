@@ -1,7 +1,7 @@
 import { hashString, seeded } from "../text";
 import type { Level, SkillId, Text } from "../types";
 import { DUEL_MODES } from "./modes";
-import type { DuelBand, DuelEvent, DuelItem } from "./types";
+import type { DuelBand, DuelEvent, DuelItem, DuelShape } from "./types";
 
 // Бот «Бит» (docs/specs/duels.md §4): чистый код без ИИ и без сервера. Подражает ученику уровня — по таблице точности
 // и темпа полосы, смешанной 50/50 с освоением навыков самого ученика, плюс «резинка» по последним матчам.
@@ -14,7 +14,10 @@ export interface BandRow {
   medianMs: readonly [number, number, number];
 }
 
-/** Таблица полос (2-game.md §4): ур. 1–4, 5–9, 10–19, 20+. */
+/**
+ * Таблица полос (2-game.md §4): ур. 1–4, 5–9, 10–19, 20+. Точность — для задания на выбор; медианы — темп «10 вопросов»
+ * (лимит на задание), чтение — сверху. В режимах на общих часах темп другой — CLOCK_PACE_MS.
+ */
 export const BOT_TABLE: Record<DuelBand, BandRow> = {
   1: { acc: [0.7, 0.55, 0.4], medianMs: [9_000, 14_000, 20_000] },
   2: { acc: [0.78, 0.64, 0.48], medianMs: [7_000, 11_000, 16_000] },
@@ -34,9 +37,22 @@ export const BOT_ACC_CAP = 0.92;
 export const BOT_ACC_MIN = 0.05;
 /** После ошибки следующий ответ медленнее во столько раз. */
 export const SLOW_AFTER_ERROR = 1.15;
-/** Утверждение решается быстрее задания на выбор: множитель медианы. */
+/**
+ * Темп в режимах на общих часах (блиц, «верю — не верю»): медиана времени на задание ВМЕСТЕ с чтением, мс.
+ * Таблица «10 вопросов» + чтение дали бы 3–4 ответа за минуту блица — медленнее любого увлечённого ученика.
+ * Темп растёт с полосой (монотонно), уровень задания — множителем CLOCK_LEVEL_FACTOR.
+ */
+export const CLOCK_PACE_MS: Record<DuelBand, Record<DuelShape, number>> = {
+  1: { choice: 5_600, statement: 3_100 },
+  2: { choice: 5_000, statement: 2_950 },
+  3: { choice: 4_400, statement: 2_800 },
+  4: { choice: 3_900, statement: 2_650 },
+};
+/** Множитель темпа на часах по уровню задания A/B/C. */
+export const CLOCK_LEVEL_FACTOR: readonly [number, number, number] = [0.9, 1, 1.15];
+/** Утверждение решается быстрее задания на выбор: множитель медианы (режимы с лимитом на задание). */
 export const STATEMENT_TIME_FACTOR = 0.35;
-/** С лимитом на задание бот отвечает не позже чем за столько до конца, мс. */
+/** С лимитом на задание бот отвечает не позже чем за столько до конца, мс; выборка за лимитом — тайм-аут (ошибка). */
 export const LIMIT_MARGIN_MS = 1_000;
 /** Шаг и предел «резинки» точности. */
 export const ADJ_STEP = 0.05;
@@ -61,12 +77,24 @@ export function botProfile(band: DuelBand, opts: { mastery?: Readonly<Record<Ski
   return { band, row: BOT_TABLE[band], mastery: opts.mastery, adj };
 }
 
-/** Точность бота на задании: таблица (или 50/50 с освоением навыка) + резинка, в пределах [0,05; 0,92]. */
-export function botAccuracy(p: BotProfile, skill: SkillId, level: Level): number {
+/** Доля «угадал» у задания на выбор из 4 вариантов: таблица точности дана для выбора. */
+const CHOICE_GUESS = 0.25;
+
+/**
+ * Точность бота на задании: таблица (или 50/50 с освоением навыка) + резинка, в пределах [0,05; 0,92].
+ * Утверждение (2 варианта) переводим через «знает»: знает = (p − 0,25) / 0,75, верно = знает + (1 − знает) / 2 —
+ * иначе бот младшей полосы на «верю — не верю» отвечал бы почти наугад (0,55 на уровне B) и проигрывал бы спаму.
+ */
+export function botAccuracy(p: BotProfile, skill: SkillId, level: Level, shape: DuelShape = "choice"): number {
   const table = p.row.acc[level - 1];
   const m = p.mastery?.[skill];
   const base = typeof m === "number" && Number.isFinite(m) ? 0.5 * table + 0.5 * (0.45 + 0.5 * clamp(m, 0, 1) - MASTERY_LEVEL_PENALTY[level - 1]) : table;
-  return clamp(base + p.adj, BOT_ACC_MIN, BOT_ACC_CAP);
+  let acc = clamp(base + p.adj, BOT_ACC_MIN, BOT_ACC_CAP);
+  if (shape === "statement") {
+    const know = clamp((acc - CHOICE_GUESS) / (1 - CHOICE_GUESS), 0, 1);
+    acc = know + (1 - know) / 2;
+  }
+  return clamp(acc, BOT_ACC_MIN, BOT_ACC_CAP);
 }
 
 const len = (t: Text) => (typeof t === "string" ? t : t.ru).length;
@@ -77,8 +105,17 @@ export function readMs(item: DuelItem): number {
   return Math.round((chars / READ_CHARS_PER_S) * 1000);
 }
 
-/** Медиана «на подумать» для задания, мс. */
+/** Режим на общих часах (блиц, «верю — не верю»)? */
+const onClock = (item: DuelItem) => DUEL_MODES[item.mode].clockMs != null;
+
+/** Чтение, которое бот добавляет к медиане, мс: на часах оно уже внутри темпа (CLOCK_PACE_MS). */
+export function botReadMs(item: DuelItem): number {
+  return onClock(item) ? 0 : readMs(item);
+}
+
+/** Медиана «на подумать» для задания, мс (на часах — темп полосы вместе с чтением). */
 export function thinkMedianMs(p: BotProfile, item: DuelItem): number {
+  if (onClock(item)) return CLOCK_PACE_MS[p.band][item.shape] * CLOCK_LEVEL_FACTOR[item.level - 1];
   const m = p.row.medianMs[item.level - 1];
   return item.shape === "statement" ? m * STATEMENT_TIME_FACTOR : m;
 }
@@ -91,8 +128,9 @@ function normal(rand: () => number): number {
 }
 
 /**
- * Таймлайн бота по набору: {i, ok, t}. Режим берётся из заданий. Общие часы (блиц) — события до конца часов;
- * лимит на задание — бот успевает до него. После ошибки — пауза режима и на 15 % медленнее.
+ * Таймлайн бота по набору: {i, ok, t}. Режим берётся из заданий. Общие часы (блиц, «верю — не верю») — события до
+ * конца часов; лимит на задание — ответ не позже лимита − 1 с, а выборка за лимитом — тайм-аут (неверно, t = лимит).
+ * После ошибки — пауза режима и на 15 % медленнее.
  */
 export function botTimeline(deck: readonly DuelItem[], profile: BotProfile, botSeed: string | number): DuelEvent[] {
   if (!deck.length) return [];
@@ -105,10 +143,15 @@ export function botTimeline(deck: readonly DuelItem[], profile: BotProfile, botS
     // Ровно три вызова rand на задание: таймлайн устойчив к изменениям одного задания.
     const u = rand();
     const z = normal(rand);
-    const ok = u < botAccuracy(profile, item.skill, item.level);
+    let ok = u < botAccuracy(profile, item.skill, item.level, item.shape);
     const think = thinkMedianMs(profile, item) * Math.exp(BOT_SIGMA * z) * (prevWrong ? SLOW_AFTER_ERROR : 1);
-    let dt = Math.max(BOT_FLOOR_MS, readMs(item) + think);
-    if (item.limitMs != null) dt = Math.min(dt, Math.max(BOT_FLOOR_MS, item.limitMs - LIMIT_MARGIN_MS));
+    let dt = Math.max(BOT_FLOOR_MS, botReadMs(item) + think);
+    if (item.limitMs != null) {
+      if (dt >= item.limitMs) {
+        dt = item.limitMs;
+        ok = false;
+      } else dt = Math.min(dt, Math.max(BOT_FLOOR_MS, item.limitMs - LIMIT_MARGIN_MS));
+    }
     const at = t + (prevWrong ? mode.errorPauseMs : 0) + Math.round(dt);
     if (mode.clockMs != null && at > mode.clockMs) break;
     events.push({ i: item.i, ok, t: at });

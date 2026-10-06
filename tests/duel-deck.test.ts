@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DECK_TAG, MIN_OPTIONS, buildDeck, checkAnswer, correctAnswer, deckLevels, duelTopics, isDuelTopic, optionCount, topicSkills } from "@/lib/duel/deck";
 import { DUEL_MODES, DUEL_MODE_IDS, bandOf, matchDurationMs } from "@/lib/duel/modes";
 import type { DuelBand, DuelItem } from "@/lib/duel/types";
@@ -7,6 +7,9 @@ import type { L, Text } from "@/lib/types";
 import { computeDeckTag, deckSources } from "../scripts/deck-tag.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+// Сотни наборов на тест: при общей нагрузке на CPU (полный прогон) 5 с по умолчанию мало.
+vi.setConfig({ testTimeout: 60_000 });
 
 const BANDS: DuelBand[] = [1, 2, 3, 4];
 const keys = (d: DuelItem[]) => d.map((x) => x.key);
@@ -33,8 +36,57 @@ describe("buildDeck", () => {
     expect(keys(buildDeck("truth", 1, 3))).not.toEqual(keys(buildDeck("truth", 2, 3)));
   });
 
-  it("ru = kk: набор не зависит от языка, у каждого задания оба языка", () => {
-    // Язык в buildDeck не передаётся вовсе; ключи — из id банка, без текста.
+  it("набор не зависит от истории вызовов банка и от свежей загрузки модулей", async () => {
+    const cases = [
+      ["blitz", 4321, 1, undefined],
+      ["truth", 4321, 3, undefined],
+      ["ten", 4321, 4, undefined],
+      ["topic", 4321, 2, "u2"],
+    ] as const;
+    const before = cases.map(([m, s, b, t]) => keys(buildDeck(m, s, b, t)));
+    // Посторонние вызовы банка и другие наборы между сборками не должны ничего менять.
+    const { draw } = await import("@/lib/bank");
+    draw("question", { skills: topicSkills("t01"), count: 50, seed: 9 });
+    draw("statement", { skills: topicSkills("t04"), count: 50, seed: 10 });
+    for (let s = 0; s < 5; s++) buildDeck("truth", s, 2);
+    expect(cases.map(([m, s, b, t]) => keys(buildDeck(m, s, b, t)))).toEqual(before);
+    // Свежий модуль (как у другого клиента или на сервере) — те же ключи.
+    vi.resetModules();
+    const fresh = await import("@/lib/duel/deck");
+    expect(fresh.buildDeck).not.toBe(buildDeck);
+    expect(cases.map(([m, s, b, t]) => keys(fresh.buildDeck(m, s, b, t)))).toEqual(before);
+  });
+
+  it("«верю — не верю»: ровно поровну «верно» и «неверно» на каждом уровне, порядок перемешан", () => {
+    for (const band of BANDS) {
+      let firstTrue = 0;
+      let decks = 0;
+      for (let seed = 0; seed < 60; seed++) {
+        const deck = buildDeck("truth", seed * 7919 + band, band);
+        expect(deck.length).toBe(DUEL_MODES.truth.n);
+        const trues = deck.filter((d) => correctAnswer(d) === true).length;
+        expect(trues, `band ${band} seed ${seed}`).toBe(deck.length / 2);
+        for (const lv of [1, 2, 3]) {
+          const at = deck.filter((d) => d.level === lv);
+          const t = at.filter((d) => correctAnswer(d) === true).length;
+          expect(Math.abs(2 * t - at.length), `band ${band} seed ${seed} lv ${lv}`).toBeLessThanOrEqual(1);
+        }
+        // Перемешано, а не блоками «все верные, потом все неверные»: серий длиннее 12 нет.
+        let run = 1;
+        for (let k = 1; k < deck.length; k++) {
+          run = correctAnswer(deck[k]) === correctAnswer(deck[k - 1]) ? run + 1 : 1;
+          expect(run).toBeLessThanOrEqual(12);
+        }
+        firstTrue += correctAnswer(deck[0]) === true ? 1 : 0;
+        decks++;
+      }
+      // Первое утверждение — то «верно», то «неверно».
+      expect(firstTrue).toBeGreaterThan(decks * 0.2);
+      expect(firstTrue).toBeLessThan(decks * 0.8);
+    }
+  });
+
+  it("у каждого задания оба языка, ключ — без текста (язык в buildDeck не передаётся вовсе)", () => {
     for (const mode of DUEL_MODE_IDS) {
       const deck = buildDeck(mode, 777, 4, mode === "topic" ? "u3" : undefined);
       for (const item of deck) {
@@ -86,8 +138,10 @@ describe("buildDeck", () => {
         expect(item.step.options.length).toBeGreaterThanOrEqual(MIN_OPTIONS);
         expect(item.step.correct).toBeGreaterThanOrEqual(0);
         expect(item.step.correct).toBeLessThan(item.step.options.length);
-        expect(seen.has(item.step.prompt.ru + item.step.options.join())).toBe(false);
-        seen.add(item.step.prompt.ru + item.step.options.join());
+        const k = [item.step.prompt.ru, ...item.step.options.map((o) => (typeof o === "string" ? o : o.ru))].join("|");
+        expect(k).not.toContain("[object Object]");
+        expect(seen.has(k), k).toBe(false);
+        seen.add(k);
       }
     }
   });

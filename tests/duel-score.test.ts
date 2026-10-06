@@ -5,6 +5,7 @@ import {
   challengePoints,
   countedFor,
   eventPts,
+  idleWinMs,
   technicalResult,
   totals,
   weekPoints,
@@ -45,8 +46,26 @@ describe("победитель", () => {
     expect(winner(side(7, 7, 90_000), side(7, 7, 80_000))).toEqual({ winner: "b", reason: "time" });
   });
   it("ничья — разница во времени меньше 1 с", () => {
-    expect(winner(side(7, 7, 80_000), side(7, 7, 80_999))).toEqual({ winner: "draw", reason: "draw" });
+    expect(winner(side(7, 7, 80_000), side(7, 7, 80_999))).toEqual({ winner: "draw", reason: "time" });
     expect(winner(side(7, 7, 80_000), side(7, 7, 81_000))).toEqual({ winner: "a", reason: "time" });
+  });
+  it("«10 вопросов»: при равных верных больше отвечено важнее времени — молчун не обходит ответившего на всё", () => {
+    const silent = totals("ten", []);
+    const allWrong = totals("ten", Array.from({ length: 10 }, (_, i) => ({ i, ok: false, t: (i + 1) * 20_000 })));
+    expect(winner(silent, allWrong)).toEqual({ winner: "b", reason: "time" });
+    expect(winner(allWrong, silent)).toEqual({ winner: "a", reason: "time" });
+    const six = { answered: 6, correct: 4, score: 4, timeMs: 30_000 };
+    const ten = { answered: 10, correct: 4, score: 4, timeMs: 200_000 };
+    expect(winner(six, ten).winner).toBe("b");
+  });
+  it("причина итога — из того же набора, что MatchView.result.reason", () => {
+    const allowed = new Set(["score", "correct", "time", "left", "idle"]);
+    for (const [a, b] of [
+      [side(1, 1, 0), side(1, 1, 0)],
+      [side(2, 1, 0), side(1, 1, 0)],
+      [side(1, 1, 0), side(1, 2, 0)],
+    ])
+      expect(allowed.has(winner(a, b).reason)).toBe(true);
   });
 });
 
@@ -66,6 +85,14 @@ describe("техническая победа", () => {
     expect(technicalResult({ ...ok, idleMs: IDLE_WIN_MS }, { ...ok, done: true }, true)).toEqual({ winner: "b", reason: "idle" });
     // Я не доиграл — молчание соперника победы не даёт.
     expect(technicalResult(ok, { ...ok, idleMs: 60_000 }, true)).toBeNull();
+  });
+  it("думает над заданием C (лимит 45 с) — порог молчания не меньше лимита + 3 с", () => {
+    const thinking: SideStatus = { ...ok, idleMs: 40_000, itemLimitMs: 45_000 };
+    expect(idleWinMs(thinking)).toBe(48_000);
+    expect(idleWinMs({ ...ok, itemLimitMs: 20_000 })).toBe(IDLE_WIN_MS);
+    expect(idleWinMs({ ...ok, itemLimitMs: null })).toBe(IDLE_WIN_MS);
+    expect(technicalResult({ ...ok, done: true }, thinking, true)).toBeNull();
+    expect(technicalResult({ ...ok, done: true }, { ...thinking, idleMs: 48_000 }, true)).toEqual({ winner: "a", reason: "idle" });
   });
 });
 

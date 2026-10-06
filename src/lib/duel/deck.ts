@@ -1,6 +1,6 @@
 import { draw, rampLevel, skillsWithShape } from "../bank";
 import type { Statement } from "../bank/types";
-import { hashString } from "../text";
+import { hashString, seeded } from "../text";
 import type { ChoiceStep, Level, QuestionStep, SkillId, Text } from "../types";
 import { SKILLS } from "@/content/skills";
 import { LESSON_META } from "@/content/catalog.generated";
@@ -117,12 +117,14 @@ export function buildDeck(mode: DuelModeId, seed: number, band: DuelBand, topic?
 
   const seen = new Set<string>();
   const byLevel: Record<Level, DuelItem[]> = { 1: [], 2: [], 3: [] };
+  // «Верю — не верю»: ровно поровну «верно» и «неверно» на каждом уровне (нечётный остаток — по очереди между уровнями),
+  // иначе «верю» на всё подряд без чтения приносит очки (§3). Порядок внутри уровня — перемешан по seed.
+  let extraTrue = (base & 1) === 1;
   for (const lv of [1, 2, 3] as const) {
-    for (let attempt = 0; byLevel[lv].length < need[lv] && attempt < MAX_ATTEMPTS; attempt++) {
-      const want = need[lv] - byLevel[lv].length;
-      const drawSeed = hashString(`${base}:${lv}:${attempt}`);
-      const opts = { skills, count: want * 3 + 4, seed: drawSeed, minLevel: lv, maxLevel: lv, ramp: false };
-      if (meta.shape === "choice") {
+    if (meta.shape === "choice") {
+      for (let attempt = 0; byLevel[lv].length < need[lv] && attempt < MAX_ATTEMPTS; attempt++) {
+        const want = need[lv] - byLevel[lv].length;
+        const opts = { skills, count: want * 3 + 4, seed: hashString(`${base}:${lv}:${attempt}`), minLevel: lv, maxLevel: lv, ramp: false };
         for (const q of draw("question", opts)) {
           if (byLevel[lv].length >= need[lv]) break;
           // Уровень задания должен совпасть с местом в ступеньке (генератор иногда отдаёт соседний).
@@ -132,15 +134,38 @@ export function buildDeck(mode: DuelModeId, seed: number, band: DuelBand, topic?
           seen.add(k);
           byLevel[lv].push(choiceItem(mode, q, lv));
         }
-      } else {
-        for (const st of draw("statement", opts)) {
-          if (byLevel[lv].length >= need[lv]) break;
-          if (typeof st.value !== "boolean" || st.level !== lv || seen.has(st.text.ru)) continue;
-          seen.add(st.text.ru);
-          byLevel[lv].push(statementItem(mode, st, lv));
-        }
+      }
+      continue;
+    }
+    if (!need[lv]) continue;
+    const half = need[lv] >> 1;
+    const want = { true: half, false: half };
+    if (need[lv] % 2) {
+      want[extraTrue ? "true" : "false"]++;
+      extraTrue = !extraTrue;
+    }
+    const pools: Record<"true" | "false", Statement[]> = { true: [], false: [] };
+    const spare: Statement[] = [];
+    const full = () => pools.true.length >= want.true && pools.false.length >= want.false;
+    for (let attempt = 0; !full() && attempt < MAX_ATTEMPTS; attempt++) {
+      const missing = want.true - pools.true.length + want.false - pools.false.length;
+      const opts = { skills, count: missing * 3 + 4, seed: hashString(`${base}:${lv}:${attempt}`), minLevel: lv, maxLevel: lv, ramp: false };
+      for (const st of draw("statement", opts)) {
+        if (typeof st.value !== "boolean" || st.level !== lv || seen.has(st.text.ru)) continue;
+        seen.add(st.text.ru);
+        const side = st.value ? "true" : "false";
+        (pools[side].length < want[side] ? pools[side] : spare).push(st);
+        if (full()) break;
       }
     }
+    // Запасной путь (банк не дал нужного значения): добираем чем есть, лишь бы набор был полным.
+    const picked = [...pools.true, ...pools.false, ...spare.slice(0, Math.max(0, need[lv] - pools.true.length - pools.false.length))];
+    const rand = seeded(hashString(`${base}:${lv}:order`));
+    for (let k = picked.length - 1; k > 0; k--) {
+      const j = Math.floor(rand() * (k + 1));
+      [picked[k], picked[j]] = [picked[j], picked[k]];
+    }
+    byLevel[lv] = picked.map((st) => statementItem(mode, st, lv));
   }
   const items = [...byLevel[1], ...byLevel[2], ...byLevel[3]];
   return items.map((it, i) => ({ ...it, i }));

@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ADJ_MAX,
   BOT_ACC_CAP,
   BOT_FLOOR_MS,
   BOT_SIGMA,
   BOT_TABLE,
+  CLOCK_LEVEL_FACTOR,
+  CLOCK_PACE_MS,
+  LIMIT_MARGIN_MS,
   SLOW_AFTER_ERROR,
   botAccuracy,
   botProfile,
+  botReadMs,
   botTimeline,
   nextBotAdj,
   readMs,
@@ -16,9 +20,12 @@ import {
 } from "@/lib/duel/bot";
 import { buildDeck, optionCount, correctAnswer } from "@/lib/duel/deck";
 import { DUEL_MODES } from "@/lib/duel/modes";
-import { totals, winner } from "@/lib/duel/score";
+import { IDLE_NOTICE_MS, totals, winner } from "@/lib/duel/score";
 import type { DuelBand, DuelEvent, DuelItem, DuelModeId } from "@/lib/duel/types";
 import { seeded } from "@/lib/text";
+
+// Тысячи матчей на тест: при общей нагрузке на CPU (полный прогон) 5 с по умолчанию мало.
+vi.setConfig({ testTimeout: 60_000 });
 
 const BANDS: DuelBand[] = [1, 2, 3, 4];
 const median = (xs: number[]) => {
@@ -109,7 +116,7 @@ describe("бот: распределения на 10 000 seed (±3 % от таб
             ok[lv][0] += e.ok ? 1 : 0;
             ok[lv][1]++;
             // Время «на подумать»: минус чтение, без замедления после ошибки.
-            think[lv].push((e.t - prev - readMs(item)) / (prevWrong ? SLOW_AFTER_ERROR : 1));
+            think[lv].push((e.t - prev - botReadMs(item)) / (prevWrong ? SLOW_AFTER_ERROR : 1));
             prev = e.t;
             prevWrong = !e.ok;
           });
@@ -150,7 +157,10 @@ function deckFor(mode: DuelModeId, seed: number, band: DuelBand): DuelItem[] {
   return d;
 }
 
-/** Смоделированный ученик того же уровня: та же таблица, своя случайность, те же правила режима. */
+/**
+ * Смоделированный ученик того же уровня: та же точность и темп полосы (так задан «ученик уровня»), своя случайность, те же
+ * правила режима. Абсолютный темп бота проверяют отдельные тесты ниже — этот тест только про равенство сил.
+ */
 function simulatedPlayer(deck: DuelItem[], p: BotProfile, seed: number): DuelEvent[] {
   const rand = seeded(seed);
   const meta = DUEL_MODES[deck[0].mode];
@@ -158,10 +168,13 @@ function simulatedPlayer(deck: DuelItem[], p: BotProfile, seed: number): DuelEve
   let t = 0;
   let prevWrong = false;
   for (const item of deck) {
-    const ok = rand() < p.row.acc[item.level - 1];
+    let ok = rand() < botAccuracy(p, item.skill, item.level, item.shape);
     const z = Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
-    let dt = Math.max(BOT_FLOOR_MS, readMs(item) + thinkMedianMs(p, item) * Math.exp(0.35 * z) * (prevWrong ? 1.15 : 1));
-    if (item.limitMs != null) dt = Math.min(dt, item.limitMs);
+    let dt = Math.max(BOT_FLOOR_MS, botReadMs(item) + thinkMedianMs(p, item) * Math.exp(0.35 * z) * (prevWrong ? 1.15 : 1));
+    if (item.limitMs != null && dt >= item.limitMs) {
+      dt = item.limitMs;
+      ok = false;
+    }
     const at = t + (prevWrong ? meta.errorPauseMs : 0) + Math.round(dt);
     if (meta.clockMs != null && at > meta.clockMs) break;
     events.push({ i: item.i, ok, t: at });
@@ -171,17 +184,19 @@ function simulatedPlayer(deck: DuelItem[], p: BotProfile, seed: number): DuelEve
   return events;
 }
 
-/** Случайный нажиматель: жмёт как можно быстрее (≥ 700 мс), вариант наугад. */
-function randomTapper(deck: DuelItem[], seed: number): DuelEvent[] {
+type Tap = "uniform" | "true" | "false";
+
+/** Нажиматель без чтения: как можно быстрее (500–700 мс на утверждение, 700–900 на выбор), вариант наугад или всегда один. */
+function tapper(deck: DuelItem[], seed: number, how: Tap = "uniform"): DuelEvent[] {
   const rand = seeded(seed);
   const meta = DUEL_MODES[deck[0].mode];
   const events: DuelEvent[] = [];
   let t = 0;
   let prevWrong = false;
   for (const item of deck) {
-    const pick = Math.floor(rand() * optionCount(item));
     const right = correctAnswer(item);
-    const ok = item.shape === "statement" ? (pick === 1) === right : pick === right;
+    const ok =
+      item.shape === "statement" && how !== "uniform" ? (how === "true") === right : Math.floor(rand() * optionCount(item)) === (item.shape === "statement" ? (right ? 1 : 0) : right);
     const at = t + (prevWrong ? meta.errorPauseMs : 0) + (item.shape === "statement" ? 500 : 700) + Math.floor(rand() * 200);
     if (meta.clockMs != null && at > meta.clockMs) break;
     events.push({ i: item.i, ok, t: at });
@@ -190,6 +205,7 @@ function randomTapper(deck: DuelItem[], seed: number): DuelEvent[] {
   }
   return events;
 }
+const randomTapper = (deck: DuelItem[], seed: number) => tapper(deck, seed);
 
 describe("бот: баланс", () => {
   for (const mode of ["blitz", "truth", "ten"] as DuelModeId[]) {
@@ -231,22 +247,142 @@ describe("бот: баланс", () => {
     expect(tapperWins / N).toBeLessThan(0.15);
   });
 
-  it("«верю — не верю»: случайный нажиматель в среднем проигрывает честному профилю", () => {
-    const p = botProfile(1);
-    let tapperSum = 0;
-    let honestSum = 0;
-    let tapperWins = 0;
-    const N = 2000;
-    for (let m = 0; m < N; m++) {
-      const deck = deckFor("truth", 900 + (m % 40), 1);
-      const tap = totals("truth", randomTapper(deck, 17 * m + 3));
-      const honest = totals("truth", botTimeline(deck, p, `h${m}`));
-      tapperSum += tap.score;
-      honestSum += honest.score;
-      if (winner(tap, honest).winner === "a") tapperWins++;
+  for (const how of ["true", "false", "uniform"] as Tap[]) {
+    it(`«верю — не верю»: нажиматель «${how}» без чтения в среднем не набирает очков и редко обыгрывает честный профиль`, () => {
+      for (const band of BANDS) {
+        const p = botProfile(band);
+        let tapperSum = 0;
+        let tapperWins = 0;
+        const N = 2000;
+        for (let m = 0; m < N; m++) {
+          const deck = deckFor("truth", 900 + (m % 40), band);
+          const tap = totals("truth", tapper(deck, 17 * m + 3, how));
+          const honest = totals("truth", botTimeline(deck, p, `h${band}:${m}`));
+          tapperSum += tap.score;
+          if (winner(tap, honest).winner === "a") tapperWins++;
+        }
+        const mean = tapperSum / N;
+        const rate = tapperWins / N;
+        expect(mean, `${how} band ${band}: mean ${mean}`).toBeLessThan(0.5);
+        // Нажатие наугад даёт разброс ±√n очков; против слабейшей полосы остаётся ≈ 14 % — это предел счёта ±1.
+        const cap = how === "uniform" ? (band === 1 ? 0.17 : 0.12) : 0.08;
+        expect(rate, `${how} band ${band}: win ${rate}`).toBeLessThan(cap);
+      }
+    });
+  }
+});
+
+describe("бот: абсолютный темп в режимах на часах", () => {
+  const stats = (mode: DuelModeId, band: DuelBand) => {
+    const answered: number[] = [];
+    const first: number[] = [];
+    const gaps: number[] = [];
+    for (let m = 0; m < 300; m++) {
+      const tl = botTimeline(deckFor(mode, 300 + (m % 30), band), botProfile(band), `pace${m}`);
+      answered.push(tl.length);
+      first.push(tl[0].t);
+      tl.forEach((e, k) => k && gaps.push(e.t - tl[k - 1].t));
     }
-    expect(tapperSum).toBeLessThan(honestSum);
-    expect(tapperWins / N).toBeLessThan(0.5);
+    return { answered: median(answered), first: median(first), gap: median(gaps) };
+  };
+
+  it("блиц: слабейшая полоса — не меньше 8 ответов за минуту, сильнее полоса — не медленнее", () => {
+    const s = BANDS.map((b) => stats("blitz", b));
+    expect(s[0].answered, JSON.stringify(s)).toBeGreaterThanOrEqual(8);
+    for (let k = 1; k < 4; k++) expect(s[k].answered, JSON.stringify(s)).toBeGreaterThanOrEqual(s[k - 1].answered);
+    // Не «сверхчеловек»: меньше половины набора и не быстрее 3 с на задание в среднем.
+    for (const x of s) expect(x.answered).toBeLessThanOrEqual(20);
+  });
+
+  it("«верю — не верю»: не меньше 10 утверждений за 45 с, но не больше 18", () => {
+    for (const band of BANDS) {
+      const x = stats("truth", band);
+      expect(x.answered, `band ${band}`).toBeGreaterThanOrEqual(10);
+      expect(x.answered, `band ${band}`).toBeLessThanOrEqual(18);
+    }
+  });
+
+  it("первый ответ и обычный промежуток — заметно раньше «Соперник не отвечает» (10 с)", () => {
+    for (const mode of ["blitz", "truth"] as DuelModeId[]) {
+      for (const band of BANDS) {
+        const x = stats(mode, band);
+        expect(x.first, `${mode} band ${band}`).toBeLessThan(IDLE_NOTICE_MS * 0.7);
+        expect(x.gap, `${mode} band ${band}`).toBeLessThan(IDLE_NOTICE_MS * 0.7);
+      }
+    }
+  });
+
+  it("медиана первого ответа на часах = темп полосы × уровень (±3 %), чтение не добавляется сверху", () => {
+    for (const mode of ["blitz", "truth"] as DuelModeId[]) {
+      for (const band of BANDS) {
+        const deck = deckFor(mode, 1, band);
+        const p = botProfile(band);
+        expect(botReadMs(deck[0])).toBe(0);
+        const target = CLOCK_PACE_MS[band][deck[0].shape] * CLOCK_LEVEL_FACTOR[deck[0].level - 1];
+        expect(thinkMedianMs(p, deck[0])).toBeCloseTo(target, 6);
+        const t0 = Array.from({ length: 10_000 }, (_, s) => botTimeline(deck, p, `f${s}`)[0].t);
+        expect(Math.abs(median(t0) / Math.max(BOT_FLOOR_MS, target) - 1), `${mode} band ${band}`).toBeLessThan(0.03);
+      }
+    }
+  });
+
+  it("утверждения: точность переводится с выбора через «знает» (±3 % на 10 000 seed)", () => {
+    for (const band of BANDS) {
+      const p = botProfile(band);
+      const ok = [0, 0, 0];
+      const all = [0, 0, 0];
+      for (let s = 0; s < 10_000; s++) {
+        const deck = deckFor("truth", s % 20, band);
+        for (const e of botTimeline(deck, p, `acc${s}`)) {
+          ok[deck[e.i].level - 1] += e.ok ? 1 : 0;
+          all[deck[e.i].level - 1]++;
+        }
+      }
+      for (const lv of [1, 2, 3] as const) {
+        if (all[lv - 1] < 2000) continue;
+        const want = botAccuracy(p, "x", lv, "statement");
+        const know = (BOT_TABLE[band].acc[lv - 1] - 0.25) / 0.75;
+        expect(want).toBeCloseTo(Math.min(BOT_ACC_CAP, know + (1 - know) / 2), 6);
+        expect(Math.abs(ok[lv - 1] / all[lv - 1] - want), `band ${band} lv ${lv}`).toBeLessThan(0.03);
+      }
+    }
+  });
+});
+
+describe("бот: тайм-аут на задании с лимитом", () => {
+  it("выборка за лимитом — тайм-аут: t = лимит, неверно; иначе не позже лимита − 1 с", () => {
+    let timeouts = 0;
+    let total = 0;
+    for (let s = 0; s < 3000; s++) {
+      const deck = deckFor("ten", s % 30, 1);
+      const tl = botTimeline(deck, botProfile(1), `to${s}`);
+      expect(tl.length).toBe(deck.length);
+      tl.forEach((e, k) => {
+        const dt = e.t - (k ? tl[k - 1].t : 0);
+        const lim = deck[k].limitMs!;
+        total++;
+        if (dt === lim) {
+          timeouts++;
+          expect(e.ok).toBe(false);
+        } else expect(dt).toBeLessThanOrEqual(lim - LIMIT_MARGIN_MS);
+      });
+    }
+    // Полоса 1 иногда не успевает (медиана 9–20 с + чтение до 16 с при лимите 20–45 с): сейчас ≈ 12 %.
+    expect(timeouts / total).toBeGreaterThan(0.02);
+    expect(timeouts / total).toBeLessThan(0.2);
+  });
+
+  it("сильная полоса почти не выходит за лимит", () => {
+    let timeouts = 0;
+    let total = 0;
+    for (let s = 0; s < 1000; s++) {
+      const deck = deckFor("ten", s % 30, 4);
+      botTimeline(deck, botProfile(4), `to4:${s}`).forEach((e, k, tl) => {
+        total++;
+        if (e.t - (k ? tl[k - 1].t : 0) === deck[k].limitMs) timeouts++;
+      });
+    }
+    expect(timeouts / total).toBeLessThan(0.03);
   });
 });
 

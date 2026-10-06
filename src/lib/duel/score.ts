@@ -1,5 +1,5 @@
-import { DUEL_MODES } from "./modes";
-import type { DuelEvent, DuelModeId, NotCountedWhy } from "./types";
+import { DUEL_MODES, LATE_GRACE_MS } from "./modes";
+import type { DuelEvent, DuelModeId, MatchView, NotCountedWhy } from "./types";
 
 // Счёт и итог дуэли (docs/specs/duels.md §3, §8): очки, победитель, техническая победа, засчитан ли матч в топ друзей.
 // Одна логика для живого матча, записи друга и бота.
@@ -53,14 +53,20 @@ export function totals(mode: DuelModeId, events: readonly DuelEvent[]): SideTota
 }
 
 export type Winner = "a" | "b" | "draw";
-export type WinReason = "score" | "correct" | "time" | "draw";
+/** Причина итога по очкам — те же значения, что в MatchView.result.reason (ничья по времени — "time"). */
+export type WinReason = Extract<NonNullable<MatchView["result"]>["reason"], "score" | "correct" | "time">;
 
-/** Победитель: больше очков, затем больше верных, затем меньше время; разница во времени < 1 с — ничья. */
+/**
+ * Победитель: больше очков, затем больше верных, затем больше отвечено (не успел — значит, медленнее), затем меньше
+ * время; разница во времени < 1 с — ничья. Время сравниваем только при равном числе ответов: иначе в «10 вопросах»
+ * сторона без ответов (время 0) обходила бы ответившую на всё.
+ */
 export function winner(a: SideTotals, b: SideTotals): { winner: Winner; reason: WinReason } {
   if (a.score !== b.score) return { winner: a.score > b.score ? "a" : "b", reason: "score" };
   if (a.correct !== b.correct) return { winner: a.correct > b.correct ? "a" : "b", reason: "correct" };
+  if (a.answered !== b.answered) return { winner: a.answered > b.answered ? "a" : "b", reason: "time" };
   const dt = a.timeMs - b.timeMs;
-  if (Math.abs(dt) < DRAW_TIME_MS) return { winner: "draw", reason: "draw" };
+  if (Math.abs(dt) < DRAW_TIME_MS) return { winner: "draw", reason: "time" };
   return { winner: dt < 0 ? "a" : "b", reason: "time" };
 }
 
@@ -69,12 +75,23 @@ export interface SideStatus {
   done: boolean;
   /** Ушёл кнопкой «Выйти» после старта. */
   left: boolean;
-  /** Сколько молчит, мс. */
+  /**
+   * Сколько молчит, мс: время с последней связи с сервером (опрос view или отправка ответов), а НЕ с последнего ответа —
+   * ученик может честно думать над заданием C до 45 с, продолжая опрос.
+   */
   idleMs: number;
+  /** Лимит задания, на котором сторона сейчас («10 вопросов»), мс; порог молчания не меньше лимита + 3 с. */
+  itemLimitMs?: number | null;
+}
+
+/** Порог технической победы для молчащей стороны: 30 с, но не меньше лимита её текущего задания + 3 с. */
+export function idleWinMs(s: SideStatus): number {
+  const lim = s.itemLimitMs;
+  return typeof lim === "number" && Number.isFinite(lim) ? Math.max(IDLE_WIN_MS, lim + LATE_GRACE_MS) : IDLE_WIN_MS;
 }
 
 /**
- * Техническая победа (§3): ушёл после старта — поражение; соперник молчит ≥ 30 с, а я доиграл, — победа.
+ * Техническая победа (§3): ушёл после старта — поражение; соперник молчит ≥ 30 с (idleWinMs), а я доиграл, — победа.
  * null — обычный подсчёт по очкам. Оба ушли — матч аннулируется ("void").
  */
 export function technicalResult(
@@ -86,8 +103,8 @@ export function technicalResult(
   if (a.left && b.left) return "void";
   if (b.left) return { winner: "a", reason: "left" };
   if (a.left) return { winner: "b", reason: "left" };
-  if (a.done && !b.done && b.idleMs >= IDLE_WIN_MS) return { winner: "a", reason: "idle" };
-  if (b.done && !a.done && a.idleMs >= IDLE_WIN_MS) return { winner: "b", reason: "idle" };
+  if (a.done && !b.done && b.idleMs >= idleWinMs(b)) return { winner: "a", reason: "idle" };
+  if (b.done && !a.done && a.idleMs >= idleWinMs(a)) return { winner: "b", reason: "idle" };
   return null;
 }
 

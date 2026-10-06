@@ -125,4 +125,32 @@ describe("judgeAnswers: время", () => {
     // Тайм-аут без выбора (−1).
     expect(judgeAnswers("ten", ten, [{ i: 0, a: -1, ms: lim }], lim + 100).accepted[0].ok).toBe(false);
   });
+
+  it("«10 вопросов»: срок задания проверяется и по часам сервера — заниженный ms не спасает", () => {
+    const lim = ten[0].limitMs!;
+    // Ответ на задание 0 пришёл на 250-й секунде, клиент заявил 5 с.
+    const late = judgeAnswers("ten", ten, [{ i: 0, a: right(ten, 0), ms: 5000 }], 250_000);
+    expect(late.accepted[0]).toMatchObject({ ok: false, pts: 0, ms: lim, flags: ["late"] });
+    expect(late.cheatFlags).toBe(0);
+    // В пределах срока + 3 с (сеть, пачки) — засчитывается.
+    expect(judgeAnswers("ten", ten, [{ i: 0, a: right(ten, 0), ms: 5000 }], lim + 3000).accepted[0]).toMatchObject({ ok: true, flags: [] });
+    // Срок задания i — сумма лимитов 0…i: второе задание честно успевает к 2·лимиту.
+    const first = judgeAnswers("ten", ten, [{ i: 0, a: right(ten, 0), ms: lim - 1000 }], lim).accepted;
+    const second: AnswerIn[] = [{ i: 1, a: right(ten, 1), ms: lim - 1000 }];
+    expect(judgeAnswers("ten", ten, second, 2 * lim + 3000, first).accepted[0].ok).toBe(true);
+    expect(judgeAnswers("ten", ten, second, 2 * lim + 3001, first).accepted[0]).toMatchObject({ ok: false, flags: ["late"] });
+  });
+
+  it("«верю — не верю»: пауза после ошибки 2,5 с входит в t", () => {
+    const r = judgeAnswers(
+      "truth",
+      truth,
+      [
+        { i: 0, a: wrong(truth, 0), ms: 1000 },
+        { i: 1, a: right(truth, 1), ms: 1000 },
+      ],
+      10_000,
+    );
+    expect(r.accepted.map((a) => a.t)).toEqual([1000, 4500]);
+  });
 });
