@@ -219,11 +219,12 @@ describe("магазин: правила сердечек, «Как зарабо
     expect(text()).toContain("Тренировка");
     expect(text()).toContain("Бесплатной тренировки нет");
     expect(text()).not.toMatch(/возвращает сердечко|вернёт сердечко/);
-    // бесплатные: задачи практикума в редакторе кода, шпаргалка, чат — без тренировки/повторения/ошибок
+    // бесплатные: шпаргалка и чат — без тренировки/повторения/ошибок и без задач практикума кода (этап 16Г: задача стоит сердечко)
     // (контекстные задания и «Чтение кода» — тренировки на заданиях ЕНТ, они платные)
     const free = host.querySelector('section[aria-labelledby="heart-rules-free"]')!;
-    expect(free.textContent).toContain("Задачи практикума в редакторе кода");
-    expect(free.textContent).not.toContain("Практикум кода");
+    expect(free.textContent).not.toContain("Задачи практикума в редакторе кода");
+    expect(free.textContent).not.toContain("практикума кода");
+    expect(text()).toContain("Задача практикума кода");
     expect(free.textContent).not.toContain("Повторение");
     expect(free.textContent).not.toContain("Тренировка");
   });

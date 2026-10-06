@@ -67,10 +67,10 @@ test("магазин: полный запас — цена за недостаю
   // Сердечко — плата за вход: цены из констант (тренировка — 1), бесплатное, восстановление по тарифам, путь при нуле.
   await expect(page.getByRole("heading", { name: "Как работают сердечки" })).toBeVisible();
   await expect(page.getByText("Сердечко — плата за вход, а не за ошибку.")).toBeVisible();
-  // Цена 2 — большой урок и тест по разделу (экстерна больше нет, #96).
-  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(2);
-  // Цена 1 — урок, тренировка, «Проверить себя», пробный ЕНТ, игра (этап 16В: тренировка платная).
-  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(5);
+  // Одно занятие — одно сердечко (этап 16Г, #120): цены 2 больше нет («большой урок» убран, тест по разделу — 1).
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 2" })).toHaveCount(0);
+  // Цена 1 — урок, тренировка, «Проверить себя», пробный ЕНТ, тест по разделу, игра, задача практикума кода.
+  await expect(page.getByRole("img", { name: "Цена входа в сердечках: 1" })).toHaveCount(7);
   await expect(page.getByText("Чат с Битом")).toBeVisible();
   await expect(page.getByText("запас 5, +1 за 6 ч")).toBeVisible();
   await expect(page.getByText("запас 10, +1 за 3 ч")).toBeVisible();

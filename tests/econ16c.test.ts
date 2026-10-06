@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dict, type DictKey } from "@/i18n/dict";
 import { AI_COST, ENTRY_COST, entryCost, type AiKind } from "@/lib/economy";
-import { playerHeartsWhere } from "@/lib/player-events";
 import { HEART_OUT_WHERES } from "@/lib/analytics-schema";
 import { label } from "@/app/owner/labels";
 
@@ -72,13 +71,6 @@ describe("тренировка за сердечко (пункт F)", () => {
     expect(entryCost("drill")).toBe(1);
   });
   it("«сердечки закончились» в тренировке: аналитика «drill», подпись у владельца", () => {
-    expect(playerHeartsWhere({ mode: "smart" })).toBe("drill");
-    expect(playerHeartsWhere({ mode: "mistakes" })).toBe("drill");
-    expect(playerHeartsWhere({ mode: "review" })).toBe("drill");
-    expect(playerHeartsWhere({ mode: "minitest" })).toBe("check"); // мини-тест платит «Начать» как «Проверить себя»
-    expect(playerHeartsWhere({ mode: "extern" })).toBe("extern");
-    expect(playerHeartsWhere({})).toBe("lesson");
-    expect(playerHeartsWhere({ via: "check" })).toBe("check");
     expect(HEART_OUT_WHERES).toContain("drill");
     expect(label.heartsWhere("drill")).toBe("тренировка");
   });

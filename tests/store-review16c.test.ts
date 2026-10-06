@@ -3,7 +3,8 @@ import { mergeState, useApp } from "@/lib/store";
 import type { ExamSummary } from "@/lib/store";
 import { ACH_RULES_VERSION } from "@/lib/achievement-rules";
 import { quizSession } from "@/lib/chat-quiz";
-import { DRILL_PAID_GRACE_MS, drillPaidActive, drillPaidKey, sanitizeDrillPaid } from "@/lib/drill-paid";
+import { DRILL_PAID_GRACE_MS, drillPaidKey } from "@/lib/drill-paid";
+import { ENTRY_PAID_MAX, checkEntryKey, entryPaidActive, lessonEntryKey, putEntryPaid, quizEntryKey, sanitizeEntryPaid } from "@/lib/entry-paid";
 import { heartsView, MINUTE, PERFECT_DROP } from "@/lib/economy";
 import { dropRandom, noteTestDrop, sanitizeDropDay, testDropsLeft } from "@/lib/perfect";
 import { todayKey } from "@/lib/text";
@@ -293,7 +294,7 @@ describe("E6: устойчивая загрузка попыток и уроко
   });
 });
 
-describe("E7: тренировка при перезагрузке — сердечко не списывается второй раз", () => {
+describe("E7 / #120: оплаченный вход — то же занятие 20 минут не списывает сердечко второй раз", () => {
   beforeEach(fullReset);
   const key = drillPaidKey("skill", { skill: "ns.bin2dec" });
 
@@ -305,83 +306,147 @@ describe("E7: тренировка при перезагрузке — серд�
     expect(drillPaidKey("minitest", { node: "n1" })).not.toBe(drillPaidKey("practice", { node: "n1" }));
   });
 
-  it("payDrill: первый вход платный и запоминается; та же тренировка в течение 20 минут — бесплатно", () => {
+  it("payEntryOnce: первый вход платный и запоминается; то же занятие в течение 20 минут — бесплатно", () => {
     expect(heartCount()).toBe(5);
-    const first = st().payDrill(key, 1);
+    const first = st().payEntryOnce(key, 1);
     expect(first).toMatchObject({ ok: true, paid: 1 });
     expect(heartCount()).toBe(4);
-    expect(st().drillPaid).toEqual({ key, at: Date.now() });
+    expect(st().entryPaid).toEqual({ [key]: Date.now() });
     vi.setSystemTime(Date.now() + 19 * MINUTE);
-    expect(st().payDrill(key, 1)).toMatchObject({ ok: true, paid: 0 });
+    expect(st().payEntryOnce(key, 1)).toMatchObject({ ok: true, paid: 0 });
     expect(heartCount()).toBe(4);
-    vi.setSystemTime(Date.now() + 2 * MINUTE); // от оплаты прошло 21 минута
-    expect(st().payDrill(key, 1)).toMatchObject({ ok: true, paid: 1 });
+    vi.setSystemTime(Date.now() + 2 * MINUTE); // от оплаты прошла 21 минута
+    expect(st().payEntryOnce(key, 1)).toMatchObject({ ok: true, paid: 1 });
     expect(heartCount()).toBe(3);
   });
 
-  it("другая тренировка платная; граница ровно 20 минут — ещё бесплатно", () => {
-    st().payDrill(key, 1);
-    expect(st().payDrill(drillPaidKey("skill", { skill: "other" }), 1).paid).toBe(1);
-    expect(heartCount()).toBe(3);
-    const k = drillPaidKey("smart");
+  it("двойной вызов (StrictMode, двойное нажатие) списывает один раз; payDrill — синоним", () => {
+    const k = lessonEntryKey("ns-1-bits");
+    st().payEntryOnce(k, 1);
+    st().payEntryOnce(k, 1);
     st().payDrill(k, 1);
+    expect(heartCount()).toBe(4);
+  });
+
+  it("payEntryFresh («Начать заново») списывает всегда и обновляет отметку", () => {
+    const k = lessonEntryKey("ns-1-bits");
+    st().payEntryOnce(k, 1);
+    vi.setSystemTime(Date.now() + 5 * MINUTE);
+    expect(st().payEntryFresh(k, 1)).toMatchObject({ ok: true, paid: 1 });
+    expect(heartCount()).toBe(3);
+    expect(st().entryPaid[k]).toBe(Date.now());
+    // Отметка обновлена: 19 минут от «Начать заново» (24 от первой оплаты) — ещё бесплатно.
+    vi.setSystemTime(Date.now() + 19 * MINUTE);
+    expect(st().payEntryOnce(k, 1).paid).toBe(0);
+  });
+
+  it("другие занятия платные, их отметки живут рядом; граница ровно 20 минут — ещё бесплатно", () => {
+    st().payEntryOnce(key, 1);
+    expect(st().payEntryOnce(drillPaidKey("skill", { skill: "other" }), 1).paid).toBe(1);
+    expect(st().payEntryOnce(lessonEntryKey("a"), 1).paid).toBe(1);
+    expect(heartCount()).toBe(2);
+    expect(Object.keys(st().entryPaid)).toHaveLength(3);
+    expect(st().payEntryOnce(key, 1).paid).toBe(0);
+    const k = drillPaidKey("smart");
+    st().payEntryOnce(k, 1);
     vi.setSystemTime(Date.now() + DRILL_PAID_GRACE_MS);
-    expect(st().payDrill(k, 1).paid).toBe(0);
+    expect(st().payEntryOnce(k, 1).paid).toBe(0);
+  });
+
+  it("помним не больше ENTRY_PAID_MAX самых свежих отметок", () => {
+    let paid = {};
+    const t0 = Date.now();
+    for (let i = 0; i < ENTRY_PAID_MAX + 3; i++) paid = putEntryPaid(paid, `k${i}`, t0 + i * 1000);
+    const keys = Object.keys(paid);
+    expect(keys).toHaveLength(ENTRY_PAID_MAX);
+    expect(keys).not.toContain("k0");
+    expect(keys).toContain(`k${ENTRY_PAID_MAX + 2}`);
+    // Просроченные выкидываются при следующей записи.
+    expect(Object.keys(putEntryPaid({ old: t0 - DRILL_PAID_GRACE_MS - 1 }, "new", t0))).toEqual(["new"]);
   });
 
   it("закончили тренировку — отметка снимается: следующая такая же снова платная", () => {
-    st().payDrill(key, 1);
-    expect(st().drillPaid).not.toBeNull();
+    st().payEntryOnce(key, 1);
+    expect(entryPaidActive(st().entryPaid, key, Date.now())).toBe(true);
     st().finishSession({ kind: "drill", title: "Т", mode: "skill", drillKey: key, answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
-    expect(st().drillPaid).toBeNull();
-    expect(st().payDrill(key, 1).paid).toBe(1);
+    expect(st().entryPaid).toEqual({});
+    expect(st().payEntryOnce(key, 1).paid).toBe(1);
   });
 
-  it("квиз в чате (kind drill без ключа) и чужая тренировка отметку не снимают: возврат в оплаченную в течение 20 минут бесплатен", () => {
-    st().payDrill(key, 1);
-    expect(heartCount()).toBe(4);
-    // Квиз чата: тот же kind "drill", но ключа тренировки у него нет.
-    st().finishSession(quizSession([rec()], 5, 1, 10, "Квиз"));
-    expect(st().drillPaid).toEqual({ key, at: Date.now() });
+  it("закончили урок — снимается ключ урока его режима; «Проверить себя» — свой ключ", () => {
+    const learn = lessonEntryKey("ns-2-read");
+    const check = checkEntryKey("ns-2-read");
+    st().payEntryOnce(learn, 1);
+    st().payEntryOnce(check, 1);
+    st().finishSession(lesson());
+    expect(Object.keys(st().entryPaid)).toEqual([check]);
+    st().payEntryOnce(learn, 1);
+    st().finishSession(lesson({ via: "check" }));
+    expect(Object.keys(st().entryPaid)).toEqual([learn]);
+  });
+
+  it("квиз в чате со своим ключом снимает только его; итог без ключа и чужая тренировка отметку не трогают", () => {
+    st().payEntryOnce(key, 1);
+    const quiz = quizEntryKey(undefined);
+    st().payEntryOnce(quiz, 1);
+    expect(heartCount()).toBe(3);
+    st().finishSession({ ...quizSession([rec()], 5, 1, 10, "Квиз"), drillKey: quiz });
+    expect(Object.keys(st().entryPaid)).toEqual([key]);
     // Итог без ключа вообще и итог тренировки с другим ключом — тоже не трогают.
     st().finishSession({ kind: "drill", title: "Т", mode: "skill", answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
     st().finishSession({ kind: "drill", title: "Т", mode: "smart", drillKey: drillPaidKey("smart"), answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
-    expect(st().drillPaid).toEqual({ key, at: Date.now() });
+    expect(st().entryPaid).toEqual({ [key]: Date.now() });
     vi.setSystemTime(Date.now() + 10 * MINUTE);
-    expect(st().payDrill(key, 1)).toMatchObject({ ok: true, paid: 0 });
-    expect(heartCount()).toBe(4);
+    expect(st().payEntryOnce(key, 1)).toMatchObject({ ok: true, paid: 0 });
+    expect(heartCount()).toBe(3);
   });
 
   it("мини-тест: ключ из итога тоже снимает отметку", () => {
     const k = drillPaidKey("minitest", { node: "n1" });
-    st().payDrill(k, 1);
+    st().payEntryOnce(k, 1);
     st().finishSession({ kind: "drill", title: "М", mode: "minitest", drillKey: k, answers: [rec()], xp: 5, maxCombo: 1, durationSec: 10, accuracy: 1 });
-    expect(st().drillPaid).toBeNull();
+    expect(st().entryPaid).toEqual({});
   });
 
   it("не хватает сердечек — отказ, ничего не запоминается; «Безлимит» ничего не списывает и не запоминает", () => {
     for (let i = 0; i < 5; i++) st().payEntry(1);
-    expect(st().payDrill(key, 1)).toMatchObject({ ok: false, paid: 0 });
-    expect(st().drillPaid).toBeNull();
+    expect(st().payEntryOnce(key, 1)).toMatchObject({ ok: false, paid: 0 });
+    expect(st().payEntryFresh(key, 1)).toMatchObject({ ok: false, paid: 0 });
+    expect(st().entryPaid).toEqual({});
     fullReset();
     st().startTrial();
-    expect(st().payDrill(key, 1)).toMatchObject({ ok: true, paid: 0 });
-    expect(st().drillPaid).toBeNull();
+    expect(st().payEntryOnce(key, 1)).toMatchObject({ ok: true, paid: 0 });
+    expect(st().payEntryFresh(key, 1)).toMatchObject({ ok: true, paid: 0 });
+    expect(st().entryPaid).toEqual({});
   });
 
-  it("отметка переживает перезагрузку; просроченная, из будущего и мусор отбрасываются", () => {
-    st().payDrill(key, 1);
-    expect(mergeState(JSON.parse(JSON.stringify(st())), st()).drillPaid).toEqual({ key, at: Date.now() });
+  it("отметки переживают перезагрузку; просроченные, из будущего и мусор отбрасываются", () => {
+    st().payEntryOnce(key, 1);
+    expect(mergeState(JSON.parse(JSON.stringify(st())), st()).entryPaid).toEqual({ [key]: Date.now() });
     const now = Date.now();
-    expect(sanitizeDrillPaid({ key, at: now - DRILL_PAID_GRACE_MS - 1 }, now)).toBeNull();
-    expect(sanitizeDrillPaid({ key, at: now + 1000 }, now)).toBeNull();
-    expect(sanitizeDrillPaid({ key: "", at: now }, now)).toBeNull();
-    expect(sanitizeDrillPaid({ key: 5, at: now }, now)).toBeNull();
-    expect(sanitizeDrillPaid({ key, at: Number.NaN }, now)).toBeNull();
-    expect(sanitizeDrillPaid(null, now)).toBeNull();
-    expect(sanitizeDrillPaid([], now)).toBeNull();
-    expect(drillPaidActive({ key, at: now }, "другой", now)).toBe(false);
-    expect(drillPaidActive(null, key, now)).toBe(false);
+    expect(sanitizeEntryPaid({ [key]: now - DRILL_PAID_GRACE_MS - 1 }, now)).toEqual({});
+    expect(sanitizeEntryPaid({ [key]: now + 1000 }, now)).toEqual({});
+    expect(sanitizeEntryPaid({ "": now }, now)).toEqual({});
+    expect(sanitizeEntryPaid({ [key]: "5" }, now)).toEqual({});
+    expect(sanitizeEntryPaid({ [key]: Number.NaN }, now)).toEqual({});
+    expect(sanitizeEntryPaid(null, now)).toEqual({});
+    expect(sanitizeEntryPaid([], now)).toEqual({});
+    expect(sanitizeEntryPaid({ [key]: now, x: now - 1 }, now)).toEqual({ [key]: now, x: now - 1 });
+    expect(entryPaidActive({ [key]: now }, "другой", now)).toBe(false);
+    expect(entryPaidActive(null, key, now)).toBe(false);
+  });
+
+  it("перенос старого drillPaid ({ key, at }) при загрузке: оплаченная тренировка остаётся бесплатной, само поле уходит", () => {
+    const now = Date.now();
+    const saved = { ...JSON.parse(JSON.stringify(st())), drillPaid: { key, at: now - MINUTE } };
+    delete saved.entryPaid;
+    const merged = mergeState(saved, st()) as unknown as Record<string, unknown>;
+    expect(merged.entryPaid).toEqual({ [key]: now - MINUTE });
+    expect("drillPaid" in merged).toBe(false);
+    // Просроченная старая отметка и мусор не переносятся.
+    expect(sanitizeEntryPaid(undefined, now, { key, at: now - DRILL_PAID_GRACE_MS - 1 })).toEqual({});
+    expect(sanitizeEntryPaid(undefined, now, { key: 5, at: now })).toEqual({});
+    expect(sanitizeEntryPaid(undefined, now, "мусор")).toEqual({});
   });
 });
 

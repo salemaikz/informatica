@@ -19,7 +19,7 @@ type Load = "loading" | "ready" | "error";
  * sql.js грузится по требованию (один раз); база пересоздаётся перед каждым запуском.
  * Правильность задачи решает код (check.ts), а не ИИ.
  */
-export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: WorkspaceProps) {
+export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t, l } = useT();
   const [load, setLoad] = useState<Load>("loading");
   const [schema, setSchema] = useState<TableInfo[] | null>(null);
@@ -65,12 +65,14 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
   };
 
   const onRun = () => {
+    if (beforeRun && !beforeRun()) return;
     execute();
   };
 
   const onCheckClick = () => {
     const SQL = engine.current;
     if (!SQL || task?.check.kind !== "sql") return;
+    if (beforeRun && !beforeRun()) return;
     execute();
     onCheck(checkSql(task.check, code, SQL));
   };

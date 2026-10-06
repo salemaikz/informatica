@@ -384,23 +384,21 @@ describe("сердечки с шагом 0,5 (этап 15)", () => {
 });
 
 describe("плата за вход (#40)", () => {
-  it("цены входа: урок, проверка, пробник, игра, тренировка — 1; контрольная и экстерн — 2; теория урока — 0,5", () => {
-    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 2, extern: 2, game: 1, theory: 0.5, drill: 1 });
+  it("одно занятие — одно сердечко (#120): урок, проверка, пробник, тест по разделу, экстерн, игра, тренировка, задача кода — 1; теория урока — 0,5", () => {
+    expect(ENTRY_COST).toEqual({ lesson: 1, check: 1, exam: 1, checkpoint: 1, extern: 1, game: 1, theory: 0.5, drill: 1, code: 1 });
     expect(entryCost("theory")).toBe(0.5);
     // этап 16В: любая тренировка стоит сердечко (решение F), у «урока игрой» цена урока не меняется
     expect(entryCost("drill")).toBe(1);
+    expect(entryCost("code")).toBe(1);
   });
-  it("большой урок (hearts: 2) — 2; «урок игрой» стоит как урок", () => {
-    expect(lessonCost(undefined)).toBe(1);
-    expect(lessonCost({})).toBe(1);
-    expect(lessonCost({ hearts: 2 })).toBe(2);
-    expect(entryCost("lesson", { hearts: 2 })).toBe(2);
+  it("«большого урока за 2» нет (этап 16Г); «урок игрой» стоит как урок", () => {
+    expect(lessonCost()).toBe(1);
+    expect(entryCost("lesson", {})).toBe(1);
     expect(entryCost("game")).toBe(1);
     expect(entryCost("game", {})).toBe(1);
-    expect(entryCost("game", { hearts: 2 })).toBe(2);
-    // «Проверить себя» большого урока — как тест, 1
-    expect(entryCost("check", { hearts: 2 })).toBe(1);
-    expect(entryCost("checkpoint")).toBe(2);
+    expect(entryCost("check", {})).toBe(1);
+    expect(entryCost("checkpoint")).toBe(1);
+    expect(entryCost("extern")).toBe(1);
   });
 });
 

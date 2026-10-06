@@ -8,7 +8,7 @@
 /** Откуда открыли окно тарифов (как PlansFrom). */
 export type PaywallFrom = "onboarding" | "auto" | "shop" | "profile" | "hearts" | "ai" | "chips" | "other";
 /** Где закончились сердечки. */
-export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill" | "theory";
+export type HeartOutWhere = "lesson" | "check" | "extern" | "exam" | "checkpoint" | "game" | "drill" | "theory" | "code";
 /** Где не хватило чипов: ИИ, магазин, примерка украшения, окно сердечек (показано «Купить чипы»). */
 export type ChipOutWhere = "ai" | "shop" | "cosmetic" | "hearts";
 /** Что выбрали в окне «Не хватает». */

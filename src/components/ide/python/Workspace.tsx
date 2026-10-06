@@ -19,7 +19,7 @@ import { highlightFor, type TraceData } from "@/lib/ide/python/trace";
 
 type Phase = RunPhase;
 
-export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: WorkspaceProps) {
+export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t } = useT();
   const taskId = task?.id ?? "sandbox";
   const pyCheck = task?.check.kind === "python" ? task.check : null;
@@ -60,6 +60,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   async function run(withTrace: boolean) {
     if (busy) return;
+    if (beforeRun && !beforeRun()) return;
     setPhase("running");
     setTrace(null);
     const r = await runPython({ code, stdin, trace: withTrace, onStatus });
@@ -75,6 +76,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   async function check() {
     if (busy || !pyCheck) return;
+    if (beforeRun && !beforeRun()) return;
     setChecking(true);
     setPhase("running");
     setTrace(null);

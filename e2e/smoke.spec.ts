@@ -62,6 +62,8 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.waitForURL("**/lesson/ns-1-bits");
   // Ситуация: квест «Побег из компьютера»
   await expect(page.getByText("Побег из компьютера")).toBeVisible();
+  // Вход списан сразу при открытии урока (этап 16Г, #120): было 5, стало 4.
+  await expect(page.getByLabel("Сердечки: 4")).toBeVisible();
   await page.locator("footer button").last().click();
   await page.locator("footer button").last().click(); // «Где живут биты» (системный блок) → дальше
 
@@ -77,7 +79,7 @@ test("онбординг и первые шаги урока", async ({ page }) 
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Неверно")).toBeVisible();
   await expect(page.locator("footer")).toContainText("2");
-  // Вход оплачен на первом «Продолжить» (#40, этап 15): было 5, стало 4 — за вход, а не за ошибку.
+  // Ошибка сердечко не снимает (#40): по-прежнему 4 — плата была за вход.
   await expect(page.getByLabel("Сердечки: 4")).toBeVisible();
 
   expect(errors).toEqual([]);

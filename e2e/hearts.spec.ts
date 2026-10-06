@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { lessonBinary } from "../src/content/lessons/ns-1-binary";
+import { withEntBoss } from "../src/lib/ent-boss";
+import { lessonSig } from "../src/lib/lesson-run";
 
 // Этап 11 (v0.10): сердечки — плата за вход, а не за ошибки (#40); незаконченный урок можно продолжить (#41).
-// Этап 15 (F2): вход списывается, когда урок начался (первое «Продолжить» или первый ответ), а не только при ответе;
+// Этап 16Г (#120): вход списывается сразу при открытии урока и тренировки; повторный вход в течение 20 минут бесплатный;
 // теория урока (`/theory/<id>`) стоит 0,5 и списывается при открытии темы — без ворот и пояснений на странице (этап 16В, решение #113).
 // Бесплатной тренировки нет — при нуле сердечек путь: ждать, купить за чипы, «Безлимит».
 // Урок ns-1-bits: 0 история → 1 теория → 2 песочница (цель: 5 ламп) → 3 теория → 4 задание «1 бит» (верно «2», вариант «1» — ошибка)
@@ -44,22 +47,10 @@ const hearts = (page: Page, n: number) => page.getByLabel(`Сердечки: ${n
 /** Главная кнопка нижней панели: «Проверить» / «Продолжить». */
 const footerButton = (page: Page) => page.locator("footer button").last();
 
-/** От первого шага до первого задания: история, теория, песочница, теория. Первое «Продолжить» — урок начался, вход оплачен. */
+/** От первого шага до первого задания: история, теория, песочница, теория (вход оплачен уже при открытии). */
 async function toFirstQuestion(page: Page) {
   const next = footerButton(page);
   await next.click(); // история → теория
-  await next.click(); // теория → песочница
-  await expect(next).toBeDisabled();
-  for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Добавить лампу" }).click();
-  await expect(page.getByText("Получилось!")).toBeVisible();
-  await next.click(); // песочница → теория
-  await next.click(); // теория → первое задание
-  await expect(page.getByRole("button", { name: "Проверить" })).toBeVisible();
-}
-
-/** То же, когда история уже пройдена (первое «Продолжить» нажато): теория, песочница, теория. */
-async function toFirstQuestionFromTheory(page: Page) {
-  const next = footerButton(page);
   await next.click(); // теория → песочница
   await expect(next).toBeDisabled();
   for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Добавить лампу" }).click();
@@ -74,17 +65,16 @@ async function answer(page: Page, option: string) {
   await page.getByRole("button", { name: "Проверить" }).click();
 }
 
-test("урок: вход списывается, когда урок начался (первое «Продолжить»), ошибки сердечки не снимают", async ({ page }) => {
+test("урок: вход списывается сразу при открытии урока, ошибки сердечки не снимают", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/lesson/ns-1-bits");
-  // Открыл урок — пока бесплатно.
-  await expect(hearts(page, 5)).toBeVisible();
-
-  // Первое «Продолжить» на истории — урок начался: 5 → 4. Дальше теория и песочница ничего не стоят.
-  await footerButton(page).click();
+  // Открыл урок — вход списан сразу: 5 → 4.
   await expect(hearts(page, 4)).toBeVisible();
-  await toFirstQuestionFromTheory(page);
+  expect(await savedHearts(page)).toBe(4);
+
+  // Дальше история, теория и песочница ничего не стоят.
+  await toFirstQuestion(page);
   await expect(hearts(page, 4)).toBeVisible();
 
   // Первый ответ (даже неверный) вход повторно не списывает.
@@ -105,10 +95,9 @@ test("урок: последнее сердечко уходит на вход �
   const errors = trackErrors(page);
   await seed(page, 1);
   await page.goto("/lesson/ns-1-bits");
-  await toFirstQuestion(page);
-
-  // Последнее сердечко уходит на вход (первое «Продолжить») — урок идёт до конца без окон «Сердечки закончились».
+  // Последнее сердечко уходит на вход при открытии — урок идёт до конца без окон «Сердечки закончились».
   await expect(hearts(page, 0)).toBeVisible();
+  await toFirstQuestion(page);
   await answer(page, "2");
   await expect(hearts(page, 0)).toBeVisible();
   await footerButton(page).click(); // → теория
@@ -124,6 +113,7 @@ test("урок: выйти посреди урока и вернуться — �
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/lesson/ns-1-bits");
+  await expect(hearts(page, 4)).toBeVisible();
   await toFirstQuestion(page);
   await answer(page, "2");
   await expect(hearts(page, 4)).toBeVisible();
@@ -162,26 +152,82 @@ test("урок: выйти посреди урока и вернуться — �
   await expect(hearts(page, 4)).toBeVisible();
   await expect(page.getByRole("button", { name: /Продолжить/ }).getByRole("img")).toHaveCount(0);
 
-  // «Начать заново»: сохранение сбрасывается, урок с первого шага, а первый ответ снова стоит сердечко.
+  // «Начать заново» — новый вход: сердечко списывается сразу по нажатию, урок с первого шага, дальше бесплатно.
   await page.getByRole("button", { name: /Начать заново/ }).click();
   await expect(page.getByText("Побег из компьютера")).toBeVisible();
-  await expect(hearts(page, 4)).toBeVisible();
-  await toFirstQuestion(page); // первое «Продолжить» снова стоит сердечко
   await expect(hearts(page, 3)).toBeVisible();
+  expect(await savedHearts(page)).toBe(3);
+  await toFirstQuestion(page);
   await answer(page, "2");
   await expect(hearts(page, 3)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test("урок: открыл и сразу вышел — сердечко не списывается", async ({ page }) => {
+test("урок: открыл и сразу вышел — сердечко списано, повторный вход в течение 20 минут бесплатный", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/lesson/ns-1-bits");
   await expect(page.getByText("Побег из компьютера")).toBeVisible();
+  await expect(hearts(page, 4)).toBeVisible();
   await page.getByRole("button", { name: "Выйти" }).click();
+  // Окно выхода честно говорит, что вернуться можно бесплатно в пределах окна.
+  await expect(page.getByRole("dialog").getByText(/Вернуться в течение \d+ минут — бесплатно/)).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Выйти" }).click();
   await page.waitForURL("**/learn");
+  expect(await savedHearts(page)).toBe(4);
+
+  // Снова открыли тот же урок — без экрана выбора и без нового списания.
+  await page.goto("/lesson/ns-1-bits");
+  await expect(page.getByText("Побег из компьютера")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Урок не закончен" })).toHaveCount(0);
+  await expect(hearts(page, 4)).toBeVisible();
+  expect(await savedHearts(page)).toBe(4);
+  expect(errors).toEqual([]);
+});
+
+test("итоги урока: «Следующий урок», потом «Назад» — пройденный урок не открывается и не списывает сердечко", async ({ page }) => {
+  const errors = trackErrors(page);
+  // Сохранение на последнем шаге урока (решение по фото), вход оплачен только что — «Продолжить» бесплатно.
+  const lesson = withEntBoss(lessonBinary);
+  const pos = lesson.steps.findIndex((s) => s.id === "q-solution-45");
+  const now = Date.now();
+  const run = {
+    lessonId: lesson.id,
+    sig: lessonSig(lesson.steps),
+    queue: lesson.steps.map((s) => ({ id: s.id, retry: false })),
+    pos,
+    done: pos,
+    records: [],
+    xp: 0,
+    combo: 0,
+    maxCombo: 0,
+    skipped: 0,
+    activeMs: 60_000,
+    xpFactor: 1,
+    chipsEarned: 0,
+    cost: 1,
+    startedAt: now - 120_000,
+    updatedAt: now,
+    paidAt: now,
+  };
+  await page.route("**/api/ai/**", (route) => route.fulfill({ status: 503, body: "" }));
+  await seed(page, 5, { lessonRuns: { [lesson.id]: run } });
+  await page.goto(`/lesson/${lesson.id}`);
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: "Пропустить" }).click();
+  await expect(page.getByRole("heading", { name: "Урок пройден!" })).toBeVisible();
   expect(await savedHearts(page)).toBe(5);
+
+  // Следующий урок — новый вход: −1. Переход заменяет запись истории (replace).
+  await page.getByRole("link", { name: "Следующий урок" }).click();
+  await expect(hearts(page, 4)).toBeVisible();
+  expect(await savedHearts(page)).toBe(4);
+
+  // «Назад» не возвращает в пройденный урок: он не открывается заново и сердечко не списывается.
+  await page.goBack();
+  await expect(page).not.toHaveURL(new RegExp(`/lesson/${lesson.id}$`));
+  await page.waitForTimeout(500);
+  expect(await savedHearts(page)).toBe(4);
   expect(errors).toEqual([]);
 });
 
@@ -218,16 +264,20 @@ test("тренировка стоит сердечко: сердечек нет 
   expect(errors).toEqual([]);
 });
 
-test("тренировка: открыл и закрыл — бесплатно, сердечки в плеере видны, возврата за тренировку нет", async ({ page }) => {
+test("тренировка: сердечко списывается при открытии, повторный вход в течение 20 минут бесплатный, возврата нет", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 3);
   await page.goto("/drill?mode=skill&skill=ns.dec2bin");
-  // Вход спишется при первом ответе (как у урока): пока 3.
-  await expect(hearts(page, 3)).toBeVisible();
+  // Вход списан сразу при открытии (этап 16Г, #120): 3 → 2.
+  await expect(hearts(page, 2)).toBeVisible();
   await page.getByRole("button", { name: "Выйти" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Выйти" }).click();
   await page.waitForURL("**/practice");
-  expect(await savedHearts(page)).toBe(3);
+  expect(await savedHearts(page)).toBe(2);
+  // Та же тренировка снова — бесплатно (ключ входа 20 минут).
+  await page.goto("/drill?mode=skill&skill=ns.dec2bin");
+  await expect(hearts(page, 2)).toBeVisible();
+  expect(await savedHearts(page)).toBe(2);
   expect(errors).toEqual([]);
 });
 

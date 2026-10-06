@@ -12,6 +12,8 @@ import { decaySkills } from "@/lib/mastery";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { ENTRY_COST } from "@/lib/economy";
+import { quizEntryKey } from "@/lib/entry-paid";
+import { track } from "@/lib/analytics";
 import {
   answerRecord,
   buildQuiz,
@@ -85,9 +87,14 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const [gain, setGain] = useState(0);
   const [praise, setPraise] = useState(0);
   const [outcome, setOutcome] = useState<{ bonusXp: number } | null>(null);
-  // Тренировка стоит сердечко (этап 16В): плата при первом ответе, как в уроке. Не хватает — шторка «Сердечки закончились».
+  // Тренировка стоит сердечко (этап 16В). Плата — при выборе числа заданий (этап 16Г, #120); если число задано сразу — при первом ответе.
+  // Ключ входа (по теме): двойное нажатие и повторный выбор в течение 20 минут не списывают дважды; итог снимает ключ — «Ещё» снова платно.
+  // Не хватает — шторка «Сердечки закончились».
+  const payKey = quizEntryKey(topic);
   const paidRef = useRef(false);
   const [outOpen, setOutOpen] = useState(false);
+  // Число заданий, выбранное до покупки сердечек: после «Продолжить» в шторке начинаем с ним.
+  const [wanted, setWanted] = useState<QuizCount | null>(null);
   const stepStartedAt = useRef(0);
   const finished = useRef(false);
 
@@ -101,18 +108,30 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const total = steps?.length ?? 0;
   const topicTitle = topic ? l(entTopicById(topic).short) : null;
 
-  const start = (n: QuizCount) => setSteps(makeSteps(topic, n));
+  /** Оплата входа из обработчика: не хватает — шторка и событие hearts_out. */
+  const pay = useCallback((): boolean => {
+    if (paidRef.current) return true;
+    if (!useApp.getState().payEntryOnce(payKey, ENTRY_COST.drill).ok) {
+      track({ e: "hearts_out", where: "drill" });
+      setOutOpen(true);
+      return false;
+    }
+    paidRef.current = true;
+    return true;
+  }, [payKey]);
+
+  const start = (n: QuizCount) => {
+    if (!pay()) {
+      setWanted(n);
+      return;
+    }
+    setSteps(makeSteps(topic, n));
+  };
 
   const check = useCallback(
     (a: Answer | null = answer) => {
       if (!step || !a || phase !== "answering" || !isReady(step, a)) return;
-      if (!paidRef.current) {
-        if (!useApp.getState().payEntry(ENTRY_COST.drill).ok) {
-          setOutOpen(true);
-          return;
-        }
-        paidRef.current = true;
-      }
+      if (!pay()) return;
       const res = evaluate(step, a, lang);
       const newCombo = nextCombo(combo, res.correct);
       const gained = xpForAnswer(res.correct, false, newCombo);
@@ -130,7 +149,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       if (res.correct) giveFeedback(newCombo >= 3 ? "combo" : "correct", { combo: newCombo });
       else giveFeedback("wrong");
     },
-    [answer, step, phase, lang, combo, recordAnswer, noteCombo],
+    [answer, step, phase, lang, combo, recordAnswer, noteCombo, pay],
   );
 
   const onAnswer = useCallback(
@@ -154,7 +173,8 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
     if (finished.current) return;
     finished.current = true;
     const durationSec = records.reduce((s, r) => s + r.timeMs, 0) / 1000;
-    const session = quizSession(records, xp, maxCombo, durationSec, t("quiz.title"));
+    // Ключ входа в итоге: finishSession снимает отметку оплаты — следующий набор «Дай задачи» снова платный.
+    const session = { ...quizSession(records, xp, maxCombo, durationSec, t("quiz.title")), drillKey: payKey };
     const out = finishSession(session);
     giveFeedback("complete");
     setOutcome({ bonusXp: out.bonusXp });
@@ -176,6 +196,20 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
     >
       <X size={20} />
     </button>
+  );
+
+  // Не хватило сердечек: купить или выйти. «Продолжить» после покупки — начинаем выбранный набор (или жмём «Проверить» снова).
+  const outSheet = (
+    <OutOfHearts
+      open={outOpen}
+      need={ENTRY_COST.drill}
+      onClose={() => setOutOpen(false)}
+      onResume={() => {
+        setOutOpen(false);
+        if (!steps && wanted) start(wanted);
+      }}
+      onExit={() => (onCancel ? onCancel() : setOutOpen(false))}
+    />
   );
 
   // Выбор числа заданий.
@@ -211,6 +245,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
             </button>
           ))}
         </div>
+        {outSheet}
       </section>
     );
   }
@@ -342,7 +377,7 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
         </Button>
       )}
 
-      <OutOfHearts open={outOpen} need={ENTRY_COST.drill} onClose={() => setOutOpen(false)} onResume={() => setOutOpen(false)} onExit={() => (onCancel ? onCancel() : setOutOpen(false))} />
+      {outSheet}
     </section>
   );
 }

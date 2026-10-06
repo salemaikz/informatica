@@ -15,7 +15,7 @@ import { runJs, stopJs, type JsRunResult } from "@/lib/ide/js/runner";
 /** Сколько символов вывода показываем (остальное обрезаем — длинный вывод тормозит страницу). */
 const SHOW_LIMIT = 20000;
 
-export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: WorkspaceProps) {
+export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t } = useT();
   const jsCheck = task?.check.kind === "js" ? task.check : null;
   const [busy, setBusy] = useState(false);
@@ -37,6 +37,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   async function run() {
     if (busy) return;
+    if (beforeRun && !beforeRun()) return;
     setBusy(true);
     const r = await runJs(code);
     if (!mounted.current) return;
@@ -50,6 +51,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError }: Wor
 
   async function check() {
     if (busy || !jsCheck) return;
+    if (beforeRun && !beforeRun()) return;
     setBusy(true);
     setChecking(true);
     let last: JsRunResult | null = null;

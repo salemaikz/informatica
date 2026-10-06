@@ -4,7 +4,9 @@ import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { HeartCost } from "@/components/economy/HeartCost";
 import { cn } from "@/lib/cn";
+import { ENTRY_COST } from "@/lib/economy";
 import type { IdeLang, IdeTask } from "@/lib/ide/types";
 import { skillById } from "@/content/skills";
 import { useApp } from "@/lib/store";
@@ -46,6 +48,8 @@ function TaskRow({ lang, task, n, stat, showLevel }: { lang: IdeLang; task: IdeT
             {LEVEL_LETTER[task.level]}
           </span>
         )}
+        {/* Задача стоит сердечко (этап 16Г, #120): списывается при первом запуске или проверке. */}
+        <HeartCost n={ENTRY_COST.code} />
         <ChevronRight size={20} className="shrink-0 text-muted" aria-hidden />
       </Link>
     </li>
