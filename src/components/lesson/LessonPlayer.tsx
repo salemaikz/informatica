@@ -271,6 +271,7 @@ export function LessonPlayer({
     firstPass: boolean;
     lessonChips: number;
     perfectDrop: PerfectDrop | null;
+    counted: boolean;
   } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({ status: "loading" });
   // Множитель XP за повтор урока фиксируем на входе: во время прохождения он не меняется (при продолжении — из сохранения).
@@ -393,7 +394,7 @@ export function LessonPlayer({
         ...(kind === "lesson" && lesson?.micro ? { micro: true } : {}),
       };
       const levelBefore = levelInfo(useApp.getState().xp).level;
-      const { bonusXp, firstPass, lessonChips, perfectDrop } = finishSession(result);
+      const { bonusXp, firstPass, lessonChips, perfectDrop, counted } = finishSession(result);
       onSessionFinish?.(result);
       const doneEvent = finishEvent({ kind, lessonId, via, mode, accuracy: result.accuracy, durationSec: result.durationSec });
       if (doneEvent) track(doneEvent);
@@ -401,7 +402,7 @@ export function LessonPlayer({
       const chips = Math.max(0, useApp.getState().wallet.earned - earnedAtStart);
       // Идеальный урок — своя фанфара вместо обычной (Results её не повторяет).
       giveFeedback(levelInfo(useApp.getState().xp).level > levelBefore ? "levelUp" : result.accuracy >= 1 ? "perfect" : "complete");
-      setSession({ result, bonusXp, achievements, chips, firstPass, lessonChips, perfectDrop });
+      setSession({ result, bonusXp, achievements, chips, firstPass, lessonChips, perfectDrop, counted });
       requestLessonFeedback(result, setFeedback);
     },
     [finishSession, kind, lessonId, lesson, via, mode, drillKey, title, onSessionFinish, earnedAtStart, lessonMs, steps],
@@ -532,8 +533,11 @@ export function LessonPlayer({
         // Подсказка или вопрос Биту до ответа (#66): ответ не самостоятельный, оценка освоения сдвигается слабее.
         ...(hintedRef.current ? { hinted: true } : {}),
       };
-      const levelBefore = levelInfo(useApp.getState().xp).level;
+      const xpBefore = useApp.getState().xp;
+      const levelBefore = levelInfo(xpBefore).level;
       recordAnswer(rec, gained, lessonId);
+      // Сколько опыта реально зачислено (с бустером ×2 — вдвое больше): его же показываем и копим в итоге урока.
+      const credited = useApp.getState().xp - xpBefore;
       const taskEv = taskEvent(rec, stableSteps, lessonId);
       if (taskEv) track(taskEv);
       const leveledUp = levelInfo(useApp.getState().xp).level > levelBefore;
@@ -550,20 +554,20 @@ export function LessonPlayer({
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
       setMaxCombo(newMaxCombo);
-      setXp((x) => x + gained);
-      setGain(gained);
+      setXp((x) => x + credited);
+      setGain(credited);
       setResult(res);
       setPhase("feedback");
       setPraise((prev) => pickPraise(newCombo, prev, Math.random()));
       setDone(newDone);
       if (needRetry) setQueue(newQueue);
       // Шаг пройден — сохраняем прохождение со следующей позиции (повтор ошибки уже в очереди).
-      persistRun({ queue: newQueue, pos: pos + 1, done: newDone, records: [...records, rec], xp: xp + gained, combo: newCombo, maxCombo: newMaxCombo });
+      persistRun({ queue: newQueue, pos: pos + 1, done: newDone, records: [...records, rec], xp: xp + credited, combo: newCombo, maxCombo: newMaxCombo });
       // Отклик: звук + вибрация. Комбо с 3-го ответа, новый уровень — фанфара; «монетка» XP чуть позже.
       if (leveledUp) giveFeedback("levelUp");
       else if (res.correct) giveFeedback(newCombo >= 3 ? "combo" : "correct", { combo: newCombo });
       else giveFeedback("wrong");
-      if (gained > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
+      if (credited > 0 && !leveledUp) setTimeout(() => giveFeedback("xp"), 180);
     },
     [question, combo, maxCombo, done, pos, queue, records, xp, item, lang, recordAnswer, lessonId, mistakeMap, dismissMistake, noteCombo, xpFactor, persistRun, stableSteps, stepMs, testMode],
   );
@@ -752,6 +756,7 @@ export function LessonPlayer({
         firstPass={session.firstPass}
         lessonChips={session.lessonChips}
         perfectDrop={session.perfectDrop}
+        counted={session.counted}
         achievements={session.achievements}
         feedback={feedback}
         via={via}

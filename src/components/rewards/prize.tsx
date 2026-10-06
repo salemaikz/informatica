@@ -47,7 +47,7 @@ export function prizeDesc(prize: CasePrize, t: Translate): string {
   }
 }
 
-/** Плитка с иконкой приза: золото — XP, чипы и бустер чипов; розово-красный — только сердечки; цвет редкости — украшения. */
+/** Плитка с иконкой приза: золото — XP, чипы и бустер опыта; розово-красный — только сердечки; цвет редкости — украшения. */
 export function PrizeIcon({ prize, size = 40, className }: { prize: CasePrize; size?: number; className?: string }) {
   // Украшение — плитка цвета редкости с превью на аватаре ученика (а не золотая плитка с иконкой).
   if (prize.kind === "cosmetic" && prize.cosmetic) return <CosmeticTile id={prize.cosmetic} size={size} className={className} />;

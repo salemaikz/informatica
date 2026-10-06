@@ -7,6 +7,7 @@ import {
   aiFreeLeft,
   boostActive,
   chipMultiplier,
+  xpMultiplier,
   effectiveTier,
   heartsView,
   PLAN_FEATURES,
@@ -116,7 +117,7 @@ export function useHeartsLive(): { view: HeartsView; now: number } {
   return { view: heartsView(hearts, tier, t, todayKey()), now: t };
 }
 
-/** Чипы и множитель (тариф × бустер). */
+/** Чипы, множитель чипов (тариф) и множитель опыта (бустер, #122). */
 export function useChips() {
   const wallet = useApp((s) => s.wallet);
   const boost = useApp((s) => s.boost);
@@ -125,7 +126,8 @@ export function useChips() {
   return {
     chips: wallet.chips,
     wallet,
-    multiplier: chipMultiplier(tier, boost, t),
+    multiplier: chipMultiplier(tier),
+    xpMult: xpMultiplier(boost, t),
     boost: boostActive(boost, t) ? boost : null,
   };
 }

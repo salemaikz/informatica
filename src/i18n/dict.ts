@@ -75,6 +75,7 @@ import { cosmeticsDict } from "./parts/cosmetics";
 import { guideDict } from "./parts/guide";
 import { dockDict } from "./parts/dock";
 import { econ16cDict } from "./parts/econ16c";
+import { econ16dDict } from "./parts/econ16d";
 import { gamifyDict } from "./parts/gamify";
 import { progress16cDict } from "./parts/progress16c";
 import { theory16cDict } from "./parts/theory16c";
@@ -582,6 +583,7 @@ export const dict = {
   ...guideDict,
   ...dockDict,
   ...econ16cDict,
+  ...econ16dDict,
   ...gamifyDict,
   ...progress16cDict,
   ...theory16cDict,

@@ -51,7 +51,7 @@ describe("стор: работа над ошибками", () => {
     };
     expect(useApp.getState().finishSession(base).bonusXp).toBe(40);
     // Другой урок: повтор того же урока дал бы меньше XP (lib/review.ts).
-    expect(useApp.getState().finishSession({ ...base, lessonId: "ns-2-read", skipped: 1 }).bonusXp).toBe(20);
+    expect(useApp.getState().finishSession({ ...base, lessonId: "ns-2-read", skipped: 1, asked: 4 }).bonusXp).toBe(20);
   });
 
   it("refundAi возвращает обращение по квитанции", () => {

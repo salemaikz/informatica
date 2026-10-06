@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { chipsEstimate, chipsKey, lessonXpMax } from "@/components/economy/xp-chips";
 
 describe("xp-chips", () => {
-  it("оценка чипов за урок: 3 за первое прохождение, 1 за повтор, множитель сверху", () => {
-    expect(chipsEstimate(false)).toBe(3);
-    expect(chipsEstimate(true)).toBe(1);
-    expect(chipsEstimate(false, 2)).toBe(6);
-    expect(chipsEstimate(true, 1.5)).toBe(1);
+  it("оценка чипов за урок: 2 за первое прохождение, 0 за повтор, множитель сверху", () => {
+    expect(chipsEstimate(false)).toBe(2);
+    expect(chipsEstimate(true)).toBe(0);
+    expect(chipsEstimate(false, 2)).toBe(4);
+    expect(chipsEstimate(true, 1.5)).toBe(0);
   });
   it("максимум XP за урок: повтор без бонусов", () => {
     // 8 заданий: 80 + комбо 6·5 + прохождение 20 + «идеально» 20

@@ -1,9 +1,12 @@
 "use client";
 
-import { Snowflake } from "lucide-react";
+import { Repeat, Snowflake } from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
+import { repeatedMistakes } from "@/lib/progress";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { WeekChart } from "@/components/app/WeekChart";
 import { GoalsPanel, WeekCard } from "@/components/goals/GoalsPanel";
@@ -23,6 +26,11 @@ import { useEntVisible } from "@/components/school/useEntVisible";
 export default function StatsPage() {
   const { t } = useT();
   const mistakes = useApp((s) => s.mistakes);
+  const missLog = useApp((s) => s.missLog);
+  const repeats = useMemo(
+    () => repeatedMistakes(Object.entries(missLog ?? {}).map(([stepId, e]) => ({ id: stepId, stepId, prompt: e.prompt, misses: e.n, at: e.at }))),
+    [missLog],
+  );
   const freezes = useApp((s) => s.streak.freezes ?? 0);
   // Темы ЕНТ, цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
   const ent = useEntVisible();
@@ -36,6 +44,30 @@ export default function StatsPage() {
         <CourseProgressCard />
       </div>
       <WeakSpotsCard tour />
+      {repeats.length > 0 && (
+        <Card>
+          <div className="mb-3 flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-danger-soft text-danger">
+              <Repeat size={24} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold leading-tight">{t("econ16d.repeat.title")}</h2>
+              <p className="text-sm font-semibold text-muted">{t("econ16d.repeat.sub")}</p>
+            </div>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {repeats.map((m) => (
+              <li key={m.id} className="rounded-xl bg-surface-2 px-3 py-2 text-sm">
+                <p className="break-normal font-semibold">{m.prompt}</p>
+                <p className="mt-1 text-xs font-bold text-danger">{t("econ16d.repeat.misses", { n: m.misses })}</p>
+              </li>
+            ))}
+          </ul>
+          <ButtonLink href="/drill?mode=mistakes" variant="secondary" block className="mt-3">
+            {t("econ16d.repeat.cta")}
+          </ButtonLink>
+        </Card>
+      )}
       <UnitProgressList />
       {ent && <TopicTable />}
 

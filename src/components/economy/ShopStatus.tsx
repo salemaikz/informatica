@@ -13,8 +13,8 @@ import { formatCountdown, formatMult, heartWaitMs, showBoostLine } from "./shop-
 export function ShopStatus() {
   const { t } = useT();
   const { view, now } = useHeartsLive();
-  const { multiplier, boost } = useChips();
-  const boostLine = showBoostLine(boost, multiplier, now);
+  const { xpMult, boost } = useChips();
+  const boostLine = showBoostLine(boost, xpMult, now);
 
   return (
     <div role="group" aria-label={t("shop.status.aria")} className="flex flex-col gap-1.5 rounded-2xl border-2 border-border bg-surface px-3.5 py-2.5">
@@ -47,7 +47,7 @@ export function ShopStatus() {
       {boostLine && boost && (
         <p className="flex min-h-6 items-center gap-2 text-[15px] font-bold">
           <Rocket size={20} className="shrink-0 text-gold" aria-hidden />
-          <span className="min-w-0 tabular-nums text-warning-strong">{t("shop.status.boost", { mult: formatMult(multiplier), time: formatCountdown(boost.until - now) })}</span>
+          <span className="min-w-0 tabular-nums text-warning-strong">{t("shop.status.boost", { mult: formatMult(xpMult), time: formatCountdown(boost.until - now) })}</span>
         </p>
       )}
     </div>
