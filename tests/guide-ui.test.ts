@@ -480,6 +480,40 @@ describe("lesson-first: первый урок", () => {
     expect(bubble()).toBeNull();
   });
 
+  it("урок закрыт на шаге сердечка — lesson-first отмечен, lesson-icons нет (значки ещё не объяснены)", async () => {
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    addTarget("lesson-ask", {}, "button");
+    await start();
+    expect(say()).toContain("Вход в урок списал 1 сердечко");
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(tips()["lesson-first"]).toBeGreaterThan(0);
+    expect(tips()["lesson-icons"]).toBeUndefined();
+  });
+
+  it("урок закрыт после шага ИИ — lesson-icons тоже отмечен", async () => {
+    addTarget("lesson-hearts");
+    addTarget("lesson-progress");
+    addTarget("lesson-tools", {}, "button");
+    addTarget("lesson-ask", {}, "button");
+    await start();
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Это значок ИИ");
+    expect(tips()["lesson-icons"]).toBeUndefined();
+    await click("Дальше");
+    await wait(50);
+    expect(tips()["lesson-icons"]).toBeGreaterThan(0);
+    expect(tips()["lesson-first"]).toBeUndefined();
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(tips()["lesson-first"]).toBeGreaterThan(0);
+  });
+
   it("значка ИИ нет — шаг пропускается, «Выбери ответ» всё равно наступает", async () => {
     addTarget("lesson-hearts");
     addTarget("lesson-progress");
@@ -738,7 +772,7 @@ describe("lesson-icons: значки урока для прошедших ста
   it("один раз в следующем уроке: инструменты → ИИ; потом не возвращается", async () => {
     h.pathname = "/lesson/ns-2";
     doneLesson();
-    useApp.setState({ tips: { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1 } });
+    useApp.setState({ tips: { welcome: 1000, "lesson-first": 60_000, "after-first": 200_000, nav: 210_000 } });
     useGuideSpots.setState({ lesson: { cost: 1 } });
     addTarget("lesson-hearts");
     addTarget("lesson-tools", {}, "button");

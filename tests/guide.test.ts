@@ -30,7 +30,8 @@ import {
   stepText,
   tourBlocking,
   dockExplained,
-  noteScene,
+  alsoDue,
+  skippedTogether,
   unionRect,
   unseenTips,
   type BitPlacement,
@@ -88,8 +89,13 @@ describe("sceneFor: путь первого входа", () => {
   });
   it("прошедшим старый lesson-first — lesson-icons один раз в следующем уроке; новый lesson-first его заменяет", () => {
     const lesson = ctx({ pathname: "/lesson/b", inLesson: true, completedLessons: 2 });
-    expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav"), lesson)).toBe("lesson-icons");
+    // Прошёл по очереди: nav — позже lesson-first.
+    const old: TipsState = { welcome: 1000, "lesson-first": 60_000, "after-first": 200_000, nav: 210_000 };
+    expect(sceneFor(old, lesson)).toBe("lesson-icons");
     expect(sceneFor(seen("welcome", "lesson-first", "after-first"), lesson)).toBe("lesson-icons");
+    // Старый «Пропустить»/Escape отметил lesson-first и nav разом — от обучения отказались, lesson-icons не играет.
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav"), lesson)).toBeNull();
+    expect(sceneFor({ welcome: 1000, "lesson-first": 60_000, "after-first": 60_000, nav: 60_000 }, lesson)).toBeNull();
     expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav", "lesson-icons"), lesson)).toBeNull();
     // Новый путь: intro показан — lesson-icons не нужен (lesson-first его отмечает сам, но и без отметки — нет).
     expect(sceneFor(seen("intro", "lesson-first", "after-first", "learn-next"), lesson)).toBeNull();
@@ -141,13 +147,24 @@ describe("tourBlocking и служебное", () => {
     expect(dockExplained(seen("intro"))).toBe(true);
     expect(dockExplained(seen("nav"))).toBe(true);
   });
-  it("noteScene отмечает сцену и то, что она заменяет", () => {
-    const noted: string[] = [];
-    noteScene("lesson-first", (id) => noted.push(id));
-    expect(noted).toEqual(["lesson-first", "lesson-icons"]);
-    noted.length = 0;
-    noteScene("intro", (id) => noted.push(id));
-    expect(noted).toEqual(["intro"]);
+  it("alsoDue: lesson-first отмечает lesson-icons только пройдя шаг ИИ (или в конце), intro — никогда", () => {
+    const lf = GUIDE_SCENES["lesson-first"];
+    const full = lf.steps;
+    const at = (id: string) => full.findIndex((s) => s.id === id);
+    expect(alsoDue(lf, full, at("hearts"))).toBe(false);
+    expect(alsoDue(lf, full, at("progress"))).toBe(false);
+    expect(alsoDue(lf, full, at("tools"))).toBe(false);
+    expect(alsoDue(lf, full, at("ask"))).toBe(true);
+    expect(alsoDue(lf, full, at("options"))).toBe(true);
+    expect(alsoDue(lf, full, full.length - 1)).toBe(true);
+    const intro = GUIDE_SCENES.intro;
+    expect(alsoDue(intro, intro.steps, intro.steps.length - 1)).toBe(false);
+  });
+  it("skippedTogether: отметки одного «Пропустить» — в одну секунду; показ по очереди — нет", () => {
+    expect(skippedTogether({ "lesson-first": 5000, nav: 5000 }, "lesson-first", "nav")).toBe(true);
+    expect(skippedTogether({ "lesson-first": 5000, nav: 5001 }, "lesson-first", "nav")).toBe(true);
+    expect(skippedTogether({ "lesson-first": 5000, nav: 95_000 }, "lesson-first", "nav")).toBe(false);
+    expect(skippedTogether({ "lesson-first": 5000 }, "lesson-first", "nav")).toBe(false);
   });
   it("новые сцены сохраняются, чужие id — нет", () => {
     expect(sanitizeTips({ "page-shop": 3, "page-profile": 4, "page-x": 1 })).toEqual({ "page-shop": 3, "page-profile": 4 });

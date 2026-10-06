@@ -49,8 +49,13 @@ export type SceneId = Exclude<TipId, "welcome">;
 export interface GuideScene {
   id: SceneId;
   steps: readonly GuideStep[];
-  /** Доиграна (или прервана) — отметить и эти сцены: новый lesson-first уже объяснил то, что повторяет lesson-icons. */
+  /**
+   * Отметить и эти сцены, когда показ дошёл до шага `alsoAfter` (или до конца сцены): новый lesson-first уже объяснил то,
+   * что повторяет lesson-icons. Прерванная раньше сцена их не отмечает.
+   */
   also?: readonly TipId[];
+  /** id шага, пройдя который сцена отмечает `also`; нет такого шага среди показанных — только по концу сцены. */
+  alsoAfter?: string;
 }
 
 /** Ожидание цели по умолчанию: страница могла ещё дорисоваться. */
@@ -121,6 +126,7 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
     id: "lesson-first",
     // Значки уже объяснены — отдельная сцена для старых учеников не нужна.
     also: ["lesson-icons"],
+    alsoAfter: "ask",
     steps: [
       {
         id: "hearts",
@@ -244,7 +250,10 @@ export function sceneFor(tips: TipsState | undefined, ctx: SceneCtx): SceneId | 
   if (ctx.inLesson) {
     if ((ctx.completedLessons === 0 || replay) && fresh("lesson-first")) return "lesson-first";
     // Старый lesson-first (v0.18) значков не объяснял; новый отмечает lesson-icons сам (`also`).
-    return !fresh("lesson-first") && fresh("intro") && fresh("lesson-icons") ? "lesson-icons" : null;
+    // Старый «Пропустить» (v0.16–0.18) отметил lesson-first вместе с nav одним махом — такой ученик от обучения отказался.
+    return !fresh("lesson-first") && fresh("intro") && fresh("lesson-icons") && !skippedTogether(tips, "lesson-first", "nav")
+      ? "lesson-icons"
+      : null;
   }
   if (ctx.pathname === "/learn") {
     if (touring) {
@@ -298,10 +307,24 @@ export function tourBlocking(tips: TipsState | undefined): boolean {
 /** Кнопку Бита уже объяснили (знакомство или обзор): стрелка «смахни вправо» у неё больше не нужна. */
 export const dockExplained = (tips: TipsState | undefined): boolean => tipSeen(tips, "intro") || tipSeen(tips, "nav");
 
-/** Отметить сцену показанной — вместе с теми, что она заменяет (`also`). */
-export function noteScene(id: SceneId, note: (id: TipId) => void): void {
-  note(id);
-  for (const other of GUIDE_SCENES[id].also ?? []) note(other);
+/**
+ * Шаг `from` из показанных `steps` пройден — пора ли отметить `also` сцены. Да, если пройден шаг `alsoAfter`
+ * или любой после него (сам шаг мог быть пропущен: значка нет).
+ */
+export function alsoDue(scene: GuideScene, steps: readonly GuideStep[], from: number): boolean {
+  if (!scene.also?.length) return false;
+  if (from + 1 >= steps.length) return true;
+  if (!scene.alsoAfter) return false;
+  const order = scene.steps.findIndex((s) => s.id === scene.alsoAfter);
+  const passed = scene.steps.findIndex((s) => s.id === steps[from]?.id);
+  return order >= 0 && passed >= order;
+}
+
+/** Две отметки поставлены одним «Пропустить» (все разом, в одну секунду), а не показом сцен по очереди. */
+export function skippedTogether(tips: TipsState | undefined, a: TipId, b: TipId): boolean {
+  const x = tips?.[a];
+  const y = tips?.[b];
+  return !!x && !!y && Math.abs(x - y) < 1000;
 }
 
 /** «Пропустить»: закрыть весь проводник — отметить все сцены, которые ещё не показаны. */

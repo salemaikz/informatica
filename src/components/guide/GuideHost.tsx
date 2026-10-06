@@ -15,7 +15,7 @@ import {
   completedLessonsCount,
   guideScroll,
   keepDash,
-  noteScene,
+  alsoDue,
   padRect,
   placeBit,
   placeFromDock,
@@ -227,10 +227,12 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
       if (cursor.current !== from) return;
       cursor.current = from + 1;
       skipped.current[from] = skip;
-      if (from + 1 >= steps.length) noteScene(scene.id, useApp.getState().noteTip);
+      const { noteTip } = useApp.getState();
+      if (alsoDue(scene, steps, from)) for (const other of scene.also ?? []) noteTip(other);
+      if (from + 1 >= steps.length) noteTip(scene.id);
       else setAt({ idx: from + 1, fallback: false });
     },
-    [steps.length, scene.id],
+    [steps, scene],
   );
 
   // Замер цели: ждём её появления (`waitMs`), прокручиваем один раз так, чтобы под ней поместились Бит с пузырём,
@@ -544,12 +546,13 @@ export function GuideHost() {
   useEffect(() => {
     if (!playing) return;
     // Вкладку закрыли или перезагрузили посреди сцены — тоже «ушёл со страницы» (стор пишет в localStorage сразу).
-    const onHide = () => noteScene(playing, useApp.getState().noteTip);
+    // Отмечаем только саму сцену: `also` SceneRunner отмечает сам, когда показ дошёл до нужного шага.
+    const onHide = () => useApp.getState().noteTip(playing);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
       window.setTimeout(() => {
-        if (playingRef.current !== playing) noteScene(playing, useApp.getState().noteTip);
+        if (playingRef.current !== playing) useApp.getState().noteTip(playing);
       }, 0);
     };
   }, [playing]);
