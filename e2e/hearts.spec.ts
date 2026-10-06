@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Этап 11 (v0.10): сердечки — плата за вход, а не за ошибки (#40); незаконченный урок можно продолжить (#41).
 // Этап 15 (F2): вход списывается, когда урок начался (первое «Продолжить» или первый ответ), а не только при ответе;
-// теория урока (`/theory/<id>`) стоит 0,5 — первая карточка бесплатна, дальше кнопка «Читать дальше» (этап 16В).
+// теория урока (`/theory/<id>`) стоит 0,5 и списывается при открытии темы — без ворот и пояснений на странице (этап 16В, решение #113).
 // Бесплатной тренировки нет — при нуле сердечек путь: ждать, купить за чипы, «Безлимит».
 // Урок ns-1-bits: 0 история → 1 теория → 2 песочница (цель: 5 ламп) → 3 теория → 4 задание «1 бит» (верно «2», вариант «1» — ошибка)
 // → 5 теория → 6 задание «3 лампочки» (верно «8», вариант «3» — ошибка).
@@ -230,32 +230,61 @@ test("тренировка: открыл и закрыл — бесплатно,
 /** Сердечки в шапке приложения (кнопка-ссылка в магазин): «Сердечки: 4,5. Открыть магазин». */
 const headerHearts = (page: Page, n: string) => page.getByLabel(`Сердечки: ${n}. Открыть магазин`).first();
 
-test("теория: первая карточка бесплатна, кнопка «Читать дальше» списывает 0,5, повторное чтение в течение суток — бесплатно", async ({ page }) => {
+/** Пояснения про плату, которых на странице чтения быть не должно (владелец: «при нажатии просто 0,5 сердца и всё»). */
+const PAY_TEXT = /первая карточка|Читать дальше|Оплачено до|читать бесплатно|Чтение: 0|Дальше — за/i;
+
+test("теория: открыл тему — на ½ сердечка меньше, повторно в тот же день — не списано, пояснений про плату нет", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page);
   await page.goto("/theory/ns-1-bits");
-  await expect(page.getByText(/Чтение: 0,5 сердечка/)).toBeVisible();
-  await expect(headerHearts(page, "5")).toBeVisible();
-
-  // Листание ничего не списывает: платить можно только кнопкой.
-  await page.mouse.wheel(0, 2500);
-  await expect(headerHearts(page, "5")).toBeVisible();
-  expect(await savedHearts(page)).toBe(5);
-
-  // Кнопка-ворота — 5 → 4,5; запятая и в шапке, и в записи.
-  await page.getByRole("button", { name: /Читать дальше — 0,5/ }).click();
+  await expect(page.getByText(/Карточка 1 из/)).toBeVisible();
+  // 5 → 4,5 сразу при открытии; запятая и в шапке, и в записи.
   await expect(headerHearts(page, "4,5")).toBeVisible();
-  await expect(page.getByText(/Оплачено до/)).toBeVisible();
-  await expect(page.getByText(/Карточка 2 из/)).toBeVisible();
   expect(await savedHearts(page)).toBe(4.5);
+  await expect(page.locator("body")).not.toContainText(PAY_TEXT);
 
-  // Повторное чтение: ворот нет, «Дальше» открывает карточки бесплатно.
-  await page.reload();
-  await expect(page.getByText(/Оплачено до/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Читать дальше — 0,5/ })).toHaveCount(0);
+  // Листание ничего не списывает; «Дальше» — обычная кнопка, не ворота.
   await page.locator("[data-tour=theory-next]").click();
+  await expect(page.getByText(/Карточка 2 из/)).toBeVisible();
+  await expect(headerHearts(page, "4,5")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(PAY_TEXT);
+
+  // Повторно открыть ту же тему в тот же день (перезагрузка и новый переход) — не списано.
+  await page.reload();
+  await expect(page.getByText(/Карточка \d+ из/)).toBeVisible();
+  await page.goto("/theory/ns-1-bits");
+  await expect(page.getByText(/Карточка \d+ из/)).toBeVisible();
   await expect(headerHearts(page, "4,5")).toBeVisible();
   expect(await savedHearts(page)).toBe(4.5);
+  expect(errors).toEqual([]);
+});
+
+test("теория: другая тема платится отдельно, возврат к первой — бесплатно", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page);
+  await page.goto("/theory/ns-1-bits");
+  await expect(headerHearts(page, "4,5")).toBeVisible();
+  await page.goto("/theory/ns-2-read");
+  await expect(page.getByText(/Карточка \d+ из/)).toBeVisible();
+  await expect(headerHearts(page, "4")).toBeVisible();
+  await page.goto("/theory/ns-1-bits");
+  await expect(page.getByText(/Карточка \d+ из/)).toBeVisible();
+  await expect(headerHearts(page, "4")).toBeVisible();
+  expect(await savedHearts(page)).toBe(4);
+  expect(errors).toEqual([]);
+});
+
+test("теория: в списке у темы значок ½ сердечка, у оплаченной за сутки значка нет", async ({ page }) => {
+  const errors = trackErrors(page);
+  await seed(page, 5, { theoryPaid: { "ns-2-read": Date.now() } });
+  await page.goto("/theory?unit=u1");
+  const costs = page.locator('a[href="/theory/ns-1-bits"] [role=img]');
+  await expect(costs).toHaveCount(1);
+  await expect(costs).toContainText("0,5");
+  await expect(page.locator('a[href="/theory/ns-2-read"] [role=img]')).toHaveCount(0);
+  expect(await savedHearts(page)).toBe(5); // список ничего не списывает
+  await page.locator('a[href="/theory/ns-1-bits"]').click();
+  await expect(headerHearts(page, "4,5")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -263,34 +292,39 @@ test("теория: пройденный урок тоже платный", asyn
   const errors = trackErrors(page);
   await seed(page, 5, { lessons: { "ns-1-bits": { completions: 1, bestAccuracy: 1, lastAt: Date.now(), totalXp: 20 } } });
   await page.goto("/theory/ns-1-bits");
-  await expect(page.getByText(/Чтение: 0,5 сердечка/)).toBeVisible();
-  await page.getByRole("button", { name: /Читать дальше — 0,5/ }).click();
+  await expect(page.getByText(/Карточка 1 из/)).toBeVisible();
   await expect(headerHearts(page, "4,5")).toBeVisible();
   expect(await savedHearts(page)).toBe(4.5);
+  await expect(page.locator("body")).not.toContainText(PAY_TEXT);
   expect(errors).toEqual([]);
 });
 
-test("теория: «Безлимит» читает бесплатно, ворот нет", async ({ page }) => {
+test("теория: «Безлимит» читает бесплатно, значка и пояснений нет", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 5, { plan: { tier: "unlimited", period: "month", until: Date.now() + 10 * 86_400_000 } });
+  await page.goto("/theory?unit=u1");
+  await expect(page.locator('a[href="/theory/ns-1-bits"]')).toBeVisible();
+  await expect(page.locator('a[href="/theory/ns-1-bits"] [role=img]')).toHaveCount(0);
   await page.goto("/theory/ns-1-bits");
-  await expect(page.getByText(/«Безлимит» — читать бесплатно/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Читать дальше — 0,5/ })).toHaveCount(0);
+  await expect(page.getByText(/Карточка 1 из/)).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(PAY_TEXT);
   await page.locator("[data-tour=theory-next]").click();
   await expect(page.getByText(/Карточка 2 из/)).toBeVisible();
   expect(await savedHearts(page)).toBe(5);
   expect(errors).toEqual([]);
 });
 
-test("теория: сердечек нет — кнопка открывает окно «Сердечки закончились», ничего не списано", async ({ page }) => {
+test("теория: сердечек нет — окно «Сердечки закончились», текста темы нет, выход к списку теории", async ({ page }) => {
   const errors = trackErrors(page);
   await seed(page, 0);
   await page.goto("/theory/ns-1-bits");
-  await expect(page.getByText(/Чтение: 0,5 сердечка/)).toBeVisible(); // первая карточка видна — можно листать
-  await page.getByRole("button", { name: /Читать дальше — 0,5/ }).click();
   const sheet = page.getByRole("dialog", { name: "Сердечки закончились" });
   await expect(sheet).toBeVisible();
   await expect(sheet.getByText(/Чтение конспекта стоит 0,5/)).toBeVisible();
+  await expect(page.getByText(/Карточка \d+ из/)).toHaveCount(0);
+  await expect(page.locator("[data-tour=theory-next]")).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(PAY_TEXT);
+  expect(await savedHearts(page)).toBe(0);
   await sheet.getByRole("button", { name: "Выйти" }).click();
   await page.waitForURL("**/theory");
   expect(await savedHearts(page)).toBe(0);

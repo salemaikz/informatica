@@ -8,6 +8,7 @@ import type { DictKey } from "@/i18n/dict";
 import { pluralIndex, type LessonReadStatus, type ReadingStats } from "@/lib/theory";
 import type { L } from "@/lib/types";
 import { Pill } from "@/components/ui/Pill";
+import { TheoryCost } from "./TheoryCost";
 
 const CARDS_KEY: DictKey[] = ["theory16c.cards.one", "theory16c.cards.few", "theory16c.cards.many"];
 
@@ -20,7 +21,7 @@ const NUMBER_CLASS: Record<LessonReadStatus, string> = {
 
 /**
  * Строка урока в разделе «Теории»: номер по порядку и статус (пройден / прочитан / не начат), название, сколько карточек.
- * Готовый — ссылка на чтение; «скоро» — серая и некликабельная (number не нужен).
+ * Готовый — ссылка на чтение со значком цены ½ сердечка (TheoryCost); «скоро» — серая и некликабельная (number не нужен).
  */
 export function LessonCard({
   id,
@@ -80,6 +81,7 @@ export function LessonCard({
             {status === "new" && <span className="sr-only">{t("theory16c.status.new")}</span>}
           </div>
         </div>
+        <TheoryCost id={id} />
         <ChevronRight size={20} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
       </Link>
     </li>

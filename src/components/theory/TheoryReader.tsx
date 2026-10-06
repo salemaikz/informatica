@@ -15,7 +15,6 @@ import {
   adjacentLessons,
   blockContext,
   cardIndexFromHash,
-  cardToRemember,
   CONSPECT_ID,
   clampCard,
   conspectContext,
@@ -31,7 +30,6 @@ import {
   withoutCardAnchor,
   type LessonReadStatus,
 } from "@/lib/theory";
-import { isTheoryCardLocked, THEORY_FREE_CARDS } from "@/lib/theory-pay";
 import { CARD_PARAM, paramValue } from "@/lib/theory-href";
 import { useApp } from "@/lib/store";
 import { AiPanel } from "@/components/ai/AiPanel";
@@ -46,10 +44,9 @@ import { InfoBlock } from "./TheoryBlocks";
 import { CardProgress } from "./TheoryCards";
 import { ConspectActions, ConspectCard } from "./TheoryConspect";
 import { TheoryCrumbs } from "./TheoryCrumbs";
-import { TheoryGate, TheoryPayButton, TheoryPayStatus } from "./TheoryPay";
 import { useHashScroll } from "./useHashScroll";
 import { useSwipe } from "./useSwipe";
-import { useTheoryPay } from "./useTheoryPay";
+import { useTheoryAccess } from "./useTheoryAccess";
 
 const CARDS_KEY: DictKey[] = ["theory.cards.one", "theory.cards.few", "theory.cards.many"];
 const SUGGESTIONS: DictKey[] = ["tutor.q.simpler", "tutor.q.example", "tutor.q.why"];
@@ -62,7 +59,8 @@ const ORDER = readableLessonIds(UNITS);
  * Адрес карточки: `?card=<id шага>` и `?card=conspect` (на них ведёт поиск; страница читает параметр на сервере и передаёт
  * сюда как initialCard). Старые ссылки с `#<id шага>` при полной загрузке тоже открывают нужную карточку. После первого листания
  * `?card=` из адреса убирается; при «Назад» к такой записи параметр с сервера устарел — его сверяем с useSearchParams (liveCardParam).
- * Плата — явная (useTheoryPay): первая карточка бесплатна, дальше — кнопка «Читать дальше — 0,5»; «Безлимит» и повтор за сутки — бесплатно.
+ * Плата (решение #113): ½ сердечка списывается при открытии темы (useTheoryAccess), без бесплатной карточки, ворот и пояснений
+ * на странице; «Безлимит» и повтор той же темы за сутки — бесплатно. Нет сердечек — «Сердечки закончились», текста темы нет.
  * Урок приходит с сервера (страница /theory/[id]): клиент не грузит содержимое всех уроков (этап 16).
  */
 export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson: Lesson; initialCard?: string | null }) {
@@ -70,7 +68,8 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
   const { t, l, lang } = useT();
   const router = useRouter();
   const reduce = useReduceMotion();
-  const pay = useTheoryPay(id);
+  const { access, resume } = useTheoryAccess(id);
+  const open = access === "open";
   const openSave = useSaveToNotes((s) => s.open);
   const openChat = useOpenLessonChat();
   const lessons = useApp((s) => s.lessons);
@@ -109,25 +108,21 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
   const areaRef = useRef<HTMLDivElement>(null);
   const conspectRef = useRef<HTMLDivElement>(null);
 
-  const locked = isTheoryCardLocked(pay.state, index);
-  const allUnlocked = pay.state !== "pay";
-
-  // Запоминаем, где остановились: «Продолжить чтение» на странице «Теория». Карточку за платными воротами не пишем:
-  // ученик её не прочитал, а «Продолжить» перескочил бы непрочитанный урок (конспект за воротами считался бы дочитанным).
+  // Запоминаем, где остановились: «Продолжить чтение» на странице «Теория». Пока тема не открыта (оплата, нет сердечек),
+  // ученик ничего не читал — не пишем: запись о карточке (особенно о конспекте, `?card=conspect` из поиска) выглядела бы как «дочитан».
   useEffect(() => {
-    const card = cardToRemember(index, locked);
-    if (card !== null) useApp.getState().noteTheoryOpen(id, card);
-  }, [id, index, locked]);
+    if (open) useApp.getState().noteTheoryOpen(id, index);
+  }, [id, index, open]);
 
-  // «Прочитан»: конспект (последняя карточка) открыт — только оплаченным чтением, не превью.
+  // «Прочитан»: конспект (последняя карточка) открыт.
   useEffect(() => {
-    if (mode === "cards" && index === last && !locked) useApp.getState().markTheoryRead(id);
-  }, [mode, index, last, locked, id]);
+    if (open && mode === "cards" && index === last) useApp.getState().markTheoryRead(id);
+  }, [open, mode, index, last, id]);
 
   // То же в режиме «Всё сразу»: конспект показался на экране.
   useEffect(() => {
     const el = conspectRef.current;
-    if (mode !== "all" || !allUnlocked || !el || typeof IntersectionObserver === "undefined") return;
+    if (mode !== "all" || !open || !el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
@@ -140,7 +135,7 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [mode, allUnlocked, id, last]);
+  }, [mode, open, id, last]);
 
   // Якорь сменился без перезагрузки (кнопки «назад»/«вперёд» браузера): открываем нужную карточку.
   useEffect(() => {
@@ -153,7 +148,8 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
   }, [cardIds]);
 
   // Переход по ссылке на карточку (из поиска): доскролл и короткая подсветка (в режиме карточек она уже открыта).
-  useHashScroll(id, true, startCard && cardIds.includes(startCard) ? startCard : null);
+  // Пока тема не открыта (оплата, нет сердечек), блоков на странице нет: ключ меняется при открытии — доскролл перезапускается.
+  useHashScroll(open ? id : `${id}:closed`, true, open && startCard && cardIds.includes(startCard) ? startCard : null);
 
   const askTask = useMemo(() => {
     if (!askId) return null;
@@ -174,36 +170,16 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
     areaRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   };
 
-  // Свайп листает только по уже открытому: платные ворота — только кнопкой.
-  const swipe = useSwipe({
-    onPrev: () => go(index - 1),
-    onNext: () => {
-      if (!isTheoryCardLocked(pay.state, index + 1)) go(index + 1);
-    },
-  });
-
-  /** Кнопка-ворота на превью: списать и открыть следующую карточку. */
-  const payNext = () => {
-    if (pay.unlock()) go(index + 1);
-  };
-  /** Не хватало сердечек — купили или дождались: списываем; кнопка была на превью — открываем следующую карточку. */
-  const resume = () => {
-    const wasPreview = mode === "cards" && index < THEORY_FREE_CARDS && index < last;
-    if (pay.resume() && wasPreview) go(index + 1);
-  };
+  const swipe = useSwipe({ onPrev: () => go(index - 1), onNext: () => go(index + 1) });
 
   const saveConspect = () => openSave({ source: "lesson", lessonId: lesson.id, title: l(lesson.title), text: l(lesson.conspect) });
 
-  const gateAt = index >= THEORY_FREE_CARDS && locked;
-  const nextOpens = !isTheoryCardLocked(pay.state, index + 1);
-
-  const card = gateAt ? (
-    <TheoryGate onPay={() => void pay.unlock()} />
-  ) : index === last ? (
-    <ConspectCard lesson={lesson} onAsk={() => setAskId(CONSPECT_ID)} />
-  ) : (
-    <InfoBlock step={steps[index]} onAsk={() => setAskId(steps[index].id)} />
-  );
+  const card =
+    index === last ? (
+      <ConspectCard lesson={lesson} onAsk={() => setAskId(CONSPECT_ID)} />
+    ) : (
+      <InfoBlock step={steps[index]} onAsk={() => setAskId(steps[index].id)} />
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -226,13 +202,15 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
           )}
           {status === "read" && <Pill tone="primary">{t("theory16c.status.read")}</Pill>}
         </div>
-        <TheoryPayStatus state={pay.state} paidAt={pay.paidAt} />
-        <Button variant="ai" block icon={<Sparkles size={20} aria-hidden />} onClick={() => openChat(lesson)} data-tour="theory-ask">
-          {t("theory16c.ask.button")}
-        </Button>
+        {open && (
+          <Button variant="ai" block icon={<Sparkles size={20} aria-hidden />} onClick={() => openChat(lesson)} data-tour="theory-ask">
+            {t("theory16c.ask.button")}
+          </Button>
+        )}
       </header>
 
-      <div className="flex flex-col gap-4">
+      {/* Текст темы — только когда она открыта: пока идёт списание или нет сердечек, ни одной карточки на странице нет. */}
+      {open && <div className="flex flex-col gap-4">
         <div role="group" aria-label={t("theory16c.mode.label")} className="flex self-start rounded-2xl bg-surface-2 p-1">
           {(["cards", "all"] as const).map((m2) => (
             <button
@@ -266,44 +244,39 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
                 {card}
               </m.div>
             </div>
-            {index === last && !locked && <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />}
+            {index === last && <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />}
             <nav className={cn("grid gap-3", index < last ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1")}>
               <Button variant="secondary" size="lg" block={index === last} disabled={index === 0} icon={<ArrowLeft size={20} />} onClick={() => go(index - 1)} className="px-3">
                 {t("theory16c.nav.back")}
               </Button>
-              {index < last &&
-                (nextOpens ? (
-                  <Button size="lg" block icon={<ArrowRight size={20} />} onClick={() => go(index + 1)} data-tour="theory-next" className="flex-row-reverse px-3">
-                    {t("theory16c.nav.next")}
-                  </Button>
-                ) : gateAt ? null : (
-                  <TheoryPayButton onClick={payNext} data-tour="theory-next" />
-                ))}
+              {index < last && (
+                <Button size="lg" block icon={<ArrowRight size={20} />} onClick={() => go(index + 1)} data-tour="theory-next" className="flex-row-reverse px-3">
+                  {t("theory16c.nav.next")}
+                </Button>
+              )}
             </nav>
           </>
         ) : (
           <>
-            {cardIds.map((cid, i) => {
-              if (isTheoryCardLocked(pay.state, i)) return null;
-              return cid === CONSPECT_ID ? (
+            {cardIds.map((cid, i) =>
+              cid === CONSPECT_ID ? (
                 <div key={cid} ref={conspectRef} className="flex flex-col gap-4">
                   <ConspectCard lesson={lesson} onAsk={() => setAskId(CONSPECT_ID)} />
                 </div>
               ) : (
                 <InfoBlock key={cid} step={steps[i]} onAsk={() => setAskId(cid)} />
-              );
-            })}
-            {!allUnlocked && <TheoryGate onPay={() => void pay.unlock()} />}
-            {allUnlocked && <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />}
+              ),
+            )}
+            <ConspectActions lesson={lesson} nextLessonId={nextLessonId} onSave={saveConspect} />
           </>
         )}
-      </div>
+      </div>}
 
+      {/* Нет сердечек: обычное окно «Сердечки закончились»; закрыть его = выйти к списку теории (onClose не задан). */}
       <OutOfHearts
-        open={pay.sheetOpen}
+        open={access === "locked"}
         need={ENTRY_COST.theory}
         what="theory"
-        onClose={() => pay.setSheetOpen(false)}
         onResume={resume}
         onExit={() => router.push("/theory")}
       />
