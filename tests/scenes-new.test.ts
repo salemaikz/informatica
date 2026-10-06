@@ -631,9 +631,9 @@ describe("подсветка синтаксиса", () => {
   });
 
   it("цвета токенов — токены темы", () => {
-    expect(TOKEN_CLASS.keyword).toBe("text-primary");
-    expect(TOKEN_CLASS.string).toBe("text-success");
-    expect(TOKEN_CLASS.number).toBe("text-warning-strong");
+    expect(TOKEN_CLASS.keyword).toBe("text-ink-primary");
+    expect(TOKEN_CLASS.string).toBe("text-ink-success");
+    expect(TOKEN_CLASS.number).toBe("text-ink-warning");
     expect(TOKEN_CLASS.comment).toBe("text-muted");
   });
 });

@@ -80,7 +80,7 @@ export function LadderScene({ scene }: { scene: LadderScene }) {
             <m.div
               key="arrow"
               aria-hidden
-              className="pointer-events-none absolute bottom-3 right-0 top-3 flex w-[30px] flex-col items-center text-primary"
+              className="pointer-events-none absolute bottom-3 right-0 top-3 flex w-[30px] flex-col items-center text-ink-primary"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

@@ -63,7 +63,7 @@ export function CodeBlock({
                 isActive && "border-l-primary bg-primary-soft",
               )}
             >
-              <span aria-hidden className="flex w-5 shrink-0 items-center justify-center text-primary">
+              <span aria-hidden className="flex w-5 shrink-0 items-center justify-center text-ink-primary">
                 <ChevronRight size={16} strokeWidth={3} className={cn("transition-opacity duration-200", isActive ? "opacity-100" : "opacity-0")} />
               </span>
               <span aria-hidden className="min-w-6 shrink-0 select-none pr-2 text-right text-muted">

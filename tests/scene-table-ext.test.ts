@@ -5,6 +5,9 @@ import { TableScene as TableView } from "@/components/scenes/TableScene";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES as EXTENDED } from "@/components/scenes/samples/extended";
 import {
+  CELL_FONT,
+  CELL_LINE,
+  CELL_PAD_Y,
   END_INSET,
   FLAT_PEAK,
   JOIN_WIDE_FROM,
@@ -23,6 +26,7 @@ import {
   rectCenter,
   rowStateMap,
   sheetRowNumber,
+  TEXT_TOP,
   toneMap,
   usesTableExt,
   type Rect,
@@ -524,8 +528,8 @@ describe("ревью v18b: острие стрелки по строке — в�
             const depth = Math.min(g.end[1] - to.y, to.y + to.h - g.end[1]);
             expect(depth, `${rows}×${cols} ${r}:${a}→${r}:${b}: острие`).toBeGreaterThanOrEqual(8);
             for (const p of g.head) {
-              expect(p[1], `наконечник сверху ${r}:${a}→${r}:${b}`).toBeGreaterThanOrEqual(to.y + 0.5);
-              expect(p[1], `наконечник снизу ${r}:${a}→${r}:${b}`).toBeLessThanOrEqual(to.y + to.h - 0.5);
+              expect(p[1], `наконечник сверху ${r}:${a}→${r}:${b}`).toBeGreaterThanOrEqual(to.y);
+              expect(p[1], `наконечник снизу ${r}:${a}→${r}:${b}`).toBeLessThanOrEqual(to.y + to.h);
             }
             expect(g.end[0]).toBeGreaterThanOrEqual(to.x + 6);
             expect(g.end[0]).toBeLessThanOrEqual(to.x + to.w - 6);
@@ -568,5 +572,78 @@ describe("ревью v18b: острие стрелки по строке — в�
       expect(g.end[0]).toBeLessThan(to.x + to.w);
     }
     expect(Math.abs(a1.end[0] - a2.end[0])).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe("ревью v18b (перепроверка): острие стрелки не садится на цифры целевой ячейки", () => {
+  /** Верх цифр и заглавных от края ячейки: блок текста + разрыв до высоты прописных (≈ 0,1 кегля), оценка ревью ≈ 11,8 px. */
+  const CAP_TOP = TEXT_TOP + 0.1 * CELL_FONT;
+  const CELL_H = 2 * CELL_PAD_Y + CELL_LINE;
+  const shapes: [number, number, number][] = [[4, 5, 80], [3, 4, 100], [6, 8, 64], [2, 3, 90], [5, 8, 46], [4, 3, 120]];
+  const gridOf = (rows: number, cols: number, w: number) => ({
+    cell: (r: number, c: number): Rect => ({ x: c * w, y: r * CELL_H, w, h: CELL_H }),
+    bounds: { w: cols * w, h: rows * CELL_H },
+  });
+
+  it("метрики ячейки в константах совпадают с разметкой (py-2, text-sm, leading-snug): блок текста начинается на TEXT_TOP ≈ 10,6 px", () => {
+    expect(CELL_PAD_Y).toBe(8); // py-2
+    expect(CELL_FONT).toBe(14); // text-sm
+    expect(CELL_LINE).toBeCloseTo(14 * 1.375, 5); // leading-snug
+    expect(TEXT_TOP).toBeCloseTo(10.625, 3);
+    const markup = grid({ kind: "table", sheet: true, columns: ["12", "34"], rows: [["56", "78"]], arrows: [{ from: [0, 0], to: [0, 1] }] });
+    expect(markup).toContain("py-2");
+    expect(markup).toContain("text-sm");
+    expect(markup).toContain("leading-snug");
+  });
+
+  it("острие стоит не ближе 2 px к блоку текста (было ≈ 0,6 px при END_INSET = 10) и не ближе 3 px к верху цифр — по верху и по низу ячейки", () => {
+    expect(TEXT_TOP - END_INSET).toBeGreaterThanOrEqual(2);
+    expect(CAP_TOP - END_INSET).toBeGreaterThanOrEqual(3);
+    let up = 0;
+    let down = 0;
+    for (const [rows, cols, w] of shapes) {
+      const { cell: c, bounds } = gridOf(rows, cols, w);
+      for (let r = 0; r < rows; r++)
+        for (let a = 0; a < cols; a++)
+          for (let b = 0; b < cols; b++) {
+            if (a === b) continue;
+            const g = arrowGeometry(c(r, a), c(r, b), bounds);
+            const to = c(r, b);
+            if (!g || Math.abs(g.start[1] - g.end[1]) > 1) continue; // только плоские дуги по строке
+            const fromTop = g.end[1] - to.y;
+            const fromBottom = to.y + to.h - g.end[1];
+            if (Math.min(fromTop, fromBottom) > 12) continue;
+            if (fromTop < fromBottom) up++;
+            else down++;
+            const gap = Math.min(fromTop, fromBottom);
+            // расстояние от острия до блока текста: TEXT_TOP − gap (оба края симметричны: отступы py-2 одинаковы)
+            expect(TEXT_TOP - gap, `${rows}×${cols}/${w} ${r}:${a}→${r}:${b}: острие и блок текста`).toBeGreaterThanOrEqual(2);
+            expect(CAP_TOP - gap, `${rows}×${cols}/${w} ${r}:${a}→${r}:${b}: острие и верх цифр`).toBeGreaterThanOrEqual(3);
+          }
+    }
+    expect(up).toBeGreaterThan(50);
+    expect(down).toBeGreaterThan(5);
+  });
+
+  it("наконечник целиком в ячейке даже при реальной высоте (35,25 px) и самом неудобном угле подхода: не пересекает границу строк", () => {
+    let checked = 0;
+    for (const [rows, cols, w] of shapes) {
+      const { cell: c, bounds } = gridOf(rows, cols, w);
+      for (let r = 0; r < rows; r++)
+        for (let a = 0; a < cols; a++)
+          for (let b = 0; b < cols; b++) {
+            if (a === b) continue;
+            const g = arrowGeometry(c(r, a), c(r, b), bounds);
+            if (!g || Math.abs(g.start[1] - g.end[1]) > 1) continue;
+            const to = c(r, b);
+            if (g.end[1] < to.y + 3 || g.end[1] > to.y + to.h - 3) continue;
+            checked++;
+            for (const p of g.head) {
+              expect(p[1], `${rows}×${cols}/${w} ${r}:${a}→${r}:${b} сверху`).toBeGreaterThanOrEqual(to.y);
+              expect(p[1], `${rows}×${cols}/${w} ${r}:${a}→${r}:${b} снизу`).toBeLessThanOrEqual(to.y + to.h);
+            }
+          }
+    }
+    expect(checked).toBeGreaterThan(100);
   });
 });

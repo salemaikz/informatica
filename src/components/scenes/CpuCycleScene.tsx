@@ -140,7 +140,7 @@ export function CpuCycleScene({ scene }: { scene: CpuCycleData }) {
               );
             })()
           ) : (
-            <text x={CX} y={CY} textAnchor="middle" dominantBaseline="central" fontSize={15} fontWeight={800} fill="var(--primary)">
+            <text x={CX} y={CY} textAnchor="middle" dominantBaseline="central" fontSize={15} fontWeight={800} fill="var(--ink-primary)">
               CPU
             </text>
           )}
@@ -173,7 +173,7 @@ export function CpuCycleScene({ scene }: { scene: CpuCycleData }) {
                 textAnchor="middle"
                 fontSize={14}
                 fontWeight={on ? 800 : 700}
-                fill={on ? "var(--primary)" : "var(--text)"}
+                fill={on ? "var(--ink-primary)" : "var(--text)"}
                 style={{ transition: fade }}
               >
                 {t(NAME_KEYS[i])}

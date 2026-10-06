@@ -245,7 +245,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                       hiBg(r, c) && "bg-primary-soft",
                       hiCell(r, c) && "relative z-10 ring-2 ring-inset ring-primary",
                       asTarget && cn("relative z-10 ring-2 ring-inset", TONE_RING[target], !hiBg(r, c) && !tone && TONE_BG[target]),
-                      bin[c] && (value === "1" ? "font-bold text-success" : "text-muted"),
+                      bin[c] && (value === "1" ? "font-bold text-ink-success" : "text-muted"),
                       extraClass(state, tone, c, width),
                       // JOIN: тон строки закрывает заливку подсветки — выделенный столбец в совпавших строках остаётся жирным
                       rowTone && hiBg(r, c) && "font-extrabold text-ink-primary",
@@ -264,7 +264,7 @@ function TableGrid({ spec, wrapRef, overlay }: { spec: GridSpec; wrapRef?: RefOb
                     ) : (
                       value
                     )}
-                    {state === "rejected" && last && <X aria-hidden size={16} strokeWidth={3.2} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-danger" />}
+                    {state === "rejected" && last && <X aria-hidden size={16} strokeWidth={3.2} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-danger" />}
                   </td>
                 );
               })}
