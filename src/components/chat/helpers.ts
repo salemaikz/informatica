@@ -161,3 +161,12 @@ export function chatHeader(
   if (subtitle.trim().toLowerCase() === title.trim().toLowerCase()) subtitle = "";
   return { title, subtitle };
 }
+
+/**
+ * Последнее сообщение — вопрос ученика без ответа (ответ не пришёл: ушли со страницы до первого текста, сбой, перезагрузка).
+ * Тогда под лентой — «Ответ не пришёл» и «Повторить». Пустая лента или последним — ответ Бита / итог задач — нет.
+ * Подходит и для ленты чата (ChatMsg), и для нити шторки ИИ (TutorTurn).
+ */
+export function unansweredTail(msgs: readonly { role: "user" | "assistant" }[]): boolean {
+  return msgs.length > 0 && msgs[msgs.length - 1].role === "user";
+}

@@ -79,6 +79,7 @@ import { gamifyDict } from "./parts/gamify";
 import { progress16cDict } from "./parts/progress16c";
 import { theory16cDict } from "./parts/theory16c";
 import { help16cDict } from "./parts/help16c";
+import { ai16dDict } from "./parts/ai16d";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -586,6 +587,7 @@ export const dict = {
   ...progress16cDict,
   ...theory16cDict,
   ...help16cDict,
+  ...ai16dDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

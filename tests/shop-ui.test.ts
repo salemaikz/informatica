@@ -216,14 +216,13 @@ describe("строка сердечек и бустера в магазине", 
     expect(showBoostLine({ until: 5000 }, 2, 1000)).toBe(true);
     expect(showBoostLine({ until: 5000 }, 2, 0)).toBe(false); // SSR/гидратация: часов ещё нет
   });
-  it("тексты строки состояния и цены голоса: плейсхолдеры совпадают", () => {
+  it("тексты строки состояния: плейсхолдеры совпадают; голос — без своей цены (#118)", () => {
     const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-    for (const k of ["shop.status.heartsOf", "shop.status.next", "shop.status.boost", "shop.ai.voice.sub", "voice.startPaid"] as const) {
+    for (const k of ["shop.status.heartsOf", "shop.status.next", "shop.status.boost", "ai16d.shop.voice.sub"] as const) {
       expect(ph(dict[k].kk), k).toEqual(ph(dict[k].ru));
     }
     expect(ph(dict["shop.status.boost"].ru)).toEqual(["mult", "time"]);
-    expect(ph(dict["voice.startPaid"].ru)).toEqual(["n"]);
-    expect(AI_COST.voice).toBe(2);
+    expect(AI_COST.voice).toBe(0);
   });
   it("старые ключи карточки баланса удалены", () => {
     expect(Object.keys(dict).filter((k) => k.startsWith("shop.balance"))).toEqual([]);

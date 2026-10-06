@@ -16,6 +16,8 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { AiCost } from "@/components/economy/AiCost";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
+import { unansweredTail } from "@/components/chat/helpers";
+import { cleanTurns } from "./ai-threads";
 import { useTutor, type TutorTurn } from "./useTutor";
 
 const TITLE: Record<Exclude<TutorMode, "chat">, DictKey> = {
@@ -39,6 +41,8 @@ export function AiPanel({
   noteKey,
   suggestions = [],
   autoAsk,
+  initialTurns,
+  onTurns,
 }: {
   open: boolean;
   onClose: () => void;
@@ -52,13 +56,26 @@ export function AiPanel({
    * («Спросить Бита» на плашке «Нужна помощь?»), вторая кнопка не нужна. Тот же путь, что у быстрого вопроса.
    */
   autoAsk?: string;
+  /** Переписка этого шага и режима из нити (ai-threads.ts): закрыли шторку и открыли снова — вопросы и ответы на месте. */
+  initialTurns?: readonly TutorTurn[];
+  /**
+   * Нить после каждого завершённого запроса — и когда шторку уже закрыли (запрос не обрывается, ответ дойдёт).
+   * Без пустой заготовки ответа; не пришёл ответ — нить с вопросом без ответа («Ответ не пришёл» и «Повторить»).
+   */
+  onTurns?: (turns: TutorTurn[]) => void;
 }) {
   const { t } = useT();
-  // Идущий запрос обрывается при закрытии шторки (размонтировании) внутри useTutor.
-  const { ask, streaming, error } = useTutor();
+  // Закрыли шторку посреди ответа — запрос не обрывается (detach): ответ дойдёт и сохранится в нить через onTurns.
+  const { ask, streaming, error } = useTutor({ detach: true });
   // Бесплатный текст: подсказка автора либо разбор неверного варианта + объяснение задания (оно есть всегда).
   const [staticText] = useState(() => staticAiText(mode, task));
-  const [turns, setTurns] = useState<TutorTurn[]>([]);
+  const [turns, setTurns] = useState<TutorTurn[]>(() => cleanTurns(initialTurns ?? []));
+  // Нить восстановлена — вопрос при открытии (autoAsk) второй раз не отправляем.
+  const [restored] = useState(() => turns.length > 0);
+  const onTurnsRef = useRef(onTurns);
+  useEffect(() => {
+    onTurnsRef.current = onTurns;
+  });
   const [draft, setDraft] = useState("");
   // Последний запрос к ИИ, который не удался: «Повторить» шлёт ту же историю заново, не дублируя сообщение ученика.
   const [retry, setRetry] = useState<TutorTurn[] | null>(null);
@@ -66,13 +83,16 @@ export function AiPanel({
   const bottom = useRef<HTMLDivElement>(null);
 
   // isCurrent — защита от ответов отменённых запусков (например, при двойном монтировании в dev).
+  // После размонтирования (шторку закрыли) runId не меняется — завершённый ответ всё равно уходит в нить.
   const stream = async (history: TutorTurn[], isCurrent: () => boolean) => {
     setRetry(history);
     const text = await ask({ mode, task, messages: history }, (full) => {
       if (isCurrent()) setTurns([...history, { role: "assistant", content: full }]);
     });
-    if (text === null && isCurrent()) setTurns(history);
-    if (text !== null && isCurrent()) setRetry(null);
+    if (!isCurrent()) return;
+    if (text === null) setTurns(history);
+    else setRetry(null);
+    onTurnsRef.current?.(text === null ? history : [...history, { role: "assistant", content: text }]);
   };
 
   useEffect(() => {
@@ -88,11 +108,14 @@ export function AiPanel({
   };
 
   // «Повторить» после сбоя или оборванного ответа: та же история, сообщение ученика второй раз не добавляется.
+  // Нить из памяти кончается вопросом без ответа — повторяем её.
+  const orphan = !streaming && !error && unansweredTail(turns);
   const retryLast = () => {
-    if (streaming || !retry) return;
+    const history = retry ?? (orphan ? turns : null);
+    if (streaming || !history) return;
     const id = ++runId.current;
-    setTurns([...retry, { role: "assistant", content: "" }]);
-    void stream(retry, () => id === runId.current);
+    setTurns([...history, { role: "assistant", content: "" }]);
+    void stream(history, () => id === runId.current);
   };
 
   const send = (text?: string) => {
@@ -111,10 +134,10 @@ export function AiPanel({
     autoRef.current = send;
   });
   useEffect(() => {
-    if (!autoAsk) return;
+    if (!autoAsk || restored) return;
     const id = window.setTimeout(() => autoRef.current(autoAsk), 0);
     return () => window.clearTimeout(id);
-  }, [autoAsk]);
+  }, [autoAsk, restored]);
 
   return (
     <Modal open={open} onClose={onClose} label={t(TITLE[mode])} className="sm:max-w-lg">
@@ -196,6 +219,14 @@ export function AiPanel({
             ))}
           </div>
         )}
+        {orphan && (
+          <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-2 px-3 py-2">
+            <p className="text-sm font-semibold text-muted">{t("ai16d.noAnswer")}</p>
+            <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retryLast}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        )}
         {error === "economy.noChips" ? (
           <NoChipsNotice kind={mode} />
         ) : (
@@ -229,7 +260,7 @@ export function AiPanel({
         <button
           type="submit"
           disabled={!draft.trim() || streaming}
-          aria-label="send"
+          aria-label={t("common.send")}
           className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ai text-white disabled:opacity-40"
         >
           <Send size={18} />

@@ -44,25 +44,24 @@ describe("econ16c.*: словарь", () => {
 });
 
 describe("список цен ИИ: «что это» под каждой строкой (пункт H)", () => {
-  const described: AiKind[] = ["hint", "explain", "ask", "chat", "photo", "review", "feedback"];
-  it("у каждого вида (кроме голоса — у него прежняя подпись) есть описание ru и kk", () => {
+  const described: AiKind[] = ["hint", "explain", "ask", "chat", "photo", "feedback"];
+  it("у каждого вида (кроме голоса — у него своя подпись) есть описание ru и kk", () => {
     for (const kind of described) {
       const k = `econ16c.ai.${kind}.desc` as DictKey;
       expect(dict[k], k).toBeDefined();
       expect(dict[k].ru.length, k).toBeGreaterThan(10);
       expect(dict[k].kk.length, k).toBeGreaterThan(10);
     }
-    expect(dict["shop.ai.voice.sub"].ru).toContain("{n}");
+    expect(dict["ai16d.shop.voice.sub"].ru).toContain("как сообщение в чате");
   });
   it("разница подсказки и сообщения в чате понятна из текстов", () => {
     expect(dict["econ16c.ai.hint.desc"].ru).toBe("Намёк к заданию, которое не получается. Ответ не называет.");
     expect(dict["econ16c.ai.chat.desc"].ru).toBe("Одно сообщение в чате с Битом — на любую тему.");
-    expect(dict["econ16c.ai.review.desc"].ru).toBe("Разбор всего пробного ЕНТ: ошибки, темы, что повторить.");
   });
-  it("цены прежние: подсказка 3, чат 7, разбор пробного ЕНТ 15", () => {
+  it("цены прежние: подсказка 3, чат 7; «Разбора пробного ЕНТ» нет (#123)", () => {
     expect(AI_COST.hint).toBe(3);
     expect(AI_COST.chat).toBe(7);
-    expect(AI_COST.review).toBe(15);
+    expect(Object.keys(AI_COST)).not.toContain("review");
   });
 });
 

@@ -20,7 +20,7 @@ import { ChatEmpty } from "./ChatEmpty";
 import { ChatManageSheet, nextManageNonce, type ManageTarget } from "./ChatManageSheet";
 import { Composer } from "./Composer";
 import { LessonChips, LessonIntro } from "./LessonChat";
-import { chatHeader, firstUserText, lastPreview, quizInHistory, reviewRequest, toHistory } from "./helpers";
+import { chatHeader, firstUserText, lastPreview, quizInHistory, reviewRequest, toHistory, unansweredTail } from "./helpers";
 import { BitBubble, PendingBubble, UserBubble } from "./MessageBubble";
 import { ModeIcon } from "./ModeIcon";
 import { QuizCard } from "./QuizCard";
@@ -216,6 +216,8 @@ export function ChatScreen({
   const shownError = voiceError ?? error;
   // «Повторить» — когда последний вопрос остался без ответа из-за сбоя ИИ (не голос и не лимиты).
   const canRetry = !voiceError && canRetryAiError(error) && list[list.length - 1]?.role === "user" && !streaming;
+  // Вопрос остался без ответа и ничего не идёт (ушли со страницы до первого текста, перезагрузка): «Ответ не пришёл» и «Повторить».
+  const orphan = messages !== null && !streaming && pending === null && !quizShown && !shownError && unansweredTail(list);
   const empty = messages !== null && list.length === 0 && pending === null && !quizShown;
 
   return (
@@ -301,8 +303,16 @@ export function ChatScreen({
           />
         )}
         {pending !== null && <PendingBubble text={pending} />}
+        {orphan && (
+          <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-2 px-3 py-2">
+            <p className="text-sm font-bold text-muted">{t("ai16d.noAnswer")}</p>
+            <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden />} onClick={retry}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        )}
         {shownError === "economy.noChips" ? (
-          <NoChipsNotice kind={voiceError ? "voice" : lastKind} />
+          <NoChipsNotice kind={voiceError ? "chat" : lastKind} />
         ) : (
           shownError && (
             <div className="flex flex-col items-start gap-2 rounded-xl bg-danger-soft px-3 py-2">

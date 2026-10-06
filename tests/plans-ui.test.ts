@@ -172,15 +172,15 @@ describe("кнопка «Ограничения ИИ» внизу окна та�
 
   it("параметры — потолок из AI_DAILY_CAP (65, один на все тарифы) и веса фото, голоса и «Разбора от Бита» из AI_UNITS", () => {
     expect(AI_DAILY_CAP).toEqual({ free: 65, lite: 65, unlimited: 65 });
-    expect(aiLimitParams()).toEqual({ n: 65, photo: AI_UNITS.photo, voice: AI_UNITS.voice, review: AI_UNITS.review });
-    expect([AI_UNITS.photo, AI_UNITS.voice, AI_UNITS.review]).toEqual([2, 4, 2]);
+    expect(aiLimitParams()).toEqual({ n: 65, photo: AI_UNITS.photo, voice: AI_UNITS.voice });
+    expect([AI_UNITS.photo, AI_UNITS.voice]).toEqual([2, 4]);
   });
 
-  it("в словаре чисел нет: n, photo, voice, review — только параметры (ru и kk)", () => {
+  it("в словаре чисел нет: n, photo, voice — только параметры (ru и kk)", () => {
     for (const k of ["plans.limit.btn", "plans.limit.text"] as const) {
       for (const lang of ["ru", "kk"] as const) expect(dict[k][lang], `${k}.${lang}`).not.toMatch(forbiddenDigits);
     }
-    for (const lang of ["ru", "kk"] as const) expect(ph(dict["plans.limit.text"][lang])).toEqual(["n", "photo", "review", "voice"]);
+    for (const lang of ["ru", "kk"] as const) expect(ph(dict["plans.limit.text"][lang])).toEqual(["n", "photo", "voice"]);
     expect(ph(dict["plans.limit.btn"].ru)).toEqual([]);
     expect(ph(dict["plans.limit.btn"].kk)).toEqual([]);
   });
@@ -189,16 +189,15 @@ describe("кнопка «Ограничения ИИ» внизу окна та�
     return [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
   }
 
-  it("подставленный текст: до 65 раз в день на любом тарифе, фото — 2, расшифровка голоса — 4, «Разбор от Бита» — 2, готовые подсказки без ограничений", () => {
+  it("подставленный текст: до 65 раз в день на любом тарифе, фото — 2, расшифровка голоса — 4, готовые подсказки без ограничений; «Разбора от Бита» нет (#123)", () => {
     const ru = fmt(dict["plans.limit.text"].ru, aiLimitParams());
-    expect(ru).toBe("Чтобы Бит быстро отвечал всем, на любом тарифе ИИ отвечает до 65 раз в день. Фото считается за 2 обращения, расшифровка голосового вопроса — за 4, «Разбор от Бита» — за 2. Готовые подсказки и объяснения в заданиях — без ограничений.");
-    // «Разбор от Бита» входит в потолок — «разборы без ограничений» не обещаем.
-    expect(ru).not.toMatch(/разбор\S* — без ограничений/i);
+    expect(ru).toBe("Чтобы Бит быстро отвечал всем, на любом тарифе ИИ отвечает до 65 раз в день. Фото считается за 2 обращения, расшифровка голосового вопроса — за 4. Готовые подсказки и объяснения в заданиях — без ограничений.");
+    expect(ru).not.toContain("Разбор от Бита");
     const kk = fmt(dict["plans.limit.text"].kk, aiLimitParams());
     expect(kk).toContain("65 реттен");
     expect(kk).toContain("Фото — 2 сұрау");
     expect(kk).toContain("мәтінге айналдыру — 4 сұрау");
-    expect(kk).toContain("«Биттің талдауы» — 2 сұрау");
+    expect(kk).not.toContain("Биттің талдауы");
     expect(kk).not.toContain("{");
   });
 

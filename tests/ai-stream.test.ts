@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STREAM_CUT_MARK, STREAM_ERROR_MARK, STREAM_OK_MARK, splitStreamTail, stripStreamMark, withStreamEnd } from "@/lib/ai-stream";
 import { aiCodeKey, canRetryAiError } from "@/lib/ai-errors";
-import { AiError, aiErrorKey, streamTutor } from "@/lib/ai";
+import { AiError, aiErrorKey, CUT_SUFFIX, streamTutor, type TutorMeta } from "@/lib/ai";
 import type { TutorRequest } from "@/lib/ai-types";
 import { dict } from "@/i18n/dict";
 
@@ -163,15 +163,14 @@ describe("streamTutor: конец ответа", () => {
     await expect(streamTutor(req, () => {})).rejects.toMatchObject({ code: "stream_cut" });
   });
 
-  it("маркер обрезки по длине: AiError stream_cut, маркер ученику не показывается", async () => {
+  it("маркер обрезки по длине с текстом — ответ получен (#118): текст с меткой «…», маркер ученику не показывается", async () => {
     fetchMock.mockResolvedValue(reply(["Ответ почти ", "готов", STREAM_CUT_MARK]));
     const seen: string[] = [];
-    const err = await streamTutor(req, (t) => seen.push(t)).catch((e) => e);
-    expect(err).toBeInstanceOf(AiError);
-    expect(err.code).toBe("stream_cut");
+    const text = await streamTutor(req, (t) => seen.push(t));
+    expect(text).toBe(`Ответ почти готов${CUT_SUFFIX}`);
     expect(seen.length).toBeGreaterThan(0);
     for (const s of seen) expect(s).not.toContain("\u0000");
-    expect(seen[seen.length - 1]).toBe("Ответ почти готов");
+    expect(seen[seen.length - 1]).toBe(text);
   });
 
   it("маркер сбоя на сервере: stream_cut", async () => {
@@ -179,11 +178,16 @@ describe("streamTutor: конец ответа", () => {
     await expect(streamTutor(req, () => {})).rejects.toMatchObject({ code: "stream_cut" });
   });
 
-  it("маркер, разорванный границей кусков, всё равно не виден и даёт stream_cut", async () => {
+  it("маркер CUT, разорванный границей кусков, всё равно не виден", async () => {
     fetchMock.mockResolvedValue(reply(["Текст\u0000", "C", "UT"]));
     const seen: string[] = [];
-    await expect(streamTutor(req, (t) => seen.push(t))).rejects.toMatchObject({ code: "stream_cut" });
-    for (const s of seen) expect(s).toBe("Текст");
+    expect(await streamTutor(req, (t) => seen.push(t))).toBe(`Текст${CUT_SUFFIX}`);
+    for (const s of seen) expect(s).not.toContain("\u0000");
+  });
+
+  it("маркер CUT без текста — stream_cut (ответа нет)", async () => {
+    fetchMock.mockResolvedValue(reply(["  ", STREAM_CUT_MARK]));
+    await expect(streamTutor(req, () => {})).rejects.toMatchObject({ code: "stream_cut" });
   });
 
   it("поток закончился на недописанном маркере — stream_cut", async () => {
@@ -224,11 +228,22 @@ describe("streamTutor: конец ответа", () => {
     expect(aiErrorKey(err)).toBe("tutor.error");
   });
 
-  it("кризисный и кэшированный ответы: заголовок X-AI-Cache доходит до колбэка", async () => {
+  it("служебные заголовки доходят до onMeta: кэш, безопасный текст, кризис", async () => {
+    const metas: TutorMeta[] = [];
     fetchMock.mockResolvedValue(reply(["Ответ", STREAM_OK_MARK], { headers: { "X-AI-Cache": "hit" } }));
-    const statuses: (string | null)[] = [];
-    await streamTutor(req, () => {}, undefined, (s) => statuses.push(s));
-    expect(statuses).toEqual(["hit"]);
+    await streamTutor(req, () => {}, undefined, (m) => metas.push(m));
+    fetchMock.mockResolvedValue(reply(["Ответ", STREAM_OK_MARK], { headers: { "X-AI-Fallback": "1" } }));
+    await streamTutor(req, () => {}, undefined, (m) => metas.push(m));
+    fetchMock.mockResolvedValue(reply(["Ответ", STREAM_OK_MARK], { headers: { "X-AI-Cache": "hit", "X-AI-Crisis": "selfHarm" } }));
+    await streamTutor(req, () => {}, undefined, (m) => metas.push(m));
+    fetchMock.mockResolvedValue(reply(["Ответ", STREAM_OK_MARK]));
+    await streamTutor(req, () => {}, undefined, (m) => metas.push(m));
+    expect(metas).toEqual([
+      { cache: "hit", fallback: false, crisis: false },
+      { cache: null, fallback: true, crisis: false },
+      { cache: "hit", fallback: false, crisis: true },
+      { cache: null, fallback: false, crisis: false },
+    ]);
   });
 
   it("ответ сервера с кодом ошибки → AiError(code) → нужный текст", async () => {

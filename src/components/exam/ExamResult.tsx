@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, Check, Clock, Dumbbell, Flag, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Clock, Dumbbell, Flag, Lightbulb, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LESSON_META } from "@/content/catalog";
@@ -9,21 +9,15 @@ import { entTopicById } from "@/content/ent-topics";
 import { skillById } from "@/content/skills";
 import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
-import { aiErrorKey, lessonFeedback } from "@/lib/ai";
 import { cn } from "@/lib/cn";
 import { examAdvice, scoreExam, SEC_PER_QUESTION, starsFor, UNIT_PASS_RATIO, unitPassed, type ExamKind } from "@/lib/exam";
-import { loadAttempt, saveAttemptState, type ExamAttempt } from "@/lib/exam-store";
+import { loadAttempt, type ExamAttempt } from "@/lib/exam-store";
 import { forecastScore, MAX_SCORE } from "@/lib/forecast";
-import { decaySkills } from "@/lib/mastery";
 import { sanitizePerfectDrop } from "@/lib/perfect";
 import { useApp } from "@/lib/store";
-import { buildStudentContext } from "@/lib/student-context";
 import type { EntTopicId } from "@/lib/types";
-import { Markdown } from "@/components/Markdown";
-import { AiCost } from "@/components/economy/AiCost";
-import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { PerfectDropTile } from "@/components/economy/PerfectDropTile";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
@@ -31,7 +25,7 @@ import { ExamShareActions } from "@/components/share/ExamShareActions";
 import { useSkillStats } from "@/components/progress/useSkillStats";
 import { ChallengeCompare } from "./ChallengeBanner";
 import { ExamNotes } from "./ExamNotes";
-import { aiMistakes, formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
+import { formatClock, formatDay, lessonsForTopic, onlyMistakes, ratioOf, reviewRows, slowestRows, toneOf, type Tone } from "./logic";
 import { ReviewList } from "./ReviewList";
 import { examTitle, unitPendingCount, unitStartLesson } from "./checkpoint";
 import { StarRow } from "./StarRow";
@@ -44,8 +38,6 @@ const TONE_COLOR: Record<Tone, string> = {
 };
 const KIND_ROWS = ["single", "multi", "match", "context"] as const;
 
-// chips — не хватает чипов на разбор; limit — потолок обращений за день; key — особая причина сбоя (всплеск, общий запас сайта).
-type AiState = { status: "idle" | "loading" | "failed" | "limit" | "chips"; key?: DictKey };
 
 function Bar({ label, points, max, hint }: { label: string; points: number; max: number; hint?: string }) {
   const ratio = ratioOf(points, max);
@@ -140,7 +132,6 @@ export function ExamResult({ id }: { id: string }) {
   const [now] = useState(() => Date.now());
   const [onlyWrong, setOnlyWrong] = useState(false);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
-  const [ai, setAi] = useState<AiState>({ status: "idle" });
 
   useEffect(() => {
     let off = false;
@@ -240,53 +231,6 @@ export function ExamResult({ id }: { id: string }) {
     setOnlyWrong(false);
     setOpen((cur) => new Set(cur).add(key));
     requestAnimationFrame(() => document.getElementById(`rv-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
-  };
-
-  const askAi = async () => {
-    if (!attempt || !result || ai.status === "loading" || attempt.review) return;
-    const app = useApp.getState();
-    const receipt = app.spendAi("review");
-    if (!receipt.ok) {
-      setAi({ status: receipt.reason === "chips" ? "chips" : "limit" });
-      return;
-    }
-    setAi({ status: "loading" });
-    try {
-      const weakSkills = [...new Set(onlyMistakes(rows).map((r) => r.q.item.skill))].slice(0, 10);
-      // Освоение для ИИ — с затуханием, как у наставника (#80).
-      const stats = decaySkills(app.skills, Date.now());
-      const data = await lessonFeedback({
-        context: buildStudentContext(app),
-        lesson: t("exam.ai.lesson", {
-          kind: kindLabel,
-          points: result.points,
-          max: result.maxPoints,
-        }),
-        accuracy: ratio,
-        durationSec: result.timeSec,
-        mistakes: aiMistakes(rows, attempt.answers, lang, 8),
-        skills: weakSkills.map((sid) => ({
-          title: skillById(sid) ? l(skillById(sid)!.title) : sid,
-          mastery: stats[sid]?.mastery ?? 0,
-        })),
-      });
-      if (!data.feedback?.trim()) throw new Error("empty");
-      const review = {
-        feedback: data.feedback,
-        focus: Array.isArray(data.focus) ? data.focus : [],
-        at: Date.now(),
-      };
-      const { paper: _paper, ...state } = attempt;
-      void _paper;
-      await saveAttemptState({ ...state, review });
-      setLoaded({ done: true, attempt: { ...attempt, review } });
-      setAi({ status: "idle" });
-    } catch (e) {
-      useApp.getState().refundAi(receipt);
-      // Общая ошибка — прежний текст раздела; отказ сервера по лимитам — свой текст (lib/ai.ts → aiErrorKey).
-      const key = aiErrorKey(e);
-      setAi({ status: "failed", key: key === "tutor.error" ? undefined : key });
-    }
   };
 
   const weak = advice?.weakTopics.slice(0, 3) ?? [];
@@ -469,41 +413,6 @@ export function ExamResult({ id }: { id: string }) {
               </div>
             </section>
           )}
-
-          {/* Разбор от Бита */}
-          <section>
-            {attempt.review ? (
-              <div className="rounded-3xl border-2 border-ai/40 bg-ai-soft p-4">
-                <p className="mb-2 flex items-center gap-2 font-extrabold text-ai">
-                  <Sparkles size={20} aria-hidden /> {t("exam.ai.title")}
-                </p>
-                <Markdown>{attempt.review.feedback}</Markdown>
-                {attempt.review.focus.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {attempt.review.focus.map((f, i) => (
-                      <Pill key={i} tone="ai">
-                        {f}
-                      </Pill>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 rounded-3xl border-2 border-ai/40 bg-ai-soft p-4">
-                <p className="flex items-center gap-2 font-extrabold text-ai">
-                  <Sparkles size={20} aria-hidden /> {t("exam.ai.title")}
-                </p>
-                <p className="text-sm font-semibold text-muted">{t("exam.ai.desc")}</p>
-                <Button variant="ai" block disabled={ai.status === "loading"} onClick={askAi} icon={<Sparkles size={18} aria-hidden />}>
-                  {ai.status === "loading" ? t("exam.ai.loading") : t("exam.ai.button")}
-                  {ai.status !== "loading" && <AiCost kind="review" variant="solid" />}
-                </Button>
-                {ai.status === "failed" && <p className="text-sm font-bold text-danger">{t(ai.key ?? "exam.ai.failed")}</p>}
-                {ai.status === "limit" && <p className="text-sm font-bold text-warning-strong">{t("exam.ai.limit")}</p>}
-                {ai.status === "chips" && <NoChipsNotice kind="review" />}
-              </div>
-            )}
-          </section>
 
           {/* Что подтянуть */}
           <section>

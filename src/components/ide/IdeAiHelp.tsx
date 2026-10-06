@@ -1,8 +1,9 @@
 "use client";
 
 import { MessageCircleQuestion, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AiPanel } from "@/components/ai/AiPanel";
+import { clearThreads, getThread, saveThread, threadKey } from "@/components/ai/ai-threads";
 import { AiCost } from "@/components/economy/AiCost";
 import { Button } from "@/components/ui/Button";
 import type { IdeLang, IdeTask } from "@/lib/ide/types";
@@ -22,6 +23,10 @@ export function IdeAiHelp({ lang, task, code, error, solved }: { lang: IdeLang; 
   const [open, setOpen] = useState(false);
   const mode = error ? "explain" : "ask";
   const langTitle = IDE_REGISTRY[lang].title.ru;
+  // Нить «Спросить Бита» / «Объясни ошибку» (#119): живёт, пока открыта задача; новая задача или новый заход — с чистого листа.
+  const taskKey = task?.id ?? `sandbox-${lang}`;
+  const aiScope = `ide:${taskKey}`;
+  useEffect(() => clearThreads(aiScope), [aiScope]);
 
   // Контекст собирается в момент открытия панели (код и ошибка на этот момент), а не на каждый ввод.
   const [snapshot, setSnapshot] = useState<{ code: string; error: string | null } | null>(null);
@@ -35,10 +40,10 @@ export function IdeAiHelp({ lang, task, code, error, solved }: { lang: IdeLang; 
             code: snapshot.code,
             error: snapshot.error,
             solved,
-            stepKey: task?.id ?? `sandbox-${lang}`,
+            stepKey: taskKey,
           })
         : null,
-    [snapshot, langTitle, task, l, solved, lang],
+    [snapshot, langTitle, task, l, solved, taskKey],
   );
 
   return (
@@ -64,6 +69,8 @@ export function IdeAiHelp({ lang, task, code, error, solved }: { lang: IdeLang; 
           task={taskCtx}
           noteKey="general"
           suggestions={mode === "ask" ? SUGGESTIONS : []}
+          initialTurns={getThread(threadKey(aiScope, taskKey, mode))}
+          onTurns={(turns) => saveThread(threadKey(aiScope, taskKey, mode), turns)}
         />
       )}
     </>

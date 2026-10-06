@@ -258,10 +258,10 @@ describe("правовые документы", () => {
 
   it("«Коротко»: ИИ получает сведения о тебе, есть автоматические отчёты о сбоях", () => {
     const brief = LEGAL.privacy.sections[0].body;
-    expect(brief.ru).toContain("имя, класс, слабые темы, память наставника и начало твоих заметок");
+    expect(brief.ru).toContain("имя, класс, слабые темы и начало твоих заметок");
     expect(brief.ru).toContain("внешний сервис искусственного интеллекта");
     expect(brief.ru).toContain("автоматические отчёты");
-    expect(brief.kk).toContain("аты, сыныбы, әлсіз тақырыптары, тәлімгер жазбалары");
+    expect(brief.kk).toContain("аты, сыныбы, әлсіз тақырыптары және өз жазбаларыңның басы");
     expect(brief.kk).toContain("жасанды интеллекттің сыртқы қызметі");
     expect(brief.kk).toContain("автоматты есептер");
     // Старая формулировка «на сервер уходит немногое: … и сообщения об ошибках» убрана.
@@ -283,11 +283,13 @@ describe("правовые документы", () => {
     }
   });
 
-  it("кнопки ИИ названы как в интерфейсе: «Спросить Бита», «Разбор от Бита», «Сообщить об ошибке»", () => {
+  it("кнопки ИИ названы как в интерфейсе: «Спросить Бита», «Сообщить об ошибке»; «Разбора от Бита» и «памяти наставника» нет (#123)", () => {
     for (const lang of LANGS) {
       const ai = section(LEGAL.privacy, "Что уходит при обращении к ИИ", lang);
       expect(ai, lang).toContain(`«${dict["ai.askBit"][lang]}»`);
-      expect(ai, lang).toContain(`«${dict["exam.ai.title"][lang]}»`);
+      for (const doc of docs) {
+        expect(fullText(doc, lang), doc.id).not.toMatch(lang === "ru" ? /Разбор от Бита|память наставника/i : /Биттің талдауы|тәлімгер жазбалары/i);
+      }
       expect(fullText(LEGAL.privacy, lang)).toContain(`«${dict["issue.button"][lang]}»`);
     }
   });
@@ -336,12 +338,16 @@ describe("правовые документы", () => {
     const kk = section(LEGAL.terms, "Бесплатно, тарифы и чипы", "kk");
     expect(ru).toContain("Число обращений к ИИ в день ограничено — до 65 на любом тарифе; готовые подсказки и разборы — без ограничений.");
     expect(kk).toContain("ЖИ-ге күніне жүгіну саны шектелген — кез келген тарифте ең көбі 65 жүгіну; дайын кеңестер мен талдаулар шектеусіз.");
-    // Вес обращений — как в коде (AI_UNITS): фото и «Разбор от Бита» одинаково, голос дороже.
-    expect(AI_UNITS.review).toBe(AI_UNITS.photo);
+    // Вес обращений — как в коде (AI_UNITS): фото дороже обычного вопроса, голос — ещё дороже.
     // Голосовой вопрос = распознавание (voice) + ответ в чате (chat).
     const voiceTotal = AI_UNITS.voice + AI_UNITS.chat;
-    expect(ru).toContain(`считаются за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${voiceTotal} (${AI_UNITS.voice} — распознавание голоса и ${AI_UNITS.chat} — ответ)`);
+    expect(ru).toContain(`считается за ${AI_UNITS.photo} обращения, голосовой вопрос — за ${voiceTotal} (${AI_UNITS.voice} — распознавание голоса и ${AI_UNITS.chat} — ответ)`);
     expect(kk).toContain(`${AI_UNITS.photo} жүгіну, дауыспен қойылған сұрақ ${voiceTotal} жүгіну (${AI_UNITS.voice} — дауысты тану, ${AI_UNITS.chat} — жауап)`);
+    // Каждый ответ — одно обращение (#118), голос — как сообщение в чате.
+    expect(ru).toContain("Каждый ответ Бита — одно обращение");
+    expect(ru).toContain("распознавание голоса бесплатные обращения и чипы не тратит");
+    expect(kk).toContain("Биттің әр жауабы — бір жүгіну");
+    expect(kk).toContain("дауысты тану тегін жүгінулер мен чиптерді жұмсамайды");
     // Своих потолков у тарифов в документах нет, ИИ «без ограничений» не обещаем.
     for (const doc of docs) {
       expect(fullText(doc, "ru"), doc.id).not.toMatch(/до (?:50|100)\b|неограниченн|безгранично|без лимита/i);
