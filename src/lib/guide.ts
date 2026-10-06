@@ -24,6 +24,10 @@ export interface GuideStep {
   textMany?: DictKey;
   /** Сердечки не списывались («Безлимит», пробный) — этот вариант. */
   textFree?: DictKey;
+  /** Числа бесплатных обращений на значке ИИ нет (безлимит, тариф без счёта) — этот вариант (без фразы про число). */
+  textNoCount?: DictKey;
+  /** Уже пройден хотя бы один урок (кнопка урока — не «Начать», а «Продолжить») — этот вариант, без названия кнопки. */
+  textAgain?: DictKey;
   mood?: Mood;
   /** next — кнопка «Дальше»/«Понятно»; tap — ждём нажатия на цель (кнопки «Дальше» нет). */
   action: GuideAction;
@@ -39,11 +43,19 @@ export interface GuideStep {
   textPartial?: DictKey;
 }
 
-export type SceneId = TipId;
+/** «welcome» — только отметка (видел старое приветствие v0.16–0.18), своей сцены нет. */
+export type SceneId = Exclude<TipId, "welcome">;
 
 export interface GuideScene {
   id: SceneId;
   steps: readonly GuideStep[];
+  /**
+   * Отметить и эти сцены, когда показ дошёл до шага `alsoAfter` (или до конца сцены): новый lesson-first уже объяснил то,
+   * что повторяет lesson-icons. Прерванная раньше сцена их не отмечает.
+   */
+  also?: readonly TipId[];
+  /** id шага, пройдя который сцена отмечает `also`; нет такого шага среди показанных — только по концу сцены. */
+  alsoAfter?: string;
 }
 
 /** Ожидание цели по умолчанию: страница могла ещё дорисоваться. */
@@ -64,18 +76,44 @@ const two = (id: SceneId, a: PageStep, b: PageStep): GuideScene => ({
   ],
 });
 
+/** Нижние вкладки и кнопка Бита — общие шаги знакомства (intro) и короткой версии для старых учеников (nav). */
+const BAR_STEP: GuideStep = {
+  id: "bar",
+  targets: ["nav-practice", "nav-materials", "nav-progress"],
+  text: "guide.nav.bar",
+  textSchool: "guide.nav.bar.school",
+  action: "next",
+};
+const DOCK_STEP: GuideStep = { id: "dock", targets: ["bit-dock"], text: "guide.nav.dock", mood: "happy", action: "next" };
+/** Значки шапки урока: инструменты (калькулятор, перевод, черновик) и ИИ (с числом бесплатных, если оно видно). */
+const TOOLS_STEP: GuideStep = { id: "tools", targets: ["lesson-tools"], text: "guide.lesson.tools", textSchool: "guide.lesson.tools.school", action: "next" };
+const ASK_STEP: GuideStep = {
+  id: "ask",
+  targets: ["lesson-ask"],
+  text: "guide.lesson.ask",
+  textNoCount: "guide.lesson.askNoCount",
+  mood: "thinking",
+  action: "next",
+};
+
 export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
-  welcome: {
-    id: "welcome",
+  // Этап 16Г: всё знакомство с приложением — до первого урока, последний шаг — нажать кнопку урока.
+  intro: {
+    id: "intro",
     steps: [
       { id: "hi", text: "guide.welcome.hi", textNoName: "guide.welcome.hi0", mood: "happy", action: "next" },
       // Реплика про карточку урока — рамка на всей карточке; кнопку «Начать» (метка continue) — только на шаге «нажми».
-      { id: "continue", targets: ["next-lesson"], text: "guide.welcome.continue", textSchool: "guide.welcome.continue.school", action: "next" },
-      { id: "hearts", targets: ["hdr-hearts"], text: "guide.welcome.hearts", action: "next" },
+      { id: "card", targets: ["next-lesson"], text: "guide.welcome.continue", textSchool: "guide.welcome.continue.school", action: "next" },
+      // Шапка одной рамкой: огонь, сердечки, чипы (на 1024–1279 px шапки нет — шаг пропускается).
+      { id: "header", targets: ["hdr-streak", "hdr-hearts", "hdr-chips"], text: "guide.intro.header", textFree: "guide.intro.headerFree", action: "next" },
+      BAR_STEP,
+      DOCK_STEP,
       {
         id: "start",
         targets: ["continue"],
         text: "guide.welcome.start",
+        // Урок уже был (подсказки вернули) — на кнопке «Продолжить»: реплика без названия кнопки.
+        textAgain: "guide.next.go",
         // У школьного трека на кнопке не «Начать», а «Продолжить» — без названия кнопки.
         textSchool: "guide.welcome.start.school",
         mood: "celebrate",
@@ -86,6 +124,9 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
   },
   "lesson-first": {
     id: "lesson-first",
+    // Значки уже объяснены — отдельная сцена для старых учеников не нужна.
+    also: ["lesson-icons"],
+    alsoAfter: "ask",
     steps: [
       {
         id: "hearts",
@@ -97,11 +138,15 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
         action: "next",
       },
       { id: "progress", targets: ["lesson-progress"], text: "guide.lesson.progress", action: "next" },
+      TOOLS_STEP,
+      // Значка ИИ нет (до ответа скрыт) — шаг пропускается.
+      ASK_STEP,
       { id: "options", targets: ["lesson-options"], text: "guide.lesson.options", action: "tap", waitMs: LESSON_WAIT_MS },
       { id: "check", targets: ["lesson-check"], text: "guide.lesson.check", action: "tap", chain: true },
-      { id: "ask", targets: ["lesson-ask"], text: "guide.lesson.ask", mood: "thinking", action: "next", chain: true },
     ],
   },
+  // Этап 16Г: прошедшим старый lesson-first (v0.18) — один раз в следующем уроке, только значки.
+  "lesson-icons": { id: "lesson-icons", steps: [{ ...TOOLS_STEP, mood: "happy" }, ASK_STEP] },
   "after-first": {
     id: "after-first",
     steps: [
@@ -111,13 +156,26 @@ export const GUIDE_SCENES: Record<SceneId, GuideScene> = {
       { id: "continue", targets: ["res-continue"], text: "guide.after.continue", mood: "happy", action: "tap" },
     ],
   },
+  // Этап 16Г: после первого урока — одна реплика у карточки урока. Курс пройден (карточки нет) — шаг молча пропускается.
+  "learn-next": {
+    id: "learn-next",
+    steps: [{ id: "go", targets: ["continue"], text: "guide.next.go", textSchool: "guide.welcome.start.school", mood: "happy", action: "tap" }],
+  },
+  // Короткая версия для видевших старое приветствие (v0.16–0.18): вкладки, кнопка Бита, нажать кнопку урока.
   nav: {
     id: "nav",
     steps: [
-      { id: "continue", targets: ["next-lesson"], text: "guide.nav.continue", mood: "happy", action: "next" },
-      { id: "bar", targets: ["nav-practice", "nav-materials", "nav-progress"], text: "guide.nav.bar", textSchool: "guide.nav.bar.school", action: "next" },
-      { id: "dock", targets: ["bit-dock"], text: "guide.nav.dock", mood: "happy", action: "next" },
-      { id: "shop", targets: ["hdr-chips"], text: "guide.nav.shop", action: "tap" },
+      BAR_STEP,
+      DOCK_STEP,
+      {
+        id: "go",
+        targets: ["continue"],
+        text: "guide.next.go",
+        textSchool: "guide.welcome.start.school",
+        mood: "celebrate",
+        action: "tap",
+        orElse: { text: "guide.welcome.noLesson" },
+      },
     ],
   },
   // Цели — компактные: заголовок раздела и первая строка (рамка выше полэкрана расползлась бы по краям экрана).
@@ -174,25 +232,37 @@ export interface SceneCtx {
 }
 
 /**
- * Какую сцену играть сейчас. Порядок пути: welcome (на «Учиться», уроков 0) → lesson-first (в первом уроке) →
- * after-first (итоги первого урока) → nav (на «Учиться» после первого урока) → сцены страниц при первом заходе.
- * Страницы ждут обзор (nav): две сцены сразу не играем. Приветствие, закрытое при нуле уроков, ждёт первого урока молча.
+ * Какую сцену играть сейчас (этап 16Г). Путь нового ученика: intro (на «Учиться», до первого урока; кончается нажатием
+ * «Начать») → lesson-first (в первом уроке) → after-first (итоги) → learn-next (на «Учиться»: «нажми» у карточки урока)
+ * → сцены страниц при первом заходе. Видевшим старое приветствие (`welcome`, v0.16–0.18), но не обзор (`nav`), — короткий
+ * nav; прошедшим старый lesson-first — lesson-icons в следующем уроке. Пока обучение идёт (`tourBlocking`), страницы
+ * молчат: две сцены сразу не играем. Знакомство, закрытое при нуле уроков, ждёт первого урока молча. После «Показать
+ * подсказки снова» (intro снова показан, обучение не закончено) lesson-first и after-first играют и при пройденных уроках.
  * Онбординг, пробный ЕНТ, тесты и игры — без сцен (у них нет ни пути, ни метки).
  */
 export function sceneFor(tips: TipsState | undefined, ctx: SceneCtx): SceneId | null {
   if (!ctx.onboarded) return null;
-  const fresh = (id: SceneId) => !tipSeen(tips, id);
+  const fresh = (id: TipId) => !tipSeen(tips, id);
+  const touring = tourBlocking(tips);
+  const replay = !fresh("intro") && touring;
   // Итоги идут внутри экрана урока — их метка важнее метки урока.
-  if (ctx.onResults) return ctx.completedLessons <= 1 && fresh("after-first") ? "after-first" : null;
-  if (ctx.inLesson) return ctx.completedLessons === 0 && fresh("lesson-first") ? "lesson-first" : null;
+  if (ctx.onResults) return (ctx.completedLessons <= 1 || replay) && fresh("after-first") ? "after-first" : null;
+  if (ctx.inLesson) {
+    if ((ctx.completedLessons === 0 || replay) && fresh("lesson-first")) return "lesson-first";
+    // Старый lesson-first (v0.18) значков не объяснял; новый отмечает lesson-icons сам (`also`).
+    // Старый «Пропустить» (v0.16–0.18) отметил lesson-first вместе с nav одним махом — такой ученик от обучения отказался.
+    return !fresh("lesson-first") && fresh("intro") && fresh("lesson-icons") && !skippedTogether(tips, "lesson-first", "nav")
+      ? "lesson-icons"
+      : null;
+  }
   if (ctx.pathname === "/learn") {
-    if (fresh("nav")) {
-      if (ctx.completedLessons >= 1) return "nav";
-      return fresh("welcome") ? "welcome" : null;
+    if (touring) {
+      if (!fresh("intro")) return ctx.completedLessons >= 1 ? "learn-next" : null;
+      return fresh("welcome") ? "intro" : "nav";
     }
     return ctx.school && fresh("page-school") ? "page-school" : null;
   }
-  if (fresh("nav")) return null;
+  if (touring) return null;
   const page = PAGE_SCENES[ctx.pathname];
   return page && fresh(page) ? page : null;
 }
@@ -203,18 +273,21 @@ export function sceneSteps(scene: GuideScene, ent: boolean): GuideStep[] {
 }
 
 /**
- * Какой текст сказать на шаге: имя есть/нет, школьный трек, сердечки не списывались (`free`: «Безлимит», пробный),
- * число сердечек, запасная реплика (`orElse`), нашлись не все метки (`partial`).
+ * Какой текст сказать на шаге: имя есть/нет, школьный трек, урок уже был (`again`: кнопка — «Продолжить»), сердечки
+ * не списывались (`free`: «Безлимит», пробный), на значке ИИ нет числа (`aiCount: false`), число сердечек, запасная
+ * реплика (`orElse`), нашлись не все метки (`partial`).
  */
 export function stepText(
   step: GuideStep,
-  o: { name?: string; school?: boolean; n?: number; free?: boolean; fallback?: boolean; partial?: boolean },
+  o: { name?: string; school?: boolean; n?: number; free?: boolean; fallback?: boolean; partial?: boolean; again?: boolean; aiCount?: boolean },
 ): DictKey {
   if (o.fallback && step.orElse) return step.orElse.text;
   if (o.partial && step.textPartial) return step.textPartial;
   if (step.textNoName && !o.name?.trim()) return step.textNoName;
   if (step.textSchool && o.school) return step.textSchool;
+  if (step.textAgain && o.again) return step.textAgain;
   if (step.textFree && o.free) return step.textFree;
+  if (step.textNoCount && o.aiCount === false) return step.textNoCount;
   if (step.textMany && o.n !== undefined && o.n !== 1) return step.textMany;
   return step.text;
 }
@@ -223,10 +296,36 @@ export function stepText(
 export const keepDash = (text: string): string => text.replace(/ (?=—)/g, "\u00a0");
 
 /**
- * Проводник ещё не закончен (обзор панели не показан): окна тарифов, напоминаний и кейса ждут.
+ * Обучение ещё не закончено (этап 16Г: не показаны ни learn-next — конец пути нового ученика, — ни nav — обзор v0.18
+ * или короткая версия): окна тарифов, напоминаний и кейса ждут, страницы молчат.
  * «Пропустить» отмечает все подсказки, поэтому снимает ожидание.
  */
-export const tourBlocking = (tips: TipsState | undefined): boolean => !tipSeen(tips, "nav");
+export function tourBlocking(tips: TipsState | undefined): boolean {
+  return !tipSeen(tips, "learn-next") && !tipSeen(tips, "nav");
+}
+
+/** Кнопку Бита уже объяснили (знакомство или обзор): стрелка «смахни вправо» у неё больше не нужна. */
+export const dockExplained = (tips: TipsState | undefined): boolean => tipSeen(tips, "intro") || tipSeen(tips, "nav");
+
+/**
+ * Шаг `from` из показанных `steps` пройден — пора ли отметить `also` сцены. Да, если пройден шаг `alsoAfter`
+ * или любой после него (сам шаг мог быть пропущен: значка нет).
+ */
+export function alsoDue(scene: GuideScene, steps: readonly GuideStep[], from: number): boolean {
+  if (!scene.also?.length) return false;
+  if (from + 1 >= steps.length) return true;
+  if (!scene.alsoAfter) return false;
+  const order = scene.steps.findIndex((s) => s.id === scene.alsoAfter);
+  const passed = scene.steps.findIndex((s) => s.id === steps[from]?.id);
+  return order >= 0 && passed >= order;
+}
+
+/** Две отметки поставлены одним «Пропустить» (все разом, в одну секунду), а не показом сцен по очереди. */
+export function skippedTogether(tips: TipsState | undefined, a: TipId, b: TipId): boolean {
+  const x = tips?.[a];
+  const y = tips?.[b];
+  return !!x && !!y && Math.abs(x - y) < 1000;
+}
 
 /** «Пропустить»: закрыть весь проводник — отметить все сцены, которые ещё не показаны. */
 export function unseenTips(tips: TipsState | undefined): TipId[] {

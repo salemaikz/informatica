@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 // Без обращений к ИИ.
 
 const STORE = "informatica-v1";
-const TIPS = { welcome: 1, "lesson-first": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 };
+const TIPS = { welcome: 1, "lesson-first": 1, "lesson-icons": 1, "after-first": 1, nav: 1, "page-practice": 1, "page-tutor": 1, "page-materials": 1, "page-progress": 1, "page-school": 1, "page-shop": 1, "page-profile": 1 };
 
 async function seed(page: Page, extra: Record<string, unknown> = {}) {
   await page.goto("/onboarding");

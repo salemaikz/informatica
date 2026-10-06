@@ -29,6 +29,9 @@ import {
   sceneSteps,
   stepText,
   tourBlocking,
+  dockExplained,
+  alsoDue,
+  skippedTogether,
   unionRect,
   unseenTips,
   type BitPlacement,
@@ -45,34 +48,65 @@ const all: TipsState = Object.fromEntries(TIP_IDS.map((id) => [id, 1]));
 const ctx = (over: Partial<SceneCtx> = {}): SceneCtx => ({ pathname: "/learn", onboarded: true, completedLessons: 0, inLesson: false, onResults: false, ...over });
 
 describe("sceneFor: путь первого входа", () => {
-  it("новый ученик на «Учиться» — приветствие", () => {
-    expect(sceneFor({}, ctx())).toBe("welcome");
-    expect(sceneFor(undefined, ctx())).toBe("welcome");
+  it("новый ученик на «Учиться» — знакомство (intro), при любом числе уроков и на школьном треке", () => {
+    expect(sceneFor({}, ctx())).toBe("intro");
+    expect(sceneFor(undefined, ctx())).toBe("intro");
+    expect(sceneFor({}, ctx({ completedLessons: 3 }))).toBe("intro");
+    expect(sceneFor({}, ctx({ school: true }))).toBe("intro");
   });
-  it("приветствие закрыто, урока ещё нет — молчит до первого урока", () => {
-    expect(sceneFor(seen("welcome"), ctx())).toBeNull();
+  it("знакомство закрыто, урока ещё нет — молчит до первого урока", () => {
+    expect(sceneFor(seen("intro"), ctx())).toBeNull();
   });
   it("в первом уроке (режим «Учиться») — lesson-first; уже не первый урок — ничего", () => {
-    expect(sceneFor(seen("welcome"), ctx({ pathname: "/lesson/a", inLesson: true }))).toBe("lesson-first");
-    expect(sceneFor(seen("welcome", "lesson-first"), ctx({ pathname: "/lesson/a", inLesson: true }))).toBeNull();
+    expect(sceneFor(seen("intro"), ctx({ pathname: "/lesson/a", inLesson: true }))).toBe("lesson-first");
+    expect(sceneFor(seen("intro", "lesson-first", "lesson-icons"), ctx({ pathname: "/lesson/a", inLesson: true }))).toBeNull();
     expect(sceneFor({}, ctx({ pathname: "/lesson/a", inLesson: true, completedLessons: 1 }))).toBeNull();
+  });
+  it("подсказки вернули (intro снова показан, обучение не закончено) — lesson-first и after-first при пройденных уроках", () => {
+    expect(sceneFor(seen("intro"), ctx({ pathname: "/lesson/a", inLesson: true, completedLessons: 3 }))).toBe("lesson-first");
+    expect(sceneFor(seen("intro", "lesson-first"), ctx({ pathname: "/lesson/a", inLesson: true, onResults: true, completedLessons: 4 }))).toBe("after-first");
+    // Обучение закончено — нет.
+    expect(sceneFor(seen("intro", "learn-next"), ctx({ pathname: "/lesson/a", inLesson: true, completedLessons: 3 }))).toBeNull();
   });
   it("урок без метки «Учиться» («Проверить себя», тренировка) — ничего", () => {
     expect(sceneFor({}, ctx({ pathname: "/lesson/a" }))).toBeNull();
     expect(sceneFor({}, ctx({ pathname: "/drill" }))).toBeNull();
   });
   it("итоги первого урока — after-first, метка итогов важнее метки урока", () => {
-    expect(sceneFor(seen("welcome", "lesson-first"), ctx({ pathname: "/lesson/a", inLesson: true, onResults: true, completedLessons: 1 }))).toBe("after-first");
+    expect(sceneFor(seen("intro", "lesson-first"), ctx({ pathname: "/lesson/a", inLesson: true, onResults: true, completedLessons: 1 }))).toBe("after-first");
     expect(sceneFor(seen("after-first"), ctx({ pathname: "/lesson/a", inLesson: true, onResults: true, completedLessons: 1 }))).toBeNull();
     // Не первый пройденный урок — итоги без сцены (и без lesson-first).
     expect(sceneFor({}, ctx({ pathname: "/lesson/b", inLesson: true, onResults: true, completedLessons: 2 }))).toBeNull();
   });
-  it("после первого урока на «Учиться» — nav, приветствие уже не нужно", () => {
-    expect(sceneFor(seen("welcome", "lesson-first", "after-first"), ctx({ completedLessons: 1 }))).toBe("nav");
-    expect(sceneFor({}, ctx({ completedLessons: 3 }))).toBe("nav");
+  it("после первого урока на «Учиться» — одна реплика learn-next", () => {
+    expect(sceneFor(seen("intro", "lesson-first", "after-first"), ctx({ completedLessons: 1 }))).toBe("learn-next");
+    expect(sceneFor(seen("intro", "lesson-first", "after-first", "learn-next"), ctx({ completedLessons: 1 }))).toBeNull();
   });
-  it("страницы — только после nav и один раз", () => {
+  it("видел старое приветствие (welcome), но не обзор (nav) — короткий nav при любом числе уроков; видел nav — ничего", () => {
+    expect(sceneFor(seen("welcome"), ctx())).toBe("nav");
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first"), ctx({ completedLessons: 1 }))).toBe("nav");
+    expect(sceneFor(seen("welcome", "nav"), ctx({ completedLessons: 1 }))).toBeNull();
+  });
+  it("прошедшим старый lesson-first — lesson-icons один раз в следующем уроке; новый lesson-first его заменяет", () => {
+    const lesson = ctx({ pathname: "/lesson/b", inLesson: true, completedLessons: 2 });
+    // Прошёл по очереди: nav — позже lesson-first.
+    const old: TipsState = { welcome: 1000, "lesson-first": 60_000, "after-first": 200_000, nav: 210_000 };
+    expect(sceneFor(old, lesson)).toBe("lesson-icons");
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first"), lesson)).toBe("lesson-icons");
+    // Старый «Пропустить»/Escape отметил lesson-first и nav разом — от обучения отказались, lesson-icons не играет.
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav"), lesson)).toBeNull();
+    expect(sceneFor({ welcome: 1000, "lesson-first": 60_000, "after-first": 60_000, nav: 60_000 }, lesson)).toBeNull();
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav", "lesson-icons"), lesson)).toBeNull();
+    // Новый путь: intro показан — lesson-icons не нужен (lesson-first его отмечает сам, но и без отметки — нет).
+    expect(sceneFor(seen("intro", "lesson-first", "after-first", "learn-next"), lesson)).toBeNull();
+    // Итоги — не урок.
+    expect(sceneFor(seen("welcome", "lesson-first", "after-first", "nav"), { ...lesson, onResults: true })).toBeNull();
+    expect(GUIDE_SCENES["lesson-first"].also).toEqual(["lesson-icons"]);
+  });
+  it("страницы — только после конца обучения (learn-next или nav) и один раз", () => {
     expect(sceneFor({}, ctx({ pathname: "/practice", completedLessons: 1 }))).toBeNull();
+    expect(sceneFor(seen("intro"), ctx({ pathname: "/practice" }))).toBeNull();
+    expect(sceneFor(seen("intro", "learn-next"), ctx({ pathname: "/practice" }))).toBe("page-practice");
     expect(sceneFor(seen("nav"), ctx({ pathname: "/practice" }))).toBe("page-practice");
     expect(sceneFor(seen("nav", "page-practice"), ctx({ pathname: "/practice" }))).toBeNull();
     expect(sceneFor(seen("nav"), ctx({ pathname: "/materials" }))).toBe("page-materials");
@@ -84,10 +118,10 @@ describe("sceneFor: путь первого входа", () => {
   it("подстраницы и экраны без сцен (чат, пробный ЕНТ, игра, онбординг) — ничего", () => {
     for (const pathname of ["/tutor/abc", "/exam/run", "/game/bit-rush", "/onboarding", "/practice/x"]) expect(sceneFor(seen("nav"), ctx({ pathname }))).toBeNull();
   });
-  it("школьный трек: после nav на «Учиться» — сцена про выбор класса", () => {
+  it("школьный трек: после конца обучения на «Учиться» — сцена про выбор класса", () => {
     expect(sceneFor(seen("nav"), ctx({ school: true }))).toBe("page-school");
+    expect(sceneFor(seen("intro", "learn-next"), ctx({ school: true, completedLessons: 1 }))).toBe("page-school");
     expect(sceneFor(seen("nav"), ctx())).toBeNull();
-    expect(sceneFor({}, ctx({ school: true }))).toBe("welcome");
   });
   it("до онбординга — ничего; «Пропустить» (всё отмечено) — больше ничего", () => {
     expect(sceneFor({}, ctx({ onboarded: false }))).toBeNull();
@@ -99,14 +133,42 @@ describe("sceneFor: путь первого входа", () => {
 });
 
 describe("tourBlocking и служебное", () => {
-  it("пока nav не показан — тарифы, напоминания и кейс ждут", () => {
+  it("пока не показаны ни learn-next, ни nav — тарифы, напоминания и кейс ждут", () => {
     expect(tourBlocking({})).toBe(true);
+    expect(tourBlocking(seen("intro", "lesson-first", "after-first"))).toBe(true);
     expect(tourBlocking(seen("welcome", "lesson-first", "after-first"))).toBe(true);
+    expect(tourBlocking(seen("learn-next"))).toBe(false);
     expect(tourBlocking(seen("nav"))).toBe(false);
     expect(tourBlocking(sanitizeTips({ nav: 5, junk: 1 }))).toBe(false);
   });
+  it("стрелка у кнопки Бита — пока кнопку не объяснили (intro или nav)", () => {
+    expect(dockExplained({})).toBe(false);
+    expect(dockExplained(seen("welcome", "lesson-first", "after-first"))).toBe(false);
+    expect(dockExplained(seen("intro"))).toBe(true);
+    expect(dockExplained(seen("nav"))).toBe(true);
+  });
+  it("alsoDue: lesson-first отмечает lesson-icons только пройдя шаг ИИ (или в конце), intro — никогда", () => {
+    const lf = GUIDE_SCENES["lesson-first"];
+    const full = lf.steps;
+    const at = (id: string) => full.findIndex((s) => s.id === id);
+    expect(alsoDue(lf, full, at("hearts"))).toBe(false);
+    expect(alsoDue(lf, full, at("progress"))).toBe(false);
+    expect(alsoDue(lf, full, at("tools"))).toBe(false);
+    expect(alsoDue(lf, full, at("ask"))).toBe(true);
+    expect(alsoDue(lf, full, at("options"))).toBe(true);
+    expect(alsoDue(lf, full, full.length - 1)).toBe(true);
+    const intro = GUIDE_SCENES.intro;
+    expect(alsoDue(intro, intro.steps, intro.steps.length - 1)).toBe(false);
+  });
+  it("skippedTogether: отметки одного «Пропустить» — в одну секунду; показ по очереди — нет", () => {
+    expect(skippedTogether({ "lesson-first": 5000, nav: 5000 }, "lesson-first", "nav")).toBe(true);
+    expect(skippedTogether({ "lesson-first": 5000, nav: 5001 }, "lesson-first", "nav")).toBe(true);
+    expect(skippedTogether({ "lesson-first": 5000, nav: 95_000 }, "lesson-first", "nav")).toBe(false);
+    expect(skippedTogether({ "lesson-first": 5000 }, "lesson-first", "nav")).toBe(false);
+  });
   it("новые сцены сохраняются, чужие id — нет", () => {
     expect(sanitizeTips({ "page-shop": 3, "page-profile": 4, "page-x": 1 })).toEqual({ "page-shop": 3, "page-profile": 4 });
+    expect(sanitizeTips({ intro: 1, "learn-next": 2, "lesson-icons": 3, welcome: 4 })).toEqual({ intro: 1, "learn-next": 2, "lesson-icons": 3, welcome: 4 });
   });
   it("completedLessonsCount считает уроки, пройденные хотя бы раз", () => {
     expect(completedLessonsCount(undefined)).toBe(0);
@@ -114,14 +176,22 @@ describe("tourBlocking и служебное", () => {
   });
 });
 
+const SCENE_IDS = Object.keys(GUIDE_SCENES) as (keyof typeof GUIDE_SCENES)[];
+const stepOf = (scene: keyof typeof GUIDE_SCENES, id: string) => {
+  const st = GUIDE_SCENES[scene].steps.find((s) => s.id === id);
+  if (!st) throw new Error(`${scene}/${id}`);
+  return st;
+};
+
 describe("сцены", () => {
-  it("у каждой сцены из TIP_IDS есть шаги; тексты — ключи словаря guide.* на двух языках", () => {
-    for (const id of TIP_IDS) {
+  it("сцена есть у каждой отметки, кроме welcome (только отметка); тексты — ключи guide.* на двух языках", () => {
+    expect([...SCENE_IDS].sort()).toEqual(TIP_IDS.filter((id) => id !== "welcome").sort());
+    for (const id of SCENE_IDS) {
       const scene = GUIDE_SCENES[id];
       expect(scene.id).toBe(id);
       expect(scene.steps.length).toBeGreaterThan(0);
       for (const st of scene.steps) {
-        for (const key of [st.text, st.textSchool, st.textNoName, st.textMany, st.orElse?.text]) {
+        for (const key of [st.text, st.textSchool, st.textNoName, st.textMany, st.textFree, st.textPartial, st.textNoCount, st.textAgain, st.orElse?.text]) {
           if (!key) continue;
           expect(key.startsWith("guide."), key).toBe(true);
           expect(dict[key].ru.length).toBeGreaterThan(0);
@@ -130,26 +200,40 @@ describe("сцены", () => {
       }
     }
   });
-  it("сцены короткие: 1–5 реплик, страницы — 1–2", () => {
-    for (const id of TIP_IDS) {
+  it("сцены короткие: знакомство и первый урок — до 6 реплик, остальные — до 5, страницы — 1–2", () => {
+    for (const id of SCENE_IDS) {
       const n = GUIDE_SCENES[id].steps.length;
-      expect(n).toBeLessThanOrEqual(id.startsWith("page-") ? 2 : 5);
+      expect(n, id).toBeLessThanOrEqual(id.startsWith("page-") ? 2 : id === "intro" || id === "lesson-first" ? 6 : 5);
     }
   });
-  it("ключевые шаги «нажми»: начать урок, вариант, «Проверить», «Продолжить» на итогах, чипы", () => {
+  it("ключевые шаги «нажми»: любое обучение кончается кнопкой урока; вариант, «Проверить», «Продолжить» на итогах", () => {
     const tap = (id: keyof typeof GUIDE_SCENES) => GUIDE_SCENES[id].steps.filter((s) => s.action === "tap").map((s) => s.targets?.[0]);
-    expect(tap("welcome")).toEqual(["continue"]);
+    expect(tap("intro")).toEqual(["continue"]);
     expect(tap("lesson-first")).toEqual(["lesson-options", "lesson-check"]);
     expect(tap("after-first")).toEqual(["res-continue"]);
-    expect(tap("nav")).toEqual(["hdr-chips"]);
+    expect(tap("learn-next")).toEqual(["continue"]);
+    expect(tap("nav")).toEqual(["continue"]);
+    expect(tap("lesson-icons")).toEqual([]);
+    for (const id of ["intro", "nav", "learn-next"] as const) expect(GUIDE_SCENES[id].steps.at(-1)?.targets).toEqual(["continue"]);
+    // Магазин из обучения убран (его объяснит page-shop при первом заходе).
+    for (const id of SCENE_IDS) for (const s of GUIDE_SCENES[id].steps) if (s.action === "tap") expect(s.targets, `${id}/${s.id}`).not.toContain("hdr-chips");
     // У каждого шага «нажми» есть цель — иначе нажимать некуда.
-    for (const id of TIP_IDS) for (const s of GUIDE_SCENES[id].steps) if (s.action === "tap") expect(s.targets?.length, `${id}/${s.id}`).toBeGreaterThan(0);
+    for (const id of SCENE_IDS) for (const s of GUIDE_SCENES[id].steps) if (s.action === "tap") expect(s.targets?.length, `${id}/${s.id}`).toBeGreaterThan(0);
   });
-  it("в уроке вариант ждут долго (сначала шаги-рассказы), «Проверить» и подсказка — только после показанного варианта", () => {
-    const steps = GUIDE_SCENES["lesson-first"].steps;
-    expect(steps[2].waitMs).toBeGreaterThanOrEqual(60_000);
-    expect(steps[3].chain).toBe(true);
-    expect(steps[4].chain).toBe(true);
+  it("порядок знакомства: привет → карточка → шапка → вкладки → кнопка Бита → «Начать»", () => {
+    expect(GUIDE_SCENES.intro.steps.map((s) => s.id)).toEqual(["hi", "card", "header", "bar", "dock", "start"]);
+    expect(stepOf("intro", "header").targets).toEqual(["hdr-streak", "hdr-hearts", "hdr-chips"]);
+    expect(GUIDE_SCENES.nav.steps.map((s) => s.id)).toEqual(["bar", "dock", "go"]);
+  });
+  it("первый урок: сердечки → полоска → инструменты → ИИ → вариант (ждём долго) → «Проверить» (только после варианта)", () => {
+    expect(GUIDE_SCENES["lesson-first"].steps.map((s) => s.id)).toEqual(["hearts", "progress", "tools", "ask", "options", "check"]);
+    expect(stepOf("lesson-first", "tools").targets).toEqual(["lesson-tools"]);
+    expect(stepOf("lesson-first", "ask")).toMatchObject({ targets: ["lesson-ask"], action: "next" });
+    // Значка ИИ нет — шаг просто пропускается, следующие от него не зависят.
+    expect(stepOf("lesson-first", "ask").chain).toBeFalsy();
+    expect(stepOf("lesson-first", "options").waitMs).toBeGreaterThanOrEqual(60_000);
+    expect(stepOf("lesson-first", "check").chain).toBe(true);
+    expect(GUIDE_SCENES["lesson-icons"].steps.map((s) => s.targets)).toEqual([["lesson-tools"], ["lesson-ask"]]);
   });
   it("sceneSteps убирает шаги «только ЕНТ» для школьного трека", () => {
     const scene = { id: "nav" as const, steps: [{ id: "a", text: "guide.ok" as const, action: "next" as const }, { id: "b", text: "guide.ok" as const, action: "next" as const, ent: true }] };
@@ -159,43 +243,79 @@ describe("сцены", () => {
 });
 
 describe("stepText", () => {
-  const welcome = GUIDE_SCENES.welcome.steps;
+  const hi = stepOf("intro", "hi");
+  const card = stepOf("intro", "card");
+  const start = stepOf("intro", "start");
   it("приветствие с именем и без", () => {
-    expect(stepText(welcome[0], { name: "Аня" })).toBe("guide.welcome.hi");
-    expect(stepText(welcome[0], { name: "  " })).toBe("guide.welcome.hi0");
+    expect(stepText(hi, { name: "Аня" })).toBe("guide.welcome.hi");
+    expect(stepText(hi, { name: "  " })).toBe("guide.welcome.hi0");
     expect(dict["guide.welcome.hi"].ru).toContain("{name}");
   });
   it("школьный трек: про урок — без «по порядку» и без названия кнопки", () => {
-    expect(stepText(welcome[1], { school: true })).toBe("guide.welcome.continue.school");
-    expect(stepText(welcome[3], { school: true })).toBe("guide.welcome.start.school");
-    expect(stepText(welcome[3], { school: true, fallback: true })).toBe("guide.welcome.noLesson");
+    expect(stepText(card, { school: true })).toBe("guide.welcome.continue.school");
+    expect(stepText(start, { school: true })).toBe("guide.welcome.start.school");
+    expect(stepText(start, { school: true, again: true })).toBe("guide.welcome.start.school");
+    expect(stepText(start, { school: true, fallback: true })).toBe("guide.welcome.noLesson");
   });
   it("нет урока — запасная реплика", () => {
-    expect(stepText(welcome[3], { fallback: true })).toBe("guide.welcome.noLesson");
-    expect(stepText(welcome[3], {})).toBe("guide.welcome.start");
+    expect(stepText(start, { fallback: true })).toBe("guide.welcome.noLesson");
+    expect(stepText(start, {})).toBe("guide.welcome.start");
+  });
+  it("урок уже был (на кнопке «Продолжить») — реплика без названия кнопки", () => {
+    expect(stepText(start, { again: true })).toBe("guide.next.go");
+    expect(stepText(stepOf("learn-next", "go"), {})).toBe("guide.next.go");
+    expect(stepText(stepOf("nav", "go"), { again: true })).toBe("guide.next.go");
+    expect(dict["guide.next.go"].ru).not.toMatch(/«/);
+    expect(dict["guide.welcome.start"].ru).toContain("«Начать»");
   });
   it("школьный трек — без пробного ЕНТ", () => {
-    const bar = GUIDE_SCENES.nav.steps[1];
+    const bar = stepOf("intro", "bar");
     expect(stepText(bar, { school: false })).toBe("guide.nav.bar");
     expect(stepText(bar, { school: true })).toBe("guide.nav.bar.school");
     expect(dict["guide.nav.bar.school"].ru).not.toContain("ЕНТ");
     expect(dict["guide.nav.bar.school"].kk).not.toContain("ҰБТ");
+    const tools = stepOf("lesson-first", "tools");
+    expect(stepText(tools, {})).toBe("guide.lesson.tools");
+    expect(stepText(tools, { school: true })).toBe("guide.lesson.tools.school");
+    expect(dict["guide.lesson.tools"].ru).toContain("как на ЕНТ");
+    expect(dict["guide.lesson.tools"].kk).toContain("ҰБТ");
+    expect(dict["guide.lesson.tools.school"].ru).not.toContain("ЕНТ");
+    expect(dict["guide.lesson.tools.school"].kk).not.toContain("ҰБТ");
+  });
+  it("значок ИИ: число видно — фраза про бесплатные; нет — без неё", () => {
+    const ask = stepOf("lesson-first", "ask");
+    expect(stepText(ask, {})).toBe("guide.lesson.ask");
+    expect(stepText(ask, { aiCount: true })).toBe("guide.lesson.ask");
+    expect(stepText(ask, { aiCount: false })).toBe("guide.lesson.askNoCount");
+    expect(dict["guide.lesson.ask"].ru).toContain("бесплатных");
+    expect(dict["guide.lesson.askNoCount"].ru).not.toContain("бесплатных");
+    expect(dict["guide.lesson.askNoCount"].kk).not.toContain("тегін");
+    expect(stepText(stepOf("lesson-icons", "ask"), { aiCount: false })).toBe("guide.lesson.askNoCount");
   });
   it("одно сердечко — «сердечко», два — «сердечка»", () => {
-    const hearts = GUIDE_SCENES["lesson-first"].steps[0];
+    const hearts = stepOf("lesson-first", "hearts");
     expect(stepText(hearts, { n: 1 })).toBe("guide.lesson.hearts");
     expect(stepText(hearts, { n: 2 })).toBe("guide.lesson.heartsMany");
     expect(stepText(hearts, {})).toBe("guide.lesson.hearts");
   });
   it("«Безлимит» и пробный: сердечки не списывались — своя реплика, без «списал»", () => {
-    const hearts = GUIDE_SCENES["lesson-first"].steps[0];
+    const hearts = stepOf("lesson-first", "hearts");
     expect(stepText(hearts, { n: 1, free: true })).toBe("guide.lesson.heartsFree");
     expect(stepText(hearts, { n: 2, free: true })).toBe("guide.lesson.heartsFree");
     expect(dict["guide.lesson.heartsFree"].ru).not.toContain("списал");
     expect(dict["guide.lesson.heartsFree"].ru).toContain("Безлимит");
     expect(dict["guide.lesson.heartsFree"].kk).toContain("Шексіз");
-    // Остальные шаги на безлимит не реагируют.
-    expect(stepText(GUIDE_SCENES.welcome.steps[2], { free: true })).toBe("guide.welcome.hearts");
+    // Шапка знакомства — свой вариант; остальные шаги на безлимит не реагируют.
+    expect(stepText(stepOf("intro", "header"), {})).toBe("guide.intro.header");
+    expect(stepText(stepOf("intro", "header"), { free: true })).toBe("guide.intro.headerFree");
+    expect(dict["guide.intro.headerFree"].ru).toContain("Безлимит");
+    expect(stepText(card, { free: true })).toBe("guide.welcome.continue");
+  });
+  it("реплики без глаголов с родом и без эмодзи", () => {
+    for (const key of ["guide.intro.header", "guide.intro.headerFree", "guide.next.go", "guide.lesson.tools", "guide.lesson.tools.school", "guide.lesson.ask", "guide.lesson.askNoCount"] as const) {
+      expect(dict[key].ru).not.toMatch(/(сделал|прошёл|прошла|застрял|смог|смогла)/i);
+      expect(dict[key].ru + dict[key].kk).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
   });
 });
 
@@ -430,10 +550,10 @@ describe("aimFinger: палец не ложится на Бита и пузыр�
 describe("сцены после ревью: цели и порядок", () => {
   const targetsOf = (scene: keyof typeof GUIDE_SCENES) => GUIDE_SCENES[scene].steps.map((s) => s.targets ?? []);
   it("реплики про следующий урок подсвечивают всю карточку; кнопку «Начать» — только шаг «нажми»", () => {
-    const welcome = GUIDE_SCENES.welcome.steps;
-    expect(welcome.find((s) => s.id === "continue")?.targets).toEqual(["next-lesson"]);
-    expect(welcome.find((s) => s.id === "start")).toMatchObject({ targets: ["continue"], action: "tap" });
-    expect(GUIDE_SCENES.nav.steps[0].targets).toEqual(["next-lesson"]);
+    const intro = GUIDE_SCENES.intro.steps;
+    expect(intro.find((s) => s.id === "card")?.targets).toEqual(["next-lesson"]);
+    expect(intro.find((s) => s.id === "start")).toMatchObject({ targets: ["continue"], action: "tap" });
+    expect(GUIDE_SCENES["learn-next"].steps[0]).toMatchObject({ targets: ["continue"], action: "tap" });
   });
   it("магазин — в порядке страницы: украшения (заголовок с переключателем), потом сердечки (заголовок и первый товар)", () => {
     expect(targetsOf("page-shop")).toEqual([["shop-cosmetics"], ["shop-hearts", "shop-hearts-first"]]);

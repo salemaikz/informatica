@@ -69,9 +69,9 @@ function useIsDesktop(): boolean {
 
 /**
  * Кнопка открытия панели. «icon» — квадрат 40×40 для шапок, «fab» — круглая плавающая кнопка для страниц.
- * Когда инструменты выключены (level === "off"), ничего не рисует.
+ * Когда инструменты выключены (level === "off"), ничего не рисует. `tour` — метка проводника (`data-tour`).
  */
-export function ToolboxButton({ className, variant = "icon" }: { className?: string; variant?: "icon" | "fab" }) {
+export function ToolboxButton({ className, variant = "icon", tour }: { className?: string; variant?: "icon" | "fab"; tour?: string }) {
   const { t } = useT();
   const level = useToolbox((s) => s.level);
   const open = useToolbox((s) => s.open);
@@ -88,6 +88,7 @@ export function ToolboxButton({ className, variant = "icon" }: { className?: str
       aria-haspopup="dialog"
       aria-expanded={open}
       title={t("tools.open")}
+      data-tour={tour}
       className={cn(
         "flex items-center justify-center transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary",
         variant === "fab"

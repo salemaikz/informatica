@@ -821,7 +821,7 @@ export function LessonPlayer({
               <AiFreeDot kind="ask" />
             </button>
           )}
-          <ToolboxButton variant="icon" />
+          <ToolboxButton variant="icon" tour="lesson-tools" />
         </div>
         {(via === "check" || xpFactor < 1) && (
           <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 px-4 pb-2">

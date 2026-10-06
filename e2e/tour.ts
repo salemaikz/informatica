@@ -5,7 +5,22 @@ import { expect, type Page } from "@playwright/test";
 
 /** Все сцены проводника отмечены показанными (поле `tips` стора, lib/tips.ts). */
 export const ALL_TIPS = Object.fromEntries(
-  ["welcome", "lesson-first", "after-first", "nav", "page-practice", "page-tutor", "page-materials", "page-progress", "page-school", "page-shop", "page-profile"].map(
+  [
+    "intro",
+    "welcome",
+    "lesson-first",
+    "lesson-icons",
+    "after-first",
+    "learn-next",
+    "nav",
+    "page-practice",
+    "page-tutor",
+    "page-materials",
+    "page-progress",
+    "page-school",
+    "page-shop",
+    "page-profile",
+  ].map(
     (id) => [id, 1],
   ),
 );

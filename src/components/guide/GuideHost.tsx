@@ -12,8 +12,10 @@ import {
   aimFinger,
   bubbleTextW,
   bubbleWidths,
+  completedLessonsCount,
   guideScroll,
   keepDash,
+  alsoDue,
   padRect,
   placeBit,
   placeFromDock,
@@ -36,6 +38,7 @@ import { entVisible } from "@/lib/school";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { usePlanTier } from "@/components/economy/useEconomy";
+import { useAiFreeDotShown } from "@/components/economy/AiCost";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { BitPopup } from "./BitPopup";
 import { GuideDim, GuideFinger } from "./GuidePointer";
@@ -185,6 +188,9 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
   const sound = useApp((s) => s.profile.sound);
   // «Безлимит» (и пробный): сердечки за вход не списываются — реплика про сердечки другая.
   const freeHearts = !Number.isFinite(PLAN_FEATURES[usePlanTier()].maxHearts);
+  // Урок уже был: на кнопке урока «Продолжить», а не «Начать». На значке ИИ нет числа — реплика без фразы про число.
+  const again = useApp((s) => completedLessonsCount(s.lessons) > 0);
+  const aiCount = useAiFreeDotShown("ask");
   const reduce = useReduceMotion();
   const isPresent = !leaving;
   const steps = useMemo(() => sceneSteps(scene, ent), [scene, ent]);
@@ -204,7 +210,7 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
   // Реплика шага (и вариант «нашлись не все метки»): по её длине оценивается высота пузыря ещё при замере.
   const sayFor = (partial: boolean): string | null => {
     if (!step) return null;
-    const key = stepText(step, { name, school: !ent, n: cost, free: freeHearts, fallback: at.fallback, partial });
+    const key = stepText(step, { name, school: !ent, n: cost, free: freeHearts, fallback: at.fallback, partial, again, aiCount });
     return t(key, { name: name.trim(), n: formatHearts(cost ?? 1) });
   };
   const sayFull = sayFor(false);
@@ -221,10 +227,12 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
       if (cursor.current !== from) return;
       cursor.current = from + 1;
       skipped.current[from] = skip;
-      if (from + 1 >= steps.length) useApp.getState().noteTip(scene.id);
+      const { noteTip } = useApp.getState();
+      if (alsoDue(scene, steps, from)) for (const other of scene.also ?? []) noteTip(other);
+      if (from + 1 >= steps.length) noteTip(scene.id);
       else setAt({ idx: from + 1, fallback: false });
     },
-    [steps.length, scene.id],
+    [steps, scene],
   );
 
   // Замер цели: ждём её появления (`waitMs`), прокручиваем один раз так, чтобы под ней поместились Бит с пузырём,
@@ -538,6 +546,7 @@ export function GuideHost() {
   useEffect(() => {
     if (!playing) return;
     // Вкладку закрыли или перезагрузили посреди сцены — тоже «ушёл со страницы» (стор пишет в localStorage сразу).
+    // Отмечаем только саму сцену: `also` SceneRunner отмечает сам, когда показ дошёл до нужного шага.
     const onHide = () => useApp.getState().noteTip(playing);
     window.addEventListener("pagehide", onHide);
     return () => {

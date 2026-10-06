@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "@/lib/cn";
 import { dockVisible, nextHopDelayMs, pickDockChat, releaseVelocity, SCROLL_BACK_MS, scrollAwayStep, swipeHidesDock, swipeRevealsDock, type Sample } from "@/lib/dock";
-import { tourBlocking } from "@/lib/guide";
+import { dockExplained } from "@/lib/guide";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -156,7 +156,7 @@ function useScrollAway(): boolean {
 // ---------- кнопка ----------
 
 /**
- * Круглая кнопка Бита. Пока проводник не показал обзор панели (`tourBlocking`), справа стрелка «›» («смахни вправо»);
+ * Круглая кнопка Бита. Пока проводник её не объяснил (`dockExplained`: знакомство или обзор), справа стрелка «›» («смахни вправо»);
  * потом стрелки нет — реплика проводника уже объяснила жест, а постоянная стрелка читалась как «перейти дальше».
  * Метка проводника `bit-dock` — на обёртке: рамка шага «А это я!» охватывает кнопку вместе со значком и стрелкой.
  * Сама кнопка — `[data-dock-button]`.
@@ -177,7 +177,7 @@ function DockButton({
   const x = useMotionValue(0);
   const swipe = useSwipeX(x, 1, swipeHidesDock, () => onHide(false));
   const away = useScrollAway();
-  const nudge = useApp((s) => tourBlocking(s.tips));
+  const nudge = useApp((s) => !dockExplained(s.tips));
 
   // Раз в ~40 с Бит слегка подпрыгивает (настроение «радость» у маскота — его собственный прыжок). «Меньше анимаций» — без этого.
   const [hop, setHop] = useState(false);
