@@ -688,18 +688,24 @@ describe("стор: ИИ за чипы", () => {
     expect(chips()).toBe(2);
   });
 
-  it("цена зависит от вида: фото — 10, чат — 7, разбор пробника — 15", () => {
+  it("цена зависит от вида: фото — 10, чат — 7", () => {
     for (let i = 0; i < 3; i++) st().spendAi("hint");
     expect(st().spendAi("photo")).toMatchObject({ pay: "chips", cost: 10 });
     expect(chips()).toBe(START - 10);
-    expect(st().spendAi("review")).toMatchObject({ ok: false, reason: "chips", cost: 15 }); // осталось 10
+    expect(st().spendAi("chat")).toMatchObject({ ok: true, pay: "chips", cost: 7 });
+    expect(chips()).toBe(START - 17);
   });
 
-  it("голосовой вопрос: расшифровка — 2 чипа, запись в истории с note voice", () => {
+  it("голосовой вопрос (#118): расшифровка чипов и бесплатных не тратит, платится ответ как сообщение в чате", () => {
+    const before = st().aiUsage.freeTotal ?? 0;
+    expect(st().spendAi("voice")).toMatchObject({ ok: true, pay: "free", cost: 0 });
+    expect(st().aiUsage.freeTotal ?? 0).toBe(before);
     for (let i = 0; i < 3; i++) st().spendAi("hint");
-    expect(st().spendAi("voice")).toMatchObject({ ok: true, pay: "chips", cost: 2 });
-    expect(chips()).toBe(START - 2);
-    expect(st().ledger[0]).toMatchObject({ reason: "ai", note: "voice", amount: -2 });
+    const ledgerLen = st().ledger.length;
+    expect(st().spendAi("voice")).toMatchObject({ ok: true, cost: 0 });
+    expect(chips()).toBe(START);
+    expect(st().ledger.length).toBe(ledgerLen);
+    expect(st().spendAi("chat")).toMatchObject({ ok: true, pay: "chips", cost: 7 });
   });
 
   it("refundAi возвращает чипы и счётчик", () => {
@@ -787,7 +793,7 @@ describe("стор: ИИ за чипы", () => {
   it("безлимит: ИИ оплачен тарифом, чипы не списываются", () => {
     st().startTrial();
     for (let i = 0; i < 10; i++) expect(st().spendAi("photo")).toMatchObject({ ok: true, pay: "plan", cost: 0 });
-    expect(st().spendAi("voice")).toMatchObject({ ok: true, pay: "plan", cost: 0 });
+    expect(st().spendAi("voice")).toMatchObject({ ok: true, cost: 0 });
     expect(chips()).toBe(START);
   });
 });

@@ -54,6 +54,7 @@ import {
   planDaysLeft,
   pushLedger,
   quoteAi,
+  quoteVoiceQuestion,
   refillHearts,
   refundAiUsage,
   sanitizeAiUsage,
@@ -746,18 +747,36 @@ describe("ИИ: quoteAi", () => {
     expect(quoteAi("chat", "free", usage(3), 100, TODAY).cost).toBe(7);
   });
 
-  it("цены обращений: подсказка 3, разбор 5, вопрос 5, чат 7, фото 10, разбор пробника 15, голос 2, отзыв 0", () => {
-    expect(AI_COST).toEqual({ hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, review: 15, voice: 2, feedback: 0 });
+  it("цены обращений: подсказка 3, разбор 5, вопрос 5, чат 7, фото 10, голос 0 (платится ответ), отзыв 0; «Разбора пробника» нет", () => {
+    expect(AI_COST).toEqual({ hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, voice: 0, feedback: 0 });
   });
 
-  it("голосовой вопрос: расшифровка стоит 2 чипа сверх бесплатного, бесплатна в пределах лимита и при безлимите", () => {
-    expect(quoteAi("voice", "free", usage(3), 100, TODAY)).toEqual({ ok: true, kind: "voice", day: TODAY, pay: "chips", cost: 2 });
-    expect(quoteAi("voice", "free", usage(3), 2, TODAY).ok).toBe(true);
-    expect(quoteAi("voice", "free", usage(3), 1, TODAY)).toEqual({ ok: false, kind: "voice", day: TODAY, cost: 2, reason: "chips" });
+  it("голосовой вопрос (#118): расшифровка не тратит ни бесплатные, ни чипы — только дневной потолок (4)", () => {
+    for (const tier of ["free", "lite", "unlimited"] as const) {
+      expect(quoteAi("voice", tier, usage(3), 0, TODAY), tier).toEqual({ ok: true, kind: "voice", day: TODAY, pay: "free", cost: 0 });
+    }
     expect(quoteAi("voice", "free", usage(0), 0, TODAY)).toMatchObject({ ok: true, pay: "free", cost: 0 });
-    expect(quoteAi("voice", "unlimited", usage(500, 10), 0, TODAY)).toMatchObject({ ok: true, pay: "plan", cost: 0 });
-    // голос съедает бесплатный лимит как одно обращение, а в дневной потолок идёт за 4 (AI_UNITS)
-    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 4, free: 1, freeTotal: 1 });
+    // бесплатный лимит не трогает, в потолок идёт за 4 (AI_UNITS)
+    expect(applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 4, free: 0, freeTotal: 0 });
+    expect(applyAiUsage(usage(0, 0, TODAY, 2), quoteAi("voice", "free", usage(0, 0, TODAY, 2), 0, TODAY))).toMatchObject({ count: 4, free: 0, freeTotal: 2 });
+    // одна голосовая реплика = расшифровка + ответ chat = одно бесплатное обращение
+    const afterVoice = applyAiUsage(undefined, quoteAi("voice", "free", undefined, 0, TODAY));
+    expect(applyAiUsage(afterVoice, quoteAi("chat", "free", afterVoice, 0, TODAY))).toEqual({ day: TODAY, count: 5, free: 1, freeTotal: 1 });
+    // возврат расшифровки бесплатных не добавляет
+    expect(refundAiUsage({ day: TODAY, count: 4, free: 1, freeTotal: 1 }, quoteAi("voice", "free", undefined, 0, TODAY))).toEqual({ day: TODAY, count: 0, free: 1, freeTotal: 1 });
+  });
+
+  it("голосовой вопрос до записи: потолок — расшифровка + ответ (4 + 1), цена — как у сообщения в чате", () => {
+    for (const tier of ["free", "lite", "unlimited"] as const) {
+      // 60 + 5 = 65 — можно; 61 + 5 = 66 — нельзя, хотя одна расшифровка (61 + 4) ещё прошла бы
+      expect(quoteVoiceQuestion(tier, usage(0, 60), 999, TODAY).ok, tier).toBe(true);
+      expect(quoteVoiceQuestion(tier, usage(0, 61), 999, TODAY), tier).toEqual({ ok: false, kind: "chat", day: TODAY, cost: 0, reason: "cap" });
+      expect(quoteAi("voice", tier, usage(0, 61), 999, TODAY).ok, tier).toBe(true);
+    }
+    // квитанция — ответа (chat): бесплатное по тарифу, потом чипы; нет чипов — chips
+    expect(quoteVoiceQuestion("free", usage(0), 0, TODAY)).toEqual(quoteAi("chat", "free", usage(0), 0, TODAY));
+    expect(quoteVoiceQuestion("free", usage(3), 100, TODAY)).toMatchObject({ ok: true, kind: "chat", pay: "chips", cost: AI_COST.chat });
+    expect(quoteVoiceQuestion("free", usage(3), 6, TODAY)).toMatchObject({ ok: false, kind: "chat", reason: "chips" });
   });
 
   it("не хватает чипов — причина chips и цена", () => {
@@ -780,8 +799,8 @@ describe("ИИ: quoteAi", () => {
     expect(AI_COST.feedback).toBe(0);
   });
 
-  it("вес обращений в потолке дня: чат, подсказка, разбор, вопрос — 1; фото и разбор пробника — 2; голос — 4; отзыв — 0", () => {
-    expect(AI_UNITS).toEqual({ hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 });
+  it("вес обращений в потолке дня: чат, подсказка, разбор, вопрос — 1; фото — 2; голос — 4; отзыв — 0", () => {
+    expect(AI_UNITS).toEqual({ hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, voice: 4, feedback: 0 });
   });
 
   it("потолок дня (решение #48, правка v0.9.1): 65 обращений для всех трёх тарифов", () => {
@@ -868,7 +887,7 @@ describe("ИИ: applyAiUsage / refundAiUsage", () => {
   it("вес обращения в count: фото +2, голос +4, подсказка +1; бесплатные — штуками", () => {
     expect(applyAiUsage(undefined, rc({ kind: "photo" }))).toEqual({ day: TODAY, count: 2, free: 1, freeTotal: 1 });
     expect(applyAiUsage(undefined, rc({ kind: "voice", pay: "chips", cost: 2 }))).toEqual({ day: TODAY, count: 4, free: 0, freeTotal: 0 });
-    expect(applyAiUsage({ day: TODAY, count: 5, free: 3, freeTotal: 3 }, rc({ kind: "review", pay: "plan" }))).toEqual({ day: TODAY, count: 7, free: 3, freeTotal: 3 });
+    expect(applyAiUsage({ day: TODAY, count: 5, free: 3, freeTotal: 3 }, rc({ kind: "photo", pay: "plan" }))).toEqual({ day: TODAY, count: 7, free: 3, freeTotal: 3 });
   });
 
   it("возврат вычитает тот же вес, не уходя ниже нуля", () => {

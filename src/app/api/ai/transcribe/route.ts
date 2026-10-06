@@ -5,7 +5,7 @@ import { AI_UNITS } from "@/lib/economy";
 import { guardAi, withGuardHeaders } from "@/server/ai-guard";
 import { lang as parseLang } from "@/server/context";
 
-// Расшифровка голосового вопроса для ИИ-чата: multipart (audio, lang) → { text }. Оплата на клиенте — spendAi("voice").
+// Расшифровка голосового вопроса для ИИ-чата: multipart (audio, lang) → { text }. Учёт на клиенте — spendAi("voice"): только дневной потолок, бесплатные и чипы не тратит (#118, платится ответ chat).
 // Страж лимитов (server/ai-guard.ts): голос весит AI_UNITS.voice = 4 обращения. Возврат — только если модель точно не
 // получила запрос: ошибка до вызова или HTTP-ошибка OpenAI; обрыв клиентом, таймаут и сеть — не возвращают.
 

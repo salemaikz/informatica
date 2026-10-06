@@ -227,15 +227,14 @@ export function EarnList() {
   );
 }
 
-/** desc — строка «что это» под названием (этап 16В, пункт H: чем подсказка отличается от сообщения в чате). У голоса — прежняя про расшифровку. */
+/** desc — строка «что это» под названием (этап 16В, пункт H: чем подсказка отличается от сообщения в чате). Голос — как сообщение в чате (#118). */
 const AI_ROWS: { kind: AiKind; icon: LucideIcon; key: DictKey; desc: DictKey }[] = [
   { kind: "hint", icon: Lightbulb, key: "shop.ai.hint", desc: "econ16c.ai.hint.desc" },
   { kind: "explain", icon: Wand2, key: "shop.ai.explain", desc: "econ16c.ai.explain.desc" },
   { kind: "ask", icon: Bot, key: "shop.ai.ask", desc: "econ16c.ai.ask.desc" },
   { kind: "chat", icon: MessageCircle, key: "shop.ai.chat", desc: "econ16c.ai.chat.desc" },
-  { kind: "voice", icon: Mic, key: "shop.ai.voice", desc: "shop.ai.voice.sub" },
+  { kind: "voice", icon: Mic, key: "shop.ai.voice", desc: "ai16d.shop.voice.sub" },
   { kind: "photo", icon: Camera, key: "shop.ai.photo", desc: "econ16c.ai.photo.desc" },
-  { kind: "review", icon: GraduationCap, key: "shop.ai.review", desc: "econ16c.ai.review.desc" },
   { kind: "feedback", icon: Sparkles, key: "shop.ai.feedback", desc: "econ16c.ai.feedback.desc" },
 ];
 
@@ -266,17 +265,19 @@ export function AiPricing() {
                 <r.icon size={18} className="shrink-0 text-ai" />
                 <span className="min-w-0 flex-1 text-[15px] font-bold">
                   {t(r.key)}
-                  <span className="block text-sm font-semibold text-muted">{t(r.desc, { n: AI_COST.voice })}</span>
+                  <span className="block text-sm font-semibold text-muted">{t(r.desc)}</span>
                 </span>
-                {AI_COST[r.kind] > 0 ? (
-                  <ChipPrice n={AI_COST[r.kind]} plus={r.kind === "voice"} className="font-extrabold text-warning-strong" />
+                {r.kind === "voice" ? (
+                  <span className="shrink-0 text-sm font-extrabold text-muted">{t("ai16d.shop.voice.price")}</span>
+                ) : AI_COST[r.kind] > 0 ? (
+                  <ChipPrice n={AI_COST[r.kind]} className="font-extrabold text-warning-strong" />
                 ) : (
                   <span className="text-sm font-extrabold text-success-strong">{t("shop.ai.free")}</span>
                 )}
               </li>
             ))}
           </ul>
-          <p className="px-3.5 pb-3 text-sm font-semibold text-muted">{t("shop.ai.voiceNote")}</p>
+          <p className="px-3.5 pb-3 text-sm font-semibold text-muted">{t("ai16d.shop.note")}</p>
         </>
       )}
     </Card>

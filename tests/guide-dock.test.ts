@@ -299,8 +299,8 @@ describe("useTutor: ушли с экрана посреди ответа", () =>
     expect(used()).toBeGreaterThan(0);
   });
 
-  it("«Стоп» ученика (экран на месте) — как раньше: null, обращение не возвращается", async () => {
-    h.stream = hanging("");
+  it("«Стоп» ученика после первого текста (экран на месте): null, обращение не возвращается — ответ показан", async () => {
+    h.stream = hanging("Бит — это");
     let stop!: () => void;
     function StopProbe() {
       const t = useTutor();
@@ -316,5 +316,25 @@ describe("useTutor: ушли с экрана посреди ответа", () =>
     await act(async () => stop());
     expect(await result).toBeNull();
     expect(used()).toBeGreaterThan(0);
+  });
+
+  it("«Стоп» до первого текста — ответа не было (#118): обращение возвращается", async () => {
+    h.stream = hanging("");
+    let stop!: () => void;
+    function StopProbe() {
+      const t = useTutor();
+      ask = t.ask;
+      stop = t.stop;
+      return null;
+    }
+    await render(createElement(StopProbe));
+    let result!: Promise<string | null>;
+    await act(async () => {
+      result = ask({ mode: "chat", messages: [{ role: "user", content: "Что такое бит?" }] }, () => {});
+    });
+    expect(used()).toBeGreaterThan(0);
+    await act(async () => stop());
+    expect(await result).toBeNull();
+    expect(used()).toBe(0);
   });
 });

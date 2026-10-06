@@ -34,6 +34,7 @@ import {
 import { CARD_PARAM, paramValue } from "@/lib/theory-href";
 import { useApp } from "@/lib/store";
 import { AiPanel } from "@/components/ai/AiPanel";
+import { clearThreads, threadKey } from "@/components/ai/ai-threads";
 import { useOpenLessonChat } from "@/components/chat/useLessonChat";
 import { Segmented } from "@/components/goals/controls";
 import { Button } from "@/components/ui/Button";
@@ -110,6 +111,9 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
   );
   const [dir, setDir] = useState<1 | -1>(1);
   const [askId, setAskId] = useState<string | null>(null);
+  // Нити «Спроси Бита» по карточкам (#119): живут, пока открыта тема; новый заход в тему — с чистого листа.
+  const aiScope = `theory:${lesson.id}`;
+  useEffect(() => clearThreads(aiScope), [aiScope]);
   const areaRef = useRef<HTMLDivElement>(null);
   const conspectRef = useRef<HTMLDivElement>(null);
 
@@ -305,7 +309,16 @@ export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson
       />
 
       {askId && askTask && (
-        <AiPanel key={askId} open onClose={() => setAskId(null)} mode="ask" task={askTask} noteKey={lesson.id} suggestions={SUGGESTIONS} />
+        <AiPanel
+          key={askId}
+          open
+          onClose={() => setAskId(null)}
+          mode="ask"
+          task={askTask}
+          noteKey={lesson.id}
+          suggestions={SUGGESTIONS}
+          thread={threadKey(aiScope, askId, "ask")}
+        />
       )}
     </div>
   );

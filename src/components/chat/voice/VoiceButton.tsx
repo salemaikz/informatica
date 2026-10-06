@@ -6,7 +6,8 @@ import type { DictKey } from "@/i18n/dict";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
-import { AI_COST, type AiReceipt } from "@/lib/economy";
+import { quoteVoiceQuestion, type AiReceipt } from "@/lib/economy";
+import { todayKey } from "@/lib/text";
 import {
   formatTimer,
   isIosUserAgent,
@@ -39,11 +40,17 @@ function micErrorKey(e: unknown): DictKey {
 
 /**
  * Голосовой вопрос: нажать — запись (до 60 с), нажать ещё раз — стоп и расшифровка.
- * Расшифровка платная (spendAi("voice")): неудача — возврат по квитанции.
+ * Одна реплика — одно обращение (#118): платится ответ (chat), расшифровка бесплатных и чипов не тратит —
+ * spendAi("voice") считает только дневной потолок. Поэтому перед записью проверяем, что ответ можно оплатить и что
+ * потолка хватит на расшифровку и ответ вместе (quoteVoiceQuestion): нет чипов — та же ошибка, что у сообщения в чате.
+ * Неудача расшифровки — возврат по квитанции.
  */
 export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
   const { t, lang } = useT();
-  const { quote } = useAiQuote("voice");
+  // Ответ на голосовой вопрос — обычное сообщение чата; расшифровка — только потолок дня.
+  const { tier, chips } = useAiQuote("chat");
+  const usage = useApp((s) => s.aiUsage);
+  const quote = quoteVoiceQuestion(tier, usage, chips, todayKey());
   const [state, setState] = useState<State>("idle");
   const [seconds, setSeconds] = useState(0);
 
@@ -98,7 +105,7 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
     }
   }, []);
 
-  /** Запись остановлена: платим, расшифровываем, при неудаче возвращаем оплату. */
+  /** Запись остановлена: учитываем в потолке дня, расшифровываем, при неудаче возвращаем. */
   const finish = useCallback(
     async (blob: Blob, durationMs: number) => {
       if (blob.size < MIN_AUDIO_BYTES || durationMs < 600) return fail("voice.err.empty");
@@ -192,9 +199,8 @@ export function VoiceButton({ onText, onError, disabled }: VoiceButtonProps) {
 
   const recording = state === "recording";
   const busy = state === "transcribing" || state === "starting";
-  // Цена видна, пока обращение не бесплатно по тарифу: расшифровка +N к цене сообщения.
-  const paid = !quote.ok || quote.pay === "chips";
-  const label = recording ? t("voice.stop") : state === "transcribing" ? t("voice.transcribing") : paid ? t("voice.startPaid", { n: AI_COST.voice }) : t("voice.start");
+  // Своей цены у голоса нет: ответ стоит как сообщение в чате (цена — у кнопки отправки).
+  const label = recording ? t("voice.stop") : state === "transcribing" ? t("voice.transcribing") : t("voice.start");
 
   return (
     <div className="flex shrink-0 items-center gap-2">

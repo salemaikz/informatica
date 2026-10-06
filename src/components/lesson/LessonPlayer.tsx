@@ -39,6 +39,7 @@ import { AiCost, AiFreeDot, useAiQuotaText } from "@/components/economy/AiCost";
 import { HeartsBar } from "@/components/economy/HeartsBar";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { AiPanel } from "@/components/ai/AiPanel";
+import { clearThreads, threadKey } from "@/components/ai/ai-threads";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { Visual } from "@/components/visuals/Visuals";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -346,6 +347,15 @@ export function LessonPlayer({
   const step = item?.step;
   const question = step && isQuestion(step) ? step : null;
   const noteKey = lessonId ?? "general";
+  // Нити шторки ИИ (#119): переписка по шагу и режиму живёт, пока идёт урок или тренировка. Новое прохождение
+  // («Начать заново», новый заход) и итоги — с чистого листа; «Продолжить» сохранённое — нити остаются.
+  const aiScope = kind === "drill" ? `drill:${drillKey ?? mode ?? "any"}` : (lessonId ?? "lesson");
+  useEffect(() => {
+    if (!init) clearThreads(aiScope);
+  }, [aiScope, init]);
+  useEffect(() => {
+    if (session) clearThreads(aiScope);
+  }, [session, aiScope]);
 
   // «Нужна помощь?» (этап 16В, P8): Бит выглядывает у «Проверить», когда ученик долго думает или читает (порог — lib/help-timer.ts).
   // Не в тесте (мини-тест: до ответа ИИ-помощи нет, как на ЕНТ). Пробный ЕНТ, тесты по теме и разделу и игры плеер не используют.
@@ -1157,6 +1167,7 @@ export function LessonPlayer({
           noteKey={noteKey}
           suggestions={ai === "ask" ? askSuggestions : []}
           autoAsk={ai === "ask" ? (autoAsk ?? undefined) : undefined}
+          thread={threadKey(aiScope, item.key, ai)}
         />
       )}
     </div>

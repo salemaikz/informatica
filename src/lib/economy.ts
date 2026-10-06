@@ -533,18 +533,19 @@ export const BOOST_PACKS: BoostPack[] = [
 
 /**
  * Вид обращения к ИИ. feedback — отзыв после урока: всегда бесплатен (дешёвая модель, без запроса ученика);
- * voice — расшифровка голосового вопроса (сам ответ — отдельное обращение chat).
+ * voice — расшифровка голосового вопроса: бесплатные и чипы не тратит, только дневной потолок (#118: одна реплика —
+ * одно обращение, им становится сам ответ chat).
  */
-export type AiKind = "hint" | "explain" | "ask" | "chat" | "photo" | "review" | "voice" | "feedback";
+export type AiKind = "hint" | "explain" | "ask" | "chat" | "photo" | "voice" | "feedback";
 
-/** Цена сверх бесплатных обращений, чипов (решение #34). */
-export const AI_COST: Record<AiKind, number> = { hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, review: 15, voice: 2, feedback: 0 };
+/** Цена сверх бесплатных обращений, чипов (решение #34). Голос — 0: платится ответ на него, как сообщение в чате (#118). */
+export const AI_COST: Record<AiKind, number> = { hint: 3, explain: 5, ask: 5, chat: 7, photo: 10, voice: 0, feedback: 0 };
 
 /**
  * Вес вида обращения в «обращениях» дневного потолка (решение #48): фото — 2, голос — 4, отзыв после урока — 0
  * (у него свой потолок на сервере). Те же числа использует серверный страж (server/ai-guard.ts).
  */
-export const AI_UNITS: Record<AiKind, number> = { hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, review: 2, voice: 4, feedback: 0 };
+export const AI_UNITS: Record<AiKind, number> = { hint: 1, explain: 1, ask: 1, chat: 1, photo: 2, voice: 4, feedback: 0 };
 
 /**
  * Потолок в обращениях в день — защита от перерасхода; одинаковый для всех тарифов (решение #48, правка v0.9.1): «Бесплатный» и «Лайт»
@@ -575,7 +576,7 @@ export function aiFreeIsLifetime(tier: PlanTier): boolean {
 
 export type AiPay = "free" | "plan" | "chips";
 
-/** Квитанция обращения к ИИ: по ней же делается возврат, если запрос не удался или ответ из кэша. */
+/** Квитанция обращения к ИИ: по ней же делается возврат, если ответа не было (сбой, обрыв до текста) или он кризисный. */
 export interface AiReceipt {
   ok: boolean;
   kind: AiKind;
@@ -604,11 +605,16 @@ export function aiFreeLeft(tier: PlanTier, u: AiUsage | undefined, today: string
   return Math.max(0, f - used);
 }
 
+/** Вид, который не тратит бесплатные обращения и чипы (только дневной потолок): отзыв после урока и расшифровка голоса. */
+export function aiKindIsFree(kind: AiKind): boolean {
+  return kind === "feedback" || kind === "voice";
+}
+
 /** Как будет оплачено обращение (без изменения состояния). */
 export function quoteAi(kind: AiKind, tier: PlanTier, usage: AiUsage | undefined, chips: number, today: string): AiReceipt {
   const u = usageToday(usage, today);
   if (u.count + AI_UNITS[kind] > AI_DAILY_CAP[tier]) return { ok: false, kind, day: today, cost: 0, reason: "cap" };
-  if (kind === "feedback") return { ok: true, kind, day: today, pay: "free", cost: 0 };
+  if (aiKindIsFree(kind)) return { ok: true, kind, day: today, pay: "free", cost: 0 };
   if (tier === "unlimited") return { ok: true, kind, day: today, pay: "plan", cost: 0 };
   if (aiFreeLeft(tier, u, today) > 0) return { ok: true, kind, day: today, pay: "free", cost: 0 };
   const cost = AI_COST[kind];
@@ -616,11 +622,22 @@ export function quoteAi(kind: AiKind, tier: PlanTier, usage: AiUsage | undefined
   return { ok: false, kind, day: today, cost, reason: "chips" };
 }
 
+/**
+ * Цена голосового вопроса до записи (#118): платится ответ (как сообщение в чате), а дневной потолок проходят оба —
+ * расшифровка (AI_UNITS.voice) и ответ (AI_UNITS.chat). Иначе ученик запишет вопрос, а ответ упрётся в потолок.
+ * Квитанция — ответа (kind "chat"); ничего не списывает.
+ */
+export function quoteVoiceQuestion(tier: PlanTier, usage: AiUsage | undefined, chips: number, today: string): AiReceipt {
+  const u = usageToday(usage, today);
+  if (u.count + AI_UNITS.voice + AI_UNITS.chat > AI_DAILY_CAP[tier]) return { ok: false, kind: "chat", day: today, cost: 0, reason: "cap" };
+  return quoteAi("chat", tier, usage, chips, today);
+}
+
 /** Учёт обращения по квитанции. */
 export function applyAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
   const cur = usageToday(u, r.day);
   if (!r.ok) return cur;
-  const usesFree = r.pay === "free" && r.kind !== "feedback";
+  const usesFree = r.pay === "free" && !aiKindIsFree(r.kind);
   return { day: r.day, count: cur.count + AI_UNITS[r.kind], free: cur.free + (usesFree ? 1 : 0), freeTotal: (cur.freeTotal ?? 0) + (usesFree ? 1 : 0) };
 }
 
@@ -631,7 +648,7 @@ export function refundAiUsage(u: AiUsage | undefined, r: AiReceipt): AiUsage {
     : { day: r.day, count: 0, free: 0, freeTotal: 0 };
   // Неудачная квитанция ничего не списывала.
   if (!r.ok) return base;
-  const usesFree = r.pay === "free" && r.kind !== "feedback";
+  const usesFree = r.pay === "free" && !aiKindIsFree(r.kind);
   // Бесплатное «за всё время» возвращается и в другой день: ответ не получен — попытка не потрачена.
   const freeTotal = Math.max(0, (base.freeTotal ?? 0) - (usesFree ? 1 : 0));
   // Дневные счётчики за другой день не возвращаем.

@@ -35,17 +35,32 @@ async function ensureOk(res: Response) {
 }
 
 /**
+ * Служебные заголовки ответа наставника (приходят до текста): откуда ответ и что это за ответ.
+ * cache — X-AI-Cache (hit | miss | skip) или null; fallback — безопасный текст вместо ответа к нерешённому заданию
+ * (X-AI-Fallback, #100); crisis — кризисный ответ с телефонами доверия (X-AI-Crisis), модель не вызывалась.
+ */
+export interface TutorMeta {
+  cache: string | null;
+  fallback: boolean;
+  crisis: boolean;
+}
+
+/** Метка в конце обрезанного по длине ответа: ученик видит, что текст не закончен. */
+export const CUT_SUFFIX = " …";
+
+/**
  * Потоковый ответ наставника: onText получает накопленный текст без служебного маркера конца.
  * Целый ответ заканчивается маркером OK (lib/ai-stream.ts). Ответ без него (соединение закрыли раньше времени,
- * сервер упал, платформа оборвала по таймауту) или с маркером сбоя/обрезки по длине — AiError("stream_cut").
- * Обрыв сети посреди чтения — тоже stream_cut. Отмена (signal) пробрасывается как есть.
+ * сервер упал, платформа оборвала по таймауту) или с маркером сбоя — AiError("stream_cut"); обрыв сети посреди
+ * чтения — тоже stream_cut. Маркер CUT (модель упёрлась в длину) с непустым текстом — ответ получен: текст с меткой
+ * «…» возвращается как ответ (#118: такое обращение списывается). Отмена (signal) пробрасывается как есть.
  */
 export async function streamTutor(
   req: TutorRequest,
   onText: (full: string) => void,
   signal?: AbortSignal,
-  /** Вызывается сразу после заголовков: значение X-AI-Cache (hit | miss | skip) или null; «fallback» — безопасный текст вместо ответа (#100). */
-  onCache?: (status: string | null) => void,
+  /** Вызывается сразу после заголовков, до текста. */
+  onMeta?: (meta: TutorMeta) => void,
 ): Promise<string> {
   const res = await fetch("/api/ai/tutor", {
     method: "POST",
@@ -54,7 +69,11 @@ export async function streamTutor(
     signal,
   });
   await ensureOk(res);
-  onCache?.(res.headers.get("X-AI-Fallback") === "1" ? "fallback" : res.headers.get("X-AI-Cache"));
+  onMeta?.({
+    cache: res.headers.get("X-AI-Cache"),
+    fallback: res.headers.get("X-AI-Fallback") === "1",
+    crisis: !!res.headers.get("X-AI-Crisis"),
+  });
   if (!res.body) throw new AiError("no_body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -73,6 +92,12 @@ export async function streamTutor(
   }
   raw += decoder.decode();
   const { text, end } = splitStreamTail(raw);
+  // Обрезан по длине, но текст есть — это ответ (показан ученику), а не обрыв.
+  if (end === "cut" && text.trim()) {
+    const cut = text.trimEnd() + CUT_SUFFIX;
+    onText(cut);
+    return cut;
+  }
   // Только положительный маркер «OK» значит «дошло целиком»: «open» — поток закрылся без маркера.
   if (end !== "ok") throw new AiError("stream_cut");
   if (!text.trim()) throw new AiError("empty_answer");

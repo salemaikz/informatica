@@ -75,7 +75,7 @@ export function knownShopId(note: string | undefined): ShopItem["id"] | undefine
   return SHOP_ITEMS.find((i) => i.id === note)?.id;
 }
 
-const AI_KINDS = ["hint", "explain", "ask", "chat", "voice", "photo", "review", "feedback"] as const;
+const AI_KINDS = ["hint", "explain", "ask", "chat", "voice", "photo", "feedback"] as const;
 export function knownAiKind(note: string | undefined): (typeof AI_KINDS)[number] | undefined {
   return AI_KINDS.find((k) => k === note);
 }

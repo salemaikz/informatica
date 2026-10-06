@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
 import { isPublicPath, isRecipientPath } from "@/lib/public-paths";
 import { savePendingLink } from "@/lib/pending-link";
-import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
+import { HYDRATION_TIMEOUT_MS, hydrationFailed, hydrationPhase, STORAGE_KEY, subscribeStorage, type HydrationPhase } from "@/lib/safe-storage";
+import { watchPeerSaves } from "@/lib/storage-sync";
 import { Mascot } from "@/components/mascot/Mascot";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Toolbox } from "@/components/tools/Toolbox";
@@ -52,6 +53,30 @@ function useHydration(): { phase: HydrationPhase; retry: () => void } {
 }
 
 /**
+ * Синхронизация вкладок (#119): другая вкладка записала прогресс — перечитываем его, чтобы поздняя запись этой вкладки
+ * не затёрла свежие траты (обращения к ИИ, чипы, сердечки). Только после удачной гидратации.
+ */
+function usePeerSync(ready: boolean) {
+  useEffect(() => {
+    if (!ready) return;
+    let area: Storage | undefined;
+    try {
+      area = window.localStorage;
+    } catch {
+      area = undefined;
+    }
+    return watchPeerSaves(window, {
+      key: STORAGE_KEY,
+      version: useApp.persist.getOptions().version ?? 0,
+      area,
+      onPeerSave: () => {
+        if (!hydrationFailed()) void useApp.persist.rehydrate();
+      },
+    });
+  }, [ready]);
+}
+
+/**
  * Прогресс хранится в localStorage, поэтому интерфейс рисуем только после гидратации стора.
  * Не открылось — экран восстановления (повторить, начать заново), а не вечный маскот.
  * Здесь же: тема, язык документа и редирект на онбординг.
@@ -59,6 +84,7 @@ function useHydration(): { phase: HydrationPhase; retry: () => void } {
 export function Providers({ children }: { children: ReactNode }) {
   const { phase, retry } = useHydration();
   const hydrated = phase === "ready";
+  usePeerSync(hydrated);
   const onboarded = useApp((s) => s.onboarded);
   const theme = useApp((s) => s.profile.theme);
   const lang = useApp((s) => s.profile.lang);

@@ -84,6 +84,7 @@ import { theory16cDict } from "./parts/theory16c";
 import { help16cDict } from "./parts/help16c";
 import { shortfall16dDict } from "./parts/shortfall16d";
 import { hearts16dDict } from "./parts/hearts16d";
+import { ai16dDict } from "./parts/ai16d";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -596,6 +597,7 @@ export const dict = {
   ...shortfall16dDict,
   ...ui16dDict,
   ...hearts16dDict,
+  ...ai16dDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

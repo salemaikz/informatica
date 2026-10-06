@@ -161,3 +161,20 @@ export function chatHeader(
   if (subtitle.trim().toLowerCase() === title.trim().toLowerCase()) subtitle = "";
   return { title, subtitle };
 }
+
+/**
+ * Последнее сообщение — вопрос ученика без ответа (ответ не пришёл: ушли со страницы до первого текста, сбой, перезагрузка).
+ * Тогда под лентой — «Ответ не пришёл» и «Повторить». Пустая лента или последним — ответ Бита / итог задач — нет.
+ * Подходит и для ленты чата (ChatMsg), и для нити шторки ИИ (TutorTurn).
+ */
+export function unansweredTail(msgs: readonly { role: "user" | "assistant" }[]): boolean {
+  return msgs.length > 0 && msgs[msgs.length - 1].role === "user";
+}
+
+/**
+ * Вопрос без ответа был с фото, а самого фото у экрана уже нет (в ленте — только пометка hadImage; ушли со страницы,
+ * перезагрузка): «Повторить» отправил бы вопрос текстом и по цене чата — вместо этого просим прикрепить фото заново.
+ */
+export function orphanNeedsPhoto(msgs: readonly { role: "user" | "assistant"; hadImage?: boolean }[], imageKept: boolean): boolean {
+  return unansweredTail(msgs) && !!msgs[msgs.length - 1].hadImage && !imageKept;
+}
