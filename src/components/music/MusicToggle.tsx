@@ -1,6 +1,6 @@
 "use client";
 
-import { Music, Music2, VolumeX } from "lucide-react";
+import { Music, Music2 } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/cn";
@@ -33,14 +33,14 @@ export function MusicToggle({ variant = "icon", className }: { variant?: "icon" 
   if (!m.activity) return null;
   const on = m.enabled;
   const label = t(on ? "music.off" : "music.on");
-  const Icon = on ? (m.playing ? Music2 : Music) : VolumeX;
+  const Icon = on && m.playing ? Music2 : Music;
   if (variant === "icon") {
     return (
       <button
         type="button"
         onClick={m.toggle}
         aria-pressed={on}
-        aria-label={label}
+        aria-label={t("music.title")}
         title={label}
         data-testid="music-toggle"
         className={cn(

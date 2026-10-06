@@ -82,6 +82,11 @@ async function reconcile() {
       audio.volume = VOLUME;
     }
     const src = sourceFor(resolveTrack(pref.track, activity), audio);
+    if (audio.error) {
+      // после сетевого сбоя элемент «залипает» в ошибке — сбрасываем источник
+      audio.removeAttribute("src");
+      audio.load();
+    }
     if (audio.getAttribute("src") !== src) {
       audio.pause();
       audio.src = src;
@@ -104,6 +109,9 @@ function bind() {
     if (wanted() && !snapshot.playing) void reconcile();
   };
   window.addEventListener("pointerdown", retry, { passive: true });
+  window.addEventListener("pointerup", retry, { passive: true });
+  window.addEventListener("click", retry, { passive: true });
+  window.addEventListener("touchend", retry, { passive: true });
   window.addEventListener("keydown", retry);
 }
 

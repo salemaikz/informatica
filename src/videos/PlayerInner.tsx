@@ -216,7 +216,7 @@ export default function PlayerInner({ videoId, lang, title }: { videoId: string;
       const onButton = e.target instanceof HTMLElement && !!e.target.closest("button, a");
       if (e.key === "ArrowLeft") seekBy(-SEEK_STEP_SEC);
       else if (e.key === "ArrowRight") seekBy(SEEK_STEP_SEC);
-      else if (inside && ((e.key === " " && !onButton) || e.key.toLowerCase() === "k")) toggle();
+      else if (inside && ((e.key === " " && !onButton) || e.code === "KeyK")) toggle();
       else if (inside && e.key === "Home") seekTo(0);
       else if (inside && e.key === "End") seekTo(last);
       // по e.code — чтобы «<»/«>» работали и в русской раскладке
