@@ -4,7 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/graph";
 import {
+  BADGE_GAP,
   GRAPH_W,
+  NODE_TEXT,
+  PILL_GAP,
+  PILL_TEXT,
   borderPoint,
   boxesOverlap,
   countCrossings,
@@ -14,6 +18,7 @@ import {
   graphAria,
   graphDegrees,
   layoutGraph,
+  polyCrossings,
   treeChildren,
   type GraphInput,
   type GraphLayout,
@@ -621,4 +626,106 @@ describe("длинные подписи вершин", () => {
       expect(lay.width).toBe(GRAPH_W);
     });
   }
+});
+
+// ---------- Ревью v18: веса рёбер, цвета текста, значки степени ----------
+
+describe("graph: ревью v18", () => {
+  /** Расстояние от точки до ломаной. */
+  const distToPoly = (poly: [number, number][], x: number, y: number) => {
+    let best = Infinity;
+    for (let i = 0; i + 1 < poly.length; i++) {
+      const [ax, ay] = poly[i];
+      const [bx, by] = poly[i + 1];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const u = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+      best = Math.min(best, Math.hypot(ax + dx * u - x, ay + dy * u - y));
+    }
+    return best;
+  };
+  const gapBetween = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+    Math.max(Math.abs(a.x - b.x) - (a.w + b.w) / 2, Math.abs(a.y - b.y) - (a.h + b.h) / 2);
+
+  it("K4: веса диагоналей «4» и «10» разнесены: зазор между подписями ≥ PILL_GAP и не у пересечения диагоналей", () => {
+    for (const lang of ["ru", "kk"] as Lang[]) {
+      const lay = layoutGraph(toInput(SAMPLES[2], lang));
+      const pills = lay.edges.flatMap((e) => (e.pill ? [{ key: e.key, ...e.pill }] : []));
+      for (let i = 0; i < pills.length; i++)
+        for (let j = i + 1; j < pills.length; j++) expect(gapBetween(pills[i], pills[j]), `${pills[i].key} / ${pills[j].key}`).toBeGreaterThanOrEqual(PILL_GAP);
+      // пересечение диагоналей — центр квадрата; подписи диагоналей стоят от него не ближе 28 px (на своей половине ребра)
+      const cx = lay.nodes.reduce((a, n) => a + n.cx, 0) / lay.nodes.length;
+      const cy = lay.nodes.reduce((a, n) => a + n.cy, 0) / lay.nodes.length;
+      for (const key of ["A>C", "B>D"]) {
+        const p = lay.edges.find((e) => e.key === key)!.pill!;
+        expect(Math.hypot(p.x - cx, p.y - cy), `${lang} ${key}`).toBeGreaterThanOrEqual(28);
+      }
+    }
+  });
+
+  it("у каждого веса своё ребро — ближайшее: подпись стоит на своём ребре (или рядом с ним, с выноской)", () => {
+    for (const lang of ["ru", "kk"] as Lang[])
+      SAMPLES.forEach((s, i) => {
+        const lay = layoutGraph(toInput(s, lang));
+        for (const e of lay.edges) {
+          if (!e.pill || e.pill.anchor) continue;
+          const own = distToPoly(e.poly, e.pill.x, e.pill.y);
+          for (const o of lay.edges) {
+            if (o === e) continue;
+            // общий конец у двух рёбер — подпись у вершины допустима, поэтому сравниваем только с рёбрами без общего конца
+            if (o.from === e.from || o.from === e.to || o.to === e.from || o.to === e.to) continue;
+            expect(own, `${lang} образец ${i}: вес ${e.key} ближе к ${o.key}`).toBeLessThan(distToPoly(o.poly, e.pill.x, e.pill.y));
+          }
+        }
+      });
+  });
+
+  it("зазор между подписями весов во всех образцах не меньше PILL_GAP, если есть куда разойтись (образцы с весами влезают без наложений)", () => {
+    for (const s of SAMPLES) {
+      const lay = layoutGraph(toInput(s));
+      const pills = lay.edges.flatMap((e) => (e.pill ? [{ key: e.key, ...e.pill }] : []));
+      for (let i = 0; i < pills.length; i++) for (let j = i + 1; j < pills.length; j++) expect(gapBetween(pills[i], pills[j]), `${pills[i].key} / ${pills[j].key}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("polyCrossings: пересечение двух диагоналей — одна точка в центре; параллельные не пересекаются", () => {
+    const x = polyCrossings([{ x: 0, y: 0 }, { x: 10, y: 10 }], [{ x: 10, y: 0 }, { x: 0, y: 10 }]);
+    expect(x).toHaveLength(1);
+    expect(x[0].x).toBeCloseTo(5, 6);
+    expect(x[0].y).toBeCloseTo(5, 6);
+    expect(polyCrossings([{ x: 0, y: 0 }, { x: 10, y: 0 }], [{ x: 0, y: 5 }, { x: 10, y: 5 }])).toHaveLength(0);
+  });
+
+  it("текст на -soft-заливке — токены ink-*, а не *-strong (в тёмной теме -strong на -soft нечитаем)", () => {
+    for (const map of [NODE_TEXT, PILL_TEXT]) {
+      for (const [tone, cls] of Object.entries(map)) {
+        expect(cls, tone).not.toMatch(/-strong/);
+        if (tone !== "none" && tone !== "muted") expect(cls, tone).toMatch(/^fill-ink-/);
+      }
+    }
+    const html = renderToStaticMarkup(createElement(SceneView, { scene: SAMPLES[0] }));
+    expect(html).toContain("fill-ink-primary");
+    expect(html).not.toContain("fill-primary-strong");
+  });
+
+  it("значки степени снаружи вершины: зазор до обводки не меньше BADGE_GAP, ни одного перекрытия обводки", () => {
+    for (const idx of [2, 4]) {
+      const lay = layoutGraph(toInput(SAMPLES[idx]));
+      expect(lay.badges.length).toBeGreaterThan(0);
+      for (const b of lay.badges) {
+        const n = lay.nodes.find((v) => v.id === b.id)!;
+        expect(n.shape).toBe("circle");
+        const gap = Math.hypot(b.x - n.cx, b.y - n.cy) - n.r - b.r;
+        expect(gap, `образец ${idx}, вершина ${b.id}`).toBeGreaterThanOrEqual(BADGE_GAP - 0.05);
+      }
+    }
+  });
+
+  it("подпись «степень» под рисунком — только у графов со значками степени, на обоих языках", () => {
+    const withDeg = renderToStaticMarkup(createElement(SceneView, { scene: SAMPLES[2] }));
+    expect(withDeg).toContain(dict["scene.graph.degreesNote"].ru);
+    const without = renderToStaticMarkup(createElement(SceneView, { scene: SAMPLES[0] }));
+    expect(without).not.toContain(dict["scene.graph.degreesNote"].ru);
+    expect(dict["scene.graph.degreesNote"].kk).toMatch(/дәреже/);
+  });
 });

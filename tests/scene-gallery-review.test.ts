@@ -59,7 +59,8 @@ describe("диаграммы: порог", () => {
 
   it("подписи значений у столбцов — с обводкой цвета фона, чтобы пунктир порога их не перечёркивал", () => {
     const out = html(CHART[2]);
-    const vals = [...out.matchAll(/<text[^>]*class="tabular-nums"[^>]*style="transform:translateX[^>]*>[^<]*₸<\/text>/g)];
+    // значения — движущиеся подписи (transform в style) с tabular-nums; единица («₸») вынесена в название оси
+    const vals = [...out.matchAll(/<text[^>]*class="tabular-nums"[^>]*style="transform:translateX[^>]*>[^<]*<\/text>/g)];
     expect(vals.length).toBe(8);
     for (const v of vals) {
       expect(v[0]).toContain('paint-order="stroke"');

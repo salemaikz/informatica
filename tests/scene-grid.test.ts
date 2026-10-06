@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/grid";
-import { GRID_VB, cellLayers, cellSize, fitFont, gridAria, gridLayout, inRegion, markedCount, pathArrow } from "@/components/scenes/grid";
+import { GRID_VB, NUM_FONT_MIN, STEP_LANE, STEP_LEN_MAX, STEP_LEN_MIN, cellLayers, cellSize, fitFont, gridAria, gridLayout, inRegion, markedCount, pathArrow, type GridStep } from "@/components/scenes/grid";
 import { estimateTextWidth } from "@/components/scenes/text-width";
 import { dict } from "@/i18n/dict";
 import type { Scene } from "@/lib/types";
@@ -168,5 +168,141 @@ describe("grid: описание и рендер", () => {
       expect(html).toContain("<svg");
       expect(html).toContain("aria-label");
     }
+  });
+});
+
+// ---------- Ревью v18: путь не перечёркивает значения ----------
+
+describe("grid: ревью v18 — путь в просветах между значениями", () => {
+  const withSteps = SAMPLES.filter((s) => s.values && (s.path?.length ?? 0) >= 2);
+  const valueBox = (L: ReturnType<typeof gridLayout>, key: string) => {
+    const b = L.blocks.find((x) => x.key === key)!;
+    const hw = estimateTextWidth(b.value, b.fontSize) / 2;
+    return b.value === "" ? null : { x0: b.textX - hw, x1: b.textX + hw, y0: b.textY - b.fontSize * 0.36, y1: b.textY + b.fontSize * 0.36 };
+  };
+  /** Все точки шага: отрезок и наконечник. */
+  const stepPoints = (st: GridStep) => [st.from, st.to, ...st.head];
+  const hitsBox = (pts: { x: number; y: number }[], r: { x0: number; x1: number; y0: number; y1: number }, pad = 0) => {
+    // отрезки и контур наконечника (по шагам вдоль звеньев)
+    const segs: [{ x: number; y: number }, { x: number; y: number }][] = [];
+    for (let i = 0; i + 1 < pts.length; i++) segs.push([pts[i], pts[i + 1]]);
+    return segs.some(([a, b]) => {
+      for (let t = 0; t <= 1; t += 0.05) {
+        const x = a.x + (b.x - a.x) * t;
+        const y = a.y + (b.y - a.y) * t;
+        if (x > r.x0 - pad && x < r.x1 + pad && y > r.y0 - pad && y < r.y1 + pad) return true;
+      }
+      return false;
+    });
+  };
+
+  it("образцы со значениями и путём: шагов столько, сколько переходов; ни одна стрелка не задевает значения", () => {
+    expect(withSteps.length).toBeGreaterThanOrEqual(2);
+    for (const s of withSteps) {
+      const L = gridLayout(s);
+      expect(L.steps.length).toBe(s.path!.length - 1);
+      for (const st of L.steps) {
+        for (const b of L.blocks) {
+          const box = valueBox(L, b.key);
+          if (!box) continue;
+          expect(hitsBox([st.from, st.to], box, 0.5), `линия шага задевает «${b.value}»`).toBe(false);
+          expect(hitsBox([st.head[0], st.head[1], st.head[2], st.head[0]], box, 0.5), `наконечник шага задевает «${b.value}»`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("стрелка шага: длина в пределах STEP_LEN_MIN..STEP_LEN_MAX (с наконечником), лежит между центрами своих клеток", () => {
+    for (const s of withSteps) {
+      const L = gridLayout(s);
+      L.steps.forEach((st, i) => {
+        const a = L.path[i];
+        const b = L.path[i + 1];
+        const len = Math.hypot(st.head[0].x - st.from.x, st.head[0].y - st.from.y);
+        expect(len).toBeGreaterThanOrEqual(STEP_LEN_MIN - 0.01);
+        expect(len).toBeLessThanOrEqual(STEP_LEN_MAX + 0.01);
+        // обе точки на отрезке между центрами (с боковым сдвигом полос) и ближе к соседней клетке, чем её центр
+        for (const p of [st.from, st.head[0]]) {
+          expect(Math.min(Math.hypot(p.x - a.x, p.y - a.y), Math.hypot(p.x - b.x, p.y - b.y))).toBeLessThanOrEqual(L.cell);
+        }
+      });
+    }
+  });
+
+  it("номера шагов не мельче NUM_FONT_MIN (10×10 — тоже), значение под номером не крупнее 0.42 клетки и не касается номера", () => {
+    for (const s of SAMPLES.filter((x) => x.numbered)) {
+      const L = gridLayout(s);
+      expect(L.numFont).toBeGreaterThanOrEqual(NUM_FONT_MIN - 0.01);
+      for (const nl of L.numLabels.values()) expect(nl.font).toBeGreaterThanOrEqual(NUM_FONT_MIN - 0.01);
+      for (const b of L.blocks) {
+        const nl = L.numLabels.get(b.key);
+        if (!nl || b.value === "") continue;
+        const numBottom = b.y + 2 + nl.font * 0.95;
+        const valueTop = b.textY - b.fontSize * 0.36;
+        expect(valueTop, `клетка ${b.key}`).toBeGreaterThanOrEqual(numBottom - 1.5);
+      }
+    }
+  });
+
+  it("10×10: «1,3» — компактно, в клетке, а повторный переход туда и обратно идёт двумя параллельными стрелками", () => {
+    const s = SAMPLES.find((x) => x.rows === 10 && x.numbered)!;
+    const L = gridLayout(s);
+    expect(L.numLabels.get("0:0")!.text).toBe("1,3");
+    expect(estimateTextWidth("1,3", L.numLabels.get("0:0")!.font)).toBeLessThanOrEqual(L.cell - 4);
+    // шаги 1 и 2: (0,0)→(0,1) и обратно — одна пара клеток, стрелки сдвинуты поперёк на STEP_LANE и смотрят в разные стороны
+    const [s1, s2] = L.steps;
+    expect(Math.abs(s1.from.y - s2.from.y)).toBeGreaterThanOrEqual(STEP_LANE - 0.01);
+    expect(Math.sign(s1.head[0].x - s1.from.x)).toBe(-Math.sign(s2.head[0].x - s2.from.x));
+  });
+
+  it("стрелки шагов не задевают номера обхода в углах клеток (вертикальные при номерах сдвинуты вправо, горизонтальные — на уровне значений)", () => {
+    for (const s of withSteps.filter((x) => x.numbered)) {
+      const L = gridLayout(s);
+      expect(L.steps.length).toBeGreaterThan(0);
+      for (const st of L.steps) {
+        for (const [k, nl] of L.numLabels) {
+          const [r, c] = k.split(":").map(Number);
+          const box = { x0: L.ox + c * L.cell + 2, x1: L.ox + c * L.cell + 2.5 + estimateTextWidth(nl.text, nl.font), y0: L.oy + r * L.cell + 2, y1: L.oy + r * L.cell + 2 + nl.font };
+          expect(hitsBox(stepPoints(st), box, 1), `стрелка задевает номер «${nl.text}» (клетка ${k})`).toBe(false);
+        }
+      }
+    }
+    // вертикальные шаги четырёхклеточной матрицы действительно сдвинуты вправо от центра клетки
+    const four = gridLayout(withSteps.find((x) => x.rows === 4 && x.numbered)!);
+    const vertical = four.steps.filter((st) => Math.abs(st.head[0].x - st.from.x) < 0.5);
+    expect(vertical.length).toBeGreaterThan(0);
+    for (const st of vertical) expect(st.from.x - (four.ox + 3 * four.cell + four.cell / 2)).toBeGreaterThan(four.cell * 0.15);
+  });
+
+  it("путь из одной клетки со значением — кольцо внутри клетки, а не кружок в центре; без значения — точка", () => {
+    const withValue = SAMPLES.find((x) => x.path?.length === 1 && x.values)!;
+    const L = gridLayout(withValue);
+    expect(L.ring).not.toBeNull();
+    expect(L.ring!.x).toBeGreaterThan(L.ox);
+    expect(L.ring!.x + L.ring!.w).toBeLessThan(L.ox + L.cell);
+    expect(L.ring!.y + L.ring!.h).toBeLessThan(L.oy + L.cell);
+    const html = renderToStaticMarkup(createElement(SceneView, { scene: withValue }));
+    expect(html).not.toMatch(/<circle[^>]*fill="var\(--ink-primary\)"/);
+    expect(html).toContain('stroke="var(--ink-primary)"');
+    // пустая клетка: ring нет, точка есть
+    const empty: G = { kind: "grid", rows: 2, cols: 2, path: [[0, 0]] };
+    expect(gridLayout(empty).ring).toBeNull();
+    expect(renderToStaticMarkup(createElement(SceneView, { scene: empty }))).toMatch(/<circle[^>]*fill="var\(--ink-primary\)"/);
+  });
+
+  it("без значений путь — ломаная через центры (без коротких стрелок); цвет — ink-primary, не бледнее 0.9", () => {
+    const s = SAMPLES.find((x) => (x.path?.length ?? 0) >= 2 && !x.values)!;
+    const L = gridLayout(s);
+    expect(L.steps).toHaveLength(0);
+    const html = renderToStaticMarkup(createElement(SceneView, { scene: s }));
+    expect(html).toContain("<polyline");
+    expect(html).toContain('stroke="var(--ink-primary)"');
+    expect(html).toContain('stroke-opacity="0.9"');
+    expect(html).not.toContain("var(--primary-strong)");
+  });
+
+  it("образец «Объединённая ячейка»: после A1:B1 следующая ячейка строки — C1", () => {
+    const s = SAMPLES.find((x) => x.merges?.length === 1 && x.caption)!;
+    expect(s.values![0]).toEqual(["A1", "", "C1"]);
   });
 });

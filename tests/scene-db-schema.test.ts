@@ -6,10 +6,13 @@ import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/db-schema";
 import {
   DB_GEO,
+  DB_HEAD_PX,
   DB_SCALES,
+  HEAD_PADX,
   dbSchemaAria,
   fieldOneLineWidth,
   gutterWidth,
+  headNeedWidth,
   innerWidth,
   layoutDbSchema,
   orderTables,
@@ -246,12 +249,55 @@ describe("layoutDbSchema: краевые случаи", () => {
     }
   });
 
-  it("имя таблицы из 14 широких букв переносится: заголовок выше, высота общая для всех карточек", () => {
-    const L = layoutDbSchema(SAMPLES[8], 296);
-    expect(L.headLines).toBeGreaterThanOrEqual(2);
-    expect(L.headH).toBeGreaterThan(DB_GEO.headH);
-    expect(layoutDbSchema(SAMPLES[0], 320).headLines).toBe(1);
-    expect(layoutDbSchema(SAMPLES[0], 320).headH).toBe(DB_GEO.headH);
+  it("имя таблицы из 14 широких букв (ПАЙДАЛАНУШЫЛАР) не рвётся по слогам: на 296–420 px — одна строка, колонка с длинным именем шире соседней", () => {
+    for (const avail of [296, 304, 320, 336, 390, 420]) {
+      const L = layoutDbSchema(SAMPLES[8], avail);
+      expect(L.headLines, `контейнер ${avail}`).toBe(1);
+      expect(L.headH).toBe(DB_GEO.headH);
+      expect(L.width).toBeLessThanOrEqual(avail);
+      for (const c of L.cards) expect(c.w).toBeLessThanOrEqual(avail <= DB_GEO.wideFrom ? DB_GEO.maxNarrow : DB_GEO.maxWide);
+    }
+    // на 296 px кегль заголовка мельчает до 10.5, но слово целиком; левая колонка («ПАЙДАЛАНУШЫЛАР») шире правой
+    const narrow = layoutDbSchema(SAMPLES[8], 296);
+    expect(narrow.cards[0].headFont).toBeGreaterThanOrEqual(DB_HEAD_PX[DB_HEAD_PX.length - 1]);
+    expect(narrow.cards[0].w).toBeGreaterThan(narrow.cards[1].w);
+    expect(narrow.cards[1].w).toBeGreaterThanOrEqual(DB_GEO.minCard);
+    expect(narrow.cards[1].x).toBe(narrow.cards[0].w + gutterWidth(1));
+    // при обычной ширине колонки равны и кегль крупнее
+    const wide = layoutDbSchema(SAMPLES[8], 320);
+    expect(wide.cards[0].w).toBe(wide.cards[1].w);
+    expect(wide.cards[0].headFont).toBeGreaterThanOrEqual(11);
+  });
+
+  it("перенос заголовка — только когда имя не влезает в свою карточку даже самым мелким кеглем; влезающее имя не переносится", () => {
+    const minPx = DB_HEAD_PX[DB_HEAD_PX.length - 1];
+    for (const avail of [232, 264, 280, 296, 320, 360, 420, 576])
+      for (const [i, s] of SAMPLES.entries()) {
+        const L = layoutDbSchema(s, avail);
+        const tables = orderTables(s.tables);
+        const fitsMin = tables.every((t) => headNeedWidth(t.name, minPx) <= L.cards.find((c) => c.name === t.name)!.w);
+        if (L.headLines === 1) {
+          for (const c of L.cards) expect(headNeedWidth(c.name, c.headFont), `${avail}: образец ${i}, ${c.name}`).toBeLessThanOrEqual(c.w);
+        } else {
+          expect(fitsMin, `${avail}: образец ${i} переносит заголовок, хотя всё влезает`).toBe(false);
+        }
+      }
+  });
+
+  it("узкая колонка не мельче minCard, ширины колонок плюс коридор не больше контейнера; все поля влезают по масштабу или переносятся", () => {
+    for (const avail of [280, 288, 296, 304]) {
+      const L = layoutDbSchema(SAMPLES[8], avail);
+      expect(L.cards[0].w + L.cards[1].w + gutterWidth(1)).toBeLessThanOrEqual(avail);
+      for (const c of L.cards) expect(c.w).toBeGreaterThanOrEqual(DB_GEO.minCard);
+      for (const c of L.cards)
+        for (const f of c.fields) expect(f.h).toBeGreaterThanOrEqual(DB_GEO.rowH);
+    }
+  });
+
+  it("в разметке заголовок таблицы — без лишних полей (padding из HEAD_PADX) и без обрезания", () => {
+    const html = renderToStaticMarkup(createElement(SceneView, { scene: SAMPLES[8] }));
+    expect(html).toContain(`padding-inline:${HEAD_PADX}px`);
+    expect(html).toContain("ПАЙДАЛАНУШЫЛАР");
   });
 
   it("wrapLines: по пробелам и дефисам, слово длиннее строки ломается по буквам", () => {

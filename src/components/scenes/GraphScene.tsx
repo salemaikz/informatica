@@ -144,6 +144,8 @@ export function GraphScene({ scene }: { scene: GraphSceneData }) {
           ))}
         </g>
       </svg>
+      {/* значки степени без пояснения непонятны: подпись под рисунком */}
+      {lay.badges.length > 0 && <p className="mt-1 text-center text-xs font-bold text-muted">{t("scene.graph.degreesNote")}</p>}
     </div>
   );
 }

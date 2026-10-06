@@ -5,6 +5,10 @@ import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/chart";
 import {
   CHART_W,
+  PIE_COLORS,
+  PIE_FILLS,
+  PIE_TONES,
+  THRESHOLD_CUT_PAD,
   chartAria,
   chartLayout,
   fitText,
@@ -14,6 +18,7 @@ import {
   niceScale,
   sectorAngles,
   spreadLabels,
+  thresholdSegments,
   type ChartInput,
 } from "@/components/scenes/chart";
 import { estimateTextWidth } from "@/components/scenes/text-width";
@@ -398,4 +403,110 @@ describe("образцы: ru и kk", () => {
       });
     });
   }
+});
+
+// ---------- Ревью v18: порог, круг из 8 долей, образцы ----------
+
+describe("chart: ревью v18", () => {
+  const html = (scene: Extract<Scene, { kind: "chart" }>) => renderToStaticMarkup(createElement(SceneView, { scene }));
+  const box = (v: { x: number; y: number; text: string; font: number }) => {
+    const hw = estimateTextWidth(v.text, v.font) / 2;
+    return { x1: v.x - hw, x2: v.x + hw, y1: v.y - v.font, y2: v.y + 2 };
+  };
+
+  it("thresholdSegments: линия прерывается под подписью, которой касается по высоте, и цела над и под нею", () => {
+    const segs = thresholdSegments(10, 200, 50, [{ x1: 80, x2: 110, y1: 40, y2: 52 }, { x1: 150, x2: 170, y1: 10, y2: 30 }]);
+    // первая подпись лежит на линии (y 50 в [40, 52]) — разрыв с запасом; вторая выше линии — не мешает
+    expect(segs).toEqual([[10, 80 - THRESHOLD_CUT_PAD], [110 + THRESHOLD_CUT_PAD, 200]]);
+    expect(thresholdSegments(10, 200, 50, [])).toEqual([[10, 200]]);
+    // подпись у самого края срезает конец линии, обломок короче 3 px не рисуется
+    expect(thresholdSegments(10, 200, 50, [{ x1: 8, x2: 100, y1: 40, y2: 52 }])).toEqual([[100 + THRESHOLD_CUT_PAD, 200]]);
+  });
+
+  it("порог не перечёркивает подписи значений: в каждом образце с порогом (ru и kk, столбцы и линии) линия обходит все подписи, которых касается", () => {
+    let cut = 0;
+    for (const lang of ["ru", "kk"] as const)
+      SAMPLES.forEach((scene, n) => {
+        if (!scene.threshold) return;
+        const lay = chartLayout(toInput(scene, lang));
+        if (lay.type === "pie" || !lay.threshold) throw new Error();
+        const th = lay.threshold;
+        expect(th.segs.length).toBeGreaterThan(0);
+        // линия остаётся длинной: режутся только места под подписями
+        expect(th.segs.reduce((a, [s, e]) => a + (e - s), 0)).toBeGreaterThan(lay.plotW * 0.6);
+        const labels = lay.type === "bar" ? [...lay.valueLabels.map(box), ...lay.funnelChips.map((c) => ({ x1: c.x - 10, x2: c.x + 10, y1: c.y - c.font, y2: c.y + 2 }))] : lay.valueLabels.map(box);
+        for (const b of labels) {
+          if (th.y < b.y1 - 1 || th.y > b.y2 + 1) continue;
+          cut++;
+          for (const [s, e] of th.segs) expect(e <= b.x1 - THRESHOLD_CUT_PAD + 0.01 || s >= b.x2 + THRESHOLD_CUT_PAD - 0.01, `${lang} образец ${n}: линия порога идёт по подписи`).toBe(true);
+        }
+      });
+    // в образце «план/факт» подпись «130» стоит прямо на линии цели 140 — линия в этом месте прервана
+    expect(cut).toBeGreaterThan(0);
+    const plan = chartLayout(toInput(SAMPLES[2], "ru"));
+    if (plan.type !== "bar" || !plan.threshold) throw new Error();
+    expect(plan.threshold.segs.length).toBeGreaterThan(1);
+  });
+
+  it("в render линия порога собрана из кусков (по одному <line> на кусок), разрыв под подписью виден в разметке", () => {
+    const out = html(SAMPLES[2]);
+    const lines = out.match(/<line[^>]*stroke-dasharray="6 4"[^>]*>/g) ?? [];
+    const plan = chartLayout(toInput(SAMPLES[2], "ru"));
+    if (plan.type !== "bar" || !plan.threshold) throw new Error();
+    expect(lines).toHaveLength(plan.threshold.segs.length);
+  });
+
+  it("круг: заливки — 4 сплошных, затем 4 штриховки тех же тонов, затем 4 тёмных; соседние никогда не совпадают", () => {
+    expect(PIE_FILLS).toHaveLength(12);
+    expect(PIE_FILLS.slice(0, 4).every((f) => !f.stripes)).toBe(true);
+    expect(PIE_FILLS.slice(4, 8).map((f) => f.stripes)).toEqual(PIE_TONES);
+    expect(PIE_FILLS.slice(8).every((f) => !f.stripes && f.color.includes("color-mix"))).toBe(true);
+    const key = (f: (typeof PIE_FILLS)[number]) => `${f.color}|${f.stripes ?? ""}`;
+    expect(new Set(PIE_FILLS.map(key)).size).toBe(12);
+    for (let i = 0; i < PIE_FILLS.length; i++) expect(key(PIE_FILLS[i])).not.toBe(key(PIE_FILLS[(i + 1) % PIE_FILLS.length]));
+    expect(PIE_COLORS).toEqual(PIE_FILLS.map((f) => f.color));
+  });
+
+  it("круг из 8 долей: легенда и сектора заливаются одним и тем же (цвет и узор), а выделение не гасит яркость остальных", () => {
+    for (const lang of ["ru", "kk"] as const) {
+      const lay = chartLayout(toInput(SAMPLES[5], lang));
+      if (lay.type !== "pie") throw new Error();
+      expect(lay.sectors).toHaveLength(8);
+      lay.sectors.forEach((s, i) => {
+        expect(lay.legend.items[i].swatch).toBe(s.color);
+        expect(lay.legend.items[i].stripes).toBe(s.stripes);
+      });
+      // в сцене — по сектору каждого вида: 4 сплошных и 4 заштрихованных, у штриховки в легенде тот же узор
+      expect(lay.sectors.filter((s) => s.stripes)).toHaveLength(4);
+      expect(lay.sectors.filter((s) => !s.stripes)).toHaveLength(4);
+    }
+    const out = html(SAMPLES[5]);
+    expect(out).not.toContain("opacity:0.4");
+    expect((out.match(/<pattern/g) ?? []).length).toBe(4);
+    // у каждого заштрихованного сектора и у его квадратика в легенде заливка — узор
+    expect((out.match(/fill="url\(#[^)]*-st-[a-z]+\)"/g) ?? []).length).toBe(8);
+    // выделенный сектор — выдвинут и обведён цветом текста, остальные обведены цветом фона
+    expect((out.match(/stroke="var\(--text\)"/g) ?? []).length).toBe(1);
+  });
+
+  it("выделенный сектор рисуется последним среди секторов (поверх соседей)", () => {
+    const out = html(SAMPLES[5]);
+    const paths = [...out.matchAll(/<path d="M[^"]*"[^>]*>/g)].map((m) => m[0]);
+    expect(paths.length).toBe(8);
+    expect(paths[paths.length - 1]).toContain('stroke="var(--text)"');
+  });
+
+  it("образцы: дни недели на двух языках, единица выручки в названии оси, градусы слитно", () => {
+    const week = SAMPLES[0];
+    expect(week.labels).toEqual([{ ru: "Пн", kk: "Дс" }, { ru: "Вт", kk: "Сс" }, { ru: "Ср", kk: "Ср" }, { ru: "Чт", kk: "Бс" }]);
+    expect(chartLayout(toInput(week, "kk")).type).toBe("bar");
+    const plan = SAMPLES[2];
+    expect(plan.unit).toBeUndefined();
+    expect(typeof plan.axes?.y === "object" ? plan.axes.y.ru : plan.axes?.y).toContain("₸");
+    expect(formatValue(4, "°")).toBe("4°");
+    expect(formatValue(40, "%")).toBe("40%");
+    expect(formatValue(40, "₸")).toBe("40 ₸");
+    expect(html(SAMPLES[8])).toContain(">4°<");
+    expect(html(SAMPLES[8])).not.toContain("4 °");
+  });
 });

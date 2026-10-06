@@ -12,6 +12,7 @@ import {
   numberlineAria,
   labelRect,
   placePointLabels,
+  placePointLabelsFan,
   type NlInput,
   type NlLayout,
   type Rect,
@@ -145,9 +146,9 @@ describe("точки и подписи", () => {
       expect(p.x + p.w / 2).toBeLessThanOrEqual(NL_W);
     }
   });
-  it("второй уровень подписей поднимает строку ниже", () => {
-    const one = layoutNumberline(input({ rows: [{ points: [{ at: 5, label: "a" }] }] }));
-    const two = layoutNumberline(input({ rows: [{ points: [{ at: 5, label: "минимум" }, { at: 6, label: "середина" }] }] }));
+  it("второй уровень подписей поднимает строку ниже (три подписи подряд на густой шкале)", () => {
+    const one = layoutNumberline(input({ min: 0, max: 40, rows: [{ points: [{ at: 5, label: "a" }] }] }));
+    const two = layoutNumberline(input({ min: 0, max: 40, rows: [{ points: [{ at: 5, label: "минимум" }, { at: 6, label: "середина" }, { at: 7, label: "максимум" }] }] }));
     expect(two.rows[0].y).toBeGreaterThan(one.rows[0].y);
     expect(two.rows[0].points[1].label!.y).toBeLessThan(two.rows[0].points[0].label!.y);
   });
@@ -436,5 +437,118 @@ describe("образцы: оба языка, подписи", () => {
     const inp: NlInput = { min: 0, max: 10, rows: [{ ranges: [{ from: null, to: 7, toIn: true }] }] };
     expect(numberlineAria(inp, tr("ru"))).toContain("от минус бесконечности до 7");
     expect(numberlineAria(inp, tr("kk"))).not.toMatch(/шексіздік мен/);
+  });
+});
+
+// ---------- Подписи точек веером: чья подпись, понятно без догадок ----------
+
+describe("подписи точек: у своей точки или с выноской (ревью v18)", () => {
+  type Pt = { at: number; open?: boolean; label?: string };
+  const layoutOf = (min: number, max: number, points: Pt[]) => layoutNumberline({ min, max, rows: [{ points }] });
+  const boxOf = (l: { text: string; x: number; y: number; font: number }) => {
+    const w = estimateTextWidth(l.text, l.font) + 4;
+    return { x1: l.x - w / 2, x2: l.x + w / 2, y1: l.y - l.font, y2: l.y + 3 };
+  };
+
+  /** Проверки: подписи не пересекаются; без выноски — над своей точкой и не накрывает чужую; с выноской — не режет чужую подпись. */
+  function expectUnambiguous(L: NlLayout, name: string) {
+    for (const row of L.rows) {
+      const labelled = row.points.filter((p) => p.label);
+      for (const p of labelled) {
+        const b = boxOf(p.label!);
+        expect(b.x1, `${name}: «${p.label!.text}» левее экрана`).toBeGreaterThanOrEqual(0);
+        expect(b.x2, `${name}: «${p.label!.text}» правее экрана`).toBeLessThanOrEqual(NL_W);
+        if (!p.label!.leader) {
+          // стоит прямо над строкой: своя точка под подписью (допуск 4 px у края) и чужих точек под ней нет
+          expect(p.x, `${name}: «${p.label!.text}» не над своей точкой`).toBeGreaterThanOrEqual(b.x1 - 4);
+          expect(p.x, `${name}: «${p.label!.text}» не над своей точкой`).toBeLessThanOrEqual(b.x2 + 4);
+          for (const o of row.points) if (o !== p) expect(o.x > b.x1 - 1 && o.x < b.x2 + 1, `${name}: «${p.label!.text}» накрывает чужую точку`).toBe(false);
+        } else {
+          expect(p.label!.leader.x, `${name}: выноска не у своей точки`).toBe(p.x);
+          expect(p.label!.leader.y1, `${name}: выноска начинается ниже подписи`).toBeGreaterThan(b.y1);
+          expect(p.label!.leader.y2, `${name}: выноска идёт вниз`).toBeGreaterThan(p.label!.leader.y1);
+          // выноска не проходит сквозь другие подписи
+          for (const o of labelled) {
+            if (o === p) continue;
+            const ob = boxOf(o.label!);
+            const crosses = p.x > ob.x1 && p.x < ob.x2 && ob.y2 > p.label!.leader.y1 && ob.y1 < p.label!.leader.y2;
+            expect(crosses, `${name}: выноска «${p.label!.text}» режет «${o.label!.text}»`).toBe(false);
+          }
+        }
+        for (const o of labelled) {
+          if (o === p) continue;
+          const ob = boxOf(o.label!);
+          expect(b.x1 < ob.x2 && ob.x1 < b.x2 && b.y1 < ob.y2 && ob.y1 < b.y2, `${name}: «${p.label!.text}» налезает на «${o.label!.text}»`).toBe(false);
+        }
+      }
+    }
+  }
+
+  const pickLang = (lang: Lang) => (t: unknown) => (typeof t === "string" || t === undefined ? (t as string | undefined) : (t as Record<Lang, string>)[lang]);
+
+  it("образец «минимум / середина / максимум»: подписи веером, а не лесенкой, и у среднего есть выноска", () => {
+    for (const lang of ["ru", "kk"] as const) {
+      const s = SAMPLES.find((x) => x.rows.some((r) => (r.points?.length ?? 0) >= 3))!;
+      const pick = pickLang(lang);
+      const L = layoutNumberline({
+        min: s.min,
+        max: s.max,
+        rows: s.rows.map((r) => ({ ...r, label: pick(r.label), points: r.points?.map((p) => ({ ...p, label: pick(p.label) })) })) as NlInput["rows"],
+      });
+      expectUnambiguous(L, `образец ${lang}`);
+      const pts = L.rows[0].points;
+      // «минимум» левее своей точки, «максимум» правее: боковые подписи стоят на нулевом уровне (на одной высоте)
+      expect(pts[0].label!.x).toBeLessThan(pts[0].x);
+      expect(pts[2].label!.x).toBeGreaterThan(pts[2].x);
+      expect(pts[0].label!.y).toBe(pts[2].label!.y);
+      // средняя — выше и с выноской к точке
+      expect(pts[1].label!.leader).toBeDefined();
+      expect(pts[1].label!.y).toBeLessThan(pts[0].label!.y);
+    }
+  });
+
+  it("все образцы (ru и kk): каждая подпись над своей точкой или с выноской", () => {
+    for (const lang of ["ru", "kk"] as const)
+      SAMPLES.forEach((s, i) => {
+        const pick = pickLang(lang);
+        const L = layoutNumberline({
+          min: s.min,
+          max: s.max,
+          ticks: s.ticks,
+          rows: s.rows.map((r) => ({ ...r, label: pick(r.label), points: r.points?.map((p) => ({ ...p, label: pick(p.label) })) })) as NlInput["rows"],
+        });
+        expectUnambiguous(L, `${lang} образец ${i}`);
+      });
+  });
+
+  it("густая шкала: три подписи подряд — боковые веером, средняя с выноской, ничто не пересекается", () => {
+    const L = layoutOf(0, 40, [{ at: 5, label: "минимум" }, { at: 6, label: "середина" }, { at: 7, label: "максимум" }]);
+    expectUnambiguous(L, "0..40");
+    const [a, b, c] = L.rows[0].points;
+    expect(b.label!.leader).toBeDefined();
+    expect(a.label!.leader).toBeUndefined();
+    expect(c.label!.leader).toBeUndefined();
+  });
+
+  it("точки без подписи между подписанными: подпись нулевого уровня не накрывает чужую точку", () => {
+    const L = layoutOf(0, 12, [{ at: 3, label: "левая точка" }, { at: 4 }, { at: 5, label: "правая точка" }, { at: 6, open: true }]);
+    expectUnambiguous(L, "с немыми точками");
+  });
+
+  it("далёкие подписи — без выносок и без сдвигов", () => {
+    const L = layoutOf(0, 10, [{ at: 1, label: "a" }, { at: 9, label: "b" }]);
+    for (const p of L.rows[0].points) {
+      expect(p.label!.leader).toBeUndefined();
+      expect(p.label!.x).toBeCloseTo(p.x, 3);
+    }
+  });
+
+  it("placePointLabelsFan: результат — по числу подписей, в порядке входа; боковые сдвинуты в стороны", () => {
+    const items = [{ x: 190, text: "середина" }, { x: 180, text: "минимум" }, { x: 200, text: "максимум" }];
+    const res = placePointLabelsFan(items, estimateTextWidth);
+    expect(res).toHaveLength(3);
+    expect(res[1].shift).toBe(-1);
+    expect(res[2].shift).toBe(1);
+    expect(placePointLabelsFan([], estimateTextWidth)).toEqual([]);
   });
 });

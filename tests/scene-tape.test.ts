@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/tape";
-import { TAPE_W, assignLevels, clampCenter, indexLabel, sliceIndices, stopBoundary, tapeAria, tapeLayout, tapeLegible, type TapeData } from "@/components/scenes/tape";
+import { TAPE_GROUP_ROW, TAPE_INDEX_FS, TAPE_LABEL_DESC, TAPE_LABEL_FS, TAPE_LEGIBLE_FONT, TAPE_W, assignLevels, clampCenter, indexLabel, sliceIndices, stopBoundary, tapeAria, tapeLayout, tapeLegible, textWidth, type TapeData } from "@/components/scenes/tape";
 import { dict, type DictKey } from "@/i18n/dict";
 import { estimateTextWidth } from "@/components/scenes/text-width";
 import { fmt } from "@/lib/text";
@@ -74,9 +74,11 @@ describe("tape: раскладка", () => {
     expect(L.cellW).toBeGreaterThanOrEqual(18);
     expect(L.x0 + 16 * L.cellW).toBeLessThanOrEqual(L.vbW);
     expect(L.indexTop).toHaveLength(16);
-    expect(L.indexBottom).toHaveLength(16);
-    // индексы не наезжают: самая широкая подпись уже ячейки минимум на 4 px
-    expect(estimateTextWidth("\u221216", L.indexFs)).toBeLessThanOrEqual(L.cellW - 4);
+    // нижние индексы «−16…−1» на узких ячейках — через одну (шрифт не мельчает), соседние подписи не слипаются: зазор ≥ 4 px
+    expect(L.indexStrideBottom).toBe(2);
+    expect(L.indexBottom).toHaveLength(8);
+    expect(L.indexFs).toBeGreaterThanOrEqual(11);
+    expect(estimateTextWidth("\u221216", L.indexFs)).toBeLessThanOrEqual(L.indexStrideBottom * L.cellW - 4);
     expect(L.arcs.filter((a) => a.kind === "jump")).toHaveLength(L.taken.length - 1);
   });
   it("6 ячеек — крупные, шрифт не больше 18", () => {
@@ -231,5 +233,136 @@ describe("tape: образцы и отрисовка", () => {
         expect(a).not.toMatch(/\{\w+\}/);
       }
     }
+  });
+});
+
+// ---------- Ревью v18: границы, байты, скобки, индексы, цвета ----------
+
+describe("tape: ревью v18", () => {
+  const html = (s: TapeData) => renderToStaticMarkup(createElement(SceneView, { scene: s }));
+
+  it("пунктир границы «не включая» начинается ниже подписи (с «хвостами» букв), а не режет её — во всех образцах, ru и kk", () => {
+    let seen = 0;
+    for (const lang of ["ru", "kk"] as Lang[])
+      for (const s of SAMPLES) {
+        const L = layout(s, lang);
+        if (!L.stop) continue;
+        seen++;
+        // низ подписи: базовая линия (центр + 0.35 em) плюс хвосты букв; пунктир с круглым колпачком (радиус 1) стартует ниже
+        const labelBottom = L.stop.label.y + TAPE_LABEL_FS * 0.35 + TAPE_LABEL_DESC;
+        expect(L.stop.y1 - 1, `${lang}: «${L.stop.label.text}»`).toBeGreaterThanOrEqual(labelBottom + 1);
+        // и подпись, и пунктир — внутри рисунка, а над индексами оставлено место
+        expect(L.stop.y1).toBeLessThan(L.stop.y2);
+        expect(L.stop.label.y - TAPE_LABEL_FS).toBeGreaterThanOrEqual(0);
+      }
+    expect(seen).toBeGreaterThanOrEqual(4);
+  });
+
+  it("байты UTF-8: биты в ячейках не мельче читаемого кегля (ячейки расширены), строка влезает в 360 px", () => {
+    const s = SAMPLES.find((x) => x.mono && x.cells[0].length === 8)!;
+    const L = layout(s);
+    expect(L.cellFs).toBeGreaterThanOrEqual(TAPE_LEGIBLE_FONT);
+    expect(L.vbW).toBe(TAPE_W);
+    expect(L.cellW).toBeGreaterThan(44);
+    expect(L.textLines).toBe(1);
+    // 8 битов в одну строку помещаются в ячейку с запасом по 2 px
+    expect(textWidth("01001011", L.cellFs, true)).toBeLessThanOrEqual(L.cellW - 4);
+    for (const c of L.cells) expect(c.lines).toEqual([c.text]);
+  });
+
+  it("8 байт подряд: биты переносятся на две строки по 4, шрифт не мельче читаемого, высота ячейки растёт", () => {
+    const L = layout(tape({ cells: Array.from({ length: 8 }, () => "10110010"), mono: true, index: "none" }));
+    expect(L.textLines).toBe(2);
+    expect(L.cellFs).toBeGreaterThanOrEqual(TAPE_LEGIBLE_FONT);
+    expect(L.vbW).toBe(TAPE_W);
+    for (const c of L.cells) {
+      expect(c.lines).toEqual(["1011", "0010"]);
+      for (const ln of c.lines) expect(textWidth(ln, L.cellFs, true)).toBeLessThanOrEqual(L.cellW - 4);
+    }
+    expect(L.cellH).toBeGreaterThanOrEqual(2 * L.lineH + 10);
+    expect(tapeLegible(tape({ cells: Array.from({ length: 8 }, () => "10110010"), mono: true }))).toBe(true);
+  });
+
+  it("односимвольные и короткие ячейки не расширяются зря", () => {
+    const L = layout(tape({ cells: Array.from({ length: 16 }, () => "x") }));
+    expect(L.textLines).toBe(1);
+    expect(L.cellW).toBeLessThan(30);
+    const six = layout(tape({ cells: ["a", "b", "c", "d", "e", "f"] }));
+    expect(six.cellW).toBe(44);
+  });
+
+  it("скобки групп разных ярусов: ножки верхней не касаются подписи нижней (по x и по y зазор ≥ 2 px)", () => {
+    const mono = SAMPLES.find((x) => x.groups && x.groups.length >= 3)!;
+    const many = tape({
+      cells: ["01", "10", "11", "00", "01", "10"],
+      mono: true,
+      groups: [
+        { from: 0, to: 0, label: { ru: "К · 1 байт", kk: "К · 1 байт" } },
+        { from: 1, to: 3, label: { ru: "Қ · 3 байта", kk: "Қ · 3 байт" } },
+        { from: 4, to: 5, label: { ru: "ab · 2 байта", kk: "ab · 2 байт" } },
+      ],
+    });
+    for (const lang of ["ru", "kk"] as Lang[])
+      for (const s of [mono, many]) {
+        const L = layout(s, lang);
+        for (const upper of L.groups) {
+          for (const lower of L.groups) {
+            if (upper.level <= lower.level) continue;
+            // ножки верхней скобки: x1 и x2, от линии вниз на 5 px (+1 толщина); подпись нижней — прямоугольник текста
+            const legsBottom = upper.y + 5 + 1;
+            const labelTop = lower.label.y - TAPE_LABEL_FS * 0.55;
+            const labelBox = { x1: lower.label.cx - lower.label.w / 2, x2: lower.label.cx + lower.label.w / 2 };
+            for (const lx of [upper.x1, upper.x2]) {
+              const overX = lx > labelBox.x1 - 1 && lx < labelBox.x2 + 1;
+              if (overX) expect(labelTop - legsBottom, `${lang}: ножка x=${lx} над «${lower.label.text}»`).toBeGreaterThanOrEqual(2);
+            }
+          }
+        }
+        // ярусы разнесены на TAPE_GROUP_ROW
+        const levels = [...new Set(L.groups.map((g) => g.level))].sort();
+        if (levels.length > 1) {
+          const ys = levels.map((lv) => L.groups.find((g) => g.level === lv)!.y);
+          expect(ys[0] - ys[1]).toBeCloseTo(TAPE_GROUP_ROW, 5);
+        }
+      }
+  });
+
+  it("индексы: кегль не мельче TAPE_INDEX_FS; на узких ячейках — через один, зазор между подписями ≥ 4 px", () => {
+    for (const s of SAMPLES) {
+      const L = layout(s);
+      if (!L.indexTop.length && !L.indexBottom.length) continue;
+      expect(L.indexFs).toBeGreaterThanOrEqual(TAPE_INDEX_FS);
+      for (const row of [L.indexTop, L.indexBottom]) {
+        for (let i = 1; i < row.length; i++) {
+          const a = row[i - 1];
+          const b = row[i];
+          const gap = b.x - a.x - (estimateTextWidth(a.text, L.indexFs) + estimateTextWidth(b.text, L.indexFs)) / 2;
+          expect(gap, `«${a.text}» и «${b.text}»`).toBeGreaterThanOrEqual(4 - 0.01);
+        }
+      }
+    }
+    // широкие ячейки — подписаны все
+    const L = layout(tape({ cells: ["a", "b", "c", "d", "e", "f"], index: "both" }));
+    expect(L.indexStrideTop).toBe(1);
+    expect(L.indexStrideBottom).toBe(1);
+    expect(L.indexBottom).toHaveLength(6);
+  });
+
+  it("цвета: текст на -soft-заливке — ink-*; подписи указателей — не жёлтые буквы (gold смешан с цветом текста), tone success/warning/primary — ink", () => {
+    const out = html(tape({ cells: ["a", "b", "c"], slice: { start: 0, stop: 2 }, highlight: [2], pointers: [{ at: 0, label: "l", tone: "primary" }, { at: 1, label: "m", tone: "warning" }, { at: 2, label: "min", tone: "gold" }] }));
+    expect(out).toContain('fill="var(--ink-primary)"');
+    expect(out).toContain('fill="var(--ink-warning)"');
+    expect(out).not.toContain('fill="var(--primary-strong)"');
+    expect(out).not.toContain('fill="var(--warning-strong)"');
+    // золото как текст — смесь с цветом текста; сам --gold остаётся для стрелки-указателя
+    expect(out).toContain("color-mix(in srgb, var(--gold) 55%, var(--text))");
+    expect(out).not.toMatch(/<text[^>]*fill="var\(--gold\)"/);
+  });
+
+  it("образец двоичного поиска: «m» и «min» на одной ячейке — разных тонов, и «min» не золотой", () => {
+    const bs = SAMPLES.find((x) => x.pointers?.some((p) => p.label === "min") && x.pointers.some((p) => p.label === "m"))!;
+    const tones = bs.pointers!.filter((p) => p.at === 5).map((p) => p.tone);
+    expect(new Set(tones).size).toBe(tones.length);
+    expect(tones).not.toContain("gold");
   });
 });

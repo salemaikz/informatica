@@ -169,6 +169,8 @@ export interface NlLabel {
   y: number;
   anchor: "start" | "middle" | "end";
   font: number;
+  /** Тонкая выноска от подписи точки вниз к самой точке (если подпись поднята над строкой): x и отрезок по y. */
+  leader?: { x: number; y1: number; y2: number };
 }
 
 export interface NlDot {
@@ -271,6 +273,96 @@ export function placePointLabels(
   return out;
 }
 
+/** Результат раскладки подписей точек «веером»: центр подписи (x), уровень и нужна ли выноска к точке. */
+export interface FanLabel {
+  x: number;
+  anchor: "middle";
+  level: number;
+  w: number;
+  /** Подпись над своей точкой не стоит (поднята выше нулевого уровня): к точке идёт тонкая выноска. */
+  leader: boolean;
+  /** -1 — подпись сдвинута влево от точки (правый край у точки), 1 — вправо, 0 — по центру. */
+  shift: -1 | 0 | 1;
+}
+
+/** Сколько уровней подписей над строкой допускаем (выше — уже слишком далеко от точки). */
+const FAN_LEVELS = 3;
+/** Предел перебора вариантов (узлов поиска): после него — жадная раскладка с выносками. */
+const FAN_BUDGET = 60000;
+
+/**
+ * Подписи точек: каждая подпись стоит либо над своей точкой (по центру или сдвинутая в сторону так, что её край у точки),
+ * либо выше с тонкой выноской к точке. Подпись нулевого уровня не накрывает чужую точку, выноска не идёт через чужую подпись.
+ * Перебор по порядку точек слева направо: меньше уровней и меньше сдвигов — лучше. pointXs — x всех точек строки (в том числе без подписи).
+ */
+export function placePointLabelsFan(items: { x: number; text: string }[], est: Est, width = NL_W, pointXs?: number[]): FanLabel[] {
+  if (!items.length) return [];
+  const xs = pointXs ?? items.map((it) => it.x);
+  const order = items.map((it, i) => ({ ...it, i })).sort((p, q) => p.x - q.x || p.i - q.i);
+  type Opt = { c: number; a: number; b: number; shift: -1 | 0 | 1 };
+  const prepared = order.map((it) => {
+    const w = est(it.text, POINT_FONT) + 4;
+    const clamp = (c: number) => Math.min(width - 4 - w / 2, Math.max(4 + w / 2, c));
+    const opts: Opt[] = [];
+    ([[it.x, 0], [it.x + 4 - w / 2, -1], [it.x - 4 + w / 2, 1]] as [number, -1 | 0 | 1][]).forEach(([c0, shift]) => {
+      const c = clamp(c0);
+      const o: Opt = { c, a: c - w / 2, b: c + w / 2, shift };
+      // подпись должна оставаться над своей точкой (край экрана мог её отодвинуть)
+      if (shift !== 0 && !(o.a - 4 <= it.x && it.x <= o.b + 4)) return;
+      if (opts.some((q) => Math.abs(q.c - c) < 0.5)) return;
+      opts.push(o);
+    });
+    return { it, w, opts };
+  });
+
+  const pick: { opt: Opt; level: number }[] = [];
+  const found: { best: { cost: number; sel: { opt: Opt; level: number }[] } | null } = { best: null };
+  let nodes = 0;
+  const conflict = (idx: number, opt: Opt, level: number): boolean => {
+    const px = prepared[idx].it.x;
+    for (let j = 0; j < idx; j++) {
+      const q = pick[j];
+      // ширина подписи уже включает по 2 px запаса с каждой стороны, поэтому между текстами остаётся ≥ 5 px
+      if (q.level === level && !(opt.b + 1 <= q.opt.a || opt.a - 1 >= q.opt.b)) return true;
+      // выноска нашей подписи идёт вниз через все нижние уровни: не должна пройти сквозь чужую подпись
+      if (q.level < level && px > q.opt.a - 2 && px < q.opt.b + 2) return true;
+      // и наоборот: выноска чужой, более высокой подписи — сквозь нашу
+      if (q.level > level && prepared[j].it.x > opt.a - 2 && prepared[j].it.x < opt.b + 2) return true;
+    }
+    // подпись прямо над строкой не должна накрывать чужую точку
+    if (level === 0) for (const fx of xs) if (Math.abs(fx - px) > 0.5 && fx > opt.a - 1 && fx < opt.b + 1) return true;
+    return false;
+  };
+  const walk = (idx: number, cost: number) => {
+    if (found.best && cost >= found.best.cost) return;
+    if (++nodes > FAN_BUDGET) return;
+    if (idx === prepared.length) {
+      found.best = { cost, sel: pick.map((p) => ({ ...p })) };
+      return;
+    }
+    for (let level = 0; level < FAN_LEVELS; level++) {
+      for (const opt of prepared[idx].opts) {
+        if (conflict(idx, opt, level)) continue;
+        pick[idx] = { opt, level };
+        walk(idx + 1, cost + level * 10 + (opt.shift ? 1 : 0));
+      }
+    }
+  };
+  if (prepared.length <= 9) walk(0, 0);
+
+  const res = new Map<number, FanLabel>();
+  if (found.best) {
+    found.best.sel.forEach((p, k) => {
+      res.set(prepared[k].it.i, { x: p.opt.c, anchor: "middle", level: p.level, w: prepared[k].w, leader: p.level > 0, shift: p.opt.shift });
+    });
+  } else {
+    // запасной путь: уровни по старому правилу, выноски у всего, что выше нуля
+    const old = placePointLabels(items, est, width);
+    old.forEach((o, i) => res.set(i, { ...o, leader: o.level > 0, shift: 0 }));
+  }
+  return items.map((_, i) => res.get(i)!);
+}
+
 /** Прямоугольник подписи (для разрывов пунктиров и тестов). */
 export interface Rect {
   x1: number;
@@ -345,9 +437,11 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
     const tone = r.tone ?? "primary";
     const aboveLabel = !leftLabels && r.label ? 18 : 0;
     const pts = r.points ?? [];
-    const placed = placePointLabels(
+    const placed = placePointLabelsFan(
       pts.map((p) => ({ x: xOf(p.at), text: p.label ?? "" })).filter((_, i) => !!pts[i].label),
       est,
+      NL_W,
+      pts.map((p) => xOf(p.at)),
     );
     const levels = placed.length ? Math.max(...placed.map((p) => p.level)) + 1 : 0;
     const jv = r.jumps ? jumpValues(r.jumps.start, r.jumps.stop, r.jumps.step) : [];
@@ -400,7 +494,10 @@ export function layoutNumberline(input: NlInput, est: Est = estimateTextWidth): 
       let label: NlLabel | undefined;
       if (p.label) {
         const pl = placed[li++];
-        label = { text: p.label, x: pl.x, y: y - R - 5 - pl.level * LEVEL_H - (r.jumps ? arcSpace : 0), anchor: "middle", font: POINT_FONT };
+        const ly = y - R - 5 - pl.level * LEVEL_H - (r.jumps ? arcSpace : 0);
+        label = { text: p.label, x: pl.x, y: ly, anchor: "middle", font: POINT_FONT };
+        // подпись поднята выше точки (или сдвинута вбок настолько, что стоит не над ней): выноска показывает, чья она
+        if (pl.leader) label.leader = { x, y1: ly + 4, y2: y - R - 2 };
         allRects.push(labelRect(label, est));
       }
       row.points.push({ x, open: !!p.open, label });

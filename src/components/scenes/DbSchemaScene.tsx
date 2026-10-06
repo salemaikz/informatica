@@ -8,7 +8,7 @@ import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
-import { DB_GEO, dbSchemaAria, layoutDbSchema, roundedPath, type DbCard, type DbFieldBox } from "./db-schema";
+import { DB_GEO, HEAD_PADX, dbSchemaAria, layoutDbSchema, roundedPath, type DbCard, type DbFieldBox } from "./db-schema";
 
 type DbSchemaSceneData = Extract<Scene, { kind: "db-schema" }>;
 
@@ -74,10 +74,10 @@ function Card({ card, scale, headH, headLineH, settled, reduce }: { card: DbCard
     >
       <div
         className={cn(
-          "flex items-center justify-center px-2 text-center font-extrabold transition-colors duration-200",
+          "flex items-center justify-center text-center font-extrabold transition-colors duration-200",
           card.highlighted ? "bg-primary-soft text-primary-strong" : "bg-surface-2 text-text",
         )}
-        style={{ height: headH, fontSize: card.headFont, lineHeight: `${headLineH}px` }}
+        style={{ height: headH, fontSize: card.headFont, lineHeight: `${headLineH}px`, paddingInline: HEAD_PADX }}
       >
         <span className="min-w-0 [overflow-wrap:anywhere]">{card.name}</span>
       </div>

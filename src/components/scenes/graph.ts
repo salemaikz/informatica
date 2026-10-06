@@ -282,6 +282,31 @@ function pointAlong(poly: Pos[], t: number): Pos {
   return poly[0];
 }
 
+/** Точка пересечения двух отрезков (null — не пересекаются или параллельны). */
+function segCross(a: Pos, b: Pos, c: Pos, d: Pos): Pos | null {
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = d.x - c.x;
+  const sy = d.y - c.y;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+  const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { x: a.x + rx * t, y: a.y + ry * t };
+}
+
+/** Все точки, где одна ломаная пересекает другую. */
+export function polyCrossings(a: Pos[], b: Pos[]): Pos[] {
+  const out: Pos[] = [];
+  for (let i = 0; i + 1 < a.length; i++)
+    for (let j = 0; j + 1 < b.length; j++) {
+      const p = segCross(a[i], a[i + 1], b[j], b[j + 1]);
+      if (p) out.push(p);
+    }
+  return out;
+}
+
 /** Расстояние от точки до отрезка. */
 function segDist(a: Pos, b: Pos, p: Pos): number {
   const dx = b.x - a.x;
@@ -365,6 +390,13 @@ function maxPillWidth(input: GraphInput, k: number): number {
   const ws = input.edges.filter((e) => e.weight).map((e) => estimateTextWidth(e.weight!, pillFont(k)) + 10);
   return ws.length ? Math.max(...ws) : 0;
 }
+
+/** Зазор между значком степени и обводкой вершины (px). */
+export const BADGE_GAP = 2.5;
+
+/** Зазор между подписями весов (px) и расстояние от подписи до пересечения рёбер, на котором она ещё считается «на пересечении». */
+export const PILL_GAP = 6;
+const CROSS_CLEAR = 30;
 
 function pillFont(k: number): number {
   return Math.max(10, 11 * k);
@@ -748,35 +780,49 @@ function build(input: GraphInput, k: number, W: number, opt: Opts): Cand {
   const placed: Rect[] = [];
   const pills = new Map<number, GPill>();
   const T = input.layout === "tree" ? [0.66, 0.58, 0.74, 0.5, 0.42, 0.34, 0.26] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74];
+  // Где рёбра пересекаются: подпись веса не ставим рядом с пересечением, иначе неясно, какому из двух рёбер она принадлежит.
+  const crossAt = raws.map((r) => raws.flatMap((o) => (o === r || o.e.from === r.e.from || o.e.from === r.e.to || o.e.to === r.e.from || o.e.to === r.e.to ? [] : polyCrossings(r.poly, o.poly))));
   const centroid = { x: boxes.reduce((a, s) => a + s.cx, 0) / boxes.length, y: boxes.reduce((a, s) => a + s.cy, 0) / boxes.length };
   let pillBad = 0;
   for (const r of raws) {
     if (!r.e.weight) continue;
     const w = estimateTextWidth(r.e.weight, pf) + 10;
     const h = pf + 7;
-    const scoreAt = (pos: Pos): number => {
+    // hard — наложения (на вершину, на подпись, на чужое ребро); soft — «вплотную» к другой подписи и близость к пересечению рёбер
+    const scoreAt = (pos: Pos): { hard: number; soft: number } => {
       const rect: Rect = { x0: pos.x - w / 2, y0: pos.y - h / 2, x1: pos.x + w / 2, y1: pos.y + h / 2 };
-      let score = 0;
-      for (const nb of boxes) if (rectHitsBox(rect, nb)) score += 100;
-      for (const pr of placed) if (rectsOverlap(rect, pr)) score += 80;
-      const grown = { x0: rect.x0 - 1, y0: rect.y0 - 1, x1: rect.x1 + 1, y1: rect.y1 + 1 };
+      let hard = 0;
+      let soft = 0;
+      for (const nb of boxes) if (rectHitsBox(rect, nb)) hard += 100;
+      for (const pr of placed) {
+        if (rectsOverlap(rect, pr)) hard += 80;
+        // две подписи вплотную читаются как одна («4 10»): между ними не меньше PILL_GAP
+        else if (rectsOverlap({ x0: rect.x0 - PILL_GAP, y0: rect.y0 - PILL_GAP, x1: rect.x1 + PILL_GAP, y1: rect.y1 + PILL_GAP }, pr)) soft += 14;
+      }
+      for (const x of crossAt[r.i]) {
+        const d = Math.hypot(pos.x - x.x, pos.y - x.y);
+        if (d < CROSS_CLEAR) soft += (CROSS_CLEAR - d) * 0.8;
+      }
+      const grown = { x0: rect.x0 - 2, y0: rect.y0 - 2, x1: rect.x1 + 2, y1: rect.y1 + 2 };
       for (const other of raws) {
         if (other === r) continue;
         for (let q = 0; q + 1 < other.poly.length; q++)
           if (segmentHitsRect(other.poly[q], other.poly[q + 1], grown)) {
-            score += 20;
+            hard += 20;
             break;
           }
       }
-      return score;
+      return { hard, soft };
     };
-    let best: { pos: Pos; anchor?: Pos; score: number } | null = null;
+    type Best = { pos: Pos; anchor?: Pos; score: number; hard: number };
+    let best: Best | null = null;
     for (const t of T) {
       const pos = pointAlong(r.poly, t);
-      const score = scoreAt(pos) + Math.abs(t - T[0]) * 10;
-      if (!best || score < best.score) best = { pos, score };
+      const sc = scoreAt(pos);
+      const score = sc.hard + sc.soft + Math.abs(t - T[0]) * 10;
+      if (!best || score < best.score) best = { pos, score, hard: sc.hard };
     }
-    if (best!.score >= 80) {
+    if (best!.hard >= 80) {
       // на самом ребре места нет (короткое ребро, подпись длиннее видимой части): сдвигаем в сторону, чаще наружу от центра графа
       for (const t of T) {
         const base = pointAlong(r.poly, t);
@@ -789,14 +835,15 @@ function build(input: GraphInput, k: number, W: number, opt: Opts): Cand {
           for (const sign of [1, -1]) {
             const pos = { x: base.x + nx * off * sign, y: base.y + ny * off * sign };
             const inward = (centroid.x - base.x) * nx * sign + (centroid.y - base.y) * ny * sign > 0;
-            const score = scoreAt(pos) + Math.abs(t - T[0]) * 10 + off * 0.4 + (inward ? 4 : 0);
-            if (score < best!.score) best = { pos, anchor: base, score };
+            const sc = scoreAt(pos);
+            const score = sc.hard + sc.soft + Math.abs(t - T[0]) * 10 + off * 0.4 + (inward ? 4 : 0);
+            if (score < best!.score) best = { pos, anchor: base, score, hard: sc.hard };
           }
         }
       }
     }
     const pos = best!.pos;
-    if (best!.score >= 80) pillBad++;
+    if (best!.hard >= 80) pillBad++;
     placed.push({ x0: pos.x - w / 2, y0: pos.y - h / 2, x1: pos.x + w / 2, y1: pos.y + h / 2 });
     pills.set(r.i, { x: pos.x, y: pos.y, w, h, text: r.e.weight, fontPx: pf, anchor: best!.anchor ? [best!.anchor.x, best!.anchor.y] : undefined });
   }
@@ -821,7 +868,8 @@ function build(input: GraphInput, k: number, W: number, opt: Opts): Cand {
       let best: { pos: Pos; score: number } | null = null;
       cand.forEach((a, ci) => {
         const edge = borderPoint(s, s.cx + Math.cos(a), s.cy + Math.sin(a));
-        const pos = { x: edge.x + Math.cos(a) * 5, y: edge.y + Math.sin(a) * 5 };
+        // значок стоит снаружи вершины с зазором BADGE_GAP от её обводки (не налезает на неё)
+        const pos = { x: edge.x + Math.cos(a) * (br + BADGE_GAP), y: edge.y + Math.sin(a) * (br + BADGE_GAP) };
         const rect: Rect = { x0: pos.x - br, y0: pos.y - br, x1: pos.x + br, y1: pos.y + br };
         let score = incident.length ? Math.min(...incident.map((b) => angleDiff(a, b))) * 10 : 10;
         score -= ci * 0.05;
@@ -994,14 +1042,15 @@ export const NODE_TONE: Record<SceneTone | "none", string> = {
   gold: "fill-gold-soft stroke-gold",
   muted: "fill-surface-2 stroke-muted",
 };
+/** Текст вершины лежит на -soft-заливке: «чернила» ink-* (в светлой теме -strong, в тёмной — базовый цвет; тёмный -strong на -soft нечитаем). */
 export const NODE_TEXT: Record<SceneTone | "none", string> = {
   none: "fill-text",
-  primary: "fill-primary-strong",
-  success: "fill-success-strong",
-  danger: "fill-danger-strong",
-  warning: "fill-warning-strong",
-  ai: "fill-ai-strong",
-  gold: "fill-warning-strong",
+  primary: "fill-ink-primary",
+  success: "fill-ink-success",
+  danger: "fill-ink-danger",
+  warning: "fill-ink-warning",
+  ai: "fill-ink-ai",
+  gold: "fill-ink-warning",
   muted: "fill-text",
 };
 export const EDGE_STROKE: Record<SceneTone | "none", string> = {
@@ -1024,16 +1073,7 @@ export const EDGE_FILL: Record<SceneTone | "none", string> = {
   gold: "fill-gold",
   muted: "fill-muted",
 };
-export const PILL_TEXT: Record<SceneTone | "none", string> = {
-  none: "fill-text",
-  primary: "fill-primary-strong",
-  success: "fill-success-strong",
-  danger: "fill-danger-strong",
-  warning: "fill-warning-strong",
-  ai: "fill-ai-strong",
-  gold: "fill-warning-strong",
-  muted: "fill-text",
-};
+export const PILL_TEXT: Record<SceneTone | "none", string> = NODE_TEXT;
 
 type Translate = (key: DictKey, params?: Record<string, string | number>) => string;
 

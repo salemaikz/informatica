@@ -1,13 +1,14 @@
 "use client";
 
 import { m } from "motion/react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { springSoft } from "@/components/motion/presets";
 import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { useT } from "@/i18n/useT";
 import type { Scene } from "@/lib/types";
 import {
   DEFAULT_TONES,
+  PIE_TONES,
   chartAria,
   chartLayout,
   toneVar,
@@ -49,25 +50,37 @@ export function ChartScene({ scene }: { scene: ChartData }) {
   };
   const lay = chartLayout(input);
   const tr = reduce ? { duration: 0 } : springSoft;
+  const uid = `chart${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
     <div className="mx-auto w-full max-w-[480px]">
       <svg viewBox={`0 0 ${lay.w} ${lay.h}`} role="img" aria-label={chartAria(input, t)} className="block h-auto w-full">
+        {lay.type === "pie" && (
+          <defs>
+            {/* штриховка секторов: полоса тона по фону карточки (и в легенде тот же узор) */}
+            {PIE_TONES.map((tone) => (
+              <pattern key={tone} id={`${uid}-st-${tone}`} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect width={6} height={6} fill="var(--surface)" />
+                <rect width={3} height={6} fill={toneVar(tone)} />
+              </pattern>
+            ))}
+          </defs>
+        )}
         <g aria-hidden="true">
-          {lay.type === "pie" ? <Pie lay={lay} /> : <Cartesian lay={lay} tr={tr} />}
-          {"legend" in lay && lay.legend && <LegendView legend={lay.legend} />}
+          {lay.type === "pie" ? <Pie lay={lay} uid={uid} /> : <Cartesian lay={lay} tr={tr} />}
+          {"legend" in lay && lay.legend && <LegendView legend={lay.legend} uid={uid} />}
         </g>
       </svg>
     </div>
   );
 }
 
-function LegendView({ legend }: { legend: Legend }) {
+function LegendView({ legend, uid }: { legend: Legend; uid: string }) {
   return (
     <>
       {legend.items.map((it, i) => (
         <g key={i}>
-          <rect x={it.x} y={it.y + 1} width={10} height={10} rx={3} fill={it.swatch} />
+          <rect x={it.x} y={it.y + 1} width={10} height={10} rx={3} fill={it.stripes ? `url(#${uid}-st-${it.stripes})` : it.swatch} stroke={it.stripes ? toneVar(it.stripes) : undefined} strokeWidth={it.stripes ? 1 : undefined} />
           <text x={it.x + 15} y={it.y + 10} fontSize={it.text.font} fontWeight={700} fill="var(--text)">
             {it.text.lines.map((ln, k) => (
               <tspan key={k} x={it.x + 15} dy={k === 0 ? 0 : it.text.font + 3}>
@@ -113,19 +126,21 @@ function Cartesian({ lay, tr }: { lay: BarChartLayout | LineChartLayout; tr: Tr 
       {lay.type === "bar" && <Bars lay={lay} tr={tr} />}
       {lay.type === "line" && <Lines lay={lay} tr={tr} />}
 
-      {/* порог: линия — под подписями значений (они с обводкой цвета фона и «разрывают» линию), подпись порога — поверх всего */}
-      {lay.threshold && (
-        <m.line
-          initial={false}
-          animate={{ y1: lay.threshold.y, y2: lay.threshold.y }}
-          transition={tr}
-          x1={lay.padL}
-          x2={right}
-          stroke="var(--text)"
-          strokeWidth={1.8}
-          strokeDasharray="6 4"
-        />
-      )}
+      {/* порог: линия прерывается под подписями значений (куски считает раскладка), подпись порога — поверх всего */}
+      {lay.threshold &&
+        lay.threshold.segs.map(([sx1, sx2], i) => (
+          <m.line
+            key={i}
+            initial={false}
+            animate={{ y1: lay.threshold!.y, y2: lay.threshold!.y }}
+            transition={tr}
+            x1={sx1}
+            x2={sx2}
+            stroke="var(--text)"
+            strokeWidth={1.8}
+            strokeDasharray="6 4"
+          />
+        ))}
       {lay.type === "bar" && <BarTexts lay={lay} tr={tr} />}
       {lay.type === "line" && <LineTexts lay={lay} tr={tr} />}
       {lay.threshold && (
@@ -242,16 +257,23 @@ function LineTexts({ lay, tr }: { lay: LineChartLayout; tr: Tr }) {
   );
 }
 
-function Pie({ lay }: { lay: PieChartLayout }): ReactNode {
+function Pie({ lay, uid }: { lay: PieChartLayout; uid: string }): ReactNode {
+  // выделенный сектор рисуется последним (поверх соседей): он выдвинут и обведён цветом текста; яркость остальных не гасим
+  const ordered = [...lay.sectors].sort((p, q) => Number(!p.dim) - Number(!q.dim));
+  const anyHl = lay.sectors.some((s) => s.dim);
   return (
     <>
-      {lay.sectors.map((s) => {
-        const style = { transform: `translate(${s.dx}px, ${s.dy}px)`, opacity: s.dim ? 0.4 : 1, transition: "transform 250ms ease, opacity 250ms ease" };
+      {ordered.map((s) => {
+        const style = { transform: `translate(${s.dx}px, ${s.dy}px)`, transition: "transform 250ms ease" };
         if (!s.path && !(lay.full && s.label)) return null;
+        const fill = s.stripes ? `url(#${uid}-st-${s.stripes})` : s.color;
+        const hl = anyHl && !s.dim;
+        const stroke = hl ? "var(--text)" : "var(--surface)";
+        const sw = hl ? 2.5 : 2;
         return lay.full ? (
-          <circle key={s.i} cx={lay.cx} cy={lay.cy} r={lay.r} fill={s.color} stroke="var(--surface)" strokeWidth={2} style={style} />
+          <circle key={s.i} cx={lay.cx} cy={lay.cy} r={lay.r} fill={fill} stroke={stroke} strokeWidth={sw} style={style} />
         ) : (
-          <path key={s.i} d={s.path} fill={s.color} stroke="var(--surface)" strokeWidth={2} strokeLinejoin="round" style={style} />
+          <path key={s.i} d={s.path} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" style={style} />
         );
       })}
       {lay.sectors.map((s) =>

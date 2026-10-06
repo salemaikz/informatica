@@ -3,7 +3,7 @@ import type { Scene } from "@/lib/types";
 /** Образцы сцены chart: все поля типа и худшие случаи (много категорий, длинные подписи на kk, воронка, пороги). */
 export const SAMPLES: Extract<Scene, { kind: "chart" }>[] = [
   // 0. Простые столбцы, значение выделено.
-  { kind: "chart", type: "bar", labels: ["Пн", "Вт", "Ср", "Чт"], series: [{ values: [3, 5, 2, 6] }], values: true, highlight: [3] },
+  { kind: "chart", type: "bar", labels: [{ ru: "Пн", kk: "Дс" }, { ru: "Вт", kk: "Сс" }, { ru: "Ср", kk: "Ср" }, { ru: "Чт", kk: "Бс" }], series: [{ values: [3, 5, 2, 6] }], values: true, highlight: [3] },
   // 1. Круг с тремя долями.
   { kind: "chart", type: "pie", labels: [{ ru: "Сон", kk: "Ұйқы" }, { ru: "Учёба", kk: "Оқу" }, { ru: "Отдых", kk: "Демалыс" }], series: [{ values: [8, 8, 8] }], values: true },
   // 2. Две серии, пороговая линия, подписи осей, единица.
@@ -16,9 +16,9 @@ export const SAMPLES: Extract<Scene, { kind: "chart" }>[] = [
       { name: { ru: "Факт", kk: "Нақты" }, values: [100, 160, 90, 190] },
     ],
     values: true,
-    unit: "₸",
+    // единица — в названии оси: «120 ₸» над столбцом читалось бы как 120 тенге, а не 120 тысяч
     threshold: { value: 140, label: { ru: "Цель: 140", kk: "Мақсат: 140" } },
-    axes: { x: { ru: "Месяц", kk: "Ай" }, y: { ru: "Выручка, тыс.", kk: "Түсім, мың" } },
+    axes: { x: { ru: "Месяц", kk: "Ай" }, y: { ru: "Выручка, тыс. ₸", kk: "Түсім, мың ₸" } },
     caption: { ru: "План и факт по месяцам", kk: "Айлар бойынша жоспар және нақты нәтиже" },
   },
   // 3. Воронка продаж.

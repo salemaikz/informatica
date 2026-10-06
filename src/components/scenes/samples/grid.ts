@@ -89,7 +89,8 @@ export const SAMPLES: Extract<Scene, { kind: "grid" }>[] = [
     kind: "grid",
     rows: 2,
     cols: 3,
-    values: [["A1", "", "B1"], ["A2", "B2", "C2"]],
+    // A1 объединена на два столбца (A1:B1) — следующая ячейка строки уже C1
+    values: [["A1", "", "C1"], ["A2", "B2", "C2"]],
     merges: [{ r: 0, c: 0, cs: 2 }],
     caption: { ru: "Объединённая ячейка", kk: "Біріктірілген ұяшық" },
   },
