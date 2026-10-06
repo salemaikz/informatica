@@ -24,7 +24,7 @@ import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
 import { gameSkillsFor } from "@/lib/drill-meta";
 import { ENTRY_COST, entryCost, formatHearts, lessonCost } from "@/lib/economy";
-import { theoryPayState } from "@/lib/theory-pay";
+import { shouldPayTheory } from "@/lib/theory-pay";
 import { theoryUnitHref } from "@/lib/theory-href";
 import { shortDate } from "@/lib/date";
 import { useApp } from "@/lib/store";
@@ -47,7 +47,7 @@ import { StepMarks } from "./MasteryLegend";
 // Шторка урока: описание, статус, сколько XP даст прохождение и режимы (учиться, проверить себя,
 // игрой, только теория, конспект). Её открывают карта курса и другие экраны.
 // Платные режимы (#40) показывают цену входа значком HeartCost; «Только теория» стоит 0,5 (и у пройденного урока тоже),
-// пока конспект не оплачен за сутки (lib/theory-pay.ts); конспект в заметках бесплатен.
+// пока тема не оплачена за сутки (lib/theory-pay.ts); конспект в заметках бесплатен.
 
 function ModeCard({
   href,
@@ -187,8 +187,8 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const stepDays = stepReviewDays(stat, now);
   // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
   const gameCost = entryCost("game", lesson);
-  // Теория: платная (и у пройденного урока тоже), пока конспект не оплачен за сутки (при безлимите значок скрыт сам).
-  const theoryState = theoryPayState({ unlimited, paidAt: theoryPaidAt, now });
+  // Теория: платная (и у пройденного урока тоже), пока тема не оплачена за сутки (при безлимите значок скрыт сам).
+  const theoryPays = shouldPayTheory({ unlimited, paidAt: theoryPaidAt, now });
 
   return (
     <div className="flex flex-col gap-4" style={unitVars(unit.color)}>
@@ -293,8 +293,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
           icon={BookOpen}
           title={t("learn2.mode.theory")}
           hint={t("learn2.mode.theoryHint")}
-          cost={theoryState === "pay" ? ENTRY_COST.theory : undefined}
-          note={theoryState === "pay" ? t("theory16c.sheet.pay") : theoryState === "paid" ? t("hearts15.sheet.theoryPaid") : undefined}
+          cost={theoryPays ? ENTRY_COST.theory : undefined}
         />
         <ModeCard href={`/notes/lesson/${lessonId}`} icon={NotebookPen} title={t("learn2.mode.notes")} hint={t("learn2.mode.notesHint")} />
         {!unlimited && <p className="px-1 text-xs font-bold text-muted">{t("theory16c.sheet.costNote", { cost: formatHearts(ENTRY_COST.theory) })}</p>}

@@ -25,6 +25,7 @@ import { useReduceMotion } from "@/components/motion/useReduceMotion";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { LessonCard } from "./LessonCard";
 import { SearchField } from "./SearchField";
+import { TheoryCost } from "./TheoryCost";
 import { useHashScroll } from "./useHashScroll";
 
 const ORDER = readableLessonIds(UNITS);
@@ -120,6 +121,7 @@ export function TheoryHome() {
                   : t("theory16c.home.continueAt", { n: cont.card + 1, m: cont.cards })}
             </span>
           </span>
+          <TheoryCost id={cont.id} />
           <ChevronRight size={22} className="shrink-0 text-primary" aria-hidden />
         </Link>
       )}

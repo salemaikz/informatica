@@ -6,7 +6,6 @@ import { lessonDocs } from "@/lib/search";
 import {
   cardIndexFromHash,
   cardIndexFromParam,
-  cardToRemember,
   clampCard,
   CONSPECT_ID,
   continueTarget,
@@ -30,7 +29,6 @@ import {
   unitSummary,
   withoutCardAnchor,
 } from "@/lib/theory";
-import { isTheoryCardLocked } from "@/lib/theory-pay";
 import { CARD_PARAM, paramValue, theoryCardHref, theoryUnitHref, UNIT_PARAM } from "@/lib/theory-href";
 import { mergeState, useApp } from "@/lib/store";
 import { theory16cDict } from "@/i18n/parts/theory16c";
@@ -248,14 +246,6 @@ describe("карточки урока и якоря", () => {
     expect(initialCard({ hash: "#conspect", cardIds: ids, lessonId: "t-1", last })).toBe(3);
   });
 
-  it("T1: карточка за платными воротами остаётся своей — ворота откроются на ней, а не на первой", () => {
-    // номер не зависит от оплаты: initialCard про адрес, ворота (isTheoryCardLocked) считает читалка
-    const at = initialCard({ card: "s3", hash: "", cardIds: ids, lessonId: "t-1", last: null });
-    expect(at).toBe(2);
-    expect(isTheoryCardLocked("pay", at)).toBe(true);
-    expect(isTheoryCardLocked("paid", at)).toBe(false);
-  });
-
   it("T1: «Назад» к записи, где ?card= уже убрали при листании, — параметр с сервера устарел, открываем где остановились", () => {
     const last = { id: "t-1", card: 4, at: 1 }; // долистали до s5 (индекс 4)
     const cards = ["s1", "s2", "s3", "s4", "s5", CONSPECT_ID];
@@ -282,13 +272,6 @@ describe("карточки урока и якоря", () => {
     expect(withoutCardAnchor("/theory/t-1", "?card=s3", "#s3")).toBe("/theory/t-1");
     expect(withoutCardAnchor("/theory/t-1", "", "")).toBeNull();
     expect(withoutCardAnchor("/theory/t-1", "?x=1", "")).toBeNull();
-  });
-
-  it("T3: закрытая воротами карточка не запоминается для «Продолжить чтение»", () => {
-    expect(cardToRemember(3, false)).toBe(3);
-    expect(cardToRemember(0, false)).toBe(0);
-    expect(cardToRemember(3, true)).toBeNull();
-    expect(cardToRemember(1, true)).toBeNull();
   });
 
   it("на реальном курсе ссылки поиска (`?card=<шаг>`, `?card=conspect`) попадают в карточки", () => {
@@ -335,19 +318,6 @@ describe("«Продолжить чтение»", () => {
 
   it("дочитан последний урок — остаётся он сам", () => {
     expect(continueTarget({ id: "c", card: 4, at: 1 }, order, cardsOf)).toEqual({ id: "c", card: 4, cards: 4, next: false });
-  });
-
-  it("T3: конспект за воротами не запомнен — «Продолжить» остаётся на непрочитанном уроке, а не перескакивает к следующему", () => {
-    // читали карточку 2; по ссылке поиска из другого места открыли ?card=conspect (карточка 5), но он закрыт воротами
-    let last: { id: string; card: number; at: number } | null = { id: "a", card: 2, at: 1 };
-    const conspect = 5; // cards.a = 5 → конспект — карточка с номером 5
-    const remembered = cardToRemember(conspect, true);
-    if (remembered !== null) last = { id: "a", card: remembered, at: 2 };
-    expect(continueTarget(last, order, cardsOf)).toEqual({ id: "a", card: 2, cards: 5, next: false });
-    // а если бы запомнили — урок выглядел бы дочитанным (прежняя ошибка)
-    expect(continueTarget({ id: "a", card: conspect, at: 2 }, order, cardsOf)).toMatchObject({ id: "b", next: true });
-    // открытый (оплаченный) конспект запоминается как раньше
-    expect(cardToRemember(conspect, false)).toBe(conspect);
   });
 
   it("неизвестный урок или урок вне порядка (школьный) — null", () => {

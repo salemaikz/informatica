@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAY, ENTRY_COST, HOUR, MINUTE, heartsView } from "@/lib/economy";
 import {
-  THEORY_FREE_CARDS,
   THEORY_PAID_MAX,
   THEORY_REPEAT_MS,
-  isTheoryCardLocked,
   putTheoryPaid,
   sanitizeTheoryPaid,
   shouldPayTheory,
   theoryCost,
-  theoryFreeUntil,
-  theoryPayState,
-  theoryUntilLabel,
+  theoryOpenStep,
+  theoryPaidRecently,
 } from "@/lib/theory-pay";
 import { mergeState, useApp } from "@/lib/store";
 import { todayKey } from "@/lib/text";
@@ -19,85 +16,83 @@ import { todayKey } from "@/lib/text";
 const NOW = 1_800_000_000_000;
 const base = { unlimited: false, paidAt: undefined as number | undefined, now: NOW };
 
-describe("плата за теорию: правила (этап 15, F2.3; этап 16В — явная плата, пройденный урок тоже платный)", () => {
-  it("цена — ENTRY_COST.theory = 0,5; повтор — сутки; без оплаты открыта одна карточка", () => {
+describe("плата за теорию: правила (этап 15, F2.3; этап 16В — ½ сердечка при открытии темы, решение #113)", () => {
+  it("цена — ENTRY_COST.theory = 0,5; повтор — сутки", () => {
     expect(theoryCost()).toBe(0.5);
     expect(ENTRY_COST.theory).toBe(0.5);
     expect(THEORY_REPEAT_MS).toBe(DAY);
-    expect(THEORY_FREE_CARDS).toBe(1);
   });
 
-  it("обычный непройденный урок без оплаты — платим", () => {
-    expect(theoryPayState(base)).toBe("pay");
+  it("P1: обычная тема без оплаты — платим", () => {
     expect(shouldPayTheory(base)).toBe(true);
   });
 
   it("пройденный урок платный, как и любой другой: прохождение на оплату не влияет (владелец: «теория тоже платная»)", () => {
     // Пройденность в правилах не участвует вовсе: лишнее поле не меняет ответа.
     const input = { ...base, done: true } as typeof base;
-    expect(theoryPayState(input)).toBe("pay");
     expect(shouldPayTheory(input)).toBe(true);
   });
 
-  it("«Безлимит» (и пробный) — бесплатно", () => {
-    expect(theoryPayState({ ...base, unlimited: true })).toBe("unlimited");
+  it("P2: «Безлимит» (и пробный) — бесплатно, и важнее записи об оплате", () => {
     expect(shouldPayTheory({ ...base, unlimited: true })).toBe(false);
+    expect(shouldPayTheory({ ...base, unlimited: true, paidAt: NOW - HOUR })).toBe(false);
   });
 
-  it("безлимит важнее оплаты", () => {
-    expect(theoryPayState({ ...base, unlimited: true, paidAt: NOW - HOUR })).toBe("unlimited");
-  });
-
-  it("оплачено за последние 24 часа — бесплатно; ровно через сутки и позже — снова платно", () => {
-    expect(theoryPayState({ ...base, paidAt: NOW - 1 })).toBe("paid");
-    expect(theoryPayState({ ...base, paidAt: NOW - 23 * HOUR })).toBe("paid");
-    expect(theoryPayState({ ...base, paidAt: NOW - DAY + 1 })).toBe("paid");
-    expect(theoryPayState({ ...base, paidAt: NOW - DAY })).toBe("pay");
-    expect(theoryPayState({ ...base, paidAt: NOW - 3 * DAY })).toBe("pay");
+  it("P2: оплачено за последние 24 часа — бесплатно; ровно через сутки и позже — снова платно", () => {
+    expect(shouldPayTheory({ ...base, paidAt: NOW - 1 })).toBe(false);
+    expect(shouldPayTheory({ ...base, paidAt: NOW - 23 * HOUR })).toBe(false);
+    expect(shouldPayTheory({ ...base, paidAt: NOW - DAY + 1 })).toBe(false);
+    expect(shouldPayTheory({ ...base, paidAt: NOW - DAY })).toBe(true);
+    expect(shouldPayTheory({ ...base, paidAt: NOW - 3 * DAY })).toBe(true);
   });
 
   it("оплата «из ближайшего будущего» (часы интерфейса отстают на тик) — считается оплаченной, из далёкого — мусор", () => {
-    expect(theoryPayState({ ...base, paidAt: NOW + 5_000 })).toBe("paid");
-    expect(theoryPayState({ ...base, paidAt: NOW + 10 * MINUTE })).toBe("pay");
+    expect(shouldPayTheory({ ...base, paidAt: NOW + 5_000 })).toBe(false);
+    expect(shouldPayTheory({ ...base, paidAt: NOW + 10 * MINUTE })).toBe(true);
   });
 
   it("мусор вместо времени — платим", () => {
     for (const paidAt of [NaN, Infinity, "x" as unknown as number, null as unknown as number]) {
-      expect(theoryPayState({ ...base, paidAt })).toBe("pay");
+      expect(shouldPayTheory({ ...base, paidAt })).toBe(true);
     }
   });
 
-  it("theoryFreeUntil: сутки после оплаты", () => {
-    expect(theoryFreeUntil(NOW)).toBe(NOW + DAY);
+  it("theoryPaidRecently — то же правило без «Безлимита»", () => {
+    expect(theoryPaidRecently(NOW - HOUR, NOW)).toBe(true);
+    expect(theoryPaidRecently(NOW - DAY, NOW)).toBe(false);
+    expect(theoryPaidRecently(undefined, NOW)).toBe(false);
   });
 });
 
-describe("ворота: какие карточки закрыты без оплаты", () => {
-  it("платить нужно — открыта только первая карточка, остальные (и конспект) закрыты", () => {
-    expect(isTheoryCardLocked("pay", 0)).toBe(false);
-    for (const i of [1, 2, 5, 11]) expect(isTheoryCardLocked("pay", i), String(i)).toBe(true);
+describe("открытие темы: что показывает страница (theoryOpenStep)", () => {
+  const step = (over: Partial<Parameters<typeof theoryOpenStep>[0]> = {}) =>
+    theoryOpenStep({ admitted: false, refused: false, unlimited: false, paidAt: undefined, now: NOW, ...over });
+
+  it("P1: тема не оплачена — pay: оплату делает колбэк страницы, текста пока нет", () => {
+    expect(step()).toBe("pay");
   });
 
-  it("оплачено или «Безлимит» — закрытых карточек нет", () => {
-    for (const state of ["paid", "unlimited"] as const) for (const i of [0, 1, 7]) expect(isTheoryCardLocked(state, i)).toBe(false);
-  });
-});
-
-describe("«Оплачено до …»: когда закончатся сутки", () => {
-  const at = (h: number, m: number) => new Date(2027, 0, 15, h, m, 0).getTime();
-
-  it("оплата сегодня — сутки заканчиваются завтра в то же время", () => {
-    // 14:30 сегодня → до 14:30 завтра
-    expect(theoryUntilLabel(at(14, 30), at(14, 31))).toEqual({ day: "tomorrow", time: "14:30" });
+  it("время ещё неизвестно (первый кадр) — wait, ничего не списываем", () => {
+    expect(step({ now: 0 })).toBe("wait");
   });
 
-  it("оплата вчера — до сегодняшнего времени", () => {
-    const paid = new Date(2027, 0, 14, 9, 5, 0).getTime();
-    expect(theoryUntilLabel(paid, at(7, 0))).toEqual({ day: "today", time: "09:05" });
+  it("P2: оплачено за сутки или «Безлимит» — сразу open, без оплаты", () => {
+    expect(step({ paidAt: NOW - HOUR })).toBe("open");
+    expect(step({ unlimited: true })).toBe("open");
   });
 
-  it("часы и минуты с ведущим нулём", () => {
-    expect(theoryUntilLabel(new Date(2027, 0, 14, 0, 0, 0).getTime(), at(10, 0)).time).toBe("00:00");
+  it("P3: сердечек не хватило — locked: текст темы не показывается; пока не отказали — снова pay", () => {
+    expect(step({ refused: true })).toBe("locked");
+    expect(step({ refused: false })).toBe("pay");
+  });
+
+  it("после покупки сердечек (resume списал и записал оплату) locked сменяется open", () => {
+    expect(step({ refused: true, paidAt: NOW })).toBe("open");
+  });
+
+  it("открытая тема не закрывается, даже если запись об оплате устарела или вытеснена", () => {
+    expect(step({ admitted: true, paidAt: undefined })).toBe("open");
+    expect(step({ admitted: true, refused: true })).toBe("open");
   });
 });
 
