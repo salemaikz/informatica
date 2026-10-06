@@ -352,8 +352,8 @@ describe("тексты магазина и тарифов: сердечко — 
     expect(dict["plans.cmp.heartsFor"].ru).toBe("вход в урок, тест или игру");
     expect(dict["plans.cmp.heartsFor"].kk.length).toBeGreaterThan(0);
   });
-  it("«Безлимит»: уроки, тесты и игры без сердечек", () => {
-    expect(dict["plans.perk.unl.hearts"].ru).toBe("Уроки, тесты и игры без сердечек");
-    expect(dict["plans.perk.unl.hearts"].kk).toBe("Сабаққа, тестке және ойынға жүрек жұмсалмайды");
+  it("«Безлимит»: уроки, тренировки, тесты и игры без сердечек (тренировка платная с этапа 16В, #111)", () => {
+    expect(dict["plans.perk.unl.hearts"].ru).toBe("Уроки, тренировки, тесты и игры без сердечек");
+    expect(dict["plans.perk.unl.hearts"].kk).toBe("Сабаққа, жаттығуға, тестке және ойынға жүрек жұмсалмайды");
   });
 });
