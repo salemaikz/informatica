@@ -147,9 +147,94 @@ export interface ArrowGeo {
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
+/** Размер наконечника стрелки, px. */
+const HEAD_SIZE = 8;
+const HEAD_HALF = 4.5;
+/** Высота плоской дуги над строкой: умещается в отступ между строками (цифры соседней строки не задеваются), px. */
+const FLAT_PEAK = 7;
+
+/** Собирает стрелку-дугу (путь, наконечник по касательной в конце) из начала, управляющей точки и конца. */
+function finishArrow(start: Pt, ctrl: Pt, end: Pt): ArrowGeo {
+  const tx = end[0] - ctrl[0];
+  const ty = end[1] - ctrl[1];
+  const tl = Math.hypot(tx, ty) || 1;
+  const ux = tx / tl;
+  const uy = ty / tl;
+  const head: [Pt, Pt, Pt] = [
+    [r1(end[0]), r1(end[1])],
+    [r1(end[0] - ux * HEAD_SIZE - uy * HEAD_HALF), r1(end[1] - uy * HEAD_SIZE + ux * HEAD_HALF)],
+    [r1(end[0] - ux * HEAD_SIZE + uy * HEAD_HALF), r1(end[1] - uy * HEAD_SIZE - ux * HEAD_HALF)],
+  ];
+  // Дугу заканчиваем у основания наконечника, чтобы линия не торчала за остриё.
+  const baseEnd: Pt = [end[0] - ux * (HEAD_SIZE - 1), end[1] - uy * (HEAD_SIZE - 1)];
+  return {
+    start: [r1(start[0]), r1(start[1])],
+    end: [r1(end[0]), r1(end[1])],
+    ctrl: [r1(ctrl[0]), r1(ctrl[1])],
+    d: `M${r1(start[0])} ${r1(start[1])} Q${r1(ctrl[0])} ${r1(ctrl[1])} ${r1(baseEnd[0])} ${r1(baseEnd[1])}`,
+    head,
+  };
+}
+
+/**
+ * Стрелка между ячейками одной строки: плоская дуга в полоске между строками (над строкой, у первой — под ней), начало и конец —
+ * на границе ячеек у самых центров. Высокая дуга задевала бы цифры соседней строки. null — места нет (одна строка во всю высоту).
+ */
+function flatRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
+  const c1 = rectCenter(from);
+  const c2 = rectCenter(to);
+  const sign = c2[0] >= c1[0] ? 1 : -1;
+  const sx = c1[0] + sign * Math.min(14, from.w * 0.25);
+  const ex = c2[0] - sign * Math.min(14, to.w * 0.25);
+  if (sign * (ex - sx) < 14) return null; // ячейки слишком близко: плоская дуга не поместится
+  const margin = 2;
+  for (const up of [true, false]) {
+    const sy = up ? from.y : from.y + from.h;
+    const ey = up ? to.y : to.y + to.h;
+    const ctrl: Pt = [(sx + ex) / 2, (sy + ey) / 2 + (up ? -2 : 2) * FLAT_PEAK];
+    const apexY = (sy + ey) / 4 + ctrl[1] / 2;
+    if (apexY < margin || apexY > bounds.h - margin) continue;
+    return finishArrow([sx, sy], ctrl, [ex, ey]);
+  }
+  return null;
+}
+
+/**
+ * Стрелка между вертикальными соседями: у них луч из центра выходит в одной точке общей границы (начало = конец, стрелки не видно).
+ * Рисуем дугу вдоль правого края: от ближней к границе части исходной ячейки к ближней к границе части целевой, выгиб вправо.
+ * `down` — целевая ячейка ниже исходной (копирование вниз); иначе выше: части зеркальны, стрелка остаётся короткой и не тянется через текст.
+ */
+function sideArrow(from: Rect, to: Rect, bounds: { w: number; h: number }, down: boolean): ArrowGeo {
+  const x0 = from.x + from.w - Math.min(18, from.w * 0.25);
+  const near = down ? 0.62 : 0.38; // доля высоты исходной ячейки, откуда стартуем (у общей границы)
+  const sy = from.y + from.h * near;
+  const ey = to.y + to.h * (1 - near);
+  const bulge = Math.max(0, Math.min(14, bounds.w - 2 - x0));
+  return finishArrow([x0, sy], [x0 + bulge, (sy + ey) / 2], [x0, ey]);
+}
+
+/**
+ * Стрелка между горизонтальными соседями, когда ни над строкой, ни под ней места нет (таблица в одну строку): плоская дуга внутри строки,
+ * в полосе у нижнего края ячеек — ниже цифр. null — ячейки слишком близко или полосы нет в таблице.
+ */
+function innerRowArrow(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
+  const c1 = rectCenter(from);
+  const c2 = rectCenter(to);
+  const sign = c2[0] >= c1[0] ? 1 : -1;
+  const sx = c1[0] + sign * Math.min(14, from.w * 0.25);
+  const ex = c2[0] - sign * Math.min(14, to.w * 0.25);
+  if (sign * (ex - sx) < 14) return null;
+  const sy = from.y + from.h - 6;
+  const ey = to.y + to.h - 6;
+  const ctrl: Pt = [(sx + ex) / 2, (sy + ey) / 2 + 4];
+  const apexY = (sy + ey) / 4 + ctrl[1] / 2;
+  if (Math.min(sy, ey, apexY) < 2 || Math.max(sy, ey, apexY) > bounds.h - 2) return null;
+  return finishArrow([sx, sy], ctrl, [ex, ey]);
+}
+
 /**
  * Стрелка-дуга от ячейки к ячейке. Начало и конец — на границах ячеек (не поверх цифр), дуга выгибается вверх (у вертикальных —
- * вправо) и остаётся внутри `bounds` (размер таблицы): если сверху нет места, выгиб идёт вниз. null — ячейка та же.
+ * вправо) и остаётся внутри `bounds` (размер таблицы): если сверху нет места, выгиб идёт вниз. null — ячейка та же или стрелке негде поместиться.
  */
 export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: number }): ArrowGeo | null {
   const c1 = rectCenter(from);
@@ -158,6 +243,10 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
   const dy = c2[1] - c1[1];
   const len = Math.hypot(dx, dy);
   if (len < 1) return null;
+  if (Math.abs(dy) < Math.min(from.h, to.h) / 2) {
+    const flat = flatRowArrow(from, to, bounds);
+    if (flat) return flat;
+  }
   const mid: Pt = [(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2];
   // Нормали: n1 — «вверх» (у вертикальных — «вправо»), n2 — противоположная.
   const base: Pt = [-dy / len, dx / len];
@@ -192,28 +281,13 @@ export function arrowGeometry(from: Rect, to: Rect, bounds: { w: number; h: numb
     }
   }
   const { ctrl, start, end } = pick;
-  // Наконечник — по касательной в конце дуги (от управляющей точки к концу).
-  const tx = end[0] - ctrl[0];
-  const ty = end[1] - ctrl[1];
-  const tl = Math.hypot(tx, ty) || 1;
-  const ux = tx / tl;
-  const uy = ty / tl;
-  const size = 8;
-  const half = 4.5;
-  const head: [Pt, Pt, Pt] = [
-    [r1(end[0]), r1(end[1])],
-    [r1(end[0] - ux * size - uy * half), r1(end[1] - uy * size + ux * half)],
-    [r1(end[0] - ux * size + uy * half), r1(end[1] - uy * size - ux * half)],
-  ];
-  // Дугу заканчиваем у основания наконечника, чтобы линия не торчала за остриё.
-  const baseEnd: Pt = [end[0] - ux * (size - 1), end[1] - uy * (size - 1)];
-  return {
-    start: [r1(start[0]), r1(start[1])],
-    end: [r1(end[0]), r1(end[1])],
-    ctrl: [r1(ctrl[0]), r1(ctrl[1])],
-    d: `M${r1(start[0])} ${r1(start[1])} Q${r1(ctrl[0])} ${r1(ctrl[1])} ${r1(baseEnd[0])} ${r1(baseEnd[1])}`,
-    head,
-  };
+  // Начало и конец совпали (соседи по общей границе): вертикальные — дуга у правого края ячеек; соседи по строке, когда над и под
+  // строкой места нет (таблица в одну строку), — дуга внутри строки. Вертикальную стрелку для соседей по строке не рисуем: она указывала бы вверх.
+  if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 12) {
+    if (Math.abs(dy) > Math.abs(dx)) return sideArrow(from, to, bounds, dy > 0);
+    if (Math.abs(dy) < Math.min(from.h, to.h) / 2) return innerRowArrow(from, to, bounds);
+  }
+  return finishArrow(start, ctrl, end);
 }
 
 // ----- JOIN: тон совпавших строк и вид раскладки -----

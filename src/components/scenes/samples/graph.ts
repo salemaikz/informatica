@@ -141,7 +141,7 @@ export const SAMPLES: G[] = [
       { id: "u2", label: { ru: "борис", kk: "бауыржан" } },
       { id: "d1", label: { ru: "Документы\nи отчёты", kk: "Құжаттар\nмен есептер" } },
       { id: "d2", label: { ru: "Музыка", kk: "Музыка" } },
-      { id: "d3", label: { ru: "Загрузки", kk: "Жүктемелер" } },
+      { id: "d3", label: { ru: "Загрузки", kk: "Жүктеулер" } },
     ],
     edges: [{ from: "home", to: "u1" }, { from: "home", to: "u2" }, { from: "u1", to: "d1" }, { from: "u1", to: "d2" }, { from: "u2", to: "d3" }],
     highlight: ["d1"],

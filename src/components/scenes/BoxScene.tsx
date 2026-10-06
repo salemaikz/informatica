@@ -204,7 +204,7 @@ export function BoxScene({ scene }: { scene: BoxSceneData }) {
       </div>
 
       {ruler.length > 0 && (
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-2.5">
           {ruler.map((line, i) => (
             <p key={i} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-center font-mono text-[13px] font-bold text-text">
               {line.head && <span className="whitespace-nowrap">{line.head}</span>}

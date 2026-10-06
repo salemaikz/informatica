@@ -75,7 +75,7 @@ export const SAMPLES: Extract<Scene, { kind: "numberline" }>[] = [
           { at: 5, label: { ru: "минимум", kk: "ең кіші мән" } },
           { at: 6, open: true, label: { ru: "середина", kk: "ортасы" } },
           { at: 7, label: { ru: "максимум", kk: "ең үлкен мән" } },
-          { at: 12, label: { ru: "конец шкалы", kk: "шкала соңы" } },
+          { at: 12, label: { ru: "конец шкалы", kk: "шкаланың соңы" } },
         ],
       },
     ],

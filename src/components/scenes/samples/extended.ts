@@ -56,8 +56,6 @@ export const SAMPLES: Scene[] = [
     outputs: [{ gate: "s", name: "S" }, { gate: "c", name: "C" }],
     values: { A: 1, B: 1 },
   },
-  { kind: "hardware", items: ["switch", "hub", "modem", "access-point", "nic", "cable-utp", "cable-fiber", "printer-dot", "printer-inkjet"] },
-  { kind: "hardware", items: ["printer-laser", "plotter", "pen-tablet", "sensor", "vr-headset", "robot-vacuum", "drone", "manipulator"] },
   // ---- S6: расширения table (добавлено в конец массива) ----
   // Состояния строк: приглушена (не прошла WHERE), удалена, добавлена, отклонена (нарушает первичный ключ).
   {
@@ -65,7 +63,7 @@ export const SAMPLES: Scene[] = [
     columns: ["ID", { ru: "Имя", kk: "Аты" }, { ru: "Балл", kk: "Балл" }],
     rows: [["1", { ru: "Али", kk: "Әли" }, "90"], ["2", "Dana", "75"], ["3", "Erlan", "60"], ["4", { ru: "Мария", kk: "Мәрия" }, "88"], ["3", "Aigul", "70"]],
     rowStates: [{ row: 1, state: "dim" }, { row: 2, state: "struck" }, { row: 3, state: "new" }, { row: 4, state: "rejected" }],
-    caption: { ru: "Приглушена, удалена, добавлена и отклонена (повтор ключа 3)", kk: "Ескерілмейтін, жойылған, қосылған және қабылданбаған жол (3 кілтінің қайталануы)" },
+    caption: { ru: "Приглушена, удалена, добавлена и отклонена (повтор ключа 3)", kk: "Ескерілмейтін, жойылған, қосылған және қабылданбаған жолдар (3 кілтінің қайталануы)" },
   },
   // UPDATE: «было → стало» и тона (условие — primary, результат — success).
   {

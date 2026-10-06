@@ -27,13 +27,12 @@ export function CountUp({
   const text = useTransform(spring, (v) => format(v));
 
   useEffect(() => {
-    if (reduce) {
-      spring.jump(value);
-      return;
-    }
+    if (reduce) return;
     const id = setTimeout(() => spring.set(value), delay * 1000);
     return () => clearTimeout(id);
   }, [value, delay, reduce, spring]);
 
+  // «Меньше анимаций»: сразу итоговое число, без пружины (jump() оставлял на экране 0).
+  if (reduce) return <span className={className}>{format(value)}</span>;
   return <m.span className={className}>{text}</m.span>;
 }

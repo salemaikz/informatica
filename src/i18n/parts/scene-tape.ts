@@ -10,10 +10,10 @@ export const sceneTapeDict = {
   "scene.tape.ariaAlias": { ru: "Второе имя той же ленты: {alias}.", kk: "Сол таспаның екінші аты: {alias}." },
   "scene.tape.ariaSlice": { ru: "Срез берёт ячейки: {cells}.", kk: "Тілім мына ұяшықтарды алады: {cells}." },
   "scene.tape.ariaEmpty": { ru: "Срез пустой.", kk: "Тілім бос." },
-  "scene.tape.ariaHighlight": { ru: "Выделены ячейки: {cells}.", kk: "Ерекшеленген ұяшықтар: {cells}." },
+  "scene.tape.ariaHighlight": { ru: "Выделены ячейки: {cells}.", kk: "Бөлектелген ұяшықтар: {cells}." },
   "scene.tape.ariaDim": { ru: "Приглушены ячейки: {cells}.", kk: "Күңгірттелген ұяшықтар: {cells}." },
   "scene.tape.ariaPointer": { ru: "Указатель {label}, ячейка {at}.", kk: "Нұсқағыш {label}, ұяшық {at}." },
-  "scene.tape.ariaSwap": { ru: "Обмен: ячейки {a} и {b}.", kk: "Орын ауыстыру: ұяшықтар {a} және {b}." },
+  "scene.tape.ariaSwap": { ru: "Обмен: ячейки {a} и {b}.", kk: "Орын алмасу: ұяшықтар {a} және {b}." },
   "scene.tape.ariaGroup": { ru: "Группа: ячейки {from}–{to}, {label}.", kk: "Топ: ұяшықтар {from}–{to}, {label}." },
   "scene.tape.ariaAfter": { ru: "После: {cells}.", kk: "Кейін: {cells}." },
 } satisfies Record<string, L>;

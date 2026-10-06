@@ -201,7 +201,7 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
   }
 
   // ---- shift: стрелка и результат ----
-  const shiftH = scene.shift ? 44 : 0;
+  const shiftH = scene.shift ? 22 : 0;
   const total = lay.height + shiftH;
   const left = Math.min(...lay.rows.flatMap((r) => r.cells.map((c) => c.x)));
   const right = Math.max(...lay.rows.flatMap((r) => r.cells.map((c) => c.x + lay.tileW)));
@@ -238,12 +238,11 @@ export function BinaryExtScene({ scene }: { scene: BinaryData }) {
               strokeLinejoin="round"
               className="stroke-primary"
             />
-            <text x={NUM_W / 2} y={ay + 24} textAnchor="middle" fontSize={14} fontWeight={800} className="fill-muted">
-              {t(scene.shift === "left" ? "scene.binary.shiftLeft" : "scene.binary.shiftRight")}
-            </text>
           </g>
         )}
       </svg>
+      {/* подпись — обычным текстом, а не в SVG: длинная фраза (особенно на kk) переносится, а не вылезает за рамку */}
+      {scene.shift && <p className="text-balance text-center text-sm font-extrabold text-muted">{t(scene.shift === "left" ? "scene.binary.shiftLeft" : "scene.binary.shiftRight")}</p>}
       {scene.shift && (
         <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-sm font-extrabold text-muted">
           <span>{t("scene.binary.shiftResult")}</span>

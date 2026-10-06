@@ -363,7 +363,7 @@ describe("dbSchemaAria", () => {
     expect(kk).toContain("Деректер қорының сызбасы. Кестелер:");
     expect(kk).toContain("бастапқы кілт");
     expect(kk).toContain("сыртқы кілт: Classes.ID");
-    expect(kk).toContain("Students.ClassID өрісі Classes.ID өрісіне сілтейді, байланыс 1:N");
+    expect(kk).toContain("Students.ClassID өрісі Classes.ID өрісіне сілтеме жасайды, байланыс 1:N");
     // без связей и выделения — без лишних фраз
     expect(dbSchemaAria(SAMPLES[7].tables.length === 1 ? { ...SAMPLES[7], highlight: undefined } : SAMPLES[7], tr("ru"))).not.toContain("Связи");
   });

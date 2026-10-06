@@ -168,6 +168,116 @@ describe("геометрия слоя: стрелки", () => {
     expect(arrowGeometry(cell(1, 1), cell(1, 1), bounds)).toBeNull();
   });
 
+  it("стрелка по строке плоская: дуга не выше отступа между строками, цифры соседней строки не задеты", () => {
+    for (const [from, to] of [[cell(2, 0), cell(2, 2)], [cell(2, 2), cell(2, 0)], [cell(1, 0), cell(1, 1)]]) {
+      const a = arrowGeometry(from, to, bounds)!;
+      const apex = (a.start[1] + a.end[1]) / 4 + a.ctrl[1] / 2; // вершина квадратичной кривой при t = 0,5
+      expect(Math.abs(apex - from.y)).toBeLessThanOrEqual(8);
+    }
+    // в первой строке — под строкой, и внутри таблицы
+    const top = arrowGeometry(cell(0, 0), cell(0, 2), bounds)!;
+    expect(top.ctrl[1]).toBeGreaterThan(cell(0, 0).y + cell(0, 0).h);
+  });
+
+  it("вертикальные соседи (копирование формулы вниз): стрелка видна — не точка; наконечник направлен вниз", () => {
+    const a = arrowGeometry(cell(0, 1), cell(1, 1), bounds)!;
+    expect(Math.hypot(a.end[0] - a.start[0], a.end[1] - a.start[1])).toBeGreaterThan(12);
+    expect(a.end[1]).toBeGreaterThan(a.start[1]);
+    // начало в нижней части верхней ячейки, конец — в верхней части нижней
+    expect(a.start[1]).toBeGreaterThan(cell(0, 1).y + cell(0, 1).h / 2);
+    expect(a.end[1]).toBeLessThan(cell(1, 1).y + cell(1, 1).h / 2);
+    for (const p of [a.start, a.end, a.ctrl, ...a.head]) {
+      expect(p[0]).toBeGreaterThanOrEqual(0);
+      expect(p[0]).toBeLessThanOrEqual(bounds.w);
+    }
+    // в последнем столбце выгиб не уходит за край таблицы
+    const last = arrowGeometry(cell(0, 2), cell(1, 2), bounds)!;
+    expect(last.ctrl[0]).toBeLessThanOrEqual(bounds.w - 2 + 1e-6);
+  });
+
+  it("вертикальные соседи, копирование вверх: зеркально вниз — короткая стрелка у общей границы, наконечник вверх, не тянется через текст", () => {
+    const from: Rect = { x: 0, y: 32, w: 100, h: 32 };
+    const to: Rect = { x: 0, y: 0, w: 100, h: 32 };
+    const a = arrowGeometry(from, to, { w: 300, h: 64 })!;
+    expect(a).not.toBeNull();
+    // начало — в верхней части нижней ячейки (у границы), конец — в нижней части верхней
+    expect(a.start[1]).toBeGreaterThan(from.y);
+    expect(a.start[1]).toBeLessThan(from.y + from.h / 2);
+    expect(a.end[1]).toBeGreaterThan(to.y + to.h / 2);
+    expect(a.end[1]).toBeLessThan(to.y + to.h);
+    // стрелка идёт вверх и короче высоты ячейки (раньше — 1,24 высоты)
+    expect(a.end[1]).toBeLessThan(a.start[1]);
+    expect(a.start[1] - a.end[1]).toBeLessThan(from.h);
+    expect(a.start[1] - a.end[1]).toBeGreaterThan(12);
+    // наконечник: остриё выше основания
+    expect(a.head[0][1]).toBeLessThan(a.head[1][1]);
+    expect(a.head[0][1]).toBeLessThan(a.head[2][1]);
+    // зеркало «вниз»: при перестановке ячеек отрезок тот же, только направление обратное
+    const down = arrowGeometry(to, from, { w: 300, h: 64 })!;
+    expect(down.start[1]).toBeCloseTo(a.end[1], 1);
+    expect(down.end[1]).toBeCloseTo(a.start[1], 1);
+    expect(down.end[1]).toBeGreaterThan(down.start[1]);
+  });
+
+  it("таблица в одну строку: соседи по строке — стрелка внутри строки вдоль нижнего края, а не вертикальная вверх", () => {
+    const bounds = { w: 300, h: 32 };
+    const row = (c: number): Rect => ({ x: c * 100, y: 0, w: 100, h: 32 });
+    for (const [i, j] of [[0, 1], [1, 2], [1, 0], [2, 1]]) {
+      const a = arrowGeometry(row(i), row(j), bounds)!;
+      expect(a, `${i}→${j}`).not.toBeNull();
+      const dir = Math.sign(j - i);
+      // идёт в сторону целевой ячейки, заметной длины, начало и конец — в своих ячейках
+      expect(Math.sign(a.end[0] - a.start[0])).toBe(dir);
+      expect(Math.abs(a.end[0] - a.start[0])).toBeGreaterThan(40);
+      expect(a.start[0]).toBeGreaterThanOrEqual(row(i).x);
+      expect(a.start[0]).toBeLessThanOrEqual(row(i).x + row(i).w);
+      expect(a.end[0]).toBeGreaterThanOrEqual(row(j).x);
+      expect(a.end[0]).toBeLessThanOrEqual(row(j).x + row(j).w);
+      // по вертикали — в нижней половине строки (ниже цифр), вся дуга внутри таблицы
+      expect(a.start[1]).toBeGreaterThan(bounds.h / 2);
+      expect(Math.abs(a.end[1] - a.start[1])).toBeLessThan(1);
+      for (const p of [a.start, a.end, a.ctrl, ...a.head]) {
+        expect(p[0]).toBeGreaterThanOrEqual(0);
+        expect(p[0]).toBeLessThanOrEqual(bounds.w);
+        expect(p[1]).toBeGreaterThanOrEqual(0);
+        expect(p[1]).toBeLessThanOrEqual(bounds.h);
+      }
+      // наконечник в конце, по ходу стрелки: основание ближе к началу, чем остриё
+      expect(a.head[0]).toEqual(a.end);
+      expect(Math.sign(a.head[0][0] - a.head[1][0])).toBe(dir);
+      expect(a.d).not.toContain("NaN");
+    }
+  });
+
+  it("узкие ячейки в одну строку: стрелка либо видна и направлена в сторону цели, либо её нет — но не вырожденная и не вертикальная", () => {
+    const bounds = { w: 200, h: 32 };
+    const row = (c: number): Rect => ({ x: c * 40, y: 0, w: 40, h: 32 });
+    for (let i = 0; i < 5; i++)
+      for (let j = 0; j < 5; j++) {
+        if (i === j) continue;
+        const a = arrowGeometry(row(i), row(j), bounds);
+        if (!a) continue;
+        expect(Math.hypot(a.end[0] - a.start[0], a.end[1] - a.start[1]), `${i}→${j}`).toBeGreaterThan(12);
+        expect(Math.sign(a.end[0] - a.start[0])).toBe(Math.sign(j - i));
+      }
+  });
+
+  it("стрелки не вырождены ни в одной из сеток: длина больше 12 px и направление совпадает с направлением к цели", () => {
+    for (const [rows, cols, cw, ch] of [[4, 3, 80, 36], [2, 3, 100, 32], [6, 4, 80, 36]] as const) {
+      const all: Rect[] = [];
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) all.push({ x: c * cw, y: r * ch, w: cw, h: ch });
+      for (const from of all)
+        for (const to of all) {
+          if (from === to) continue;
+          const g = arrowGeometry(from, to, { w: cols * cw, h: rows * ch })!;
+          const len = Math.hypot(g.end[0] - g.start[0], g.end[1] - g.start[1]);
+          expect(len, `${from.x},${from.y} → ${to.x},${to.y}`).toBeGreaterThan(12);
+          // стрелка между строками идёт в сторону цели по вертикали: вниз — вниз, вверх — вверх
+          if (to.y !== from.y && to.x === from.x) expect(Math.sign(g.end[1] - g.start[1])).toBe(Math.sign(to.y - from.y));
+        }
+    }
+  });
+
   it("все числа конечны для любых пар ячеек сетки 4×3 (включая диагонали и обратное направление)", () => {
     const all = [...rects(4, 3).values()];
     for (const from of all)

@@ -19,7 +19,7 @@ export const SAMPLES: Extract<Scene, { kind: "db-schema" }>[] = [
       { name: "Courses", fields: [{ name: "ID", type: "INT", pk: true }, { name: "Title", type: "TEXT" }, { name: "Hours", type: "INT" }] },
     ],
     highlight: ["Enrollments"],
-    caption: { ru: "Многие ко многим: связка хранит два внешних ключа", kk: "Көпке-көп: байланыстырушы кестеде екі сыртқы кілт бар" },
+    caption: { ru: "Многие ко многим: связка хранит два внешних ключа", kk: "Көптен-көпке: байланыстырушы кестеде екі сыртқы кілт бар" },
   },
   // Четыре таблицы, пять связей: диагональ и «колонка» (OrderItems → Orders).
   {
@@ -72,7 +72,7 @@ export const SAMPLES: Extract<Scene, { kind: "db-schema" }>[] = [
           { name: "Орташа балл", type: "REAL" },
         ],
       },
-      { name: "Сыныптар", fields: [{ name: "Коды", type: "INT", pk: true }, { name: "Аталуы", type: "TEXT" }, { name: "Жетекші", type: "TEXT" }] },
+      { name: "Сыныптар", fields: [{ name: "Коды", type: "INT", pk: true }, { name: "Атауы", type: "TEXT" }, { name: "Жетекші", type: "TEXT" }] },
     ],
     highlight: ["Оқушылар.Сынып коды"],
   },
@@ -82,21 +82,21 @@ export const SAMPLES: Extract<Scene, { kind: "db-schema" }>[] = [
     tables: [{ name: "Books", fields: [{ name: "ID", type: "INT", pk: true }, { name: "Title", type: "TEXT" }, { name: "Author", type: "TEXT" }, { name: "Year", type: "INT" }] }],
     highlight: ["Books.ID"],
   },
-  // Длинные казахские имена (15–21 символ) и широкое имя таблицы: переносятся на вторую строку, не обрезаются.
+  // Длинные казахские имена (15–21 символ) и широкое имя таблицы (14 заглавных): переносятся на вторую строку, не обрезаются.
   {
     kind: "db-schema",
     tables: [
       {
-        name: "ЖҰМЫСШЫЛАРДЫҢ",
+        name: "ПАЙДАЛАНУШЫЛАР",
         fields: [
           { name: "Коды", type: "INT", pk: true },
-          { name: "Оқушының аты-жөні", type: "INT" },
-          { name: "Сабақ кестесі коды", type: "INT", fk: "Кесте.Коды" },
-          { name: "Жетекшінің коды", type: "INT" },
+          { name: "Электрондық пошта", type: "TEXT" },
+          { name: "Рөл коды", type: "INT", fk: "Рөлдер.Коды" },
+          { name: "Соңғы кіру күні", type: "DATE" },
         ],
       },
-      { name: "Кесте", fields: [{ name: "Коды", type: "INT", pk: true }, { name: "Оқушының аты-жөні" }] },
+      { name: "Рөлдер", fields: [{ name: "Коды", type: "INT", pk: true }, { name: "Рөлдің атауы" }] },
     ],
-    highlight: ["ЖҰМЫСШЫЛАРДЫҢ.Сабақ кестесі коды"],
+    highlight: ["ПАЙДАЛАНУШЫЛАР.Рөл коды"],
   },
 ];
