@@ -92,32 +92,44 @@ export function topBar(): number {
   return top;
 }
 
-/** Прокрутить на `dy` px то, что прокручивает элемент: ближайший прокручиваемый предок или само окно. */
-export function scrollPage(el: Element, dy: number, smooth: boolean): void {
+/**
+ * Прокрутить на `dy` px то, что прокручивает элемент: ближайший прокручиваемый предок или само окно. Возвращает, сколько
+ * ещё осталось проехать (px): плавная прокрутка идёт несколько кадров, а у края страницы она проедет меньше `dy`.
+ */
+export function scrollPage(el: Element, dy: number, smooth: boolean): () => number {
   const opts: ScrollToOptions = { top: dy, behavior: smooth ? "smooth" : "auto" };
+  let box: Element | null = null;
   for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
     const oy = getComputedStyle(n).overflowY;
     if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight + 1) {
-      n.scrollBy?.(opts);
-      return;
+      box = n;
+      break;
     }
   }
-  window.scrollBy?.(opts);
+  const page = box ?? document.scrollingElement ?? document.documentElement;
+  const at = () => (box ? box.scrollTop : window.scrollY);
+  const to = Math.max(0, Math.min(page.scrollHeight - page.clientHeight, at() + dy));
+  if (box) box.scrollBy?.(opts);
+  else window.scrollBy?.(opts);
+  return () => to - at();
 }
 
 const CONTROLS = 'a[href], button, [role="button"], [role="radio"], [role="tab"], input, select, textarea';
 
 /**
  * Кнопки и ссылки на экране, кроме целей и самого проводника: поднятый над целью Бит на них не садится, а пузырь шага
- * без цели их не режет.
+ * без цели их не режет. `ahead` — сколько ещё проедет плавная прокрутка: кнопки страницы — там, где окажутся после неё
+ * (приколотые к экрану — где есть).
  */
-export function obstacles(targets: readonly Element[], vw: number, vh: number): Rect[] {
+export function obstacles(targets: readonly Element[], vw: number, vh: number, ahead = 0): Rect[] {
   const out: Rect[] = [];
   for (const el of document.querySelectorAll<HTMLElement>(CONTROLS)) {
     if (el.closest("[data-guide]") || targets.some((t) => t.contains(el) || el.contains(t))) continue;
     const r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) continue;
-    out.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+    if (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= vw) continue;
+    const y = ahead && !pinned(el) ? r.top - ahead : r.top;
+    if (y + r.height <= 0 || y >= vh) continue;
+    out.push({ x: r.left, y, w: r.width, h: r.height });
   }
   return out;
 }

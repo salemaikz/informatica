@@ -576,6 +576,39 @@ describe("визуальное ревью: прокрутка к цели, сл�
     }
   });
 
+  it("пока плавная прокрутка едет, Бит встаёт под целью — туда, где она окажется (не подпрыгивает над ней на миг)", async () => {
+    const scrollBy = vi.fn();
+    const was = window.scrollBy;
+    window.scrollBy = scrollBy as unknown as typeof window.scrollBy;
+    // Страница длинная: прокрутке есть куда ехать. Мок scrollBy страницу не двигает — прокрутка «едет» всё время.
+    const page = document.scrollingElement ?? document.documentElement;
+    Object.defineProperty(page, "scrollHeight", { configurable: true, value: 5000 });
+    Object.defineProperty(page, "clientHeight", { configurable: true, value: window.innerHeight });
+    try {
+      const vh = window.innerHeight;
+      addTarget("nav-practice", {}, "a", { x: 90, y: vh - 64, w: 90, h: 64 });
+      // Карточка во всю ширину у самого низа над панелью: где она сейчас, Биту под ней места нет — он поднялся бы над ней.
+      const card = addTarget("next-lesson", {}, "div", { x: 12, y: vh - 150, w: window.innerWidth - 24, h: 60 });
+      card.appendChild(addTarget("continue", { href: "/lesson/ns-1" }));
+      await start();
+      await click("Дальше");
+      await wait(300);
+      expect(say()).toContain("следующий урок");
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      const dy = scrollBy.mock.calls[0][0].top as number;
+      expect(dy).toBeGreaterThan(50);
+      // Пузырь — у низа экрана (Бит над панелью), а не над карточкой (её верх сейчас — в 150 px от низа окна).
+      expect(parseFloat(bubble()!.style.bottom)).toBeLessThan(150);
+      // Прокрутка так и не доехала (прервали) — дольше SETTLE_MS не ждём: мерим как есть, Бит над целью.
+      await wait(1200);
+      expect(parseFloat(bubble()!.style.bottom)).toBeGreaterThan(150);
+    } finally {
+      window.scrollBy = was;
+      Reflect.deleteProperty(page, "scrollHeight");
+      Reflect.deleteProperty(page, "clientHeight");
+    }
+  });
+
   it("слабые места: тем нет (нет первой строки) — «реши пару заданий»; темы есть — «нажми на тему»", async () => {
     h.pathname = "/stats";
     useApp.setState({ tips: { nav: 1 } });

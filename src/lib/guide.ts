@@ -383,18 +383,48 @@ export function overlapArea(a: Rect, b: Rect): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-/** Сколько площади прямоугольников `list` закрывает `r`; `cut` — только «разрезанных» (закрытых не целиком). */
-function coverArea(r: Rect, list: readonly Rect[], cut = false): number {
+/** Сколько площади прямоугольников `list` закрывает `r`. */
+function coverArea(r: Rect, list: readonly Rect[]): number {
   let sum = 0;
-  for (const a of list) {
-    const o = overlapArea(r, a);
-    if (o > 0 && !(cut && o >= a.w * a.h - 1)) sum += o;
-  }
+  for (const a of list) sum += overlapArea(r, a);
   return sum;
 }
 
 /** Верх пузыря не выше этого поля: текст реплики виден целиком. */
 const TOP_MARGIN = 4;
+/**
+ * Шаг без цели: край пузыря не ближе этого к краю кнопки — ни снаружи (кнопка «прилипла» к пузырю), ни изнутри
+ * (высота пузыря — оценка: настоящий край может её чуть разрезать).
+ */
+const NEAR = 8;
+/** Кнопка у самого края пузыря — меньшее зло, чем разрезанная: её площадь в полосе NEAR идёт с этим весом. */
+const NEAR_WEIGHT = 0.25;
+/** Шаг без цели: «цена» сдвига Бита на 1 px от обычного места над нижней панелью (в px² разрезанной кнопки). */
+const SHIFT_COST = 4;
+/** Шаг без цели: «цена» другого угла (Бит не прыгает из угла в угол ради пары пикселей). */
+const SWITCH_COST = 400;
+/** Шаг без цели: выше обычного места Бит поднимается не больше чем на полроста — остаётся внизу экрана. */
+const RAISE_MAX = BIT_SIZE / 2;
+/** Шаг без цели: шаг перебора высоты Бита, px. */
+const LEVEL_STEP = 2;
+
+/** Прямоугольник, раздутый (или при d < 0 — сжатый) на d со всех сторон. */
+const inflate = (r: Rect, d: number): Rect => ({ x: r.x - d, y: r.y - d, w: Math.max(0, r.w + 2 * d), h: Math.max(0, r.h + 2 * d) });
+
+/**
+ * «Цена» прямоугольника `r` (пузыря или Бита) для кнопок `list` на шаге без цели: разрезанная кнопка — площадь разреза;
+ * с `ring` ещё и кнопка у самого края (ближе NEAR снаружи или изнутри) — её площадь в этой полосе с весом NEAR_WEIGHT.
+ * Закрытая целиком с запасом или далёкая — 0.
+ */
+function edgeCost(r: Rect, list: readonly Rect[], ring: boolean): number {
+  let sum = 0;
+  for (const a of list) {
+    const o = overlapArea(r, a);
+    if (o > 0 && o < a.w * a.h - 1) sum += o;
+    else if (ring) sum += NEAR_WEIGHT * (overlapArea(inflate(r, NEAR), a) - overlapArea(inflate(r, -NEAR), a));
+  }
+  return sum;
+}
 
 /** Отступы снизу: нижняя панель (с safe-area) и одна safe-area (на ней — Бит на затемнённой панели). */
 function insets(vp: GuideViewport): { panel: number; safe: number } {
@@ -468,7 +498,8 @@ export interface PlaceOpts {
  * Варианты, где пузырь вылез бы за верх окна, отбрасываются. Бит поднимается над целью, только если под ней ему нет места
  * (кнопка у самого низа экрана: «Проверить», «Продолжить»), и тогда не садится на кнопки вокруг (`avoid`).
  * Чисто не помещается ничего — там, где меньше всего закрыто цели (пузырь растёт вверх — его кнопки видны всегда).
- * Без цели (экран затемнён целиком) — прошлый угол, пузырь над Битом; есть `avoid` — где пузырь не режет кнопки.
+ * Без цели (экран затемнён целиком) — прошлый угол, пузырь над Битом; есть `avoid` — Бит чуть поднимается или опускается
+ * (до затемнённой панели), пока пузырь не перестанет резать кнопки и липнуть к ним (кнопки самой панели не в счёт).
  * `textLen` — длина реплики: по ней оценивается высота пузыря.
  */
 export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, opts: PlaceOpts = {}): BitPlacement {
@@ -487,19 +518,27 @@ export function placeBit(target: Rect | null, vp: GuideViewport, textLen = 90, o
   if (!target) {
     const first = opts.prev ?? "br";
     const plain = layout(first, "above", base, vw);
-    if (!avoid.length) return plain;
+    // Кнопки нижней панели — под затемнением, Бит садится на неё и на шагах с целью: их не считаем.
+    const zone = panel > safe ? avoid.filter((a) => a.y < vh - panel - 1) : avoid;
+    if (!zone.length) return plain;
+    // Высота Бита — от затемнённой панели (или от места над ней) до полроста выше обычного места; обычное — первым.
+    const floor = panel > safe ? low : base;
+    const levels = [base];
+    for (let lvl = floor; lvl <= base + RAISE_MAX; lvl += LEVEL_STEP) if (Math.abs(lvl - base) >= 1) levels.push(lvl);
     let best = plain;
-    let bestCut = Infinity;
+    let bestCost = Infinity;
     for (const c of [first, first === "br" ? "bl" : "br"] as const) {
-      for (const lvl of panel > safe ? [base, low] : [base]) {
-        for (const b of ["above", "side"] as const) {
+      for (const b of ["above", "side"] as const) {
+        for (const lvl of levels) {
           const p = layout(c, b, lvl, vw);
           if (!fits(p)) continue;
           const r = rects(p);
-          const cut = coverArea(r.bubble, avoid, true) + coverArea(r.bit, avoid, true);
-          if (cut < bestCut) {
+          // Пузырь не режет кнопки и не липнет к ним, Бит не режет; при прочих равных — ближе к обычному месту и углу.
+          const cost =
+            edgeCost(r.bubble, zone, true) + edgeCost(r.bit, zone, false) + Math.abs(lvl - base) * SHIFT_COST + (c === first ? 0 : SWITCH_COST);
+          if (cost < bestCost - 0.5) {
             best = p;
-            bestCut = cut;
+            bestCost = cost;
           }
         }
       }

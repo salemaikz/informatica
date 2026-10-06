@@ -11,6 +11,7 @@ import {
   fingerRect,
   guideScroll,
   keepDash,
+  overlapArea,
   overlaps,
   padRect,
   placeBit,
@@ -549,6 +550,47 @@ describe("V2: шаг без цели — пузырь не режет кнопк
     expect(overlaps(r.bubble, start)).toBe(false);
     expect(overlaps(r.bit, start)).toBe(false);
     expect(p.corner).toBe("br");
+  });
+
+  // Раскладка «Учиться» на 360×640 по скриншоту v18 (welcome-dark-640-1): режимы, «Курс», «Другие режимы», «Начать».
+  const vp640 = { vw: 360, vh: 640, bottomInset: 64, safeBottom: 0 };
+  const other = { x: 158, y: 406, w: 168, h: 40 };
+  const start640 = { x: 38, y: 460, w: 288, h: 52 };
+  const page640 = [{ x: 16, y: 156, w: 120, h: 50 }, { x: 144, y: 156, w: 136, h: 50 }, { x: 16, y: 230, w: 328, h: 50 }, other, start640];
+  const nav640 = [0, 90, 180, 270].map((x) => ({ x, y: 576, w: 90, h: 64 }));
+
+  it("360×640, приветствие (ru и kk): пузырь не режет «Другие режимы» и «Начать» — закрывает целиком или обходит; Бит их не задевает", () => {
+    for (const len of [56, 66]) {
+      const p = placeBit(null, vp640, len, { avoid: [...page640, ...nav640] });
+      const r = placementRects(p, vp640.vh, len);
+      for (const a of page640) {
+        const o = overlapArea(r.bubble, a);
+        expect(o === 0 || o === a.w * a.h).toBe(true);
+        // Не задетая кнопка — не вплотную к пузырю.
+        if (o === 0) expect(overlaps(r.bubble, a, 7)).toBe(false);
+        expect(overlapArea(r.bit, a)).toBe(0);
+      }
+      expect(r.bubble.y).toBeGreaterThanOrEqual(0);
+      expect(p.corner).toBe("br");
+    }
+  });
+
+  it("кнопки нижней панели не в счёт: Бит садится на затемнённую панель, как на шагах с целью", () => {
+    expect(placeBit(null, vp640, 56, { avoid: nav640 })).toEqual(placeBit(null, vp640, 56));
+  });
+
+  it("кнопка вплотную под пузырём — пузырь отходит от неё хотя бы на 8 px", () => {
+    const vp = { vw: 360, vh: 760, bottomInset: 0 };
+    const plain = placementRects(placeBit(null, vp, 57), vp.vh, 57);
+    const btn = { x: 16, y: plain.bubble.y + plain.bubble.h + 2, w: 184, h: 28 };
+    expect(overlaps(plain.bubble, btn, 7)).toBe(true);
+    const r = placementRects(placeBit(null, vp, 57, { avoid: [btn] }), vp.vh, 57);
+    expect(overlaps(r.bubble, btn, 7)).toBe(false);
+    expect(overlaps(r.bit, btn)).toBe(false);
+  });
+
+  it("при равных местах Бит остаётся в прошлом углу (V8 и для шага без цели)", () => {
+    expect(placeBit(null, vp640, 56, { prev: "bl", avoid: [...page640, ...nav640] }).corner).toBe("bl");
   });
 });
 

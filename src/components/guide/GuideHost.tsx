@@ -51,6 +51,11 @@ const FRAME_INSET = 3;
 const HIDE_AFTER_MS = DEFAULT_WAIT_MS + 100;
 /** Как часто перемеряем цель (страница дорисовывается, анимации). */
 const POLL_MS = 150;
+/**
+ * Плавная прокрутка к цели идёт не дольше: пока она едет, Бит встаёт туда, где цель окажется после неё. Дольше —
+ * значит, прокрутку прервали (ученик сам листает): мерим как есть.
+ */
+const SETTLE_MS = 1000;
 /** Сцена закончилась — столько времени Бит уезжает вниз, потом сцена снимается. */
 const LEAVE_MS = 450;
 /**
@@ -199,6 +204,9 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
     let deadline = start + (step.waitMs ?? DEFAULT_WAIT_MS);
     let lastFound = start;
     let scrolled = false;
+    /** Сколько ещё проедет плавная прокрутка к цели (null — не едет). */
+    let left: (() => number) | null = null;
+    let settleUntil = 0;
     let stopped = false;
     let raf = 0;
     const measure = () => {
@@ -229,18 +237,30 @@ function SceneRunner({ scene, cost, leaving }: { scene: GuideScene; cost?: numbe
           // Под целью — место Биту с пузырём (на шаге «нажми» — и пальцу); приколотые к экрану цели не прокручиваются.
           if (!els.some(pinned)) {
             const dy = guideScroll(grow(unionRect(els.map(rectOf))!, HOLE_PAD, tap ? FINGER_ROOM : 0), vp, topBar(), len);
-            if (Math.abs(dy) >= 2) scrollPage(els[0], dy, !reduce);
+            if (Math.abs(dy) >= 2) {
+              left = scrollPage(els[0], dy, !reduce);
+              settleUntil = now + SETTLE_MS;
+            }
           }
         }
+      }
+      // Плавная прокрутка ещё едет: место Бита — по тому, где цель будет после неё. Иначе низкая цель на миг поднимет
+      // Бита над собой, он вернётся вниз, а угол этого мига запомнится как прошлый.
+      let ahead = left && now < settleUntil ? left() : 0;
+      if (Math.abs(ahead) < 1) {
+        left = null;
+        ahead = 0;
       }
       const hideBit = !found && (!shownRef.current || now - lastFound > HIDE_AFTER_MS);
       shownRef.current = !hideBit;
       const rect = found && els.length ? unionRect(els.map(rectOf)) : null;
+      // Вырез — где цель сейчас (едет вместе со страницей); место Бита — где она будет.
       const hole = rect ? padRect(rect, HOLE_PAD, vw, vh, FRAME_INSET) : null;
+      const final = rect && ahead ? padRect({ ...rect, y: rect.y - ahead }, HOLE_PAD, vw, vh, FRAME_INSET) : hole;
       // Шаг «нажми»: под целью место пальцу — Бит и пузырь его не займут.
-      const spot = hole && tap ? { ...hole, h: hole.h + FINGER_ROOM } : hole;
+      const spot = final && tap ? { ...final, h: final.h + FINGER_ROOM } : final;
       // Кнопки вокруг нужны, только если Бит встанет над целью или цели нет (пузырь не должен резать кнопки).
-      const avoid = found && (!spot || !roomBelow(spot, vp)) ? obstacles(els, vw, vh) : undefined;
+      const avoid = found && (!spot || !roomBelow(spot, vp)) ? obstacles(els, vw, vh, ahead) : undefined;
       const aimX = dock && els[0] ? centerX(focusableIn(els[0]) ?? els[0]) : undefined;
       const radius = els.length ? Math.min(...els.map((e) => radiusOf(e))) : 16;
       setView((prev) => {
