@@ -46,12 +46,13 @@ test("проводник: школьник после онбординга ви�
   await page.getByRole("button", { name: "Поехали" }).click();
   await page.waitForURL("**/learn");
 
-  // Бит выпрыгивает снизу и здоровается (без затемнения — это status, а не dialog).
+  // Бит выпрыгивает снизу и здоровается (шаг без цели — модальный диалог на затемнённом экране).
   const bit = page.getByLabel("Подсказка Бита");
   await expect(bit).toBeVisible();
   await expect(bit).toContainText("Привет, Аян!");
-  // Окна тарифов и напоминаний ждут проводник.
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Окна тарифов и напоминаний ждут проводник: диалог на экране один — сам Бит.
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Подсказка Бита" })).toHaveCount(1);
   await dismissTour(page);
   const tips = (await saved(page)).tips ?? {};
   expect(tips.welcome).toBeTruthy();

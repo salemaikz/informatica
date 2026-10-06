@@ -105,7 +105,8 @@ export function ChatList({ activeId, compact }: { activeId?: string; compact?: b
           <p className="font-semibold text-muted">{t("chat2.empty.text")}</p>
         </div>
         <div className="w-full text-left">
-          <ModeList onPick={(mode) => (needsTopicStep(mode) ? openNew(mode) : startChat(mode))} />
+          {/* Метка проводника (сцена page-tutor): «Свободный» чат — «спрашивай о чём угодно». */}
+          <ModeList tourFirst="tutor-free" onPick={(mode) => (needsTopicStep(mode) ? openNew(mode) : startChat(mode))} />
         </div>
         {sheets}
       </div>
@@ -114,7 +115,7 @@ export function ChatList({ activeId, compact }: { activeId?: string; compact?: b
 
   return (
     <div className="flex flex-col gap-3">
-      <Button variant="ai" block icon={<Plus size={20} />} onClick={() => openNew()}>
+      <Button variant="ai" block icon={<Plus size={20} />} onClick={() => openNew()} data-tour="tutor-free">
         {t("chat2.new")}
       </Button>
       <label className="relative block">

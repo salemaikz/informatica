@@ -17,7 +17,8 @@ const SLOT_LABEL: Record<CosmeticSlot, DictKey> = {
 
 /**
  * Раздел магазина «Украшения профиля»: переключатель «Рамки · Фоны · Титулы» (крупные сегменты) и сетка карточек —
- * 2 колонки на телефоне, 3 на широком экране. Нажатие на карточку — шторка «Примерка». Метка `data-tour="shop-cosmetics"`.
+ * 2 колонки на телефоне, 3 на широком экране. Нажатие на карточку — шторка «Примерка». Метка проводника
+ * `data-tour="shop-cosmetics"` — на заголовке с переключателем (компактная цель: вся сетка выше экрана).
  */
 export function CosmeticsShop() {
   const { t } = useT();
@@ -29,38 +30,40 @@ export function CosmeticsShop() {
   const defs = cosmeticsOfSlot(slot);
 
   return (
-    <section id="shop-cosmetics" data-tour="shop-cosmetics" className="flex scroll-mt-20 flex-col gap-3">
-      <div>
-        <h2 className="text-lg font-extrabold">{t("cosmetics.shop.title")}</h2>
-        <p className="text-sm font-semibold text-muted">{t("cosmetics.shop.hint")}</p>
-      </div>
+    <section id="shop-cosmetics" className="flex scroll-mt-20 flex-col gap-3">
+      <div data-tour="shop-cosmetics" className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-lg font-extrabold">{t("cosmetics.shop.title")}</h2>
+          <p className="text-sm font-semibold text-muted">{t("cosmetics.shop.hint")}</p>
+        </div>
 
-      <div role="tablist" aria-label={t("cosmetics.shop.tabs")} className="grid grid-cols-3 gap-1 rounded-2xl bg-surface-2 p-1">
-        {COSMETIC_SLOTS.map((sl) => {
-          const all = cosmeticsOfSlot(sl);
-          const have = all.filter((c) => owned.includes(c.id)).length;
-          const on = sl === slot;
-          return (
-            <button
-              key={sl}
-              type="button"
-              role="tab"
-              id={`${uid}-tab-${sl}`}
-              aria-controls={`${uid}-panel`}
-              aria-selected={on}
-              onClick={() => setSlot(sl)}
-              className={cn(
-                "flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-sm font-extrabold leading-tight transition-colors focus-visible:outline-3 focus-visible:outline-primary",
-                on ? "bg-surface text-primary shadow-sm" : "text-muted hover:text-text",
-              )}
-            >
-              {t(SLOT_LABEL[sl])}
-              <span className="text-[11px] font-bold tabular-nums opacity-70">
-                {have}/{all.length}
-              </span>
-            </button>
-          );
-        })}
+        <div role="tablist" aria-label={t("cosmetics.shop.tabs")} className="grid grid-cols-3 gap-1 rounded-2xl bg-surface-2 p-1">
+          {COSMETIC_SLOTS.map((sl) => {
+            const all = cosmeticsOfSlot(sl);
+            const have = all.filter((c) => owned.includes(c.id)).length;
+            const on = sl === slot;
+            return (
+              <button
+                key={sl}
+                type="button"
+                role="tab"
+                id={`${uid}-tab-${sl}`}
+                aria-controls={`${uid}-panel`}
+                aria-selected={on}
+                onClick={() => setSlot(sl)}
+                className={cn(
+                  "flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-sm font-extrabold leading-tight transition-colors focus-visible:outline-3 focus-visible:outline-primary",
+                  on ? "bg-surface text-primary shadow-sm" : "text-muted hover:text-text",
+                )}
+              >
+                {t(SLOT_LABEL[sl])}
+                <span className="text-[11px] font-bold tabular-nums opacity-70">
+                  {have}/{all.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${slot}`} className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">

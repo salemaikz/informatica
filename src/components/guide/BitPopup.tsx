@@ -2,8 +2,8 @@
 
 import { Pointer } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { BIT_SIZE, type BitPlacement, type GuideAction } from "@/lib/guide";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BIT_SIZE, keepDash, tailLeft, type BitPlacement, type GuideAction } from "@/lib/guide";
 import { playSound } from "@/lib/sound";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
@@ -93,7 +93,10 @@ export interface BitPopupProps {
   action: GuideAction;
   /** Последний шаг: «Понятно» вместо «Дальше». */
   last: boolean;
-  /** Шаг с затемнением и «Дальше»: пузырь — модальный диалог, фокус на «Дальше». Шаг «нажми» — не модальный (фокус на цели). */
+  /**
+   * Шаг с затемнением и «Дальше»: пузырь — модальный диалог, фокус — на самом пузыре (Enter — «Дальше»; кольцо на кнопке
+   * только после Tab, чтобы не спорить с рамкой цели). Шаг «нажми» — не модальный (фокус на цели).
+   */
   modal: boolean;
   reduce: boolean;
   sound: boolean;
@@ -106,6 +109,7 @@ export interface BitPopupProps {
 /**
  * Бит-проводник: выезжает снизу из угла (дом плавающей кнопки Бита), рядом — пузырь с печатающейся репликой и «голоском».
  * Между шагами Бит остаётся на месте — меняются реплика и настроение; в конце уезжает вниз (exit в AnimatePresence).
+ * Шаг про плавающую кнопку Бита (`place.dock`): говорящий Бит уходит вниз, пузырь выходит из самой кнопки.
  * «Меньше анимаций»: без прыжков (только проявление), текст сразу целиком, звук — один «буп» при появлении.
  */
 export function BitPopup({ place, mood, stepKey, text, action, last, modal, reduce, sound, shake, onNext, onSkip }: BitPopupProps) {
@@ -129,60 +133,84 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
   }, [shake, sound]);
 
   const delay = stepKey === firstKey ? 380 : 120;
-  const typing = useTyping(text ?? "", stepKey, reduce, sound, delay);
+  const shown = text === null ? "" : keepDash(text);
+  const typing = useTyping(shown, stepKey, reduce, sound, delay);
+
+  // Модальный пузырь берёт фокус сам, когда появляется (читалка читает реплику, Enter — «Дальше»). Ref-функция, а не
+  // эффект: новый пузырь появляется только после ухода старого (AnimatePresence mode="wait").
+  const focusDialog = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (el && modal) el.focus({ preventScroll: true });
+    },
+    [modal],
+  );
 
   const right = place.corner === "br";
-  const bitCx = place.bitX + BIT_SIZE / 2;
-  // Хвостик пузыря смотрит на Бита: над Битом — снизу, сбоку — с его стороны.
+  // Хвостик пузыря смотрит на Бита (или на его кнопку): над Битом — снизу, сбоку — с его стороны.
   const tail =
     place.bubble === "above"
-      ? { left: Math.max(18, Math.min(bitCx - place.bubbleX - 8, place.bubbleW - 34)), bottom: -9, cls: "border-b-2 border-r-2" }
+      ? { left: tailLeft(place), bottom: -9, cls: "border-b-2 border-r-2" }
       : right
         ? { right: -9, bottom: 22, cls: "border-r-2 border-t-2" }
         : { left: -9, bottom: 22, cls: "border-b-2 border-l-2" };
 
   return (
     <>
-      <m.div
-        className="pointer-events-auto absolute bottom-0 left-0"
-        style={{ width: BIT_SIZE, height: BIT_SIZE }}
-        initial={{ x: place.bitX, y: BIT_SIZE + 40, rotate: right ? -16 : 16, opacity: 0 }}
-        animate={{ x: place.bitX, y: -place.bitBottom, rotate: 0, opacity: 1 }}
-        exit={{ y: BIT_SIZE + 40, rotate: right ? 12 : -12, opacity: reduce ? 0 : 1, transition: { duration: 0.28, ease: "easeIn" } }}
-        transition={{ ...BIT_SPRING, opacity: { duration: 0.15 } }}
-        onClick={typing.finish}
-      >
-        {/* «Нет-нет»: каждое нажатие на затемнение — новое покачивание головой (чётное/нечётное — в разные стороны). */}
-        <m.div
-          className="h-full w-full"
-          style={{ transformOrigin: "50% 90%" }}
-          initial={false}
-          animate={{ rotate: shake && !reduce ? (shake % 2 ? SHAKE : SHAKE.map((v) => -v)) : 0 }}
-          transition={{ duration: 0.5, ease: "easeInOut" }}
-        >
-          {/* Каждая новая реплика — маленький «прыжок». */}
+      <AnimatePresence>
+        {!place.dock && (
           <m.div
-            key={stepKey}
-            className="h-full w-full"
-            initial={{ y: 0 }}
-            animate={reduce ? { y: 0 } : { y: [0, -10, 0, -3, 0] }}
-            transition={{ duration: 0.55, ease: "easeOut" }}
+            key="bit"
+            data-guide-bit=""
+            className="pointer-events-auto absolute bottom-0 left-0"
+            style={{ width: BIT_SIZE, height: BIT_SIZE }}
+            initial={{ x: place.bitX, y: BIT_SIZE + 40, rotate: right ? -16 : 16, opacity: 0 }}
+            animate={{ x: place.bitX, y: -place.bitBottom, rotate: 0, opacity: 1 }}
+            exit={{ y: BIT_SIZE + 40, rotate: right ? 12 : -12, opacity: reduce ? 0 : 1, transition: { duration: 0.28, ease: "easeIn" } }}
+            transition={{ ...BIT_SPRING, opacity: { duration: 0.15 } }}
+            onClick={typing.finish}
           >
-            <Mascot mood={mood} size={BIT_SIZE} className="drop-shadow-[0_6px_10px_rgb(0_0_0/0.25)]" />
+            {/* «Нет-нет»: каждое нажатие на затемнение — новое покачивание головой (чётное/нечётное — в разные стороны). */}
+            <m.div
+              className="h-full w-full"
+              style={{ transformOrigin: "50% 90%" }}
+              initial={false}
+              animate={{ rotate: shake && !reduce ? (shake % 2 ? SHAKE : SHAKE.map((v) => -v)) : 0 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+            >
+              {/* Каждая новая реплика — маленький «прыжок». */}
+              <m.div
+                key={stepKey}
+                className="h-full w-full"
+                initial={{ y: 0 }}
+                animate={reduce ? { y: 0 } : { y: [0, -10, 0, -3, 0] }}
+                transition={{ duration: 0.55, ease: "easeOut" }}
+              >
+                <Mascot mood={mood} size={BIT_SIZE} className="drop-shadow-[0_6px_10px_rgb(0_0_0/0.25)]" />
+              </m.div>
+            </m.div>
           </m.div>
-        </m.div>
-      </m.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {text !== null && (
           <m.div
             key={stepKey}
+            ref={focusDialog}
             data-guide=""
             role={modal ? "dialog" : "status"}
             aria-modal={modal ? true : undefined}
             aria-live={modal ? undefined : "polite"}
             aria-label={t("guide.aria")}
-            className="pointer-events-auto absolute rounded-2xl border-2 border-border bg-surface px-4 pb-2.5 pt-3 shadow-[0_12px_32px_rgb(0_0_0/0.22)]"
+            tabIndex={modal ? -1 : undefined}
+            onKeyDown={(e) => {
+              // Фокус на самом пузыре: Enter — «Дальше» (как раньше с фокусом на кнопке).
+              if (modal && action === "next" && e.key === "Enter" && e.target === e.currentTarget) {
+                e.preventDefault();
+                onNext();
+              }
+            }}
+            className="pointer-events-auto absolute rounded-2xl border-2 border-border bg-surface px-4 pb-2.5 pt-3 shadow-[0_12px_32px_rgb(0_0_0/0.22)] outline-none"
             style={{
               left: place.bubbleX,
               bottom: place.bubbleBottom,
@@ -198,14 +226,15 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
             <span aria-hidden className={cn("absolute h-4 w-4 rotate-45 border-border bg-surface", tail.cls)} style={{ left: tail.left, right: tail.right, bottom: tail.bottom }} />
             {/* Печать: невидимый «хвост» текста уже занимает место — строки не прыгают, пузырь не растёт. */}
             <p aria-hidden className="relative text-[15px] font-semibold leading-snug">
-              <span>{text.slice(0, typing.n)}</span>
-              <span className="text-transparent">{text.slice(typing.n)}</span>
+              <span>{shown.slice(0, typing.n)}</span>
+              <span className="text-transparent">{shown.slice(typing.n)}</span>
             </p>
             <span className="sr-only">{text}</span>
             <div className="relative mt-2 flex items-center gap-2">
               {action === "tap" ? (
-                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-extrabold text-primary">
-                  <Pointer size={14} aria-hidden className="shrink-0" /> {t("guide.tapHint")}
+                // Подсказка, а не действие: текст приглушённый (синий — цвет кнопок), синяя только иконка пальца.
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-bold leading-tight text-muted">
+                  <Pointer size={14} aria-hidden className="shrink-0 text-primary" /> {t("guide.tapHint")}
                 </span>
               ) : (
                 <span className="flex-1" />
@@ -221,12 +250,11 @@ export function BitPopup({ place, mood, stepKey, text, action, last, modal, redu
               >
                 {t("guide.skip")}
               </Button>
-              {/* Фокус — на «Дальше», только когда пузырь модальный (шаг с затемнением). Без затемнения страница работает —
-                  фокус ученика не уводим; у шага «нажми» фокус ставит GuideHost — на цель. */}
+              {/* Фокус модального пузыря — на нём самом (кольцо на «Дальше» — только после Tab: не спорит с рамкой цели);
+                  у шага «нажми» фокус ставит GuideHost — на цель. */}
               {action === "next" && (
                 <Button
                   size="md"
-                  autoFocus={modal}
                   className="min-w-24"
                   onClick={(e) => {
                     e.stopPropagation();

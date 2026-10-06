@@ -61,9 +61,9 @@ export default function ShopPage() {
 
       <CosmeticsShop />
 
-      {/* Метка data-tour="shop-hearts" — для проводника Бита (сцена page-shop). */}
-      <div data-tour="shop-hearts">
+      {/* Метки проводника Бита (сцена page-shop): заголовок раздела и первый товар — компактная цель. */}
       <ShopSection
+        tour="shop-hearts"
         title={t("shop.hearts.title")}
         hint={
           hearts.unlimited
@@ -79,6 +79,7 @@ export default function ShopPage() {
               icon={<HeartPlus size={26} />}
               nameKey="shop.item.heart-1"
               descKey="shop.item.heart-1.desc"
+              tour="shop-hearts-first"
             />
           )}
           {heart3 && (
@@ -101,7 +102,6 @@ export default function ShopPage() {
           )}
         </div>
       </ShopSection>
-      </div>
 
       <ShopSection title={t("shop.rules.title")} hint={t("shop.rules.hint")}>
         <HeartRules />

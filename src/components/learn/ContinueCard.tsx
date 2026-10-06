@@ -12,6 +12,7 @@ import { unitVars } from "./useLearn";
 import { UnitArt } from "./UnitArt";
 
 // Карточка «Продолжить»: следующий урок (или урок, который пора повторить) и кнопка режимов.
+// Метки проводника: вся карточка — `next-lesson` (реплика «здесь твой следующий урок»), кнопка — `continue` (шаг «нажми»).
 
 export function ContinueCard({
   target,
@@ -56,7 +57,7 @@ export function ContinueCard({
   const cta = resume ? t("resume.cta", { title: l(ref.title) }) : kind === "due" ? t("learn2.hero.review") : firstTime ? t("learn2.hero.start") : t("learn2.hero.continue");
 
   return (
-    <div style={unitVars(unit.color)} className="relative overflow-hidden rounded-3xl border-2 border-(--u)/30 bg-surface">
+    <div data-tour="next-lesson" style={unitVars(unit.color)} className="relative overflow-hidden rounded-3xl border-2 border-(--u)/30 bg-surface">
       <div className="absolute inset-y-0 left-0 w-1.5 bg-(--u)" />
       <UnitArt theme={unit.theme} className="absolute -right-6 -top-4 h-28 w-40 opacity-45" />
       <div className="relative flex flex-col gap-3 p-4 pl-5">

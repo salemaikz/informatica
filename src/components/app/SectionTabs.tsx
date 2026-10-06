@@ -40,6 +40,13 @@ export function SubLink({ sub, active, className, iconSize = 18 }: { sub: NavSub
   );
 }
 
+/** Затухание по краям ряда — с той стороны, где есть что прокрутить (иначе обрезанная «таблетка» похожа на ошибку). */
+const FADE = cn(
+  "data-[fade=left]:[mask-image:linear-gradient(to_right,transparent,black_24px)]",
+  "data-[fade=right]:[mask-image:linear-gradient(to_left,transparent,black_24px)]",
+  "data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%_-_24px),transparent)]",
+);
+
 /**
  * Строка подразделов группы: горизонтальные «таблетки» над содержимым главной страницы подраздела.
  * Рисуется оболочкой на телефоне/планшете (на компьютере подразделы раскрыты в боковом меню).
@@ -60,10 +67,32 @@ export function SectionTabs() {
     box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: "auto" });
   }, [pathname]);
 
+  // С какой стороны ряд обрезан: data-fade на самом ряду (без setState) — по нему CSS рисует затухание.
+  const groupId = group?.id;
+  useEffect(() => {
+    const box = scroller.current;
+    if (!box) return;
+    const update = () => {
+      const left = box.scrollLeft > 1;
+      const right = box.scrollLeft + box.clientWidth < box.scrollWidth - 1;
+      box.dataset.fade = left && right ? "both" : left ? "left" : right ? "right" : "none";
+    };
+    update();
+    box.addEventListener("scroll", update, { passive: true });
+    // Ширина ряда и «таблеток» (смена языка меняет подписи) — пересчитать.
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    ro?.observe(box);
+    for (const c of box.children) ro?.observe(c);
+    return () => {
+      box.removeEventListener("scroll", update);
+      ro?.disconnect();
+    };
+  }, [groupId, pathname]);
+
   if (!group) return null;
   return (
     <nav aria-label={t("nav2.sections")} className="-mx-4 mb-4 sm:-mx-6 lg:hidden">
-      <div ref={scroller} className="relative flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+      <div ref={scroller} className={cn("relative flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden", FADE)}>
         {group.subs.map((sub) => {
           const active = sub.id === current;
           return (

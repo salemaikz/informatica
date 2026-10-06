@@ -116,7 +116,10 @@ function useSwipeX(x: MotionValue<number>, dir: 1 | -1, decide: (dx: number, vx:
 
 // ---------- кнопка ----------
 
-/** Круглая кнопка Бита и стрелка «›» справа («смахни вправо»). */
+/**
+ * Круглая кнопка Бита и стрелка «›» справа («смахни вправо»). Метка проводника `bit-dock` — на обёртке: рамка шага
+ * «А это я!» охватывает кнопку вместе со значком и стрелкой. Сама кнопка — `[data-dock-button]`.
+ */
 function DockButton({
   onOpen,
   onHide,
@@ -171,11 +174,12 @@ function DockButton({
       animate={{ y: 0, opacity: 1 }}
       exit={{ x: 150, opacity: 0, transition: { duration: 0.18, ease: "easeIn" } }}
       transition={SPRING}
-      className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] right-1 z-40 flex touch-pan-y select-none items-center lg:bottom-6 lg:right-3"
+      data-tour="bit-dock"
+      className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] right-1 z-40 flex touch-pan-y select-none items-center rounded-full lg:bottom-6 lg:right-3"
     >
       <button
         type="button"
-        data-tour="bit-dock"
+        data-dock-button=""
         aria-label={t("dock.ask")}
         aria-describedby={hintId}
         onClick={onOpen}
@@ -305,7 +309,7 @@ export function BitDock() {
   useEffect(() => {
     if (!moveFocus.current) return;
     moveFocus.current = false;
-    document.querySelector<HTMLElement>(hidden ? "[data-dock-tab]" : '[data-tour="bit-dock"]')?.focus({ preventScroll: true });
+    document.querySelector<HTMLElement>(hidden ? "[data-dock-tab]" : "[data-dock-button]")?.focus({ preventScroll: true });
   }, [hidden]);
   const hide = (keyboard: boolean) => {
     moveFocus.current = keyboard;
@@ -322,7 +326,7 @@ export function BitDock() {
   // Панель закрылась — фокус возвращаем на кнопку Бита.
   const wasOpen = useRef(false);
   useEffect(() => {
-    if (wasOpen.current && !open) document.querySelector<HTMLElement>('[data-tour="bit-dock"]')?.focus({ preventScroll: true });
+    if (wasOpen.current && !open) document.querySelector<HTMLElement>("[data-dock-button]")?.focus({ preventScroll: true });
     wasOpen.current = open;
   }, [open]);
 

@@ -39,7 +39,8 @@ export function GradeProgressCard({ grade, progress, nextLessonId, resume }: { g
       )}
 
       {next && goId && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-primary-soft p-3">
+        // Метка проводника: блок следующего урока — `next-lesson`, кнопка — `continue` (шаг «нажми»).
+        <div data-tour="next-lesson" className="flex flex-col gap-2 rounded-2xl bg-primary-soft p-3">
           <p className="text-xs font-extrabold uppercase tracking-wide text-primary">{resume ? t("resume.label") : t("school.next.label")}</p>
           <p className="font-extrabold leading-snug">{l(next.title)}</p>
           {resume && <p className="text-sm font-bold text-muted">{t("resume.step", { x: resume.step, y: resume.total })}</p>}

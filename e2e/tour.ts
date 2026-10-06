@@ -12,7 +12,7 @@ export const ALL_TIPS = Object.fromEntries(
 
 /**
  * Ждёт Бита-проводника на /learn и закрывает его (Escape закрывает весь проводник). Пузырь Бита — «Подсказка Бита»:
- * без затемнения это `status`, с затемнением — `dialog`.
+ * на шаге «нажми» это `status`, на остальных (затемнение с вырезом или весь экран) — `dialog`.
  */
 export async function dismissTour(page: Page) {
   const bit = page.getByLabel("Подсказка Бита");

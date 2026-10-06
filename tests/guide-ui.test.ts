@@ -53,14 +53,23 @@ const start = async () => {
 };
 
 /** Элемент с data-tour: у happy-dom нет вёрстки, поэтому размеры задаём сами. */
-function addTarget(name: string, attrs: Record<string, string> = {}, tag = "a") {
+function addTarget(name: string, attrs: Record<string, string> = {}, tag = "a", box = { x: 20, y: 100, w: 200, h: 48 }) {
   const el = document.createElement(tag);
   el.dataset.tour = name;
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   el.appendChild(document.createElement("span"));
-  el.getBoundingClientRect = () => ({ left: 20, top: 100, width: 200, height: 48, right: 220, bottom: 148, x: 20, y: 100, toJSON: () => ({}) }) as DOMRect;
+  const { x, y, w, h } = box;
+  el.getBoundingClientRect = () => ({ left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, x, y, toJSON: () => ({}) }) as DOMRect;
   document.body.appendChild(el);
   return el;
+}
+
+/** Карточка следующего урока (`next-lesson`) с кнопкой «Начать» (`continue`) внутри. */
+function addLessonCard(href = "/lesson/ns-1") {
+  const card = addTarget("next-lesson", {}, "div");
+  const cont = addTarget("continue", { href });
+  card.appendChild(cont);
+  return { card, cont };
 }
 
 /** Варианты ответа: блок-цель с двумя кнопками и промежутком между ними (`gap`). */
@@ -105,15 +114,17 @@ afterEach(async () => {
 });
 
 describe("welcome: приветствие и путь к первому уроку", () => {
-  it("после паузы Бит здоровается по имени — без затемнения; дальше показывает урок и сердечки и просит нажать «Начать»", async () => {
-    const cont = addTarget("continue", { href: "/lesson/ns-1" });
+  it("после паузы Бит здоровается по имени — модально, на затемнённом экране; дальше показывает урок и сердечки и просит нажать «Начать»", async () => {
+    const { cont } = addLessonCard();
     addTarget("hdr-hearts");
     await render();
     expect(bubble()).toBeNull();
     await wait(GUIDE_DELAY_MS + 50);
     expect(say()).toContain("Привет, Аня! Я Бит.");
-    expect(bubble()?.getAttribute("role")).toBe("status");
-    expect(dims()).toHaveLength(0);
+    // Шаг без цели: весь экран затемнён и закрыт для нажатий (один «ловец» на весь экран), пузырь — диалог.
+    expect(bubble()?.getAttribute("role")).toBe("dialog");
+    expect(bubble()?.getAttribute("aria-modal")).toBe("true");
+    expect(dims()).toHaveLength(1);
     expect(useGuideUi.getState().active).toBe(true);
 
     await click("Дальше");
@@ -142,8 +153,13 @@ describe("welcome: приветствие и путь к первому урок
   });
 
   it("нажатие на затемнение ничего не делает (шаг тот же), Бит «качает головой»", async () => {
-    addTarget("continue", { href: "/lesson/ns-1" });
+    addLessonCard();
     await start();
+    // Шаг без цели: нажатие на затемнение тоже ничего не делает.
+    await act(async () => {
+      dims()[0].dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    });
+    expect(say()).toContain("Привет, Аня!");
     await click("Дальше");
     await wait(50);
     const before = say();
@@ -212,7 +228,7 @@ describe("welcome: приветствие и путь к первому урок
 
 describe("шаг «Дальше» с целью и шаг «нажми»: вырез, палец, фокус, роли", () => {
   it("нажатие на саму цель (ссылку) — это «Дальше»: со страницы не уходим, до цели нажатие не доходит; пальца нет", async () => {
-    const cont = addTarget("continue", { href: "/lesson/ns-1" });
+    const { cont } = addLessonCard();
     addTarget("hdr-hearts", { href: "/shop" });
     const reached = vi.fn();
     cont.addEventListener("click", reached);
@@ -259,7 +275,7 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
   });
 
   it("нажатие мимо выреза на шаге «Дальше» не перехватывается (страница под затемнением его не получит — его ловит затемнение)", async () => {
-    addTarget("continue", { href: "/lesson/ns-1" });
+    addLessonCard();
     await start();
     await click("Дальше");
     await wait(50);
@@ -281,18 +297,24 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
     expect(say()).toContain("следующий урок");
   });
 
-  it("фокус: без затемнения «Дальше» фокус не забирает; с затемнением — забирает; шаг «нажми» — статус, фокус на цели", async () => {
-    const cont = addTarget("continue", { href: "/lesson/ns-1" });
+  it("фокус: модальный пузырь берёт фокус сам (кольцо на «Дальше» — только после Tab), Enter — «Дальше»; шаг «нажми» — статус, фокус на цели", async () => {
+    const { cont } = addLessonCard();
     addTarget("hdr-hearts", { href: "/shop" });
     await start();
-    expect(bubble()?.getAttribute("role")).toBe("status");
+    expect(bubble()?.getAttribute("role")).toBe("dialog");
+    expect(document.activeElement).toBe(bubble());
     expect(document.activeElement).not.toBe(button("Дальше"));
     await click("Дальше");
     await wait(50);
     expect(bubble()?.getAttribute("role")).toBe("dialog");
     expect(bubble()?.getAttribute("aria-modal")).toBe("true");
-    expect(document.activeElement).toBe(button("Дальше"));
-    await click("Дальше");
+    expect(document.activeElement).toBe(bubble());
+    // Enter на самом пузыре — «Дальше».
+    await act(async () => {
+      bubble()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    await wait(50);
+    expect(say()).toContain("Сердечки — входы в уроки");
     await wait(50);
     await click("Дальше");
     await wait(50);
@@ -325,6 +347,7 @@ describe("шаг «Дальше» с целью и шаг «нажми»: выр
     dialog((_, wrap) => (wrap.style.display = "none"));
     dialog((el) => (el.style.visibility = "hidden"));
     dialog((el) => el.setAttribute("hidden", ""));
+    addTarget("tutor-free", {}, "button");
     await start();
     expect(say()).toContain("Спрашивай меня");
     // Открылось настоящее окно поверх — Бит прячется и ждёт.
@@ -463,7 +486,7 @@ describe("nav: после первого урока", () => {
   it("следующий урок → панель → (нет кнопки Бита — пропуск) → «нажми на чипы»; школьному треку — без ЕНТ", async () => {
     doneLesson();
     useApp.setState((s) => ({ tips: { welcome: 1, "lesson-first": 1, "after-first": 1 }, profile: { ...s.profile, track: "school" } }));
-    addTarget("continue", { href: "/lesson/ns-2" });
+    addLessonCard("/lesson/ns-2");
     addTarget("nav-practice");
     addTarget("nav-materials");
     addTarget("nav-progress");
@@ -486,22 +509,138 @@ describe("nav: после первого урока", () => {
   it("на шаге про плавающую кнопку Бит её не прячет (active = false)", async () => {
     doneLesson();
     useApp.setState({ tips: { welcome: 1 } });
-    addTarget("continue", { href: "/lesson/ns-2" });
-    addTarget("bit-dock", {}, "button");
+    addLessonCard("/lesson/ns-2");
+    addTarget("hdr-chips", { href: "/shop" });
+    const wrap = addTarget("bit-dock", {}, "div", { x: 284, y: 600, w: 72, h: 56 });
+    const btn = document.createElement("button");
+    btn.dataset.dockButton = "";
+    btn.getBoundingClientRect = () => ({ left: 284, top: 600, width: 56, height: 56, right: 340, bottom: 656, x: 284, y: 600, toJSON: () => ({}) }) as DOMRect;
+    wrap.appendChild(btn);
     await start();
     expect(useGuideUi.getState().active).toBe(true);
     expect(useGuideUi.getState().dockStep).toBe(false);
+    expect(document.querySelector("[data-guide-bit]")).not.toBeNull();
     await click("Дальше");
     await wait(2000);
     expect(say()).toContain("А это я!");
     expect(useGuideUi.getState().active).toBe(false);
     expect(useGuideUi.getState().dockStep).toBe(true);
+    // Говорящий Бит прячется: «А это я!» говорит сама кнопка — пузырь над ней, хвостик к её центру (284 + 28).
+    expect(document.querySelector("[data-guide-bit]")).toBeNull();
+    const tail = bubble()!.querySelector<HTMLElement>("span.rotate-45")!;
+    expect(parseFloat(bubble()!.style.left) + parseFloat(tail.style.left) + 8).toBeCloseTo(312);
     // Нажатие на саму кнопку Бита (она в вырезе) — «Дальше», а не чат.
     await act(async () => {
       clickAt(document.querySelector('[data-tour="bit-dock"]')!, 0, 0);
     });
     await wait(50);
     expect(useGuideUi.getState().dockStep).toBe(false);
+    // Следующий шаг («нажми на чипы») — Бит снова на месте.
+    await wait(1000);
+    expect(say()).toContain("нажми на чипы");
+    expect(document.querySelector("[data-guide-bit]")).not.toBeNull();
+  });
+});
+
+describe("визуальное ревью: прокрутка к цели, слабые темы, чат", () => {
+  it("цель низко на странице — страница прокручивается так, чтобы под ней поместились Бит с пузырём; приколотая цель — нет", async () => {
+    const scrollBy = vi.fn();
+    const was = window.scrollBy;
+    window.scrollBy = scrollBy as unknown as typeof window.scrollBy;
+    try {
+      const vh = window.innerHeight;
+      // Телефон: нижняя панель (64 px) — под карточкой должно хватить места Биту с пузырём над ней.
+      addTarget("nav-practice", {}, "a", { x: 90, y: vh - 64, w: 90, h: 64 });
+      const card = addTarget("next-lesson", {}, "div", { x: 20, y: vh - 300, w: 300, h: 140 });
+      card.appendChild(addTarget("continue", { href: "/lesson/ns-1" }));
+      const header = document.createElement("header");
+      header.style.position = "sticky";
+      const hearts = addTarget("hdr-hearts", { href: "/shop" }, "a", { x: 200, y: 10, w: 60, h: 40 });
+      header.appendChild(hearts);
+      document.body.appendChild(header);
+      await start();
+      await click("Дальше");
+      await wait(50);
+      expect(say()).toContain("следующий урок");
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      // Низ карточки (с зазором рамки) — над Битом с пузырём над панелью: сдвиг ≈ 80 px.
+      expect(scrollBy.mock.calls[0][0].top).toBeGreaterThan(50);
+      await click("Дальше");
+      await wait(50);
+      expect(say()).toContain("Сердечки");
+      // Сердечки в шапке (sticky) — прокрутка их не сдвинет: страницу не трогаем.
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      header.remove();
+    } finally {
+      window.scrollBy = was;
+    }
+  });
+
+  it("пока плавная прокрутка едет, Бит встаёт под целью — туда, где она окажется (не подпрыгивает над ней на миг)", async () => {
+    const scrollBy = vi.fn();
+    const was = window.scrollBy;
+    window.scrollBy = scrollBy as unknown as typeof window.scrollBy;
+    // Страница длинная: прокрутке есть куда ехать. Мок scrollBy страницу не двигает — прокрутка «едет» всё время.
+    const page = document.scrollingElement ?? document.documentElement;
+    Object.defineProperty(page, "scrollHeight", { configurable: true, value: 5000 });
+    Object.defineProperty(page, "clientHeight", { configurable: true, value: window.innerHeight });
+    try {
+      const vh = window.innerHeight;
+      addTarget("nav-practice", {}, "a", { x: 90, y: vh - 64, w: 90, h: 64 });
+      // Карточка во всю ширину у самого низа над панелью: где она сейчас, Биту под ней места нет — он поднялся бы над ней.
+      const card = addTarget("next-lesson", {}, "div", { x: 12, y: vh - 150, w: window.innerWidth - 24, h: 60 });
+      card.appendChild(addTarget("continue", { href: "/lesson/ns-1" }));
+      await start();
+      await click("Дальше");
+      await wait(300);
+      expect(say()).toContain("следующий урок");
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      const dy = scrollBy.mock.calls[0][0].top as number;
+      expect(dy).toBeGreaterThan(50);
+      // Пузырь — у низа экрана (Бит над панелью), а не над карточкой (её верх сейчас — в 150 px от низа окна).
+      expect(parseFloat(bubble()!.style.bottom)).toBeLessThan(150);
+      // Прокрутка так и не доехала (прервали) — дольше SETTLE_MS не ждём: мерим как есть, Бит над целью.
+      await wait(1200);
+      expect(parseFloat(bubble()!.style.bottom)).toBeGreaterThan(150);
+    } finally {
+      window.scrollBy = was;
+      Reflect.deleteProperty(page, "scrollHeight");
+      Reflect.deleteProperty(page, "clientHeight");
+    }
+  });
+
+  it("слабые места: тем нет (нет первой строки) — «реши пару заданий»; темы есть — «нажми на тему»", async () => {
+    h.pathname = "/stats";
+    useApp.setState({ tips: { nav: 1 } });
+    addTarget("stats-overview", {}, "div");
+    const weak = addTarget("stats-weak", {}, "div");
+    await start();
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Реши пару заданий");
+    expect(say()).not.toContain("Нажми на тему");
+    await click("Понятно");
+    await wait(600); // Бит ушёл — сцена снята
+    weak.remove();
+    await act(async () => useApp.getState().resetTips());
+    useApp.setState({ tips: { nav: 1 } });
+    addTarget("stats-weak", {}, "div");
+    addTarget("stats-weak-first", {}, "div");
+    await wait(GUIDE_DELAY_MS + 50);
+    await click("Дальше");
+    await wait(50);
+    expect(say()).toContain("Нажми на тему");
+  });
+
+  it("чат: рамка на «Свободном» чате; его нет — та же реплика на затемнённом экране", async () => {
+    h.pathname = "/tutor";
+    useApp.setState({ tips: { nav: 1 } });
+    await start();
+    expect(bubble()).toBeNull();
+    await wait(2000);
+    expect(say()).toContain("Спрашивай меня");
+    expect(dims()).toHaveLength(1);
+    expect(bubble()?.getAttribute("role")).toBe("dialog");
   });
 });
 
@@ -532,6 +671,7 @@ describe("страницы и «Показать подсказки снова»
   it("сброс подсказок — сцена играет снова с первого шага", async () => {
     h.pathname = "/tutor";
     useApp.setState({ tips: { nav: 1 } });
+    addTarget("tutor-free", {}, "button");
     await start();
     expect(say()).toContain("Спрашивай меня");
     await click("Понятно");
@@ -549,6 +689,7 @@ describe("страницы и «Показать подсказки снова»
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
     document.body.appendChild(modal);
+    addTarget("tutor-free", {}, "button");
     await start();
     await wait(3000);
     expect(bubble()).toBeNull();
@@ -572,6 +713,14 @@ describe("звук и «Меньше анимаций»", () => {
     await start();
     await wait(3000);
     expect(h.sounds).toEqual([]);
+  });
+
+  it("тире в реплике не уезжает в начало строки: на экране перед ним неразрывный пробел, читалке — обычный текст", async () => {
+    useApp.setState((s) => ({ profile: { ...s.profile, reduceMotion: true } }));
+    await start();
+    const visible = bubble()!.querySelector("p")!.textContent ?? "";
+    expect(visible).toContain("где,\u00a0— это быстро");
+    expect(bubble()!.querySelector(".sr-only")?.textContent).toContain("где, — это быстро");
   });
 
   it("«Меньше анимаций»: текст сразу целиком, звук — один «буп»", async () => {

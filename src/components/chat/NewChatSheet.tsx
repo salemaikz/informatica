@@ -24,15 +24,16 @@ export function useStartChat() {
   };
 }
 
-/** Карточки режимов: иконка, название и одна строка «что умеет». */
-export function ModeList({ onPick }: { onPick: (mode: ChatMode) => void }) {
+/** Карточки режимов: иконка, название и одна строка «что умеет». `tourFirst` — метка проводника на первом режиме. */
+export function ModeList({ onPick, tourFirst }: { onPick: (mode: ChatMode) => void; tourFirst?: string }) {
   const { t } = useT();
   return (
     <ul className="flex flex-col gap-2">
-      {CHAT_MODES.map((mode) => (
+      {CHAT_MODES.map((mode, i) => (
         <li key={mode}>
           <button
             type="button"
+            data-tour={i === 0 ? tourFirst : undefined}
             onClick={() => onPick(mode)}
             className="flex min-h-16 w-full items-center gap-3 rounded-2xl border-2 border-border bg-surface p-3 text-left hover:border-ai/40 hover:bg-ai-soft"
           >

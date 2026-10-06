@@ -22,11 +22,16 @@ export const rectOf = (el: Element): Rect => {
   return { x: r.left, y: r.top, w: r.width, h: r.height };
 };
 
-/** Скругление элемента (рамка повторяет его форму); не прочиталось — 16 px. */
-export function radiusOf(el: Element | null): number {
+/**
+ * Скругление элемента (рамка повторяет его форму). Обёртка без скругления вокруг одной карточки — скругление карточки
+ * (иначе вокруг rounded-3xl виден квадратный «ореол»); вокруг заголовка и нескольких блоков или не прочиталось — 16 px.
+ */
+export function radiusOf(el: Element | null, depth = 0): number {
   if (!el) return 16;
   const v = parseFloat(getComputedStyle(el).borderTopLeftRadius);
-  return Number.isFinite(v) ? v : 16;
+  if (Number.isFinite(v) && v > 0) return v;
+  if (depth < 3 && el.children.length === 1) return radiusOf(el.children[0], depth + 1);
+  return 16;
 }
 
 /**
@@ -48,7 +53,7 @@ export const foreignModal = (): boolean => Array.from(document.querySelectorAll(
 
 /** Высота safe-area снизу (полоска «домой» на iPhone): env() из JS не прочитать — меряем пробником. */
 let safeProbe: HTMLDivElement | null = null;
-function safeBottom(): number {
+export function safeBottom(): number {
   if (!safeProbe) {
     safeProbe = document.createElement("div");
     safeProbe.setAttribute("aria-hidden", "true");
@@ -68,12 +73,65 @@ export function bottomInset(vh: number): number {
   return inset > 0 ? inset : safeBottom();
 }
 
-/** Цель видна целиком (не под шапкой и не за краем окна) — прокручивать не нужно. */
-export function inView(el: Element, vh: number): boolean {
-  const r = el.getBoundingClientRect();
-  // Шапка закрывает верх страницы, кроме своих же элементов (сердечки, чипы).
-  const top = el.closest("header") ? 0 : 64;
-  return r.top >= top && r.bottom <= vh;
+/** Элемент приколот к экрану (шапка, нижняя панель, кнопка Бита, низ урока): прокрутка его не сдвинет. */
+export function pinned(el: Element): boolean {
+  for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
+    const p = getComputedStyle(n).position;
+    if (p === "fixed" || p === "sticky") return true;
+  }
+  return false;
+}
+
+/** Низ шапки, прилипшей к верху экрана (шапка приложения или урока); шапки нет — 0. */
+export function topBar(): number {
+  let top = 0;
+  for (const h of document.querySelectorAll("header")) {
+    const r = h.getBoundingClientRect();
+    if (r.height > 0 && r.top <= 1 && r.bottom > 0) top = Math.max(top, r.bottom);
+  }
+  return top;
+}
+
+/**
+ * Прокрутить на `dy` px то, что прокручивает элемент: ближайший прокручиваемый предок или само окно. Возвращает, сколько
+ * ещё осталось проехать (px): плавная прокрутка идёт несколько кадров, а у края страницы она проедет меньше `dy`.
+ */
+export function scrollPage(el: Element, dy: number, smooth: boolean): () => number {
+  const opts: ScrollToOptions = { top: dy, behavior: smooth ? "smooth" : "auto" };
+  let box: Element | null = null;
+  for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight + 1) {
+      box = n;
+      break;
+    }
+  }
+  const page = box ?? document.scrollingElement ?? document.documentElement;
+  const at = () => (box ? box.scrollTop : window.scrollY);
+  const to = Math.max(0, Math.min(page.scrollHeight - page.clientHeight, at() + dy));
+  if (box) box.scrollBy?.(opts);
+  else window.scrollBy?.(opts);
+  return () => to - at();
+}
+
+const CONTROLS = 'a[href], button, [role="button"], [role="radio"], [role="tab"], input, select, textarea';
+
+/**
+ * Кнопки и ссылки на экране, кроме целей и самого проводника: поднятый над целью Бит на них не садится, а пузырь шага
+ * без цели их не режет. `ahead` — сколько ещё проедет плавная прокрутка: кнопки страницы — там, где окажутся после неё
+ * (приколотые к экрану — где есть).
+ */
+export function obstacles(targets: readonly Element[], vw: number, vh: number, ahead = 0): Rect[] {
+  const out: Rect[] = [];
+  for (const el of document.querySelectorAll<HTMLElement>(CONTROLS)) {
+    if (el.closest("[data-guide]") || targets.some((t) => t.contains(el) || el.contains(t))) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= vw) continue;
+    const y = ahead && !pinned(el) ? r.top - ahead : r.top;
+    if (y + r.height <= 0 || y >= vh) continue;
+    out.push({ x: r.left, y, w: r.width, h: r.height });
+  }
+  return out;
 }
 
 /** Первый элемент, на который можно поставить фокус: сама цель или кнопка/ссылка внутри неё. */
