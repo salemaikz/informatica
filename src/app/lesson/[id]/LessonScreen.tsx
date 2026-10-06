@@ -25,6 +25,8 @@ import { GuideSpot } from "@/components/guide/GuideSpot";
  * и показывает «−1». Повторный вход в течение 20 минут после оплаты бесплатен (ключ входа, lib/entry-paid.ts), после итогов — снова платный.
  * Экран «Урок не закончен»: «Продолжить» — бесплатно, если оплата свежая (или впереди нет заданий), иначе платно по нажатию;
  * «Начать заново» — всегда новый платный вход. Оплаченное, но нетронутое прохождение (шаг 0) продолжается молча.
+ * «Пройти урок заново» на итогах незасчитанного урока (#122) — тоже новый платный вход в том же режиме: оплата здесь,
+ * плеер монтируется заново (ключ с номером круга); сердечек не хватает — окно покупки поверх итогов.
  *
  * Урок уже с «боссом» (#84) и набор «Проверить себя» собирает сервер (page.tsx): клиент не грузит все уроки,
  * банки навыков и банк ЕНТ (этап 16).
@@ -51,7 +53,9 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
   // Оплата на экране выбора («Продолжить» после окна, «Начать заново»): плееру — «−N» и время оплаты для сохранения.
   const [handPaid, setHandPaid] = useState<EntryPayment | null>(null);
   // Не хватает сердечек на выбранное действие — окно покупки; после покупки выполняем это действие.
-  const [short, setShort] = useState<null | "continue" | "restart">(null);
+  const [short, setShort] = useState<null | "continue" | "restart" | "retry">(null);
+  // Номер круга: «Пройти урок заново» с итогов увеличивает его — плеер монтируется заново.
+  const [round, setRound] = useState(0);
 
   const cost = asCheck ? ENTRY_COST.check : lessonCost();
   const payKey = asCheck ? checkEntryKey(id) : lessonEntryKey(id);
@@ -64,10 +68,10 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
   useHeartsOutOnEntry(askNeed, outWhere);
 
   /** Оплата из обработчика: списано — запоминаем для плеера; не хватает — окно покупки. */
-  const payNow = (action: "continue" | "restart"): boolean => {
+  const payNow = (action: "continue" | "restart" | "retry"): boolean => {
     const app = useApp.getState();
-    // «Начать заново» — новый вход: платим всегда и обновляем ключ; «Продолжить» — по ключу (свежая оплата дважды не списывается).
-    const res = action === "restart" ? app.payEntryFresh(payKey, cost) : app.payEntryOnce(payKey, cost);
+    // «Начать заново» и повтор с итогов — новый вход: платим всегда и обновляем ключ; «Продолжить» — по ключу (свежая оплата дважды не списывается).
+    const res = action === "continue" ? app.payEntryOnce(payKey, cost) : app.payEntryFresh(payKey, cost);
     if (!res.ok) {
       track({ e: "hearts_out", where: outWhere });
       setShort(action);
@@ -80,6 +84,13 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
     if (!payNow("restart")) return;
     useApp.getState().clearLessonRun(id);
     setChoice("fresh");
+  };
+  // «Пройти урок заново» с итогов: новый платный вход в том же режиме, плеер — с первого шага.
+  const doRetry = () => {
+    if (!payNow("retry")) return;
+    useApp.getState().clearLessonRun(id);
+    setChoice("fresh");
+    setRound((r) => r + 1);
   };
   // «Продолжить»: оплачен ли вход, проверяем в момент нажатия — 20 минут могли истечь, пока открыт экран выбора.
   const doContinue = () => {
@@ -126,13 +137,26 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
   // Оплата входа — в следующем кадре: пустой экран на мгновение.
   if (!saved && access !== "open") return <main className="min-h-dvh" aria-busy />;
 
-  // Оплата: свежий вход — хук; экран выбора — обработчик; молчаливое продолжение — уже оплачено (время оплаты в сохранении).
-  const paidNow = saved ? handPaid : payment;
+  // Оплата: свежий вход — хук; экран выбора и повтор с итогов — обработчик; молчаливое продолжение — уже оплачено (время оплаты в сохранении).
+  const paidNow = saved || round > 0 ? handPaid : payment;
+  // Повтор с итогов: сердечек не хватило — окно покупки поверх итогов; после покупки — снова оплата и новый круг.
+  const retryShort = (
+    <OutOfHearts
+      open={short === "retry"}
+      need={cost}
+      onClose={() => setShort(null)}
+      onResume={() => {
+        setShort(null);
+        doRetry();
+      }}
+      onExit={() => router.push("/learn")}
+    />
+  );
   let player: ReactNode;
   if (asCheck) {
     player = (
       <LessonPlayer
-        key="check"
+        key={`check:${round}`}
         kind="lesson"
         via="check"
         lessonId={lesson.id}
@@ -142,13 +166,14 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
         entryCost={ENTRY_COST.check}
         prepaid={paidNow?.paid}
         paidAt={paidNow?.paidAt}
+        onRetry={doRetry}
       />
     );
   } else {
     player = (
       <>
         <LessonPlayer
-          key={choice}
+          key={`${choice}:${round}`}
           kind="lesson"
           lessonId={lesson.id}
           lesson={lesson}
@@ -159,11 +184,18 @@ export function LessonScreen({ lesson, mode, check }: { lesson: Lesson; mode: "l
           paidAt={paidNow?.paidAt}
           saveRun
           resume={choice === "continue" && saved ? saved : undefined}
+          onRetry={doRetry}
         />
-        {/* Бит-проводник: метка «урок в режиме Учиться» — в самом первом уроке Бит покажет сердечки, варианты и «Проверить». */}
-        <GuideSpot kind="lesson" cost={cost} />
+        {/* Бит-проводник: метка «урок в режиме Учиться» — в самом первом уроке Бит покажет сердечки, варианты и «Проверить».
+            paid — сколько списано на этом входе (0 — вход уже был оплачен: «Продолжить», повтор в течение 20 минут). */}
+        <GuideSpot kind="lesson" cost={cost} paid={paidNow?.paid ?? 0} />
       </>
     );
   }
-  return player;
+  return (
+    <>
+      {player}
+      {retryShort}
+    </>
+  );
 }

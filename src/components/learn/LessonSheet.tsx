@@ -23,7 +23,7 @@ import { UNITS, lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
 import { GAMES } from "@/games/registry";
 import { gameSkillsFor } from "@/lib/drill-meta";
-import { ENTRY_COST, entryCost, formatHearts, lessonCost } from "@/lib/economy";
+import { ENTRY_COST, entryCost, formatHearts, lessonCost, xpMultiplier } from "@/lib/economy";
 import { shouldPayTheory } from "@/lib/theory-pay";
 import { theoryUnitHref } from "@/lib/theory-href";
 import { shortDate } from "@/lib/date";
@@ -121,6 +121,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const { plan, trial } = usePlan();
   const stat = useApp((s) => s.lessons[lessonId]);
   const theoryPaidAt = useApp((s) => s.theoryPaid[lessonId]);
+  const boost = useApp((s) => s.boost);
   const [gamesOpen, setGamesOpen] = useState(false);
   const place = findLessonRef(lessonId);
   const lesson = lessonMeta(lessonId);
@@ -182,10 +183,11 @@ function SheetBody({ lessonId }: { lessonId: string }) {
   const due = isDue(stat, now);
   const xp = xpKind(stat, now);
   const steps = lesson.stepCount;
-  const maxXp = lessonXpMax(steps, lessonXpFactor(stat, now), !!stat);
+  // «до +N XP» — с бустером опыта, как начислит стор (#122).
+  const maxXp = lessonXpMax(steps, lessonXpFactor(stat, now), !!stat, xpMultiplier(boost, now));
   const step = lessonStep(stat, now);
   const stepDays = stepReviewDays(stat, now);
-  // «Урок игрой» стоит как сам урок (1 или 2 сердечка).
+  // «Урок игрой» стоит как сам урок (1 сердечко, #120).
   const gameCost = entryCost("game", lesson);
   // Теория: платная (и у пройденного урока тоже), пока тема не оплачена за сутки (при безлимите значок скрыт сам).
   const theoryPays = shouldPayTheory({ unlimited, paidAt: theoryPaidAt, now });

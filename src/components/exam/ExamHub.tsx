@@ -218,7 +218,7 @@ export function ExamHub() {
                     <span className="flex items-center gap-2 text-xs font-bold text-muted">
                       <StarRow stars={stars} size={15} />
                       <span className="min-w-0 flex-1 truncate">{best ? t("exam.unit.best", { a: best.points, b: best.max }) : t("exam.unit.new")}</span>
-                      {/* Контрольная стоит 2 сердечка (#40). Значок — в строке под названием: у кнопки «Начать» узко на 360 px. */}
+                      {/* Контрольная стоит 1 сердечко (ENTRY_COST.checkpoint, #120). Значок — в строке под названием: у кнопки «Начать» узко на 360 px. */}
                       <HeartCost n={ENTRY_COST.checkpoint} />
                     </span>
                   </span>

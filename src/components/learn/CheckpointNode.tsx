@@ -97,7 +97,7 @@ export function CheckpointNode({ unit, lessons }: { unit: Unit; lessons: Record<
           </ul>
           <Button size="lg" block icon={<Play size={20} aria-hidden />} onClick={start}>
             {t("common.start")}
-            {/* Тест по разделу стоит 2 сердечка (#40); списывается на экране условий по «Начать». */}
+            {/* Тест по разделу стоит 1 сердечко (ENTRY_COST.checkpoint, #120); списывается на экране условий по «Начать». */}
             <HeartCost n={ENTRY_COST.checkpoint} variant="solid" />
           </Button>
         </div>

@@ -99,7 +99,7 @@ export function PracticeNode({
             <Icon size={28} strokeWidth={2.4} aria-hidden />
           </button>
           {badge && (
-            <span className="pointer-events-none absolute -right-1.5 -top-1 rounded-full border-2 border-surface bg-success-strong px-1.5 text-[11px] font-black leading-4 text-white">
+            <span className="pointer-events-none absolute -right-1.5 -top-1 rounded-full border-2 border-surface bg-action-success px-1.5 text-[11px] font-black leading-4 text-white">
               {badge}
             </span>
           )}

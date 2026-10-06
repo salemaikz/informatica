@@ -97,6 +97,8 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const [wanted, setWanted] = useState<QuizCount | null>(null);
   const stepStartedAt = useRef(0);
   const finished = useRef(false);
+  // Нехватку сердечек отмечаем в аналитике один раз за квиз, а не на каждое нажатие (как IdeShell, useEntryAccess).
+  const outSent = useRef(false);
 
   // Отсчёт времени первого задания — с момента, когда набор заданий готов. Время активное (#68), как в уроке: вкладка в фоне не считается.
   const ready0 = !!steps;
@@ -112,7 +114,10 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
   const pay = useCallback((): boolean => {
     if (paidRef.current) return true;
     if (!useApp.getState().payEntryOnce(payKey, ENTRY_COST.drill).ok) {
-      track({ e: "hearts_out", where: "drill" });
+      if (!outSent.current) {
+        outSent.current = true;
+        track({ e: "hearts_out", where: "drill" });
+      }
       setOutOpen(true);
       return false;
     }
@@ -136,13 +141,16 @@ export function ChatQuiz({ topic, count, onDone, onCancel }: ChatQuizProps) {
       const newCombo = nextCombo(combo, res.correct);
       const gained = xpForAnswer(res.correct, false, newCombo);
       const rec = answerRecord(step, res, lang, Math.max(0, activeMs() - stepStartedAt.current));
+      // Начислено с бустером опыта (#122) — показываем и пишем в итог то, что реально прибавилось (как LessonPlayer).
+      const xpBefore = useApp.getState().xp;
       recordAnswer(rec, gained);
+      const credited = useApp.getState().xp - xpBefore;
       noteCombo(newCombo);
       setRecords((r) => [...r, rec]);
       setCombo(newCombo);
       setMaxCombo((m) => Math.max(m, newCombo));
-      setXp((x) => x + gained);
-      setGain(gained);
+      setXp((x) => x + credited);
+      setGain(credited);
       setResult(res);
       setPhase("feedback");
       setPraise(Math.floor(Math.random() * PRAISE.length));
