@@ -3,7 +3,7 @@
 import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { m } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UNITS } from "@/content/course-map";
 import { cn } from "@/lib/cn";
@@ -15,20 +15,24 @@ import {
   adjacentLessons,
   blockContext,
   cardIndexFromHash,
+  cardToRemember,
   CONSPECT_ID,
   clampCard,
   conspectContext,
   infoSteps,
   initialCard,
   lessonPlace,
+  liveCardParam,
   lessonReadStatus,
   pluralIndex,
   readableLessonIds,
   readingStats,
   theoryCardIds,
+  withoutCardAnchor,
   type LessonReadStatus,
 } from "@/lib/theory";
 import { isTheoryCardLocked, THEORY_FREE_CARDS } from "@/lib/theory-pay";
+import { CARD_PARAM, paramValue } from "@/lib/theory-href";
 import { useApp } from "@/lib/store";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { useOpenLessonChat } from "@/components/chat/useLessonChat";
@@ -55,11 +59,13 @@ const ORDER = readableLessonIds(UNITS);
  * Чтение урока без заданий (этап 16В, «Теория 2.0»): карточки урока — по одной (как шаги урока), последняя — конспект.
  * Сверху «где я»: раздел, номер урока, лента уроков раздела. Переключатель «По карточкам / Всё сразу» запоминается.
  * Ничего не пишет в прогресс уроков; запоминает последнюю карточку (theoryLast) и прочитанный до конспекта урок (theoryRead).
- * Якоря: `#<id шага>` и `#conspect` (на них ведёт поиск) открывают нужную карточку.
+ * Адрес карточки: `?card=<id шага>` и `?card=conspect` (на них ведёт поиск; страница читает параметр на сервере и передаёт
+ * сюда как initialCard). Старые ссылки с `#<id шага>` при полной загрузке тоже открывают нужную карточку. После первого листания
+ * `?card=` из адреса убирается; при «Назад» к такой записи параметр с сервера устарел — его сверяем с useSearchParams (liveCardParam).
  * Плата — явная (useTheoryPay): первая карточка бесплатна, дальше — кнопка «Читать дальше — 0,5»; «Безлимит» и повтор за сутки — бесплатно.
  * Урок приходит с сервера (страница /theory/[id]): клиент не грузит содержимое всех уроков (этап 16).
  */
-export function TheoryReader({ lesson }: { lesson: Lesson }) {
+export function TheoryReader({ lesson, initialCard: cardParam = null }: { lesson: Lesson; initialCard?: string | null }) {
   const id = lesson.id;
   const { t, l, lang } = useT();
   const router = useRouter();
@@ -84,8 +90,19 @@ export function TheoryReader({ lesson }: { lesson: Lesson }) {
   const status = statusOf(id);
 
   // Страницы показываются только после гидратации стора (Providers), поэтому якорь и сохранённая карточка читаются сразу.
+  // Параметр ?card= — от сервера (при переходе внутри приложения window.location.hash ещё старый); хэш — только старые ссылки.
+  // Но «Назад» к записи, где ?card= уже убрали при листании (go), поднимает прежние пропсы с карточкой из поиска: сверяем с адресом
+  // роутера (useSearchParams — в первом рендере он уже новый, в отличие от window.location). Устарел — открываем theoryLast.
+  const urlCard = paramValue(useSearchParams().get(CARD_PARAM));
+  const [startCard] = useState(() => liveCardParam(cardParam, urlCard));
   const [index, setIndex] = useState(() =>
-    initialCard({ hash: typeof window === "undefined" ? "" : window.location.hash, cardIds, lessonId: id, last: useApp.getState().theoryLast }),
+    initialCard({
+      card: startCard,
+      hash: typeof window === "undefined" ? "" : window.location.hash,
+      cardIds,
+      lessonId: id,
+      last: useApp.getState().theoryLast,
+    }),
   );
   const [dir, setDir] = useState<1 | -1>(1);
   const [askId, setAskId] = useState<string | null>(null);
@@ -95,10 +112,12 @@ export function TheoryReader({ lesson }: { lesson: Lesson }) {
   const locked = isTheoryCardLocked(pay.state, index);
   const allUnlocked = pay.state !== "pay";
 
-  // Запоминаем, где остановились: «Продолжить чтение» на странице «Теория».
+  // Запоминаем, где остановились: «Продолжить чтение» на странице «Теория». Карточку за платными воротами не пишем:
+  // ученик её не прочитал, а «Продолжить» перескочил бы непрочитанный урок (конспект за воротами считался бы дочитанным).
   useEffect(() => {
-    useApp.getState().noteTheoryOpen(id, index);
-  }, [id, index]);
+    const card = cardToRemember(index, locked);
+    if (card !== null) useApp.getState().noteTheoryOpen(id, card);
+  }, [id, index, locked]);
 
   // «Прочитан»: конспект (последняя карточка) открыт — только оплаченным чтением, не превью.
   useEffect(() => {
@@ -133,8 +152,8 @@ export function TheoryReader({ lesson }: { lesson: Lesson }) {
     return () => window.removeEventListener("hashchange", onHash);
   }, [cardIds]);
 
-  // Переход по ссылке с якорем (из поиска): доскролл и короткая подсветка карточки (в режиме карточек она уже открыта).
-  useHashScroll(id);
+  // Переход по ссылке на карточку (из поиска): доскролл и короткая подсветка (в режиме карточек она уже открыта).
+  useHashScroll(id, true, startCard && cardIds.includes(startCard) ? startCard : null);
 
   const askTask = useMemo(() => {
     if (!askId) return null;
@@ -148,8 +167,9 @@ export function TheoryReader({ lesson }: { lesson: Lesson }) {
     if (next === index) return;
     setDir(next > index ? 1 : -1);
     setIndex(next);
-    // Якорь из адреса сработал при входе; дальше он только мешал бы (обновление страницы вернуло бы к нему, а не к месту, где остановились).
-    if (window.location.hash) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    // Якорь из адреса (?card= или #…) сработал при входе; дальше он только мешал бы (обновление страницы вернуло бы к нему, а не к месту, где остановились).
+    const clean = withoutCardAnchor(window.location.pathname, window.location.search, window.location.hash);
+    if (clean !== null) window.history.replaceState(window.history.state, "", clean);
     // Новая карточка — с её начала (шапка урока остаётся выше).
     areaRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   };

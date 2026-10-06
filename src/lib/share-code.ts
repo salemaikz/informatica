@@ -8,7 +8,8 @@
 //   пробник:  x1-<f|m|t>-<баллы>-<максимум>-<r|k>-<seed>-<тег банка>[-<темы>]   темы — номера через склейку: t04,t05 → 0405
 //   курс:     c1-<пройдено>-<всего>-<r|k>[-g<класс>]                           класс — у школьного трека (% класса)
 //   серия:    s1-<дней>-<рекорд>-<r|k>
-//   урок:     l1-<точность %>-<XP>-<идеально 0|1>-<уроков пройдено>-<r|k>   только числа (этап 16В): ни названия урока, ни имени
+//   урок:     l1-<точность %>-<XP>-<идеально 0|1>-<уроков пройдено>-<r|k>   только числа (этап 16В): ни названия урока, ни имени;
+//             «идеально» (1) возможно только при точности 100
 // Версия в префиксе (x1, c1, s1, l1): поменялся смысл или дизайн картинки — новый префикс, старые ссылки остаются валидными.
 
 import { ENT_TOPICS } from "@/content/ent-topics";
@@ -105,7 +106,14 @@ function valid(r: ShareResult): boolean {
     case "streak":
       return isInt(r.days, 1, SHARE_MAX_DAYS) && isInt(r.best, r.days, SHARE_MAX_DAYS);
     case "lesson":
-      return isInt(r.accuracy, 0, 100) && isInt(r.xp, 0, SHARE_MAX_XP) && typeof r.perfect === "boolean" && isInt(r.n, 1, SHARE_MAX_LESSONS);
+      // «Идеально» — урок без ошибок и подсказок, значит точность 100%: perfect=1 при меньшей точности — противоречие (подделка кода).
+      return (
+        isInt(r.accuracy, 0, 100) &&
+        isInt(r.xp, 0, SHARE_MAX_XP) &&
+        typeof r.perfect === "boolean" &&
+        (!r.perfect || r.accuracy === 100) &&
+        isInt(r.n, 1, SHARE_MAX_LESSONS)
+      );
     default:
       return false;
   }

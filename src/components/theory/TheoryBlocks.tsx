@@ -105,7 +105,7 @@ function ExploreBlock({ step }: { step: ExploreStep }) {
 }
 
 /**
- * Один информационный блок урока. id = id шага — на него ведут ссылки из поиска (`/theory/<урок>#<шаг>`).
+ * Один информационный блок урока. id = id шага — на него ведут ссылки из поиска (`/theory/<урок>?card=<шаг>`).
  * Разбор показывается целиком (режим «по шагам» заменила постраничная подача карточек, этап 16В).
  */
 export function InfoBlock({ step, onAsk }: { step: InfoStep; onAsk: () => void }) {
@@ -129,5 +129,10 @@ export function InfoBlock({ step, onAsk }: { step: InfoStep; onAsk: () => void }
 
 function VideoBlock({ step }: { step: Extract<InfoStep, { type: "video" }> }) {
   const { l, lang } = useT();
-  return <LessonVideo videoId={step.videoId} lang={lang} title={l(step.title)} />;
+  // Перемотка видео — горизонтальный жест пальцем: свайп по карточкам здесь не листает (как у песочницы).
+  return (
+    <div data-no-swipe>
+      <LessonVideo videoId={step.videoId} lang={lang} title={l(step.title)} />
+    </div>
+  );
 }

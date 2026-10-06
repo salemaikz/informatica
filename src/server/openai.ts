@@ -29,7 +29,7 @@ export const MAX_TOKENS = { hint: 250, chat: 800, chatLong: 1000, chatPhoto: 120
  * задание + история. Казахский ≈ 2,5–3 символа на токен, русский ≈ 3–4: tutor ≈ 5–6 тыс. токенов, остальное ≈ 2 тыс.
  * Картинка в бюджет не входит (отдельный предел ~4 МБ base64, sanitizeImage). Потолки полей (server/context.ts) заданы так,
  * что обычный запрос укладывается без обрезки; fitInput срабатывает только на тяжёлых случаях: сначала отбрасывает самые
- * старые сообщения истории, затем укорачивает необязательные части контекста (заметки, память, ошибки). Системные правила
+ * старые сообщения истории, затем укорачивает необязательные части контекста (заметки, ошибки, пройденные уроки, сильные и слабые темы). Системные правила
  * и последний вопрос ученика не трогаются. Выход ограничен MAX_TOKENS.
  * tutor — чат, подсказки, разборы (поток и кэшируемый путь); check — проверка решения по фото; feedback — отзыв после урока.
  */
@@ -76,10 +76,11 @@ export function logUsage(
   route: string,
   model: string,
   usage?: { prompt_tokens?: number; completion_tokens?: number } | null,
-  input?: { chars: number; trimmed?: boolean },
+  input?: { chars: number; trimmed?: boolean; lesson?: boolean },
 ) {
   if (!usage) return;
-  const size = input ? ` chars=${input.chars}${input.trimmed ? " trimmed=1" : ""}` : "";
+  // trimmed=1 — вход пришлось укоротить; lesson=1 — чат по теме урока (в промпте конспект урока).
+  const size = input ? ` chars=${input.chars}${input.trimmed ? " trimmed=1" : ""}${input.lesson ? " lesson=1" : ""}` : "";
   console.info(`[ai] route=${route} model=${model} in=${usage.prompt_tokens ?? 0} out=${usage.completion_tokens ?? 0}${size}`);
 }
 

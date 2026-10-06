@@ -257,6 +257,43 @@ describe("маршрут /api/ai/tutor: чат по теме урока", () => 
     expect(systemOf()).not.toContain("ЧАТ ПО ТЕМЕ УРОКА");
   });
 
+  it("лог расхода: у чата по теме урока пометка lesson=1, у обычного чата, объяснения и чата с фото — нет", async () => {
+    // поток с итоговым usage (без него logUsage молчит)
+    const withUsage = () => {
+      async function* gen() {
+        yield { choices: [{ delta: { content: "Ответ" }, finish_reason: null }] };
+        yield { choices: [{ delta: {}, finish_reason: "stop" }] };
+        yield { choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } };
+      }
+      return Object.assign(gen(), { controller: { abort: vi.fn() } });
+    };
+    create.mockImplementation(() => withUsage());
+    const info = vi.mocked(console.info);
+    const usageLines = () => info.mock.calls.map((c) => String(c[0])).filter((line) => line.startsWith("[ai] route=tutor:chat model="));
+    const run = async (extra: Record<string, unknown>) => {
+      info.mockClear();
+      await (await POST(post(body(extra)))).text();
+      return usageLines();
+    };
+
+    const lessonLog = await run({ chatMode: "free", lessonId: "ns-1-bits" });
+    expect(lessonLog).toHaveLength(1);
+    expect(lessonLog[0]).toMatch(/ chars=\d+( trimmed=1)? lesson=1$/);
+
+    // неизвестный урок — обычный чат: контекста урока нет, пометки нет
+    expect((await run({ lessonId: "nope" }))[0]).not.toContain("lesson=1");
+    expect((await run({}))[0]).not.toContain("lesson=1");
+    expect((await run({ chatMode: "explain", topic: "t04", lessonId: "ns-1-bits" }))[0]).not.toContain("lesson=1");
+    // с фото контекст урока не добавляется (решение) — и пометки нет
+    const photo = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=";
+    const photoLog = await run({ lessonId: "ns-1-bits", image: photo });
+    expect(photoLog).toHaveLength(1);
+    expect(photoLog[0]).not.toContain("lesson=1");
+    const photoMessages = create.mock.calls.at(-1)![0].messages as { role: string; content: unknown }[];
+    expect(photoMessages[photoMessages.length - 1].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image_url" })]));
+    expect(photoMessages[0].content).not.toContain("ЧАТ ПО ТЕМЕ УРОКА");
+  });
+
   it("без lessonId — прежний свободный чат", async () => {
     await (await POST(post(body({ chatMode: "free" })))).text();
     expect(systemOf()).not.toContain("КОНСПЕКТ УРОКА");

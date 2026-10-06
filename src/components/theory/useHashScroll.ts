@@ -10,22 +10,25 @@ function flash(el: HTMLElement) {
 }
 
 /**
- * Доскролл к якорю из адреса (`#conspect`, `#u3`) после монтирования.
+ * Доскролл к блоку из адреса после монтирования. Адрес — `target` (параметр `?card=` / `?unit=`, его передаёт страница:
+ * при переходе внутри приложения `window.location.hash` ещё старый), а при полной загрузке со старой ссылкой — якорь `#…`.
  * Страницы появляются только после гидратации стора (Providers), поэтому браузер сам до якоря уже не доходит.
  * key — перезапуск при смене страницы (id урока).
  */
-export function useHashScroll(key: string, highlight = true) {
+export function useHashScroll(key: string, highlight = true, target: string | null = null) {
   useEffect(() => {
-    let hash = "";
-    try {
-      hash = decodeURIComponent(window.location.hash.slice(1));
-    } catch {
-      return; // битая %-последовательность в адресе
+    let id = target ?? "";
+    if (!id) {
+      try {
+        id = decodeURIComponent(window.location.hash.slice(1));
+      } catch {
+        return; // битая %-последовательность в адресе
+      }
     }
-    if (!hash) return;
-    const el = document.getElementById(hash);
+    if (!id) return;
+    const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ block: "start" });
     if (highlight) flash(el);
-  }, [key, highlight]);
+  }, [key, highlight, target]);
 }

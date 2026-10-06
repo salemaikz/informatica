@@ -2,12 +2,13 @@
 
 import { BookOpen, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lessonMeta } from "@/content/catalog";
 import { UNITS } from "@/content/course-map";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
+import { CONSPECT_ID, paramValue, theoryCardHref, UNIT_PARAM } from "@/lib/theory-href";
 import { useT } from "@/i18n/useT";
 import {
   continueTarget,
@@ -30,12 +31,14 @@ const ORDER = readableLessonIds(UNITS);
 
 /**
  * Справочник теории (этап 16В, «Теория 2.0»): поиск, «Продолжить чтение» и разделы списком — свёрнутые, со сводкой
- * «прочитано N из M»; раскрыт не больше одного (при входе — по адресу `#u3` или раздел текущего урока). Внутри — уроки
- * по порядку с номерами и статусами: пройден / прочитан / не начат / скоро.
+ * «прочитано N из M»; раскрыт не больше одного (при входе — по адресу `?unit=u3` (старое `#u3` при полной загрузке тоже)
+ * или раздел текущего урока). Внутри — уроки по порядку с номерами и статусами: пройден / прочитан / не начат / скоро.
  */
 export function TheoryHome() {
   const { t, l, lang } = useT();
   const router = useRouter();
+  // Раздел из адреса (`?unit=u3`): параметр актуален с первого рендера и при переходе внутри приложения (у `#u3` — нет).
+  const unitParam = paramValue(useSearchParams().get(UNIT_PARAM));
   const reduce = useReduceMotion();
   const lessons = useApp((s) => s.lessons);
   const theoryRead = useApp((s) => s.theoryRead);
@@ -49,7 +52,7 @@ export function TheoryHome() {
 
   // Страницы показываются после гидратации стора (Providers): адрес и стор читаются сразу, раздел раскрыт с первого кадра.
   const [open, setOpen] = useState<string | null>(() =>
-    initialOpenUnit(UNITS, typeof window === "undefined" ? "" : window.location.hash, cont?.id ?? last?.id),
+    initialOpenUnit(UNITS, typeof window === "undefined" ? "" : window.location.hash, cont?.id ?? last?.id, unitParam),
   );
   const toggled = useRef<string | null>(null);
 
@@ -69,8 +72,8 @@ export function TheoryHome() {
   const isDone = (id: string) => (lessons[id]?.completions ?? 0) > 0;
   const isRead = (id: string) => !!theoryRead[id];
 
-  // Переход по ссылке «/theory#u3» (из урока, с карты курса): доскролл к разделу.
-  useHashScroll("theory", false);
+  // Переход по ссылке «/theory?unit=u3» (из урока, с карты курса): доскролл к разделу (только к известному — как и раскрытие).
+  useHashScroll("theory", false, unitParam && UNITS.some((u) => u.id === unitParam) ? unitParam : null);
 
   // Раскрыли раздел — его шапка в начало экрана (свёрнутый выше раздел сдвигает страницу).
   useEffect(() => {
@@ -98,7 +101,8 @@ export function TheoryHome() {
 
       {cont && contMeta && (
         <Link
-          href={`/theory/${cont.id}`}
+          // Дочитанный последний урок (подпись «Конспект») открываем на конспекте; иначе — с того места, где остановились (theoryLast).
+          href={!cont.next && cont.card >= cont.cards ? theoryCardHref(cont.id, CONSPECT_ID) : theoryCardHref(cont.id)}
           className="flex items-center gap-3 rounded-3xl border-2 border-primary/40 bg-primary-soft p-4 transition-[filter] hover:brightness-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface text-primary">

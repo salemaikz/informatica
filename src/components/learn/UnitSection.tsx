@@ -9,6 +9,7 @@ import { LESSON_META } from "@/content/catalog";
 import { lessonNumber } from "@/content/course-map";
 import { SKILLS } from "@/content/skills";
 import { useApp } from "@/lib/store";
+import { theoryUnitHref } from "@/lib/theory-href";
 import { useT } from "@/i18n/useT";
 import { ButtonLink } from "@/components/ui/Button";
 import { ProgressBar, Ring } from "@/components/ui/ProgressBar";
@@ -74,7 +75,7 @@ function UnitHeader({ unit, index, lessons, skills }: { unit: Unit; index: numbe
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonLink href={`/theory#${unit.id}`} variant="secondary" size="sm" className="h-10" icon={<BookOpen size={16} />}>
+          <ButtonLink href={theoryUnitHref(unit.id)} variant="secondary" size="sm" className="h-10" icon={<BookOpen size={16} />}>
             {t("learn2.unit.theory")}
           </ButtonLink>
         </div>

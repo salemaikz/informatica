@@ -5,6 +5,8 @@ import { getLesson, UNITS } from "@/content/course";
 import { lessonDocs } from "@/lib/search";
 import {
   cardIndexFromHash,
+  cardIndexFromParam,
+  cardToRemember,
   clampCard,
   CONSPECT_ID,
   continueTarget,
@@ -14,6 +16,7 @@ import {
   initialOpenUnit,
   lessonPlace,
   lessonReadStatus,
+  liveCardParam,
   putTheoryRead,
   readableLessonIds,
   sanitizeTheoryLast,
@@ -25,7 +28,10 @@ import {
   THEORY_READ_MAX,
   unitReadableIds,
   unitSummary,
+  withoutCardAnchor,
 } from "@/lib/theory";
+import { isTheoryCardLocked } from "@/lib/theory-pay";
+import { CARD_PARAM, paramValue, theoryCardHref, theoryUnitHref, UNIT_PARAM } from "@/lib/theory-href";
 import { mergeState, useApp } from "@/lib/store";
 import { theory16cDict } from "@/i18n/parts/theory16c";
 import { dict, type DictKey } from "@/i18n/dict";
@@ -106,6 +112,46 @@ describe("статус урока и сводка раздела", () => {
     expect(initialOpenUnit(UNITS_X, "", undefined)).toBeNull();
     expect(initialOpenUnit(UNITS_X, "", "zzz")).toBeNull();
   });
+
+  it("раздел из параметра ?unit= важнее старого якоря #uN и текущего урока; неизвестный — пропускается", () => {
+    expect(initialOpenUnit(UNITS_X, "", undefined, "u2")).toBe("u2");
+    // при переходе внутри приложения хэш в первом рендере ещё старый — параметр его перебивает
+    expect(initialOpenUnit(UNITS_X, "#u1", "a", "u2")).toBe("u2");
+    expect(initialOpenUnit(UNITS_X, "", "a", "u2")).toBe("u2");
+    // неизвестный раздел в параметре — как будто параметра нет
+    expect(initialOpenUnit(UNITS_X, "#u2", "a", "nope")).toBe("u2");
+    expect(initialOpenUnit(UNITS_X, "", "b", "nope")).toBe("u1");
+    expect(initialOpenUnit(UNITS_X, "", undefined, "constructor")).toBeNull();
+    expect(initialOpenUnit(UNITS_X, "", undefined, null)).toBeNull();
+    expect(initialOpenUnit(UNITS_X, "", undefined, "")).toBeNull();
+  });
+});
+
+describe("адреса теории: карточка и раздел параметрами", () => {
+  it("theoryCardHref / theoryUnitHref: параметр, а не «#»", () => {
+    expect(theoryCardHref("ns-1-bits", "s2")).toBe("/theory/ns-1-bits?card=s2");
+    expect(theoryCardHref("ns-1-bits", "conspect")).toBe("/theory/ns-1-bits?card=conspect");
+    expect(theoryCardHref("ns-1-bits")).toBe("/theory/ns-1-bits");
+    expect(theoryCardHref("a", "x y&z")).toBe("/theory/a?card=x%20y%26z");
+    expect(theoryUnitHref("u3")).toBe("/theory?unit=u3");
+    expect([CARD_PARAM, UNIT_PARAM]).toEqual(["card", "unit"]);
+  });
+
+  it("paramValue: первое непустое значение; пусто и отсутствует — null", () => {
+    expect(paramValue("s2")).toBe("s2");
+    expect(paramValue(["s2", "s3"])).toBe("s2");
+    for (const v of [undefined, null, "", [], [""]] as const) expect(paramValue(v), String(v)).toBeNull();
+  });
+
+  it("в исходниках не осталось ссылок на карточки и разделы теории через «#»", () => {
+    const hits: string[] = [];
+    for (const file of [...sources("src/components"), ...sources("src/app"), ...sources("src/lib")]) {
+      const code = readFileSync(join(ROOT, file), "utf8");
+      for (const m of code.matchAll(/\/theory[^"'`\s]*#/g)) hits.push(`${file}: ${m[0]}`);
+    }
+    // единственное исключение — пояснения в комментариях к старым ссылкам
+    expect(hits.filter((h) => !/^src\/(lib\/theory|lib\/theory-href|components\/theory\/use)/.test(h))).toEqual([]);
+  });
 });
 
 describe("тема ЕНТ урока для чата по теме", () => {
@@ -158,6 +204,13 @@ describe("карточки урока и якоря", () => {
     expect(cardIndexFromHash("#%E0%A4%A", ids)).toBeNull();
   });
 
+  it("параметр ?card= → номер карточки; чужой, пустой и отсутствующий — null", () => {
+    expect(cardIndexFromParam("s2", ids)).toBe(1);
+    expect(cardIndexFromParam("conspect", ids)).toBe(3);
+    expect(cardIndexFromParam("q", ids)).toBeNull();
+    for (const v of ["", null, undefined, "constructor", "__proto__", "#s2"]) expect(cardIndexFromParam(v, ids), String(v)).toBeNull();
+  });
+
   it("clampCard: в пределах, мусор — 0", () => {
     expect(clampCard(2, 4)).toBe(2);
     expect(clampCard(-3, 4)).toBe(0);
@@ -181,7 +234,64 @@ describe("карточки урока и якоря", () => {
     expect(initialCard({ hash: "", cardIds: ids, lessonId: "t-1", last: null })).toBe(0);
   });
 
-  it("на реальном курсе якоря поиска (`#<шаг>`, `#conspect`) попадают в карточки", () => {
+  it("T1: ?card= важнее хэша (в первом рендере после перехода внутри приложения хэш ещё старый), сохранённой карточки и первой", () => {
+    const last = { id: "t-1", card: 1, at: 1 };
+    // поиск → /theory/t-1?card=s3, а в адресной строке ещё «#s1» от прошлой страницы
+    expect(initialCard({ card: "s3", hash: "#s1", cardIds: ids, lessonId: "t-1", last })).toBe(2);
+    expect(initialCard({ card: "conspect", hash: "", cardIds: ids, lessonId: "t-1", last: null })).toBe(3);
+    expect(initialCard({ card: "s2", hash: "", cardIds: ids, lessonId: "t-1", last })).toBe(1);
+    // чужая или пустая карточка — как будто параметра нет: старая ссылка с «#», затем где остановились, затем первая
+    expect(initialCard({ card: "zzz", hash: "#s3", cardIds: ids, lessonId: "t-1", last })).toBe(2);
+    expect(initialCard({ card: "zzz", hash: "", cardIds: ids, lessonId: "t-1", last })).toBe(1);
+    expect(initialCard({ card: null, hash: "", cardIds: ids, lessonId: "t-1", last: null })).toBe(0);
+    // старые ссылки с «#<шаг>» при полной загрузке работают по-прежнему
+    expect(initialCard({ hash: "#conspect", cardIds: ids, lessonId: "t-1", last })).toBe(3);
+  });
+
+  it("T1: карточка за платными воротами остаётся своей — ворота откроются на ней, а не на первой", () => {
+    // номер не зависит от оплаты: initialCard про адрес, ворота (isTheoryCardLocked) считает читалка
+    const at = initialCard({ card: "s3", hash: "", cardIds: ids, lessonId: "t-1", last: null });
+    expect(at).toBe(2);
+    expect(isTheoryCardLocked("pay", at)).toBe(true);
+    expect(isTheoryCardLocked("paid", at)).toBe(false);
+  });
+
+  it("T1: «Назад» к записи, где ?card= уже убрали при листании, — параметр с сервера устарел, открываем где остановились", () => {
+    const last = { id: "t-1", card: 4, at: 1 }; // долистали до s5 (индекс 4)
+    const cards = ["s1", "s2", "s3", "s4", "s5", CONSPECT_ID];
+    // переход по ссылке из поиска: сервер и адрес роутера — оба ?card=s3 → параметр действует
+    expect(liveCardParam("s3", "s3")).toBe("s3");
+    expect(initialCard({ card: liveCardParam("s3", "s3"), hash: "", cardIds: cards, lessonId: "t-1", last })).toBe(2);
+    // «Назад»: пропсы прежние (s3), а в адресе параметра уже нет → theoryLast, а не карточка из поиска
+    expect(liveCardParam("s3", null)).toBeNull();
+    expect(initialCard({ card: liveCardParam("s3", null), hash: "", cardIds: cards, lessonId: "t-1", last })).toBe(4);
+    // в адресе другая карточка (обе ссылки на один урок) — прежний параметр тоже не действует
+    expect(liveCardParam("s3", "s5")).toBeNull();
+    // параметра на сервере не было — его и нет (обычное открытие, старые ссылки с «#»)
+    expect(liveCardParam(null, null)).toBeNull();
+    expect(liveCardParam(undefined, undefined)).toBeNull();
+    expect(liveCardParam("", "")).toBeNull();
+    expect(liveCardParam(null, "s3")).toBeNull();
+  });
+
+  it("withoutCardAnchor: убирает ?card= и «#…», остальные параметры остаются; нечего убирать — null", () => {
+    expect(withoutCardAnchor("/theory/t-1", "?card=s3", "")).toBe("/theory/t-1");
+    expect(withoutCardAnchor("/theory/t-1", "?card=conspect&x=1", "")).toBe("/theory/t-1?x=1");
+    expect(withoutCardAnchor("/theory/t-1", "", "#s3")).toBe("/theory/t-1");
+    expect(withoutCardAnchor("/theory/t-1", "?x=1", "#s3")).toBe("/theory/t-1?x=1");
+    expect(withoutCardAnchor("/theory/t-1", "?card=s3", "#s3")).toBe("/theory/t-1");
+    expect(withoutCardAnchor("/theory/t-1", "", "")).toBeNull();
+    expect(withoutCardAnchor("/theory/t-1", "?x=1", "")).toBeNull();
+  });
+
+  it("T3: закрытая воротами карточка не запоминается для «Продолжить чтение»", () => {
+    expect(cardToRemember(3, false)).toBe(3);
+    expect(cardToRemember(0, false)).toBe(0);
+    expect(cardToRemember(3, true)).toBeNull();
+    expect(cardToRemember(1, true)).toBeNull();
+  });
+
+  it("на реальном курсе ссылки поиска (`?card=<шаг>`, `?card=conspect`) попадают в карточки", () => {
     let checked = 0;
     for (const id of readableLessonIds(UNITS)) {
       const real = getLesson(id)!;
@@ -190,9 +300,14 @@ describe("карточки урока и якоря", () => {
       expect(new Set(cards).size, id).toBe(cards.length);
       for (const doc of lessonDocs([real], UNITS, "ru")) {
         if (doc.kind !== "theory" && doc.kind !== "conspect") continue;
-        const hash = doc.href.split("#")[1];
-        expect(hash, doc.href).toBeTruthy();
-        expect(cardIndexFromHash(hash!, cards), doc.href).not.toBeNull();
+        const url = new URL(doc.href, "http://localhost");
+        expect(url.pathname, doc.href).toBe(`/theory/${id}`);
+        expect(url.hash, doc.href).toBe("");
+        const card = paramValue(url.searchParams.get(CARD_PARAM));
+        expect(card, doc.href).toBeTruthy();
+        expect(cardIndexFromParam(card, cards), doc.href).not.toBeNull();
+        // и ведёт ровно на свою карточку: «конспект» — на последнюю, шаг — на шаг с таким id
+        expect(cards[cardIndexFromParam(card, cards)!], doc.href).toBe(doc.kind === "conspect" ? CONSPECT_ID : card);
         checked++;
       }
     }
@@ -220,6 +335,19 @@ describe("«Продолжить чтение»", () => {
 
   it("дочитан последний урок — остаётся он сам", () => {
     expect(continueTarget({ id: "c", card: 4, at: 1 }, order, cardsOf)).toEqual({ id: "c", card: 4, cards: 4, next: false });
+  });
+
+  it("T3: конспект за воротами не запомнен — «Продолжить» остаётся на непрочитанном уроке, а не перескакивает к следующему", () => {
+    // читали карточку 2; по ссылке поиска из другого места открыли ?card=conspect (карточка 5), но он закрыт воротами
+    let last: { id: string; card: number; at: number } | null = { id: "a", card: 2, at: 1 };
+    const conspect = 5; // cards.a = 5 → конспект — карточка с номером 5
+    const remembered = cardToRemember(conspect, true);
+    if (remembered !== null) last = { id: "a", card: remembered, at: 2 };
+    expect(continueTarget(last, order, cardsOf)).toEqual({ id: "a", card: 2, cards: 5, next: false });
+    // а если бы запомнили — урок выглядел бы дочитанным (прежняя ошибка)
+    expect(continueTarget({ id: "a", card: conspect, at: 2 }, order, cardsOf)).toMatchObject({ id: "b", next: true });
+    // открытый (оплаченный) конспект запоминается как раньше
+    expect(cardToRemember(conspect, false)).toBe(conspect);
   });
 
   it("неизвестный урок или урок вне порядка (школьный) — null", () => {

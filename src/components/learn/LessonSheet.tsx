@@ -25,6 +25,7 @@ import { GAMES } from "@/games/registry";
 import { gameSkillsFor } from "@/lib/drill-meta";
 import { ENTRY_COST, entryCost, formatHearts, lessonCost } from "@/lib/economy";
 import { theoryPayState } from "@/lib/theory-pay";
+import { theoryUnitHref } from "@/lib/theory-href";
 import { shortDate } from "@/lib/date";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -163,7 +164,7 @@ function SheetBody({ lessonId }: { lessonId: string }) {
         </div>
         <div className="flex flex-col gap-2">
           {hasTheory && (
-            <ButtonLink href={`/theory#${unit.id}`} variant="secondary" block icon={<BookOpen size={18} />}>
+            <ButtonLink href={theoryUnitHref(unit.id)} variant="secondary" block icon={<BookOpen size={18} />}>
               {t("learn2.sheet.topicTheory")}
             </ButtonLink>
           )}

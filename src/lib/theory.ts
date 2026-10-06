@@ -4,7 +4,10 @@
 import type { TaskContext } from "./ai-types";
 import { fold, queryTokens, search, type SearchIndex, type SearchKind, type SearchResult } from "./search";
 import { plain, tx } from "./text";
+import { CARD_PARAM, CONSPECT_ID } from "./theory-href";
 import type { EntTopicId, InfoStep, Lang, Lesson, Step, Unit } from "./types";
+
+export { CONSPECT_ID };
 
 // ---------- Чтение урока ----------
 
@@ -135,8 +138,12 @@ export function unitSummary(ids: readonly string[], isDone: (id: string) => bool
   return { total: ids.length, read, done };
 }
 
-/** Какой раздел раскрыть при входе: из адреса (`#u3`), иначе раздел текущего урока, иначе ничего. */
-export function initialOpenUnit(units: Unit[], hash: string, currentLessonId: string | undefined): string | null {
+/**
+ * Какой раздел раскрыть при входе: из адреса (`?unit=u3`, затем старый якорь `#u3` при полной загрузке),
+ * иначе раздел текущего урока, иначе ничего. Неизвестный раздел в адресе пропускается.
+ */
+export function initialOpenUnit(units: Unit[], hash: string, currentLessonId: string | undefined, unitParam?: string | null): string | null {
+  if (unitParam && units.some((u) => u.id === unitParam)) return unitParam;
   const h = hash.replace(/^#/, "");
   if (h && units.some((u) => u.id === h)) return h;
   if (currentLessonId) {
@@ -152,13 +159,18 @@ export function lessonEntTopic(lesson: { unitId: string; entTopics?: EntTopicId[
 }
 
 // Карточки урока: информационные шаги, последняя карточка — конспект.
-
-/** Якорь конспекта (поиск ведёт на `/theory/<урок>#conspect`). */
-export const CONSPECT_ID = "conspect";
+// Адрес карточки — `/theory/<урок>?card=<id шага>` (lib/theory-href.ts); старый якорь `#<id шага>` при полной загрузке тоже понимаем.
 
 /** Id карточек урока по порядку: информационные шаги и в конце конспект. */
 export function theoryCardIds(steps: readonly InfoStep[]): string[] {
   return [...steps.map((s) => s.id), CONSPECT_ID];
+}
+
+/** Номер карточки по её id; null — id пустой или карточки с таким id в этом уроке нет. */
+function cardIndexOf(id: string | null | undefined, cardIds: readonly string[]): number | null {
+  if (!id) return null;
+  const i = cardIds.indexOf(id);
+  return i >= 0 ? i : null;
 }
 
 /** Номер карточки по якорю адреса (`#<id шага>`, `#conspect`); null — якоря нет или он не от этого урока. */
@@ -169,9 +181,23 @@ export function cardIndexFromHash(hash: string, cardIds: readonly string[]): num
   } catch {
     return null; // битая %-последовательность
   }
-  if (!h) return null;
-  const i = cardIds.indexOf(h);
-  return i >= 0 ? i : null;
+  return cardIndexOf(h, cardIds);
+}
+
+/** Номер карточки по параметру `?card=` (уже разобранному Next: без %-кодов); null — параметра нет или он не от этого урока. */
+export function cardIndexFromParam(card: string | null | undefined, cardIds: readonly string[]): number | null {
+  return cardIndexOf(card, cardIds);
+}
+
+/**
+ * Параметр `?card=`, который ещё действует. Страница получает его с сервера, а читалка после первого листания убирает
+ * `?card=` из адреса (withoutCardAnchor). При «Назад» к такой записи истории Next поднимает прежние пропсы (initialCard —
+ * карточка из поиска), хотя в адресе её уже нет: параметр устарел, и урок открывается там, где ученик остановился (theoryLast).
+ * urlCard — `?card=` из useSearchParams (адрес роутера: в отличие от window.location он уже новый в первом рендере
+ * и при переходе по ссылке, и при «Назад»). Совпали — параметр действует; иначе null.
+ */
+export function liveCardParam(serverCard: string | null | undefined, urlCard: string | null | undefined): string | null {
+  return serverCard && serverCard === urlCard ? serverCard : null;
 }
 
 /** Номер карточки в пределах 0..total-1 (мусор — 0). */
@@ -181,15 +207,38 @@ export function clampCard(i: number, total: number): number {
 }
 
 /**
- * С какой карточки открыть урок: якорь из адреса важнее всего; иначе — где ученик остановился (theoryLast этого урока,
- * если конспект ещё не дочитан); иначе с первой.
+ * С какой карточки открыть урок: адрес важнее всего (`?card=`, затем старый якорь `#…` при полной загрузке);
+ * иначе — где ученик остановился (theoryLast этого урока, если конспект ещё не дочитан); иначе с первой.
+ * Карточка из адреса может оказаться за платными воротами — номер остаётся её, ворота откроются на ней.
  */
-export function initialCard(input: { hash: string; cardIds: readonly string[]; lessonId: string; last: TheoryLast | null }): number {
+export function initialCard(input: {
+  /** Параметр `?card=` (страница читает его на сервере: при переходе внутри приложения `window.location.hash` ещё старый). */
+  card?: string | null;
+  hash: string;
+  cardIds: readonly string[];
+  lessonId: string;
+  last: TheoryLast | null;
+}): number {
+  const fromParam = cardIndexFromParam(input.card, input.cardIds);
+  if (fromParam !== null) return fromParam;
   const fromHash = cardIndexFromHash(input.hash, input.cardIds);
   if (fromHash !== null) return fromHash;
   const { last, cardIds } = input;
   if (last && last.id === input.lessonId && last.card < cardIds.length - 1) return clampCard(last.card, cardIds.length);
   return 0;
+}
+
+/**
+ * Адрес страницы без якоря карточки: убирает `?card=` (остальные параметры остаются) и `#…`.
+ * Якорь сработал при входе; дальше он только мешал бы (обновление страницы вернуло бы к нему, а не к месту, где остановились).
+ * null — убирать нечего.
+ */
+export function withoutCardAnchor(pathname: string, search: string, hash: string): string | null {
+  const params = new URLSearchParams(search);
+  if (!params.has(CARD_PARAM) && !hash) return null;
+  params.delete(CARD_PARAM);
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
 }
 
 // Свайп по карточке: влево — дальше, вправо — назад.
@@ -205,6 +254,15 @@ export function swipeDirection(dx: number, dy: number, min = SWIPE_MIN_PX): "nex
 }
 
 // Что читал ученик: последний открытый урок («Продолжить чтение»), прочитанные уроки, как показывать карточки.
+
+/**
+ * Какую карточку запомнить для «Продолжить чтение» (theoryLast): открытую — её номер; закрытую платными воротами — никакую (null).
+ * Ученик закрытую карточку не читал: запись о ней (особенно о конспекте, `?card=conspect` из поиска) выглядела бы как «урок
+ * дочитан», и continueTarget перескочил бы непрочитанный урок к следующему.
+ */
+export function cardToRemember(index: number, locked: boolean): number | null {
+  return locked ? null : index;
+}
 
 /** Режим чтения: по одной карточке или всё сразу (для повторения). */
 export type TheoryMode = "cards" | "all";

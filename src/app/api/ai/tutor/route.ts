@@ -24,7 +24,8 @@ import type { EntTopicId } from "@/lib/types";
 // Ответ к нерешённому заданию (#100): подсказка и вопрос к ещё не решённому заданию проверяются кодом (lib/answer-leak.ts) —
 // ответ модели без потока (целиком), при утечке один повтор с усиленной припиской, потом безопасный текст и лог `[ai] leak=1`.
 // Бюджет входа (INPUT_BUDGET.tutor, v0.9.1): fitInput укладывает системный промпт + данные ученика + историю в 16 000 символов —
-// сначала отбрасывает самые старые сообщения, потом ужимает заметки, память и ошибки; правила и последний вопрос целы.
+// сначала отбрасывает самые старые сообщения, потом ужимает заметки, ошибки, пройденные уроки, сильные и слабые темы;
+// правила и последний вопрос целы.
 // Кэшируемый путь бюджет не превышает по построению (контекст нейтральный, вопрос — одна из быстрых кнопок, потолки полей
 // задания), его размер пишется в лог.
 
@@ -135,6 +136,8 @@ export async function POST(req: Request) {
   try {
     const topic = topicId ? entTopicById(topicId).title[ctx.lang] : undefined;
     // Чат по теме урока (этап 16В): клиент шлёт только id урока, название и конспект берём здесь (только свободный чат).
+    // С фото контекст урока НЕ добавляем (решение главной модели): вопрос с фото — отдельный сценарий «разбери картинку»
+    // (модель MODELS.vision, вес как у проверки фото), конспект урока к нему не подмешиваем. Поведение менять — только решением.
     const lesson = mode === "chat" && !image && (!chatMode || chatMode === "free") ? await loadLessonChat(body.lessonId, ctx.lang) : undefined;
     const promptOpts = { chatMode, topic, lesson };
     // Бюджет входа: укладываем историю и необязательные части контекста (подробности — в шапке файла и в fitInput).
@@ -145,7 +148,8 @@ export async function POST(req: Request) {
       base: (c) => tutorSystemPrompt(c, mode, task, promptOpts).length + (history.length === 0 ? emptyAsk.length : 0),
     });
     const messages: Msg[] = [{ role: "system", content: tutorSystemPrompt(fit.ctx, mode, task, promptOpts) }, ...userTurns(fit.history)];
-    const input = { chars: messagesChars(messages), trimmed: fit.trimmed };
+    // lesson — пометка в логе расхода: сколько чатов по теме урока (конспект в промпте) и во что они обходятся.
+    const input = { chars: messagesChars(messages), trimmed: fit.trimmed, lesson: !!lesson };
     // Тело потока SDK таймаутом не покрывает (только ожидание заголовков): общий срок — свой сигнал, чтобы сами
     // закрыть ответ маркером ERR до того, как платформа оборвёт функцию по maxDuration.
     const timeoutMs = callTimeoutMs(maxDuration);
