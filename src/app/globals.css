@@ -61,6 +61,15 @@
   --rarity-legendary: #e08a00;
   --rarity-legendary-soft: #fff0d4;
 
+  /* «Чернила» (этап 16В): текст и тонкие линии цвета смысла поверх его -soft-заливки. В светлой теме — -strong,
+     в тёмной — базовый цвет (тёмный -strong на тёмном -soft даёт контраст ≈ 3,4:1). Для подписей в рисунках и пилюль. */
+  --ink-primary: var(--primary-strong);
+  --ink-success: var(--success-strong);
+  --ink-danger: var(--danger-strong);
+  --ink-warning: var(--warning-strong);
+  --ink-ai: var(--ai-strong);
+  --ink-heart: var(--heart-strong);
+
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 16%, var(--surface));
   --device-shell-2: color-mix(in srgb, var(--muted) 34%, var(--surface));
@@ -125,6 +134,13 @@
   --rarity-epic-soft: #3a1c3a;
   --rarity-legendary: #ffb52e;
   --rarity-legendary-soft: #3a2a0e;
+
+  --ink-primary: var(--primary);
+  --ink-success: var(--success);
+  --ink-danger: var(--danger);
+  --ink-warning: var(--warning);
+  --ink-ai: var(--ai);
+  --ink-heart: var(--heart);
 
   /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
   --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
@@ -191,6 +207,13 @@
     --rarity-legendary: #ffb52e;
     --rarity-legendary-soft: #3a2a0e;
 
+    --ink-primary: var(--primary);
+    --ink-success: var(--success);
+    --ink-danger: var(--danger);
+    --ink-warning: var(--warning);
+    --ink-ai: var(--ai);
+    --ink-heart: var(--heart);
+
     /* Рисунки устройств (scenes/hardware) и текст на заливке primary. */
     --device-shell-1: color-mix(in srgb, var(--muted) 52%, var(--surface));
     --device-shell-2: color-mix(in srgb, var(--muted) 40%, var(--surface));
@@ -248,6 +271,12 @@
   --color-rarity-epic-soft: var(--rarity-epic-soft);
   --color-rarity-legendary: var(--rarity-legendary);
   --color-rarity-legendary-soft: var(--rarity-legendary-soft);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-success: var(--ink-success);
+  --color-ink-danger: var(--ink-danger);
+  --color-ink-warning: var(--ink-warning);
+  --color-ink-ai: var(--ink-ai);
+  --color-ink-heart: var(--ink-heart);
   --color-on-primary: var(--on-primary);
 
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
