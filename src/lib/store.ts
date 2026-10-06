@@ -395,6 +395,8 @@ export interface DuelFinish {
   attempts: { skill: SkillId; correct: boolean }[];
   /** Неверные ответы — в «Ошибки», как у пробного ЕНТ. */
   wrong: WrongItem[];
+  /** Итог от сервера (живой матч: техническая победа, уход) — иначе по счёту сторон. */
+  result?: DuelOutcome;
 }
 
 /** Итог урока/тренировки для экрана результатов. */
@@ -1675,7 +1677,7 @@ export const useApp = create<AppState & AppActions>()(
         if (dup) return { xp: 0, result: dup.result, record: dup, duplicate: true };
         const now = Date.now();
         const today = todayKey();
-        const result = duelOutcome(f.you, f.rival);
+        const result = f.result ?? duelOutcome(f.you, f.rival);
         // Бустер умножает только опыт (#122).
         const xp = Math.round(duelXpBase(f.mode, f.you, result, f.opp) * xpMultiplier(s.boost, now));
         // Освоение — как у мини-игры (#67): навык с ≥ 3 ответами, одна запись на навык, не самостоятельный успех.

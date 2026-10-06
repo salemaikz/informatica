@@ -1,13 +1,13 @@
 "use client";
 
 import { Check, ListChecks, RotateCcw, Swords, Trophy, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useApp } from "@/lib/store";
 import { ENTRY_COST } from "@/lib/economy";
 import { correctAnswer } from "@/lib/duel/check";
 import type { DuelOutcome } from "@/lib/duel/bot";
 import type { DuelSideStat } from "@/lib/duel/record";
-import type { DuelAnswer, DuelEvent, DuelItem } from "@/lib/duel/types";
+import type { DuelAnswer, DuelEvent, DuelItem, PublicCard } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
 import { InlineMarkdown, Markdown } from "@/components/Markdown";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -18,10 +18,12 @@ import { XpIcon } from "@/components/economy/XpIcon";
 import { Avatar } from "@/components/app/Avatar";
 import { Mascot, MascotSays } from "@/components/mascot/Mascot";
 import { BotChip } from "./BotChip";
+import { OppAvatar, useOppName } from "./OpponentCard";
 
 // Итоги дуэли (этап 16Д, docs/specs/duels.md §9): победа — кубок золотом; проигрыш — мягко, без красного заголовка;
 // счёт, верные, время, опыт; «Реванш» (новый вход — новое сердечко), «Разобрать ошибки» (статические объяснения),
-// «К дуэлям». «Отправить другу» появится с вызовами (Ф3). Бит подписан «бот».
+// «К дуэлям». «Отправить другу» появится с вызовами (Ф3). Бит подписан «бот». Живой соперник (Ф4): его карточка,
+// слот children (очки недели, «не попал в топ», жалоба), состояние реванша (ждём согласия соперника 20 с).
 
 const fmtTime = (ms: number) => {
   const s = Math.round(ms / 1000);
@@ -38,6 +40,9 @@ export function DuelResult({
   answers,
   onRematch,
   onHub,
+  opponent,
+  rematchState = "idle",
+  children,
 }: {
   result: DuelOutcome;
   you: DuelSideStat;
@@ -48,8 +53,15 @@ export function DuelResult({
   answers: (DuelAnswer | null)[];
   onRematch: () => void;
   onHub: () => void;
+  /** Живой соперник; нет — Бит. */
+  opponent?: PublicCard | null;
+  /** Реванш с живым: ждём ответа, соперник просит, соперник не ответил. */
+  rematchState?: "idle" | "waiting" | "offered" | "none";
+  children?: ReactNode;
 }) {
   const { t } = useT();
+  const oppName = useOppName(opponent ?? null);
+  const human = opponent !== undefined;
   const name = useApp((s) => s.profile.name);
   const avatar = useApp((s) => s.profile.avatar);
   const [review, setReview] = useState(false);
@@ -73,7 +85,7 @@ export function DuelResult({
         ) : (
           <>
             <Mascot mood="neutral" size={88} />
-            <h1 className="text-xl font-extrabold">{t("duel.result.loss")}</h1>
+            <h1 className="text-xl font-extrabold">{human ? t("duel.result.lossLive") : t("duel.result.loss")}</h1>
           </>
         )}
       </div>
@@ -86,13 +98,22 @@ export function DuelResult({
         <span className="whitespace-nowrap font-mono text-3xl font-black tabular-nums" data-testid="duel-final-score">
           {you.score} : {rival.score}
         </span>
-        <div className="flex min-w-0 flex-col items-center gap-1">
-          <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-2">
-            <Mascot mood="neutral" size={38} />
-          </span>
-          <span className="text-sm font-extrabold">{t("duel.bot.name")}</span>
-          <BotChip />
-        </div>
+        {human ? (
+          <div className="flex min-w-0 flex-col items-center gap-1">
+            <OppAvatar card={opponent ?? null} size={40} />
+            <span className="w-full truncate text-center text-sm font-extrabold" data-testid="duel-opp-name">
+              {oppName}
+            </span>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col items-center gap-1">
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-2">
+              <Mascot mood="neutral" size={38} />
+            </span>
+            <span className="text-sm font-extrabold">{t("duel.bot.name")}</span>
+            <BotChip />
+          </div>
+        )}
         <Row label={t("duel.correct")} a={String(you.correct)} b={String(rival.correct)} />
         <Row label={t("duel.time")} a={fmtTime(you.timeMs)} b={fmtTime(rival.timeMs)} />
       </section>
@@ -108,13 +129,23 @@ export function DuelResult({
       <MascotSays mood={result === "loss" ? "happy" : result === "win" ? "celebrate" : "happy"} size={56}>
         <span className="font-bold">{t(result === "win" ? "duel.line.win" : result === "draw" ? "duel.line.draw" : "duel.line.loss")}</span>
       </MascotSays>
-      <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>
+      {human ? children : <p className="text-center text-xs font-semibold text-muted">{t("duel.bot.note")}</p>}
 
       <div className="flex-1" />
       <div className="flex flex-col gap-3">
-        <Button size="lg" block onClick={onRematch} icon={<RotateCcw size={20} />}>
-          {t("duel.rematch")}
-          <HeartCost n={ENTRY_COST.duel} variant="solid" />
+        {rematchState === "offered" && (
+          <p role="status" className="text-center text-sm font-extrabold text-ink-primary" data-testid="duel-rematch-offer">
+            {t("duel.rematch.opp")}
+          </p>
+        )}
+        {rematchState === "none" && (
+          <p role="status" className="text-center text-sm font-semibold text-muted">
+            {t("duel.rematch.none")}
+          </p>
+        )}
+        <Button size="lg" block onClick={onRematch} disabled={rematchState === "waiting"} icon={<RotateCcw size={20} />} data-testid="duel-rematch">
+          {rematchState === "waiting" ? t("duel.rematch.wait") : t("duel.rematch")}
+          {rematchState !== "waiting" && <HeartCost n={ENTRY_COST.duel} variant="solid" />}
         </Button>
         {wrong.length > 0 ? (
           <Button variant="secondary" block onClick={() => setReview(true)} icon={<ListChecks size={18} />}>

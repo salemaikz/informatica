@@ -1,14 +1,15 @@
 "use client";
 
 import { ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { playSound } from "@/lib/sound";
 import { DUEL_MODES } from "@/lib/duel/modes";
 import { opponentAt, type OpponentState, type OpponentTimeline } from "@/lib/duel/timeline";
 import { clockLeftMs, clockNow, clockPause, clockResume, clockStart, itemLeftMs, runAnswer, runTick, sideStat, startRun, type MatchClock, type RunState } from "@/lib/duel/run";
-import type { DuelAnswer, DuelEvent, DuelItem, DuelModeId } from "@/lib/duel/types";
+import { answerIn } from "@/lib/duel/live";
+import type { AnswerIn, DuelAnswer, DuelEvent, DuelItem, DuelModeId, PublicCard } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
 import { InlineMarkdown } from "@/components/Markdown";
 import { SceneView } from "@/components/scenes/SceneView";
@@ -21,11 +22,14 @@ import { Avatar } from "@/components/app/Avatar";
 import { Mascot } from "@/components/mascot/Mascot";
 import { BotChip } from "./BotChip";
 import { MODE_TITLE } from "./mode-meta";
+import { OppAvatar, useOppName } from "./OpponentCard";
 
 // Экран матча дуэли (этап 16Д, Ф1): задания по очереди, общие часы (блиц, «верю — не верю») или лимит на задание
 // («10 вопросов»), штраф и пауза после ошибки, полоса соперника по его таймлайну (бот — opponentAt). Соперник для экрана —
 // только таймлайн: потом сюда же придут живой матч и запись друга. Время — «часы матча» (lib/duel/run.ts): в «10 вопросах»
 // они стоят, пока ученик смотрит разбор ответа (бот этого времени тоже не тратит).
+// Живой матч (Ф4, live): часы — серверные (сдвиг из useDuel), не стоят на разборе; каждый ответ уходит в live.onAnswer;
+// ученик доиграл — onFinish сразу (ждать соперника и подводить итоги будет LivePlay по данным сервера).
 
 /** Шаг часов экрана, мс. */
 const TICK_MS = 100;
@@ -63,34 +67,65 @@ export function DuelRun({
   timeline,
   onFinish,
   onQuit,
+  opponent,
+  live,
+  banner,
+  initial,
+  stop,
 }: {
   items: DuelItem[];
   mode: DuelModeId;
   timeline: OpponentTimeline;
   onFinish: (run: RunState, oppEvents: DuelEvent[]) => void;
   onQuit: () => void;
+  /** Живой соперник (карточка с сервера); нет — Бит. */
+  opponent?: PublicCard | null;
+  /** Живой матч: часы матча (мс от старта по серверу) и отправка каждого ответа. */
+  live?: { now: () => number; onAnswer: (a: AnswerIn) => void };
+  /** Плашка под счётом («Соперник не отвечает»). */
+  banner?: ReactNode;
+  /** Живой матч после перезагрузки: ход с уже принятыми сервером ответами (они не отправляются снова). */
+  initial?: RunState;
+  /** Матч закончился раньше (сервер: соперник вышел или пропал) — закончить ход сейчас. */
+  stop?: boolean;
 }) {
   const { t } = useT();
   const sound = useApp((s) => s.profile.sound);
   const meta = DUEL_MODES[mode];
   const onClock = meta.clockMs != null;
 
-  const [ui, setUi] = useState<Ui>(() => ({ run: startRun(), now: 0, fb: null, opp: opponentAt(timeline, 0) }));
+  const [ui, setUi] = useState<Ui>(() => ({ run: initial ?? startRun(), now: 0, fb: null, opp: opponentAt(timeline, 0) }));
   // Ход игры — в ref (меняют обработчики и таймер), экран рисует копию из состояния.
-  const game = useRef<{ run: RunState; clock: MatchClock | null; fb: Feedback | null; oppAnswered: number; finished: boolean; lockUntil: number }>({
+  const game = useRef<{ run: RunState; clock: MatchClock | null; fb: Feedback | null; oppAnswered: number; finished: boolean; lockUntil: number; sent: number }>({
     run: ui.run,
     clock: null,
     fb: null,
     oppAnswered: 0,
     finished: false,
     lockUntil: 0,
+    sent: ui.run.events.length,
   });
   const hearts = useHearts();
   const [quitAsk, setQuitAsk] = useState(false);
-  const props = useRef({ items, timeline, onFinish, sound, onClock });
+  const props = useRef({ items, timeline, onFinish, sound, onClock, live, mode, stop });
   useEffect(() => {
-    props.current = { items, timeline, onFinish, sound, onClock };
+    props.current = { items, timeline, onFinish, sound, onClock, live, mode, stop };
   });
+
+  /** Часы матча: живой — по серверу, иначе — свои (в «10 вопросах» стоят на разборе). */
+  const nowOf = (real: number): number => {
+    const lv = props.current.live;
+    if (lv) return Math.max(0, Math.round(lv.now()));
+    return game.current.clock ? clockNow(game.current.clock, real) : 0;
+  };
+
+  /** Живой матч: новые события хода — на сервер (тайм-аут — ответ −1). */
+  const report = () => {
+    const g = game.current;
+    const { live: lv, mode: m } = props.current;
+    if (!lv) return;
+    for (; g.sent < g.run.events.length; g.sent++) lv.onAnswer(answerIn(m, g.run.events, g.sent, g.run.answers[g.run.events[g.sent].i] ?? null));
+  };
 
   const commit = (now: number) => {
     const g = game.current;
@@ -114,20 +149,22 @@ export function DuelRun({
       const { items: list, timeline: tl, sound: snd, onClock: clocked } = props.current;
       if (g.finished || !g.clock) return;
       const real = Date.now();
+      const isLive = !!props.current.live;
       if (g.fb && real >= g.fb.until) {
         g.fb = null;
-        if (!clocked) g.clock = clockResume(g.clock, real);
+        if (!clocked && !isLive) g.clock = clockResume(g.clock, real);
       }
-      const now = clockNow(g.clock, real);
+      const now = nowOf(real);
       if (!g.fb) {
         const before = g.run;
         g.run = runTick(g.run, list, now);
         // Тайм-аут «10 вопросов»: показываем верный ответ, часы матча стоят.
         if (g.run.events.length > before.events.length && !clocked) {
           g.fb = { i: before.i, answer: null, ok: false, until: real + FEEDBACK_WRONG_MS };
-          g.clock = clockPause(g.clock, real);
+          if (!isLive) g.clock = clockPause(g.clock, real);
           if (snd) playSound("wrong");
         }
+        report();
       }
       const opp = opponentAt(tl, now);
       if (opp.answered > g.oppAnswered) {
@@ -135,7 +172,7 @@ export function DuelRun({
         if (snd) playSound("pop");
       }
       const meta0 = list[0] ? DUEL_MODES[list[0].mode] : null;
-      const over = clocked ? meta0?.clockMs != null && now >= meta0.clockMs : g.run.done && !g.fb && opp.done;
+      const over = props.current.stop || (clocked ? meta0?.clockMs != null && now >= meta0.clockMs : g.run.done && !g.fb && (isLive || opp.done));
       if (over) {
         g.run = { ...g.run, done: true };
         commit(now);
@@ -154,10 +191,11 @@ export function DuelRun({
     if (g.finished || g.fb || g.run.done || !g.clock) return;
     const real = Date.now();
     if (real < g.lockUntil) return;
-    const now = clockNow(g.clock, real);
+    const now = nowOf(real);
     const before = g.run;
     g.run = runAnswer(g.run, items, a, now);
     if (g.run === before) return;
+    report();
     const ev = g.run.events[g.run.events.length - 1];
     if (sound) playSound(ev.ok ? "correct" : "wrong");
     if (onClock) {
@@ -166,7 +204,7 @@ export function DuelRun({
       else g.lockUntil = real + ANSWER_LOCK_MS;
     } else {
       g.fb = { i: before.i, answer: a, ok: ev.ok, until: real + (ev.ok ? FEEDBACK_OK_MS : FEEDBACK_WRONG_MS) };
-      g.clock = clockPause(g.clock, real);
+      if (!live) g.clock = clockPause(g.clock, real);
     }
     commit(now);
   };
@@ -215,7 +253,9 @@ export function DuelRun({
           them={{ score: them.score, answered: them.answered, correct: them.correct }}
           n={items.length}
           perItem={!onClock}
+          opponent={opponent}
         />
+        {banner}
 
         {itemLeft != null && item?.limitMs != null && (
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2" aria-hidden>
@@ -256,13 +296,16 @@ function ScoreBoard({
   them,
   n,
   perItem,
+  opponent,
 }: {
   you: { score: number; answered: number; correct: number; events: DuelEvent[] };
   them: { score: number; answered: number; correct: number };
   n: number;
   perItem: boolean;
+  opponent?: PublicCard | null;
 }) {
   const { t } = useT();
+  const oppName = useOppName(opponent ?? null);
   const name = useApp((s) => s.profile.name);
   const avatar = useApp((s) => s.profile.avatar);
   // На часах набор с запасом (40–50 заданий): полоса — доля верных от «шкалы» (не меньше 10).
@@ -287,14 +330,30 @@ function ScoreBoard({
           <span key={k} className={cn("h-1.5 flex-1 rounded-full", !e ? "bg-surface-2" : e.ok ? "bg-success" : "bg-danger")} />
         ))}
       </div>
-      <div className="mt-1 flex items-center gap-2" aria-label={t("duel.opp.aria", { n: them.answered, c: them.correct })} role="group" data-testid="duel-opp">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2">
-          <Mascot mood="neutral" size={26} />
-        </span>
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-extrabold">
-          <span className="truncate">{t("duel.bot.name")}</span>
-          <BotChip />
-        </span>
+      <div
+        className="mt-1 flex items-center gap-2"
+        aria-label={opponent ? t("duel.live.opp.aria", { name: oppName, n: them.answered, c: them.correct }) : t("duel.opp.aria", { n: them.answered, c: them.correct })}
+        role="group"
+        data-testid="duel-opp"
+      >
+        {opponent ? (
+          <>
+            <OppAvatar card={opponent} size={28} />
+            <span className="min-w-0 flex-1 truncate text-sm font-extrabold" data-testid="duel-opp-name">
+              {oppName}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2">
+              <Mascot mood="neutral" size={26} />
+            </span>
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-extrabold">
+              <span className="truncate">{t("duel.bot.name")}</span>
+              <BotChip />
+            </span>
+          </>
+        )}
         <span className="font-mono text-lg font-extrabold tabular-nums text-muted" data-testid="duel-opp-score">
           {them.score}
         </span>

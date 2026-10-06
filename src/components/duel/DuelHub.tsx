@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, ChevronRight, UserPlus, Users } from "lucide-react";
+import { Check, ChevronRight, Radio, UserPlus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
 import { shortDate } from "@/lib/date";
@@ -10,6 +10,7 @@ import { ENTRY_COST } from "@/lib/economy";
 import { DUEL_MODE_IDS } from "@/lib/duel/modes";
 import { duelTopics, isDuelTopic, isEntTopic } from "@/lib/duel/topics";
 import { duelPlayHref, newDuelSeed } from "@/lib/duel/api";
+import { liveHref, socialStatus } from "@/lib/duel/live";
 import type { DuelRecord } from "@/lib/duel/record";
 import type { DuelModeId } from "@/lib/duel/types";
 import { useT } from "@/i18n/useT";
@@ -22,7 +23,8 @@ import { BotChip } from "./BotChip";
 import { MODE_ICON, MODE_TITLE, modeDesc, topicTitle } from "./mode-meta";
 
 // Хаб дуэлей /duel (этап 16Д, Ф1; docs/specs/duels.md §9): главная кнопка — «Сыграть с Битом» в выбранном режиме,
-// «Найти соперника» и «Вызвать друга» — «Скоро» (Ф3/Ф4), сетка режимов, тема для «По теме», последние 3 дуэли.
+// «Найти соперника» (живой «Блиц») и «Играть с другом вживую» (комната по ссылке) — когда соцчасть включена на сервере
+// (GET /api/social/home, Ф4), иначе «Скоро»; «Вызвать друга» — Ф3. Сетка режимов, тема для «По теме», последние 3 дуэли.
 
 /** Выбор режима и темы помним на этом устройстве (удобство, не прогресс). */
 const PICK_KEY = "informatica-duel-pick";
@@ -57,6 +59,15 @@ export function DuelHub() {
   const [pick, setPick] = useState<Pick>(readPick);
   const [topicsOpen, setTopicsOpen] = useState(false);
   const history = useApp((s) => s.duels.history);
+  // Соцчасть: null — ещё не знаем; on — живые матчи доступны; off — «Скоро»; down — временно недоступны.
+  const [social, setSocial] = useState<"on" | "off" | "down" | null>(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    socialStatus(ctl.signal).then((s) => {
+      if (!ctl.signal.aborted) setSocial(s);
+    });
+    return () => ctl.abort();
+  }, []);
 
   const topicName = (topic: string | undefined): string => {
     const title = topic ? topicTitle(topic) : null;
@@ -76,6 +87,15 @@ export function DuelHub() {
       return;
     }
     router.push(duelPlayHref(pick.mode, newDuelSeed(), pick.topic));
+  };
+
+  /** Комната для друга в выбранном режиме (живой бой по ссылке). */
+  const startRoom = () => {
+    if (pick.mode === "topic" && !pick.topic) {
+      setTopicsOpen(true);
+      return;
+    }
+    router.push(liveHref({ room: pick.mode, topic: pick.topic }));
   };
 
   return (
@@ -110,11 +130,34 @@ export function DuelHub() {
         </span>
       </button>
 
-      {/* Друзья и живые соперники — Ф3/Ф4. */}
+      {/* Живые соперники и комната с другом (Ф4) — когда соцчасть включена; вызов друга — Ф3. */}
       <section data-tour="duel-soon" className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
+        {social === "on" && (
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "duel.find" as const, desc: "duel.find.desc" as const, Icon: Users, go: () => router.push(liveHref({ find: true })), id: "duel-find" },
+              { key: "duel.live.room" as const, desc: "duel.live.room.desc" as const, Icon: Radio, go: startRoom, id: "duel-room" },
+            ].map(({ key, desc, Icon, go, id }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={go}
+                data-testid={id}
+                className="flex min-h-14 flex-col items-start gap-1 rounded-2xl border-2 border-primary/40 bg-surface px-3 py-2.5 text-left shadow-[0_3px_0_var(--border)] transition-transform hover:bg-surface-2 active:translate-y-0.5"
+              >
+                <span className="flex items-center gap-1.5 text-sm font-extrabold text-ink-primary">
+                  <Icon size={18} aria-hidden />
+                  {t(key)}
+                </span>
+                <span className="text-xs font-semibold text-muted">{t(desc)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {social === "down" && <p className="rounded-2xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">{t("duel.live.unavailable")}</p>}
+        <div className={cn("grid gap-2", social === "on" ? "grid-cols-1" : "grid-cols-2")}>
           {[
-            { key: "duel.find" as const, Icon: Users },
+            ...(social === "on" ? [] : [{ key: "duel.find" as const, Icon: Users }]),
             { key: "duel.invite" as const, Icon: UserPlus },
           ].map(({ key, Icon }) => (
             <button
@@ -132,7 +175,7 @@ export function DuelHub() {
             </button>
           ))}
         </div>
-        <p className="text-xs font-semibold text-muted">{t("duel.soon.hint")}</p>
+        {social !== "on" && <p className="text-xs font-semibold text-muted">{t("duel.soon.hint")}</p>}
       </section>
 
       <section>

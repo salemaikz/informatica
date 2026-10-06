@@ -4,15 +4,23 @@
 // Чистая логика без React: tests/pending-link.test.ts.
 
 import { examLink, parseRunParams } from "@/components/exam/logic";
+import { normalizeRoomCode, roomPath } from "@/lib/duel/live";
 
 /** Ключ в localStorage (отдельно от прогресса: сброс прогресса его не касается, срок жизни — час). */
 export const PENDING_LINK_KEY = "informatica:pending-link";
 /** Сколько живёт запомненная ссылка. */
 export const PENDING_LINK_TTL_MS = 60 * 60 * 1000;
 
-/** Каноничный адрес вызова или null, если это не вызов на пробник. */
+/** Каноничный адрес вызова или null, если это не вызов на пробник (и не комната дуэли друга — этап 16Д, Ф4). */
 export function pendingLinkOf(href: unknown): string | null {
-  if (typeof href !== "string" || href.length > 300 || !href.startsWith("/exam/run?")) return null;
+  if (typeof href !== "string" || href.length > 300) return null;
+  // Комната живой дуэли с другом: /duel/r/<код из 6 знаков> — только сам код, без хвостов.
+  const room = /^\/duel\/r\/([A-Za-z0-9-]{1,12})$/.exec(href);
+  if (room) {
+    const code = normalizeRoomCode(room[1]);
+    return code ? roomPath(code) : null;
+  }
+  if (!href.startsWith("/exam/run?")) return null;
   let url: URL;
   try {
     url = new URL(href, "http://x.invalid");
