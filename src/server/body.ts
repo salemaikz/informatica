@@ -35,3 +35,25 @@ export async function readBodyText(req: Request, max: number): Promise<string | 
   }
   return new TextDecoder().decode(all);
 }
+
+export type JsonBody = { ok: true; value: unknown } | { ok: false; status: 400 | 413; error: "bad_json" | "too_large" };
+
+/**
+ * Тело запроса как JSON, не больше max байт (потоком, как readBodyText). Пустое тело — `{}` (DELETE и POST без полей).
+ * Ошибка — готовые статус и код ответа: 413 too_large или 400 bad_json.
+ */
+export async function readJsonBody(req: Request, max: number): Promise<JsonBody> {
+  let text: string | null;
+  try {
+    text = await readBodyText(req, max);
+  } catch {
+    return { ok: false, status: 400, error: "bad_json" };
+  }
+  if (text === null) return { ok: false, status: 413, error: "too_large" };
+  if (text.trim() === "") return { ok: true, value: {} };
+  try {
+    return { ok: true, value: JSON.parse(text) as unknown };
+  } catch {
+    return { ok: false, status: 400, error: "bad_json" };
+  }
+}

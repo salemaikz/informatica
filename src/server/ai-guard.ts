@@ -1,8 +1,9 @@
 import "server-only";
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { getKv, kzDay } from "@/server/kv";
 import { sameOrigin } from "@/server/context";
 import { clientIp, kvRateLimit } from "@/server/rate-limit";
+import { cookieHeader, newSignedId, readSignedCookie, signedValue, verifySignedId } from "@/server/signed-id";
 
 // Серверный страж маршрутов ИИ (решение #48, docs/specs/stage10.md → B1): ни один ученик, даже на «Безлимите»,
 // не должен разорить нас запросами, в том числе прямыми (curl, скрипт, чужой сайт).
@@ -87,7 +88,6 @@ const DAY_TTL = 2 * 86_400;
 
 export const DEVICE_COOKIE = "inf_ai";
 const COOKIE_MAX_AGE = 400 * 86_400;
-const ID_RE = /^[A-Za-z0-9_-]{22}$/;
 
 let processSecret: string | null = null;
 
@@ -106,38 +106,18 @@ function deviceSecret(env: Record<string, string | undefined> = process.env): st
   return processSecret;
 }
 
-function sign(id: string, secret: string): string {
-  return createHmac("sha256", secret).update(id).digest("base64url").slice(0, 22);
-}
-
-/** Значение cookie `<id>.<sig>` → id устройства, если подпись верна. */
+/** Значение cookie `<id>.<sig>` → id устройства, если подпись верна (общий помощник server/signed-id.ts). */
 export function verifyDeviceCookie(value: string, secret: string): string | null {
-  const dot = value.indexOf(".");
-  if (dot !== 22) return null;
-  const id = value.slice(0, dot);
-  const sig = value.slice(dot + 1);
-  if (!ID_RE.test(id) || sig.length !== 22) return null;
-  const want = Buffer.from(sign(id, secret));
-  const got = Buffer.from(sig);
-  return got.length === want.length && timingSafeEqual(got, want) ? id : null;
+  return verifySignedId(value, secret);
 }
 
 function readDeviceId(req: Request, secret: string): string | null {
-  const header = req.headers.get("cookie");
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const p = part.trim();
-    if (!p.startsWith(`${DEVICE_COOKIE}=`)) continue;
-    const id = verifyDeviceCookie(p.slice(DEVICE_COOKIE.length + 1), secret);
-    if (id) return id;
-  }
-  return null;
+  return readSignedCookie(req, DEVICE_COOKIE, secret);
 }
 
 function newDeviceCookie(secret: string, env: Record<string, string | undefined> = process.env): { id: string; header: string } {
-  const id = randomBytes(16).toString("base64url");
-  const secure = env.NODE_ENV === "production" ? "; Secure" : "";
-  return { id, header: `${DEVICE_COOKIE}=${id}.${sign(id, secret)}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=${COOKIE_MAX_AGE}${secure}` };
+  const id = newSignedId();
+  return { id, header: cookieHeader(DEVICE_COOKIE, signedValue(id, secret), { path: "/api", maxAgeSec: COOKIE_MAX_AGE }, env) };
 }
 
 // ---------- Страж ----------
