@@ -58,7 +58,7 @@ export function LayersScene({ scene }: { scene: LayersData }) {
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <span className={cn("block text-[15px] font-extrabold leading-tight", on ? "text-primary" : "text-text")}>{l(item.title)}</span>
+                <span className={cn("block text-[15px] font-extrabold leading-tight", on ? "text-ink-primary" : "text-text")}>{l(item.title)}</span>
                 {item.text && <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-muted">{l(item.text)}</span>}
               </span>
             </m.li>

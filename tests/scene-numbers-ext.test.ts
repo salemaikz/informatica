@@ -5,7 +5,9 @@ import { SceneView } from "@/components/scenes/SceneView";
 import { SAMPLES } from "@/components/scenes/samples/extended";
 import { binarySum, decimalParts, decimalTotal } from "@/components/scenes/logic";
 import {
+  NUM_MIN_SCALE,
   NUM_W,
+  TILE_FONT_MIN,
   andBits,
   andLines,
   baseColumnWidth,
@@ -299,5 +301,55 @@ describe("образцы расширений binary и decimal", () => {
     const lay = layoutRows(units, {});
     expect(lay.rows).toHaveLength(2);
     expect(lay.height).toBeLessThan(120);
+  });
+});
+
+describe("ревью v18b: цифры в плитках не мельче 10 px на экране телефона", () => {
+  const bins = SAMPLES.filter((s): s is Bin => s.kind === "binary" && isBinaryExt(s));
+  /** Раскладка так же, как у BinaryExtScene. */
+  const layOf = (s: Bin) =>
+    layoutRows(binaryUnits(s.bits, { groups: s.groups, gap: s.gap, shift: s.shift }), {
+      weights: (!!s.weights || !!s.gap) && s.and === undefined,
+      brackets: !!s.groups && s.and === undefined,
+      maxTiles: s.shift && !s.groups ? 17 : undefined,
+    });
+
+  it("кегль цифр в плитке × NUM_MIN_SCALE ≥ 10 у всех образцов (плотные строки из 16–17 плиток — тоже)", () => {
+    expect(bins.length).toBeGreaterThanOrEqual(8);
+    expect(TILE_FONT_MIN * NUM_MIN_SCALE).toBeGreaterThanOrEqual(10);
+    for (const s of bins) {
+      const lay = layOf(s);
+      expect(lay.font * NUM_MIN_SCALE, `${s.bits.slice(0, 8)}… плитка ${lay.tileW}`).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it("16-битный сдвиг (17 плиток): плитка 16, цифра 13 влезает по ширине и высоте с полем", () => {
+    const sh = bins.find((s) => s.bits.length === 16 && s.shift === "left" && !s.groups)!;
+    const lay = layOf(sh);
+    expect(lay.rows).toHaveLength(1);
+    expect(lay.rows[0].cells).toHaveLength(17);
+    expect(lay.tileW).toBe(16);
+    expect(lay.font).toBeGreaterThanOrEqual(13);
+    // цифра моноширинная: 0.6 em по ширине; рамка плитки 2 px; поле не меньше 2 px с каждой стороны
+    expect((lay.tileW - 2 - 0.6 * lay.font) / 2).toBeGreaterThanOrEqual(2);
+    expect(lay.tileH).toBeGreaterThanOrEqual(lay.font * 1.5);
+  });
+
+  it("строки «адрес / маска / сеть»: те же две строки по 16 плиток, цифры не мельче 10 px; в разметке кегль плиток ≥ TILE_FONT_MIN", () => {
+    const and = bins.find((s) => s.and !== undefined && s.bits.length === 32)!;
+    const lay = layOf(and);
+    expect(lay.rows).toHaveLength(2);
+    expect(lay.rows.every((r) => r.cells.length === 16)).toBe(true);
+    expect(lay.font * NUM_MIN_SCALE).toBeGreaterThanOrEqual(10);
+    const out = html(and);
+    const sizes = [...out.matchAll(/<text[^>]*font-size="(\d+)"[^>]*class="font-mono[^"]*"[^>]*>([01])</g)].map((m) => Number(m[1]));
+    expect(sizes.length).toBeGreaterThanOrEqual(3 * 32);
+    for (const f of sizes) expect(f).toBeGreaterThanOrEqual(TILE_FONT_MIN);
+  });
+
+  it("крупные плитки по-прежнему растут с шириной (кегль не ограничен снизу сверх меры)", () => {
+    const eight = layOf({ kind: "binary", bits: "11010111", groups: 4 });
+    expect(eight.tileW).toBe(37);
+    expect(eight.font).toBeGreaterThan(20);
   });
 });

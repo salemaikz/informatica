@@ -76,7 +76,7 @@ export function HardwareScene({ scene }: { scene: HardwareSceneData }) {
                 className={cn(
                   "px-1 text-center font-bold leading-tight",
                   single ? "text-base" : "text-[13px]",
-                  lit ? "text-primary" : "text-text",
+                  lit ? "text-ink-primary" : "text-text",
                 )}
               >
                 {name}

@@ -286,11 +286,11 @@ export function tokenizeLine(line: string, lang: CodeLang = "text"): Token[] {
   }
 }
 
-/** Класс цвета токена — только токены темы (светлая и тёмная). */
+/** Класс цвета токена — токены темы (светлая и тёмная); ink-*, потому что строки кода подсвечивают -soft-заливкой (ревью v18b: warning-strong на warning-soft был ≈ 2,7:1). */
 export const TOKEN_CLASS: Record<TokenType, string> = {
   plain: "",
-  keyword: "text-primary",
-  string: "text-success",
-  number: "text-warning-strong",
+  keyword: "text-ink-primary",
+  string: "text-ink-success",
+  number: "text-ink-warning",
   comment: "text-muted",
 };

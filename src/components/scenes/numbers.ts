@@ -181,9 +181,17 @@ export const BRACKET_H = 26;
 export const BYTE_BRACKET_H = 40;
 const ROW_GAP = 10;
 
-/** Размеры плитки под ширину: ширина ≥ 12 и ≤ 40, высота ≈ 1.25 ширины, шрифт — по ширине. */
+/**
+ * Наименьший кегль цифр в плитке (px viewBox). Рисунок на телефоне идёт с масштабом до ≈ 0.84 (карточка с полями): 13 → ≈ 11 px на экране.
+ * Плотная строка из 16–17 плиток по 16–17 px раньше получала 11–12 и на экране выходила 9–10 px (ревью v18b).
+ */
+export const TILE_FONT_MIN = 13;
+/** Наименьший масштаб рисунка на экране телефона, по которому проверяется читаемость (рисунок в карточке с полями). */
+export const NUM_MIN_SCALE = 0.84;
+
+/** Размеры плитки под ширину: ширина ≥ 12 и ≤ 40, высота ≈ 1.25 ширины, шрифт — по ширине, но не мельче TILE_FONT_MIN. */
 export function tileSizes(tileW: number): { tileH: number; font: number } {
-  return { tileH: Math.max(22, Math.min(48, Math.round(tileW * 1.25))), font: Math.max(11, Math.min(28, Math.round(tileW * 0.68))) };
+  return { tileH: Math.max(22, Math.min(48, Math.round(tileW * 1.25))), font: Math.max(TILE_FONT_MIN, Math.min(28, Math.round(tileW * 0.68))) };
 }
 
 /** Раскладка единиц по рядам: единицы переносятся целиком (группа не рвётся), ряды делят единицы поровну. */

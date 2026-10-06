@@ -151,6 +151,36 @@ describe("grid: читаемость", () => {
     const b = gridLayout(s).blocks[0];
     expect(b.textY).toBeGreaterThan(b.y + gridLayout(s).cell / 2);
   });
+  it("ревью v18b: при номерах обхода у ВСЕХ значений один кегль и один сдвиг (10×10 и 4×4), строка «0 1 2 3» ровная", () => {
+    for (const s of SAMPLES.filter((x) => x.numbered && x.values)) {
+      const L = gridLayout(s);
+      const withValue = L.blocks.filter((b) => b.value !== "");
+      expect(withValue.length).toBeGreaterThan(0);
+      const sizes = new Set(withValue.map((b) => b.fontSize));
+      expect(sizes.size, `кегли значений в сетке ${s.rows}×${s.cols}`).toBe(1);
+      const shifts = new Set(withValue.map((b) => +(b.textY - (b.y + b.h / 2)).toFixed(3)));
+      expect(shifts.size, `сдвиги значений в сетке ${s.rows}×${s.cols}`).toBe(1);
+      expect([...shifts][0]).toBeGreaterThan(0);
+      // в одной строке базовая линия цифр одна и та же, и цифры не мельче 11 единиц (≈ 9 px на телефоне) в 10×10
+      const row0 = withValue.filter((b) => b.r === 0);
+      expect(new Set(row0.map((b) => b.textY)).size).toBe(1);
+      expect(withValue[0].fontSize).toBeGreaterThanOrEqual(11);
+    }
+  });
+  it("ревью v18b: 10×10 с путём — значения «0», «1», «10» не мельче соседних «2», «11» и не сдвинуты относительно них", () => {
+    const s = SAMPLES.find((x) => x.rows === 10 && x.numbered)!;
+    const L = gridLayout(s);
+    const get = (k: string) => L.blocks.find((b) => b.key === k)!;
+    const path = [get("0:0"), get("0:1"), get("1:0")];
+    const others = [get("0:2"), get("1:1"), get("5:5")];
+    for (const p of path) for (const o of others) {
+      expect(p.fontSize).toBe(o.fontSize);
+      expect(p.textY - p.y).toBeCloseTo(o.textY - o.y, 6);
+    }
+    // значение не касается номера «1,3» и «4» в углу своей клетки
+    const nl = L.numLabels.get("0:0")!;
+    expect(get("0:0").textY - get("0:0").fontSize * 0.36).toBeGreaterThanOrEqual(get("0:0").y + 2 + nl.font * 0.95 - 1.5);
+  });
 });
 
 describe("grid: описание и рендер", () => {

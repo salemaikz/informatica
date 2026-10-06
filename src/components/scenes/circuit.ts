@@ -123,6 +123,8 @@ export interface CircuitLayout {
   labelConflicts: number;
   /** Волна 3: на сколько px раздвинуты ряды, чтобы все подписи встали под рамки (0 — раскладка по умолчанию). */
   rowSpread: number;
+  /** Плотная раскладка полного сумматора (CIRCUIT_WIDE): шаг столбцов 80, рамка 36, плашка ближе к рамке. */
+  wide: boolean;
 }
 
 /** Внутренний id узла-выхода: не может совпасть с именем входа или id вентиля из контента. */
@@ -210,6 +212,45 @@ export interface CircuitLayoutOpts {
 export const ROW_SPREADS = [8, 16, 24, 32] as const;
 
 /**
+ * Схемы с несколькими выходами и четырьмя вентилями и больше (полный сумматор) раскладываются плотнее по рамке, но свободнее по проводам: шаг
+ * столбцов 80 (был 76), рамка вентиля 36 (была 40), значит, между рамкой и следующим столбцом 44 px (было 36); выходной столбец ближе к последнему
+ * вентилю (60 вместо шага). Ширина рисунка не растёт (≈ 356 ≤ 362), сумматор по-прежнему помещается на телефоне без прокрутки. В щели — плашка 0/1
+ * (3…19 px от рамки) и две вертикали проводов в 12 px друг от друга, дальняя из них в 5 px от плашки (ревью v18b: вертикали шли в 8 px
+ * друг от друга, а плашка «0» вплотную к ним). Остальные схемы раскладываются как раньше.
+ */
+export const CIRCUIT_WIDE = { pitch: 80, gateW: 36, outGap: 60, chipOffset: 11 } as const;
+/** Расстояние между вертикалями проводов разных источников в одной щели между столбцами (при плотной раскладке), px. */
+export const WIRE_LANE_GAP = 12;
+/** Размер плашки со значением 0/1 и её отступ от рамки источника (центр), px. */
+export const CHIP_SIZE = 16;
+const CHIP_OFFSET = 12;
+
+/** Раздвинуты ли столбцы схемы (см. CIRCUIT_WIDE). */
+export function isWideCircuit(scene: CircuitScene): boolean {
+  return !!scene.outputs?.length && scene.gates.length >= 4;
+}
+
+/**
+ * Плашка значения 0/1 на выходе узла: центр по x, верхний край по y и сторона провода. Плашка — с той стороны провода источника,
+ * куда не уходит его вертикальный излом.
+ */
+export function valueChipBox(wires: CircuitWire[], n: CircuitNode, wide = false): { cx: number; top: number; below: boolean } {
+  const cx = n.x + n.w / 2 + (n.op && GATE_STYLE[n.op].inverted ? CIRCUIT_GEO.bubble * 2 : 0) + (wide ? CIRCUIT_WIDE.chipOffset : CHIP_OFFSET);
+  const below = wires.some((w) => w.from === n.id && w.points.length > 2 && w.points[2][1] < n.y);
+  return { cx, top: below ? n.y + 3 : n.y - 19, below };
+}
+
+/**
+ * Кегль подписи в кружке входа/выхода. Схемы с несколькими выходами рисуются при сжатии до ≈ 0.84, поэтому подписи в них крупнее
+ * (17 → ≈ 14 px на экране: у «Ci» точка над «i» не сливается со стойкой); у старых схем — прежние 15 и 11.
+ */
+export function terminalFont(label: string, multi: boolean): number {
+  const limit = CIRCUIT_GEO.r * 1.6;
+  for (const f of multi ? [17, 15, 13] : [15]) if (estimateTextWidth(label, f) <= limit) return f;
+  return 11;
+}
+
+/**
  * Автоматическая раскладка: вентиль стоит в столбце 1 + max(столбцов входов), по вертикали — напротив
  * среднего положения своих входов; внутри столбца вентили не ближе одного шага (порядок сохраняется).
  * Провода — ломаные: горизонталь от источника, вертикаль перед приёмником, горизонталь в клемму.
@@ -235,6 +276,10 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
   // Подписи вентилей в две строки — ряды и нижний отступ больше на строку.
   const extra = Math.max(0, (opts.labelLines ?? 1) - 1) * G.labelLine;
   const rowStep = G.row + extra + spread;
+  const multi = !!scene.outputs?.length;
+  const wide = isWideCircuit(scene);
+  const pitch = wide ? CIRCUIT_WIDE.pitch : G.pitch;
+  const gateW = wide ? CIRCUIT_WIDE.gateW : G.gateW;
   const cols = circuitColumns(scene);
   const nodes = new Map<string, CircuitNode>();
 
@@ -251,13 +296,12 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
     const prev = lastY[col];
     const y = prev === undefined ? desired : Math.max(desired, prev + rowStep);
     lastY[col] = y;
-    nodes.set(g.id, { id: g.id, label: g.id, kind: "gate", op: g.op, col, x: G.x0 + col * G.pitch, y, w: G.gateW, h: G.gateH });
+    nodes.set(g.id, { id: g.id, label: g.id, kind: "gate", op: g.op, col, x: G.x0 + col * pitch, y, w: gateW, h: G.gateH });
   }
 
   const maxCol = Math.max(0, ...scene.gates.map((g) => cols[g.id]));
   const outCol = maxCol + 1;
   // Выходы: у старой схемы один («F»); при `outputs` — несколько со своими подписями (первый — всегда OUT_ID).
-  const multi = !!scene.outputs?.length;
   const outDefs = multi ? scene.outputs! : [{ gate: scene.output, name: OUT_LABEL }];
   const outNodes: CircuitNode[] = [];
   outDefs.forEach((o, i) => {
@@ -270,7 +314,7 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
       label: o.name,
       kind: "output",
       col: outCol,
-      x: G.x0 + outCol * G.pitch,
+      x: G.x0 + maxCol * pitch + (wide ? CIRCUIT_WIDE.outGap : pitch),
       y,
       w: G.r * 2,
       h: G.r * 2,
@@ -300,7 +344,8 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
     if (from) defs.push({ from, to: outNodes[i], port: 0, count: 1 });
   });
   // Излом у двухвходового вентиля — на разном расстоянии для клемм, чтобы вертикали проводов не слились.
-  const defaultBend = (d: WireDef) => inPort(d.to, d.port, d.count)[0] - (d.count === 2 ? (d.port === 0 ? 16 : 8) : 12);
+  const farBend = wide ? 20 : 16;
+  const defaultBend = (d: WireDef) => inPort(d.to, d.port, d.count)[0] - (d.count === 2 ? (d.port === 0 ? farBend : 8) : 12);
   const routeWire = (d: WireDef, bendX: number): CircuitWire => {
     const [sx, sy] = outPort(d.from);
     const [tx, ty] = inPort(d.to, d.port, d.count);
@@ -308,7 +353,15 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
     return { from: d.from.id, to: d.to.id, port: d.port, points };
   };
   let bends = defs.map(defaultBend);
-  if (multi) bends = bestBends(defs.map((d) => ({ route: (b: number) => routeWire(d, b), choices: d.count === 2 ? [inPort(d.to, d.port, 2)[0] - 16, inPort(d.to, d.port, 2)[0] - 8] : [defaultBend(d)] })));
+  if (multi)
+    bends = bestBends(
+      defs.map((d) => ({
+        route: (b: number) => routeWire(d, b),
+        choices: d.count === 2 ? [inPort(d.to, d.port, 2)[0] - farBend, inPort(d.to, d.port, 2)[0] - 8] : [defaultBend(d)],
+        // провода одного источника в один столбец лучше вести по одной вертикали (общий ствол), а не двумя рядом
+        share: `${d.from.id}>${d.to.col}`,
+      })),
+    );
   let wires: CircuitWire[] = defs.map((d, i) => routeWire(d, bends[i]));
   // Только при `outputs`: провод, идущий сквозь рамку чужого вентиля (источник в раннем столбце, а на его строке стоит вентиль
   // позже), уводим в свободный горизонтальный канал между рядами. Старые схемы без `outputs` не меняются.
@@ -320,7 +373,7 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
       if (hitsGate(wires[i].points, d) === 0) return;
       const [sx, sy] = outPort(d.from);
       const [tx, ty] = inPort(d.to, d.port, d.count);
-      const bxs = d.to.kind === "output" ? [tx - 6, tx - 18] : d.count === 2 ? [tx - 16, tx - 8] : [tx - 12];
+      const bxs = d.to.kind === "output" ? [tx - 6, tx - 18] : d.count === 2 ? [tx - farBend, tx - 8] : [tx - 12];
       let best: CircuitWire | null = null;
       let bestCost = Infinity;
       // Кандидаты канала: середины зазоров между рамками вентилей в полосе провода, а также над самым верхним и под самым нижним.
@@ -407,6 +460,7 @@ function layoutOnce(scene: CircuitScene, opts: CircuitLayoutOpts, spread: number
     crossings: countCrossings(wires),
     labelConflicts,
     rowSpread: spread,
+    wide,
   };
 }
 
@@ -482,7 +536,7 @@ export function countCrossings(wires: CircuitWire[]): number {
 }
 
 /** Перебор изломов проводов (2 варианта у каждого провода к двухвходовому вентилю) с наименьшим штрафом; при равенстве — ближе к прежним изломам. */
-function bestBends(items: { route: (b: number) => CircuitWire; choices: number[] }[]): number[] {
+function bestBends(items: { route: (b: number) => CircuitWire; choices: number[]; share?: string }[]): number[] {
   const varIdx = items.map((it, i) => (it.choices.length > 1 ? i : -1)).filter((i) => i >= 0);
   const base = items.map((it) => it.choices[0]);
   // Больше 12 переменных проводов не бывает (не больше шести вентилей), но на всякий случай — без перебора.
@@ -494,7 +548,14 @@ function bestBends(items: { route: (b: number) => CircuitWire; choices: number[]
     varIdx.forEach((wi, bit) => {
       cur[wi] = items[wi].choices[(mask >> bit) & 1];
     });
-    const cost = wiresPenalty(items.map((it, i) => it.route(cur[i])));
+    // тай-брейк (меньше пересечения): провода одного источника в один столбец с разными изломами — лишние параллельные вертикали
+    const groups = new Map<string, Set<number>>();
+    items.forEach((it, i) => {
+      if (it.share) groups.set(it.share, (groups.get(it.share) ?? new Set<number>()).add(cur[i]));
+    });
+    let split = 0;
+    for (const set of groups.values()) split += set.size - 1;
+    const cost = wiresPenalty(items.map((it, i) => it.route(cur[i]))) + 0.5 * split;
     if (cost < bestCost) {
       bestCost = cost;
       best = cur;

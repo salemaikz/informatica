@@ -29,12 +29,12 @@ export function SizesScene({ scene }: { scene: SizesData }) {
             <li key={i} className="rounded-2xl border border-border bg-surface px-3 py-2.5">
               <div className="flex items-center gap-2.5">
                 {Icon && (
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary" aria-hidden="true">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-ink-primary" aria-hidden="true">
                     <Icon className="size-[18px]" strokeWidth={2} />
                   </span>
                 )}
                 <span className="min-w-0 flex-1 text-sm font-bold leading-tight text-text">{l(item.label)}</span>
-                <span className="shrink-0 whitespace-nowrap text-base font-extrabold tabular-nums text-primary">{formatBytes(item.bytes, lang)}</span>
+                <span className="shrink-0 whitespace-nowrap text-base font-extrabold tabular-nums text-ink-primary">{formatBytes(item.bytes, lang)}</span>
               </div>
               <div className="mt-2 h-3 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
                 <m.div

@@ -78,7 +78,7 @@ export function UrlScene({ scene }: { scene: UrlSceneData }) {
           {lock === "secure" ? (
             <Lock size={16} strokeWidth={2.5} className="text-muted" />
           ) : lock === "open" ? (
-            <LockOpen size={16} strokeWidth={2.5} className="text-warning" />
+            <LockOpen size={16} strokeWidth={2.5} className="text-ink-warning" />
           ) : (
             <Globe size={16} strokeWidth={2.5} className="text-muted" />
           )}

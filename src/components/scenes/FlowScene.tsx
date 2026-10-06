@@ -99,7 +99,7 @@ export function FlowScene({ scene }: { scene: FlowSceneData }) {
               )}
               style={{ left: box.cx - box.w / 2, top: box.cy - box.h / 2, width: box.w, height: box.h, fontSize: layout.fontPx }}
             >
-              {showIcon && <Icon size={22} strokeWidth={2.2} className={cn("shrink-0", scene.active === box.id ? "text-primary" : "text-primary-strong")} />}
+              {showIcon && <Icon size={22} strokeWidth={2.2} className={cn("shrink-0", scene.active === box.id ? "text-ink-primary" : "text-primary-strong")} />}
               {/* Колонка текста посчитана в layoutFlow (у ромба — вписанный прямоугольник). Рвать слова не даём; дефис — только если слово почти во всю колонку. */}
               <span className={cn("line-clamp-3 max-w-full break-normal", box.tight ? "hyphens-auto" : "hyphens-none")} style={{ width: box.textW }}>
                 {l(node.label)}

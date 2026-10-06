@@ -76,7 +76,7 @@ export function PcInsideScene({ scene }: { scene: Extract<Scene, { kind: "pc-ins
                 textAnchor={left ? "end" : "start"}
                 fontSize={g.fontSize}
                 fontWeight={on ? 800 : 700}
-                fill={on ? "var(--primary)" : "var(--text)"}
+                fill={on ? "var(--ink-primary)" : "var(--text)"}
                 dominantBaseline="central"
               >
                 {c.lines.map((line, i) => (
