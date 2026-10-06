@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Footprints, Loader2, Play, Square, SquareCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EntryNote, PaidLabel, useEntryDue } from "@/components/ide/EntryPrice";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { OutputPanel, type RunPhase } from "./OutputPanel";
 import { Tracer } from "./Tracer";
@@ -21,6 +22,7 @@ type Phase = RunPhase;
 
 export function Workspace({ task, code, onCodeChange, onCheck, onRunError, beforeRun }: WorkspaceProps) {
   const { t } = useT();
+  const due = useEntryDue();
   const taskId = task?.id ?? "sandbox";
   const pyCheck = task?.check.kind === "python" ? task.check : null;
   // В песочнице пример кода просит имя — подставляем его, чтобы первый запуск не падал с EOFError.
@@ -148,8 +150,8 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
               {t("iderun.stop")}
             </Button>
           ) : (
-            <Button variant="primary" size="md" onClick={() => run(false)} icon={<Play size={20} aria-hidden />}>
-              {t("idepy.run")}
+            <Button variant="primary" size="md" className={due ? "px-3" : undefined} onClick={() => run(false)} icon={<Play size={20} aria-hidden className={due ? "max-[399px]:hidden" : undefined} />}>
+              <PaidLabel>{t("idepy.run")}</PaidLabel>
             </Button>
           )}
           <Button variant="secondary" size="md" disabled={busy} onClick={() => run(true)} icon={<Footprints size={20} aria-hidden />}>
@@ -157,7 +159,7 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
           </Button>
           {pyCheck && (
             <Button
-              variant="success"
+              variant="primary"
               size="lg"
               block
               className="col-span-2"
@@ -165,10 +167,11 @@ export function Workspace({ task, code, onCodeChange, onCheck, onRunError, befor
               onClick={check}
               icon={checking ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <SquareCheckBig size={20} aria-hidden />}
             >
-              {checking ? t("idepy.checking") : t("idepy.check")}
+              {checking ? t("idepy.checking") : <PaidLabel>{t("idepy.check")}</PaidLabel>}
             </Button>
           )}
         </div>
+        <EntryNote />
       </div>
 
       <div className="min-w-0 space-y-3">

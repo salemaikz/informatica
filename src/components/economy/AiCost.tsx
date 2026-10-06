@@ -53,7 +53,8 @@ export function AiFreeDot({ kind = "ask" }: { kind?: AiKind }) {
       aria-hidden
       className={cn(
         "pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-extrabold leading-none tabular-nums",
-        out ? "bg-surface-2 text-muted ring-2 ring-bg" : "bg-action-ai text-white ring-2 ring-bg",
+        // На нуле — видимая плашка с рамкой (bg-surface-2 сливался с фоном кнопки и страницы), цвет «ИИ» только у платных бесплатных.
+        out ? "border-2 border-border bg-surface text-muted ring-2 ring-bg" : "bg-action-ai text-white ring-2 ring-bg",
       )}
     >
       {out ? 0 : freeLeft}
@@ -108,9 +109,16 @@ export function AiCost({
   }
 
   if (quote.pay === "free") {
-    const text = compact && Number.isFinite(max) ? t("hearts15.ai.freeShort", { n: freeLeft, max }) : (sentence ?? t("aicost.freeShort"));
+    // Вне кнопки — «Бесплатно ещё 2 из 3» (без двоеточия: рядом подпись «Каждое сообщение:»); полная фраза — в title.
+    const life = aiFreeIsLifetime(tier);
+    const text = compact && Number.isFinite(max)
+      ? t("hearts15.ai.freeShort", { n: freeLeft, max })
+      : Number.isFinite(max)
+        ? t(life ? "pol16d.ai.free" : "pol16d.ai.freeDay", { n: freeLeft, max })
+        : t("aicost.freeShort");
+    // Бесплатные обращения — про ИИ: фиолетовая плашка (зелёный — только «верно»).
     return (
-      <span title={sentence ?? t("aicost.aria.free", { n: freeLeft })} className={cn(base, tone("bg-success-soft text-success-strong"), className)}>
+      <span title={sentence ?? t("aicost.aria.free", { n: freeLeft })} className={cn(base, tone("bg-ai-soft text-ink-ai"), className)}>
         {text}
       </span>
     );
@@ -126,7 +134,8 @@ export function AiCost({
       title={sentence ?? label}
       className={cn(
         base,
-        enough ? tone("bg-gold-soft text-warning-strong") : solid ? "bg-white/90 text-danger" : "bg-danger-soft text-danger",
+        // Не хватает чипов — один цвет во всех окнах («частично»: янтарный), не красный.
+        enough ? tone("bg-gold-soft text-warning-strong") : "bg-warning-soft text-ink-warning",
         className,
       )}
     >

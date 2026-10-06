@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { OutOfHearts } from "@/components/economy/OutOfHearts";
+import { useHearts } from "@/components/economy/useEconomy";
 import { track } from "@/lib/analytics";
 import { ENTRY_COST } from "@/lib/economy";
-import { codeEntryKey } from "@/lib/entry-paid";
+import { codeEntryKey, entryPaidActive } from "@/lib/entry-paid";
 import { feedback } from "@/lib/feedback";
 import { clearDraft, loadDraft, saveDraft, sandboxDraftId } from "@/lib/ide/drafts";
 import type { CheckResult, IdeLang, IdeTask } from "@/lib/ide/types";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
+import { EntryPriceProvider } from "./EntryPrice";
 import { IdeAiHelp } from "./IdeAiHelp";
 import { IDE_REGISTRY } from "./registry";
 import { ResultBanner, type ResultState } from "./ResultBanner";
@@ -44,6 +46,13 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
   const stat = useApp((s) => (task ? s.codeTasks[task.id] : undefined));
   const codeTasks = useApp((s) => s.codeTasks);
 
+  // Цена на кнопках «Запустить» / «Проверить» — пока задача не оплачена (и не оплачена за последние 20 минут до открытия страницы).
+  const hearts = useHearts();
+  const entryPaid = useApp((s) => s.entryPaid);
+  const [openedAt] = useState(() => Date.now());
+  const [paid, setPaid] = useState(false);
+  const due = !!task && !paid && !hearts.unlimited && !entryPaidActive(entryPaid, codeEntryKey(lang, task.id), openedAt);
+
   const onCodeChange = useCallback(
     (c: string) => {
       setCode(c);
@@ -72,6 +81,7 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
     if (!task || paidRef.current) return true;
     if (useApp.getState().payEntryOnce(codeEntryKey(lang, task.id), ENTRY_COST.code).ok) {
       paidRef.current = true;
+      setPaid(true);
       return true;
     }
     // Нехватку отмечаем в аналитике один раз на задачу, а не на каждое нажатие.
@@ -113,7 +123,9 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
       )}
 
       <div className="flex min-w-0 flex-col gap-3">
-        <Workspace task={task} code={code} onCodeChange={onCodeChange} onCheck={onCheck} onRunError={onRunError} beforeRun={task ? beforeRun : undefined} />
+        <EntryPriceProvider due={due}>
+          <Workspace task={task} code={code} onCodeChange={onCodeChange} onCheck={onCheck} onRunError={onRunError} beforeRun={task ? beforeRun : undefined} />
+        </EntryPriceProvider>
 
         {result && task && <ResultBanner ref={bannerRef} state={result} next={next ? { href: `/code/${lang}/${next.id}` } : null} listHref={`/code/${lang}`} />}
 
@@ -146,6 +158,7 @@ export function IdeShell({ lang, task }: { lang: IdeLang; task: IdeTask | null }
         <OutOfHearts
           open={outOpen}
           need={ENTRY_COST.code}
+          context="code"
           onClose={() => setOutOpen(false)}
           onResume={() => setOutOpen(false)}
           onExit={() => router.push(`/code/${lang}`)}

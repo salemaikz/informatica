@@ -3,6 +3,7 @@
 import { Repeat, Snowflake } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
+import { missPromptText } from "@/lib/miss-prompt";
 import { repeatedMistakes } from "@/lib/progress";
 import { useApp } from "@/lib/store";
 import { useT } from "@/i18n/useT";
@@ -13,6 +14,7 @@ import { GoalsPanel, WeekCard } from "@/components/goals/GoalsPanel";
 import { HistoryStatsCard } from "@/components/history/HistoryCards";
 import { CourseProgressCard } from "@/components/progress/CourseProgressCard";
 import { SkillsMasteryCard } from "@/components/progress/SkillsMasteryCard";
+import { useRepeatPrompts } from "@/components/progress/useRepeatPrompts";
 import { StatsTiles } from "@/components/progress/StatsTiles";
 import { TopicTable } from "@/components/progress/TopicTable";
 import { UnitProgressList } from "@/components/progress/UnitProgressList";
@@ -24,13 +26,15 @@ import { useEntVisible } from "@/components/school/useEntVisible";
  * цели, история, освоение навыков по разделам (#67, этап 16В) и ошибки. «Памяти ИИ» здесь больше нет (этап 16В, L).
  */
 export default function StatsPage() {
-  const { t } = useT();
+  const { t, l } = useT();
   const mistakes = useApp((s) => s.mistakes);
   const missLog = useApp((s) => s.missLog);
   const repeats = useMemo(
-    () => repeatedMistakes(Object.entries(missLog ?? {}).map(([stepId, e]) => ({ id: stepId, stepId, prompt: e.prompt, misses: e.n, at: e.at }))),
+    () => repeatedMistakes(Object.entries(missLog ?? {}).map(([stepId, e]) => ({ id: stepId, stepId, prompt: e.prompt, promptL: e.promptL, lessonId: e.lessonId, misses: e.n, at: e.at }))),
     [missLog],
   );
+  // Текст задания на языке интерфейса: из контента по id, затем оба языка из журнала, затем старая строка.
+  const resolved = useRepeatPrompts(repeats);
   const freezes = useApp((s) => s.streak.freezes ?? 0);
   // Темы ЕНТ, цели, прогноз балла, план недели и график пробников — только в треке ЕНТ (#52); «Неделя» (уроков за неделю) нужна всем.
   const ent = useEntVisible();
@@ -58,7 +62,7 @@ export default function StatsPage() {
           <ul className="flex flex-col gap-2">
             {repeats.map((m) => (
               <li key={m.id} className="rounded-xl bg-surface-2 px-3 py-2 text-sm">
-                <p className="break-normal font-semibold">{m.prompt}</p>
+                <p className="break-normal font-semibold">{l(missPromptText(m, resolved[m.stepId]))}</p>
                 <p className="mt-1 text-xs font-bold text-ink-danger">{t("econ16d.repeat.misses", { n: m.misses })}</p>
               </li>
             ))}

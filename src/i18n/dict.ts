@@ -86,6 +86,7 @@ import { shortfall16dDict } from "./parts/shortfall16d";
 import { hearts16dDict } from "./parts/hearts16d";
 import { ai16dDict } from "./parts/ai16d";
 import { guide16dDict } from "./parts/guide16d";
+import { polish16dDict } from "./parts/polish16d";
 
 // Все строки интерфейса. Правило: у каждого ключа обязательно есть ru и kk.
 // Казахские формулировки желательно вычитывать носителем языка (см. docs/CONTENT_GUIDE.md).
@@ -392,7 +393,7 @@ const core = {
   "tutor.askTitle": { ru: "Спроси Бита", kk: "Биттен сұра" },
   "tutor.askButton": { ru: "Спросить ИИ", kk: "ЖИ-ден сұрау" },
   "tutor.askInline": { ru: "Непонятно? Спроси Бита", kk: "Түсінбедің бе? Биттен сұра" },
-  "tutor.askPlaceholder": { ru: "Что непонятно? Спроси своими словами…", kk: "Не түсініксіз? Өз сөзіңмен сұра…" },
+  "tutor.askPlaceholder": { ru: "Спроси своими словами…", kk: "Өз сөзіңмен сұра…" },
   "tutor.q.simpler": { ru: "Объясни проще", kk: "Қарапайымырақ түсіндірші" },
   "tutor.q.example": { ru: "Приведи пример", kk: "Мысал келтірші" },
   "tutor.q.why": { ru: "Зачем это нужно?", kk: "Бұл не үшін керек?" },
@@ -600,6 +601,7 @@ export const dict = {
   ...hearts16dDict,
   ...ai16dDict,
   ...guide16dDict,
+  ...polish16dDict,
 } satisfies Record<string, L>;
 
 export type DictKey = keyof typeof dict;

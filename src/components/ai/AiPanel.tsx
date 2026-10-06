@@ -6,6 +6,7 @@ import type { TaskContext, TutorMode } from "@/lib/ai-types";
 import { staticAiText } from "@/lib/ai-static";
 import { canRetryAiError } from "@/lib/ai-errors";
 import { isCrisisReply } from "@/lib/safety";
+import { cn } from "@/lib/cn";
 import { useT } from "@/i18n/useT";
 import type { DictKey } from "@/i18n/dict";
 import { useSaveToNotes } from "@/components/notes/saveToNotesBus";
@@ -13,7 +14,8 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Markdown } from "@/components/Markdown";
 import { Mascot } from "@/components/mascot/Mascot";
-import { AiCost } from "@/components/economy/AiCost";
+import { AiCost, useAiQuotaText } from "@/components/economy/AiCost";
+import { useAiQuote } from "@/components/economy/useEconomy";
 import { ReportIssueButton } from "@/components/issue/ReportIssueButton";
 import { NoChipsNotice } from "@/components/economy/NoChipsNotice";
 import { unansweredTail } from "@/components/chat/helpers";
@@ -88,6 +90,7 @@ export function AiPanel({
   // Последний запрос к ИИ, который не удался: «Повторить» шлёт ту же историю заново, не дублируя сообщение ученика.
   const [retry, setRetry] = useState<TutorTurn[] | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const lastQuestion = useRef<HTMLDivElement>(null);
 
   // Запрос пишет в нить сразу (вопрос + «ответ в пути»), по ходу ответа и в конце — и когда шторку уже закрыли.
   // Запись устаревшего запуска (был новый запрос, нить очищена) нить не трогает (rev в ai-threads).
@@ -101,9 +104,17 @@ export function AiPanel({
     if (mine && text !== null) setRetry(null);
   };
 
+  // К концу ленты; при «Не хватает чипов» — к вопросу ученика (он остаётся над карточкой, а её верх не обрезается).
+  const noChips = error === "economy.noChips";
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
-  }, [saved]);
+    if (noChips && lastQuestion.current) lastQuestion.current.scrollIntoView({ block: "start" });
+    else bottom.current?.scrollIntoView({ block: "end" });
+  }, [saved, noChips]);
+  // Платно чипами: фраза длинная («бесплатные закончились; сейчас — за 5 чипов · у тебя 0») — подпись слева не нужна, фраза говорит сама.
+  const quotaText = useAiQuotaText(mode);
+  const { quote } = useAiQuote(mode);
+  const longQuota = quote.pay !== "free" && quote.pay !== "plan" && !!quotaText;
+  const lastUserIdx = turns.reduce((acc, m, i) => (m.role === "user" ? i : acc), -1);
 
   // «Спросить Бита / Ещё подсказка / Подробнее от Бита» — запрос к ИИ только по нажатию.
   const askMore = () => {
@@ -146,7 +157,7 @@ export function AiPanel({
           <Sparkles size={18} /> {t(TITLE[mode])}
         </h3>
       </div>
-      <div className="flex max-h-[52dvh] flex-col gap-3 overflow-y-auto pr-1">
+      <div className={cn("flex flex-col gap-3 overflow-y-auto py-0.5 pr-1", noChips ? "max-h-[60dvh]" : "max-h-[52dvh]")}>
         {staticText && (
           <div className="rounded-2xl rounded-bl-md border-2 border-primary/25 bg-primary-soft px-4 py-3">
             <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-primary">
@@ -168,7 +179,7 @@ export function AiPanel({
         )}
         {turns.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} className="self-end rounded-2xl rounded-br-md bg-action-primary px-3.5 py-2 font-semibold text-white">
+            <div ref={i === lastUserIdx ? lastQuestion : undefined} key={i} className="scroll-mt-1 self-end rounded-2xl rounded-br-md bg-action-primary px-3.5 py-2 font-semibold text-white">
               {m.content}
             </div>
           ) : (
@@ -226,7 +237,7 @@ export function AiPanel({
             </Button>
           </div>
         )}
-        {error === "economy.noChips" ? (
+        {noChips ? (
           <NoChipsNotice kind={mode} />
         ) : (
           error && (
@@ -265,8 +276,9 @@ export function AiPanel({
           <Send size={18} />
         </button>
       </form>
-      <p className="mt-1.5 flex items-center justify-end gap-1.5 text-xs font-bold text-muted">
-        {t("aicost.perMessage")} <AiCost kind={mode} />
+      {/* Длинная фраза («бесплатные закончились; сейчас — за 5 чипов») сама уходит на свою строку, короткая стоит рядом с подписью. */}
+      <p className="mt-1.5 flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-xs font-bold text-muted">
+        {!longQuota && <span className="whitespace-nowrap">{t("aicost.perMessage")}</span>} <AiCost kind={mode} />
       </p>
     </Modal>
   );
