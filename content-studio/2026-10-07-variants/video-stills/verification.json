@@ -1,0 +1,550 @@
+{
+  "date": "2026-10-07",
+  "testMethod": "Isolated Playwright Chromium contexts, installed headless shell1217",
+  "ports": [
+    {
+      "port": 3120,
+      "loaded": true,
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "colorScheme": "dark"
+      },
+      "consoleErrors": [],
+      "pageErrors": [],
+      "storageErrors": [],
+      "bodyBackground": "rgb(15, 20, 32)",
+      "savedBytes": 715,
+      "error": null,
+      "checks": [
+        {
+          "lang": "ru",
+          "id": "shelf",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 11,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "notebook",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "detective",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 11,
+          "pausedFrame": 17,
+          "stoppedFrame": 17,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "teach",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "meme",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "invite",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "shelf",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "notebook",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "detective",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "teach",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "meme",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "invite",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 17,
+          "stoppedFrame": 17,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        }
+      ],
+      "musicRequests": [
+        "/media/music/quiet-focus.wav",
+        "/media/music/bit-arcade.wav"
+      ]
+    },
+    {
+      "port": 3132,
+      "loaded": true,
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "colorScheme": "dark"
+      },
+      "consoleErrors": [],
+      "pageErrors": [],
+      "storageErrors": [],
+      "bodyBackground": "rgb(15, 20, 32)",
+      "savedBytes": 715,
+      "error": null,
+      "checks": [
+        {
+          "lang": "ru",
+          "id": "shelf",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 11,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "notebook",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "detective",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "teach",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 11,
+          "pausedFrame": 17,
+          "stoppedFrame": 17,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "meme",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "ru",
+          "id": "invite",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "shelf",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "notebook",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "detective",
+          "seekEnd": "899",
+          "seekMax": "899",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 17,
+          "stoppedFrame": 17,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": null,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "teach",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 11,
+          "pausedFrame": 17,
+          "stoppedFrame": 17,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "meme",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        },
+        {
+          "lang": "kk",
+          "id": "invite",
+          "seekEnd": "599",
+          "seekMax": "599",
+          "seekHome": "0",
+          "playingFrame": 12,
+          "pausedFrame": 18,
+          "stoppedFrame": 18,
+          "fullscreen": true,
+          "controlsInFullscreen": true,
+          "exitedFullscreen": true,
+          "musicDefaultOff": true,
+          "musicOff": true,
+          "overflow": {
+            "scroll": 390,
+            "client": 390,
+            "body": 390
+          }
+        }
+      ],
+      "musicRequests": [
+        "/media/music/quiet-focus.wav",
+        "/media/music/bit-arcade.wav"
+      ]
+    }
+  ],
+  "audioContext": {
+    "port": 3132,
+    "reels": [
+      "teach",
+      "meme",
+      "invite"
+    ],
+    "defaultOff": true,
+    "observedContextState": "running",
+    "observedContextTimeSec": 0.5973333333333334,
+    "bufferChunkDurationSec": 0.09287981859410431,
+    "checkboxOff": true,
+    "consoleErrors": [],
+    "pageErrors": [],
+    "nativeStartObserved": true,
+    "nativeStopOnMusicOffObserved": true
+  },
+  "screenshot": "gallery-mobile-dark.jpg",
+  "notes": [
+    "Main Chrome/IAB profiles showed a persistent mascot loader; fresh contexts loaded both ports. Exact cause of existing profile failure not proven.",
+    "Parent plans to remove unnecessary store hydration wait for readonly /video-lab routes. This report precedes that change; no app source changed by reviewer."
+  ]
+}

@@ -66,6 +66,11 @@ if (existsSync(path.join(root, "src/lib/bank"))) {
 for (const d of readdirSync(path.join(root, "src/videos"), { withFileTypes: true })) {
   if (d.isDirectory() && existsSync(path.join(root, "src/videos", d.name, "script.ts"))) candidates.push([`video:${d.name}`, `src/videos/${d.name}/script.ts`, "media"]);
 }
+// Сценарии новых проб могут лежать внутри отдельных групп.
+for (const group of ["lessons", "instagram"]) {
+  const file = `src/videos/variants-2026-10-07/${group}/script.ts`;
+  if (existsSync(path.join(root, file))) candidates.push([`video:variants-2026-10-07:${group}`, file, "media"]);
+}
 if (existsSync(path.join(root, "src/games"))) {
   for (const d of readdirSync(path.join(root, "src/games"), { withFileTypes: true })) {
     if (d.isDirectory() && existsSync(path.join(root, "src/games", d.name, "strings.ts"))) candidates.push([`game:${d.name}`, `src/games/${d.name}/strings.ts`, "ui"]);

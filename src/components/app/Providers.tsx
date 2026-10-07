@@ -28,7 +28,8 @@ export function Providers({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const needsOnboarding = hydrated && !onboarded && pathname !== "/onboarding" && !pathname.startsWith("/video-lab");
+  const isVideoLab = pathname.startsWith("/video-lab");
+  const needsOnboarding = hydrated && !onboarded && pathname !== "/onboarding" && !isVideoLab;
 
   useEffect(() => {
     const el = document.documentElement;
@@ -46,7 +47,8 @@ export function Providers({ children }: { children: ReactNode }) {
     if (needsOnboarding) router.replace("/onboarding");
   }, [needsOnboarding, router]);
 
-  if (!hydrated || needsOnboarding) {
+  // Просмотр медиа не зависит от доступности сохранённого прогресса.
+  if ((!hydrated && !isVideoLab) || needsOnboarding) {
     return (
       <MotionProvider>
         <div className="flex min-h-dvh items-center justify-center">
