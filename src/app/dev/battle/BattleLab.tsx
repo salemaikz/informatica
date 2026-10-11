@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store";
@@ -32,9 +32,14 @@ interface Fight {
   picked: number | null;
   stunned: boolean;
   startedAt: number;
+  /** Счётчик событий: nonce следующего события = seq + 1. */
+  seq: number;
 }
 
-const fresh = (): Fight => ({ youHp: HP, oppHp: HP, combo: 0, event: null, q: 0, picked: null, stunned: false, startedAt: Date.now() });
+const fresh = (): Fight => ({ youHp: HP, oppHp: HP, combo: 0, event: null, q: 0, picked: null, stunned: false, startedAt: Date.now(), seq: 0 });
+
+/** Новое событие боя: поля event и seq для состояния. */
+const ev = (f: Fight, kind: BattleEventKind, dmg: number): Pick<Fight, "event" | "seq"> => ({ event: { kind, dmg, nonce: f.seq + 1 }, seq: f.seq + 1 });
 
 export function BattleLab() {
   const params = useSearchParams();
@@ -50,17 +55,13 @@ export function BattleLab() {
   const [oppSkin, setOppSkin] = useState(variant.skins[Math.min(2, variant.skins.length - 1)].id);
   const [fight, setFight] = useState<Fight>(fresh);
   const [now, setNow] = useState(() => Date.now());
-  const nonce = useRef(0);
-  const timers = useRef<number[]>([]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
   }, []);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
-
   const later = (ms: number, fn: () => void) => {
-    timers.current.push(window.setTimeout(fn, ms));
+    window.setTimeout(fn, ms);
   };
 
   const pickVariant = (id: typeof vid) => {
@@ -70,8 +71,6 @@ export function BattleLab() {
     setOppSkin(v.skins[Math.min(2, v.skins.length - 1)].id);
     setFight(fresh());
   };
-
-  const ev = (kind: BattleEventKind, dmg: number): BattleEvent => ({ kind, dmg, nonce: ++nonce.current });
 
   const nextQuestion = () =>
     later(NEXT_MS, () => setFight((f) => (f.youHp <= 0 || f.oppHp <= 0 ? f : { ...f, q: (f.q + 1) % QUESTIONS.length, picked: null })));
@@ -84,11 +83,11 @@ export function BattleLab() {
       const crit = combo >= CRIT_COMBO;
       const dmg = crit ? 26 : 12 + (combo % 3);
       const oppHp = Math.max(0, f.oppHp - dmg);
-      return { ...f, combo, oppHp, event: ev(oppHp === 0 ? "ko" : crit ? "crit" : "hit", dmg) };
+      return { ...f, combo, oppHp, ...ev(f, oppHp === 0 ? "ko" : crit ? "crit" : "hit", dmg) };
     });
 
   const miss = () => {
-    setFight((f) => (f.youHp <= 0 || f.oppHp <= 0 ? f : { ...f, combo: 0, stunned: true, event: ev("miss", 0) }));
+    setFight((f) => (f.youHp <= 0 || f.oppHp <= 0 ? f : { ...f, combo: 0, stunned: true, ...ev(f, "miss", 0) }));
     later(STUN_MS, () => setFight((f) => ({ ...f, stunned: false })));
   };
 
@@ -96,7 +95,7 @@ export function BattleLab() {
     setFight((f) => {
       if (f.youHp <= 0 || f.oppHp <= 0) return f;
       const youHp = Math.max(0, f.youHp - 12);
-      return { ...f, youHp, event: ev(youHp === 0 ? "lose" : "taken", 12) };
+      return { ...f, youHp, ...ev(f, youHp === 0 ? "lose" : "taken", 12) };
     });
 
   const onAnswer = (i: number) => {
@@ -116,8 +115,8 @@ export function BattleLab() {
     ["Крит", () => strike(true)],
     ["Удар по мне", taken],
     ["Ошибка", miss],
-    ["Нокаут", () => setFight((f) => ({ ...f, oppHp: 0, event: ev("ko", f.oppHp) }))],
-    ["Проигрыш", () => setFight((f) => ({ ...f, youHp: 0, event: ev("lose", f.youHp) }))],
+    ["Нокаут", () => setFight((f) => ({ ...f, oppHp: 0, ...ev(f, "ko", f.oppHp) }))],
+    ["Проигрыш", () => setFight((f) => ({ ...f, youHp: 0, ...ev(f, "lose", f.youHp) }))],
     ["Сначала", () => setFight(fresh())],
   ];
 
