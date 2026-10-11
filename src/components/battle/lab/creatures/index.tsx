@@ -1,13 +1,17 @@
 "use client";
 
 import type { BattleVariant } from "../types";
+import { Creature } from "./art";
+import CreaturesScreen from "./Screen";
+import { SKINS } from "./skins";
 
-// Заготовка: вариант «creatures» рисует исполнитель (docs/specs/battle-lab.md).
+// Вариант «Существа»: милые зверьки на лугу, раскладка как в классических битвах карманных монстров.
 export const variant: BattleVariant = {
   id: "creatures",
-  title: "creatures",
-  pitch: "Скоро",
-  skins: [{ id: "base", name: "Базовый", rarity: "common" }],
-  Screen: () => <div className="p-6 text-center text-muted">Скоро</div>,
-  SkinPreview: ({ size }) => <div style={{ width: size, height: size }} className="rounded-xl bg-border" />,
+  title: "Существа",
+  pitch:
+    "Милые существа на лугу: у каждого скина свой силуэт и характер. Вы слева внизу, крупнее; соперник справа вверху. Ответы — «приёмы» со стихиями: Логика, Код, Сеть, Данные.",
+  skins: SKINS,
+  Screen: CreaturesScreen,
+  SkinPreview: ({ skin, size }) => <Creature skin={skin} size={size} shadow />,
 };
