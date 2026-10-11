@@ -5,7 +5,8 @@
 // /owner — страница владельца (#69): своя защита секретом, онбординг ученика не нужен.
 // /report — отчёт родителю (#74): данные целиком во фрагменте ссылки, стор не нужен.
 // /dev/scenes — галерея рисунков для разработчика (этап 16Б, волна 3), открыта только при SCENES_GALLERY=1.
-const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/offline", "/owner", "/report", "/dev/scenes"]);
+// /dev/battle — эскизы стилей битвы для владельца (этап 16Е), в продакшене 404.
+const EXACT = new Set(["/onboarding", "/privacy", "/terms", "/offline", "/owner", "/report", "/dev/scenes", "/dev/battle"]);
 
 /** Префиксы (адрес совпадает или продолжается через «/»). /r/<код> — результат, которым поделились (#72). */
 const PREFIXES: string[] = ["/r"];
